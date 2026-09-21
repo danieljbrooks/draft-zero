@@ -26,8 +26,21 @@ python -c "import sysconfig,sys; sys.exit(0 if sysconfig.get_config_var('EXT_SUF
 if python -m pip install --help 2>/dev/null | grep -q break-system-packages; then
   PIPFLAGS="$PIPFLAGS --break-system-packages"
 fi
-python -m pip install -q $PIPFLAGS --ignore-installed blinker -e . || {
+# NEVER let pip upgrade torch. Worker images ship a torch built against the host's CUDA
+# driver; our dependency chain only says torch>=2.1, so an unconstrained install happily
+# pulls a newer wheel the driver cannot load, and training silently falls back to CPU
+# (torch.cuda.is_available() -> False). Pin whatever is already installed.
+CONSTRAINTS="$(mktemp)"
+if python -c "import torch" 2>/dev/null; then
+  # strip the local version tag: "2.9.1+cu128" is not resolvable from PyPI and makes the
+  # whole resolve fail, while "2.9.1" is satisfied by the installed cu128 build.
+  python -c "import torch; print('torch==' + torch.__version__.split('+')[0])" > "$CONSTRAINTS"
+  echo "   pinning $(cat "$CONSTRAINTS") so the driver-matched build survives"
+fi
+
+python -m pip install -q $PIPFLAGS -c "$CONSTRAINTS" --ignore-installed blinker -e . || {
   echo "!! editable install failed; falling back to PYTHONPATH=src"; }
+rm -f "$CONSTRAINTS"
 
 echo "== sanity"
 python - <<'PY'
@@ -38,6 +51,9 @@ try:
     import torch
     print(f"   cuda={torch.cuda.is_available()} "
           f"{torch.cuda.get_device_name(0) if torch.cuda.is_available() else ''}")
+    if not torch.cuda.is_available():
+        print("   !! CUDA UNAVAILABLE -- training would run on CPU. "
+              "The torch build does not match the driver.")
 except Exception as e:
     print(f"   torch check skipped: {e}")
 PY
