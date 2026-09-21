@@ -1,0 +1,29 @@
+[project]
+name = "draftzero"
+version = "0.1.0"
+description = "One agent that plays a whole Magic limited format with any deck"
+requires-python = ">=3.10"
+dependencies = [
+    # MageZero supplies the RL framework, the XMage bridge and the training/eval runner.
+    # This must point at a branch that actually exists on the remote. Replace the branch
+    # with a commit SHA before any run you intend to reproduce -- a branch pin silently
+    # changes what your results were produced against.
+    "magezero @ git+https://github.com/danieljbrooks/MageZero@fdn-generalist",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pyyaml>=6.0",
+    "h5py>=3.8",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+dz = "draftzero.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+draftzero = ["py.typed"]

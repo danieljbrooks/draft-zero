@@ -1,0 +1,18 @@
+# Same shape as runpod.yml at 1/50 scale: proves the pod, the CUDA path, the vocab, the
+# metrics rows and the watchdog sync in ~20 minutes before committing to the real run.
+model: FDN_generalist_smoke
+version: 1
+generations: 3
+target_games: null
+resource_interval_s: 5
+
+bootstrap_games: 12
+games_per_gen: 12
+chunk_games: 6
+mix: {self: 0.7, past: 0.2, gen0: 0.1}
+replay_states: 6000
+
+eval: {baselines: [offline, minimax], pairs: 1, window_gens: 2}
+stats: {window_gens: 2, min_card_games: 1}
+
+jvm: {heap: 12g, threads: 6, search_budget: 40, timeout_ms: 3000, max_minutes: 8}

@@ -1,0 +1,1252 @@
+{
+ "source": "game_data_public.FDN.PremierDraft.csv.gz",
+ "games": 791159,
+ "cards": {
+  "Abrade": {
+   "gih_games": 36439,
+   "gih_wr": 0.5723537967562228
+  },
+  "Abyssal Harvester": {
+   "gih_games": 18045,
+   "gih_wr": 0.5568301468550845
+  },
+  "Adventuring Gear": {
+   "gih_games": 2429,
+   "gih_wr": 0.4672704816797036
+  },
+  "Aegis Turtle": {
+   "gih_games": 11332,
+   "gih_wr": 0.49876456053653373
+  },
+  "Aetherize": {
+   "gih_games": 12096,
+   "gih_wr": 0.5011574074074074
+  },
+  "Affectionate Indrik": {
+   "gih_games": 25262,
+   "gih_wr": 0.5549441849418099
+  },
+  "Ajani's Pridemate": {
+   "gih_games": 33187,
+   "gih_wr": 0.5575978545816133
+  },
+  "Ajani, Caller of the Pride": {
+   "gih_games": 7592,
+   "gih_wr": 0.5760010537407798
+  },
+  "Akroma's Memorial": {
+   "gih_games": 961,
+   "gih_wr": 0.5535900104058272
+  },
+  "Alesha, Who Laughs at Fate": {
+   "gih_games": 16532,
+   "gih_wr": 0.6182555044761674
+  },
+  "Ambush Wolf": {
+   "gih_games": 40641,
+   "gih_wr": 0.5528161216505499
+  },
+  "An Offer You Can't Refuse": {
+   "gih_games": 1855,
+   "gih_wr": 0.48086253369272236
+  },
+  "Angel of Finality": {
+   "gih_games": 29924,
+   "gih_wr": 0.5667691485095575
+  },
+  "Anthem of Champions": {
+   "gih_games": 8648,
+   "gih_wr": 0.5550416281221091
+  },
+  "Apothecary Stomper": {
+   "gih_games": 20237,
+   "gih_wr": 0.5162326431783367
+  },
+  "Arahbo, the First Fang": {
+   "gih_games": 17856,
+   "gih_wr": 0.6092069892473119
+  },
+  "Arbiter of Woe": {
+   "gih_games": 41599,
+   "gih_wr": 0.5853986874684488
+  },
+  "Arcane Epiphany": {
+   "gih_games": 36853,
+   "gih_wr": 0.5585976718313299
+  },
+  "Archmage of Runes": {
+   "gih_games": 16956,
+   "gih_wr": 0.5546119367775418
+  },
+  "Armasaur Guide": {
+   "gih_games": 12709,
+   "gih_wr": 0.5052325123927925
+  },
+  "Ashroot Animist": {
+   "gih_games": 11345,
+   "gih_wr": 0.5846628470691935
+  },
+  "Authority of the Consuls": {
+   "gih_games": 4686,
+   "gih_wr": 0.520273154075971
+  },
+  "Axgard Cavalry": {
+   "gih_games": 33464,
+   "gih_wr": 0.5213961271814487
+  },
+  "Bake into a Pie": {
+   "gih_games": 103949,
+   "gih_wr": 0.5801402610895727
+  },
+  "Balmor, Battlemage Captain": {
+   "gih_games": 21473,
+   "gih_wr": 0.5560005588413356
+  },
+  "Banishing Light": {
+   "gih_games": 88026,
+   "gih_wr": 0.5744893554177175
+  },
+  "Banner of Kinship": {
+   "gih_games": 2807,
+   "gih_wr": 0.5062344139650873
+  },
+  "Battlesong Berserker": {
+   "gih_games": 32403,
+   "gih_wr": 0.5759343270684814
+  },
+  "Beast-Kin Ranger": {
+   "gih_games": 53446,
+   "gih_wr": 0.5522770647008195
+  },
+  "Bigfin Bouncer": {
+   "gih_games": 96673,
+   "gih_wr": 0.5708625986573294
+  },
+  "Billowing Shriekmass": {
+   "gih_games": 23466,
+   "gih_wr": 0.5368192278189722
+  },
+  "Bite Down": {
+   "gih_games": 62971,
+   "gih_wr": 0.5556526019913929
+  },
+  "Blanchwood Armor": {
+   "gih_games": 3051,
+   "gih_wr": 0.52015732546706
+  },
+  "Blasphemous Edict": {
+   "gih_games": 20309,
+   "gih_wr": 0.5936776798463735
+  },
+  "Bloodfell Caves": {
+   "gih_games": 31524,
+   "gih_wr": 0.5440299454383961
+  },
+  "Bloodthirsty Conqueror": {
+   "gih_games": 9182,
+   "gih_wr": 0.6272054018732303
+  },
+  "Bloom Tender": {
+   "gih_games": 835,
+   "gih_wr": 0.5425149700598803
+  },
+  "Blossoming Sands": {
+   "gih_games": 22187,
+   "gih_wr": 0.5374318294496777
+  },
+  "Boltwave": {
+   "gih_games": 2452,
+   "gih_wr": 0.44738988580750405
+  },
+  "Brass's Bounty": {
+   "gih_games": 35,
+   "gih_wr": 0.37142857142857144
+  },
+  "Brazen Scourge": {
+   "gih_games": 18504,
+   "gih_wr": 0.522589710332901
+  },
+  "Brineborn Cutthroat": {
+   "gih_games": 32977,
+   "gih_wr": 0.5430148285168451
+  },
+  "Broken Wings": {
+   "gih_games": 7484,
+   "gih_wr": 0.4917156600748263
+  },
+  "Bulk Up": {
+   "gih_games": 3559,
+   "gih_wr": 0.4830008429334083
+  },
+  "Burglar Rat": {
+   "gih_games": 103615,
+   "gih_wr": 0.5629493799160353
+  },
+  "Burnished Hart": {
+   "gih_games": 10984,
+   "gih_wr": 0.4841587764020393
+  },
+  "Burst Lightning": {
+   "gih_games": 90050,
+   "gih_wr": 0.5788672959466963
+  },
+  "Bushwhack": {
+   "gih_games": 52968,
+   "gih_wr": 0.5375698534964507
+  },
+  "Cackling Prowler": {
+   "gih_games": 36026,
+   "gih_wr": 0.541109198911897
+  },
+  "Campus Guide": {
+   "gih_games": 37663,
+   "gih_wr": 0.5138730318880599
+  },
+  "Cat Collector": {
+   "gih_games": 41111,
+   "gih_wr": 0.585706988397266
+  },
+  "Cathar Commando": {
+   "gih_games": 72782,
+   "gih_wr": 0.5557555439531753
+  },
+  "Celestial Armor": {
+   "gih_games": 19675,
+   "gih_wr": 0.6199745870393901
+  },
+  "Cephalid Inkmage": {
+   "gih_games": 19113,
+   "gih_wr": 0.5341913880604824
+  },
+  "Chandra, Flameshaper": {
+   "gih_games": 8377,
+   "gih_wr": 0.6160916795989018
+  },
+  "Claws Out": {
+   "gih_games": 19017,
+   "gih_wr": 0.5358889414734185
+  },
+  "Clinquant Skymage": {
+   "gih_games": 15302,
+   "gih_wr": 0.48725656776891907
+  },
+  "Condemn": {
+   "gih_games": 1192,
+   "gih_wr": 0.5662751677852349
+  },
+  "Consuming Aberration": {
+   "gih_games": 11484,
+   "gih_wr": 0.5195924764890282
+  },
+  "Courageous Goblin": {
+   "gih_games": 44677,
+   "gih_wr": 0.5384649819817804
+  },
+  "Crackling Cyclops": {
+   "gih_games": 7214,
+   "gih_wr": 0.48530634876628775
+  },
+  "Crypt Feaster": {
+   "gih_games": 8275,
+   "gih_wr": 0.5038066465256797
+  },
+  "Crystal Barricade": {
+   "gih_games": 3565,
+   "gih_wr": 0.48695652173913045
+  },
+  "Curator of Destinies": {
+   "gih_games": 21884,
+   "gih_wr": 0.6208645585816122
+  },
+  "Dauntless Veteran": {
+   "gih_games": 19355,
+   "gih_wr": 0.5193490054249548
+  },
+  "Day of Judgment": {
+   "gih_games": 14772,
+   "gih_wr": 0.5911183319794205
+  },
+  "Dazzling Angel": {
+   "gih_games": 90067,
+   "gih_wr": 0.5777587795752052
+  },
+  "Diregraf Ghoul": {
+   "gih_games": 19064,
+   "gih_wr": 0.5426982794796475
+  },
+  "Dismal Backwater": {
+   "gih_games": 43365,
+   "gih_wr": 0.5626657442638072
+  },
+  "Divine Resilience": {
+   "gih_games": 8636,
+   "gih_wr": 0.5078740157480315
+  },
+  "Doubling Season": {
+   "gih_games": 1019,
+   "gih_wr": 0.39450441609421
+  },
+  "Dragon Trainer": {
+   "gih_games": 31085,
+   "gih_wr": 0.5647418368988258
+  },
+  "Drake Hatcher": {
+   "gih_games": 17961,
+   "gih_wr": 0.5673403485329325
+  },
+  "Drakuseth, Maw of Flames": {
+   "gih_games": 9080,
+   "gih_wr": 0.5429515418502202
+  },
+  "Dreadwing Scavenger": {
+   "gih_games": 40751,
+   "gih_wr": 0.6043287281293711
+  },
+  "Dwynen's Elite": {
+   "gih_games": 38200,
+   "gih_wr": 0.5307329842931937
+  },
+  "Dwynen, Gilt-Leaf Daen": {
+   "gih_games": 15680,
+   "gih_wr": 0.5293367346938775
+  },
+  "Eager Trufflesnout": {
+   "gih_games": 25119,
+   "gih_wr": 0.5647119710179546
+  },
+  "Eaten Alive": {
+   "gih_games": 98928,
+   "gih_wr": 0.5612768882419538
+  },
+  "Electroduplicate": {
+   "gih_games": 2154,
+   "gih_wr": 0.5143918291550603
+  },
+  "Elementalist Adept": {
+   "gih_games": 44209,
+   "gih_wr": 0.5258657739374335
+  },
+  "Elenda, Saint of Dusk": {
+   "gih_games": 17216,
+   "gih_wr": 0.6154158921933085
+  },
+  "Elfsworn Giant": {
+   "gih_games": 30792,
+   "gih_wr": 0.5260782021304234
+  },
+  "Elvish Archdruid": {
+   "gih_games": 8203,
+   "gih_wr": 0.5410215774716567
+  },
+  "Elvish Regrower": {
+   "gih_games": 29490,
+   "gih_wr": 0.5647677178704645
+  },
+  "Embercleave": {
+   "gih_games": 1395,
+   "gih_wr": 0.6379928315412187
+  },
+  "Empyrean Eagle": {
+   "gih_games": 30136,
+   "gih_wr": 0.5910207061322007
+  },
+  "Erudite Wizard": {
+   "gih_games": 32519,
+   "gih_wr": 0.51065530920385
+  },
+  "Essence Scatter": {
+   "gih_games": 45291,
+   "gih_wr": 0.5806230818484909
+  },
+  "Etali, Primal Storm": {
+   "gih_games": 11905,
+   "gih_wr": 0.5326333473330533
+  },
+  "Evolving Wilds": {
+   "gih_games": 107097,
+   "gih_wr": 0.5458696322025827
+  },
+  "Exemplar of Light": {
+   "gih_games": 16561,
+   "gih_wr": 0.5899402210011473
+  },
+  "Exsanguinate": {
+   "gih_games": 2584,
+   "gih_wr": 0.4818111455108359
+  },
+  "Extravagant Replication": {
+   "gih_games": 10096,
+   "gih_wr": 0.5205031695721077
+  },
+  "Faebloom Trick": {
+   "gih_games": 48583,
+   "gih_wr": 0.5908033674330527
+  },
+  "Fake Your Own Death": {
+   "gih_games": 57913,
+   "gih_wr": 0.5581302988966208
+  },
+  "Fanatical Firebrand": {
+   "gih_games": 30112,
+   "gih_wr": 0.5300212539851222
+  },
+  "Felidar Savior": {
+   "gih_games": 86439,
+   "gih_wr": 0.5736415275512211
+  },
+  "Felling Blow": {
+   "gih_games": 30186,
+   "gih_wr": 0.587093354535215
+  },
+  "Fiend Artisan": {
+   "gih_games": 1132,
+   "gih_wr": 0.5512367491166078
+  },
+  "Fiendish Panda": {
+   "gih_games": 27920,
+   "gih_wr": 0.5534025787965616
+  },
+  "Fiery Annihilation": {
+   "gih_games": 37302,
+   "gih_wr": 0.581711436384108
+  },
+  "Firebrand Archer": {
+   "gih_games": 24860,
+   "gih_wr": 0.49698310539018503
+  },
+  "Firespitter Whelp": {
+   "gih_games": 16296,
+   "gih_wr": 0.5155866470299459
+  },
+  "Fishing Pole": {
+   "gih_games": 1989,
+   "gih_wr": 0.42684766214177977
+  },
+  "Flamewake Phoenix": {
+   "gih_games": 10432,
+   "gih_wr": 0.5196510736196319
+  },
+  "Fleeting Distraction": {
+   "gih_games": 76215,
+   "gih_wr": 0.5483041396050646
+  },
+  "Fleeting Flight": {
+   "gih_games": 58273,
+   "gih_wr": 0.5644294956497864
+  },
+  "Forest": {
+   "gih_games": 251702,
+   "gih_wr": 0.5393322262040031
+  },
+  "Frenzied Goblin": {
+   "gih_games": 12909,
+   "gih_wr": 0.5152994035169262
+  },
+  "Garruk's Uprising": {
+   "gih_games": 13997,
+   "gih_wr": 0.5211116667857398
+  },
+  "Genesis Wave": {
+   "gih_games": 2274,
+   "gih_wr": 0.48812664907651715
+  },
+  "Ghalta, Primal Hunger": {
+   "gih_games": 10904,
+   "gih_wr": 0.5522743947175348
+  },
+  "Giada, Font of Hope": {
+   "gih_games": 17909,
+   "gih_wr": 0.604277179071975
+  },
+  "Giant Growth": {
+   "gih_games": 30706,
+   "gih_wr": 0.541913632514818
+  },
+  "Gleaming Barrier": {
+   "gih_games": 12195,
+   "gih_wr": 0.4777367773677737
+  },
+  "Gnarlid Colony": {
+   "gih_games": 50920,
+   "gih_wr": 0.5300471327572663
+  },
+  "Goblin Boarders": {
+   "gih_games": 40068,
+   "gih_wr": 0.5364130977338525
+  },
+  "Goblin Bushwhacker": {
+   "gih_games": 751,
+   "gih_wr": 0.5299600532623169
+  },
+  "Goblin Negotiation": {
+   "gih_games": 8154,
+   "gih_wr": 0.5194996320824136
+  },
+  "Goblin Surprise": {
+   "gih_games": 43647,
+   "gih_wr": 0.5256718674823012
+  },
+  "Goldvein Pick": {
+   "gih_games": 58002,
+   "gih_wr": 0.5356711837522844
+  },
+  "Good-Fortune Unicorn": {
+   "gih_games": 15475,
+   "gih_wr": 0.518642972536349
+  },
+  "Gorehorn Raider": {
+   "gih_games": 49976,
+   "gih_wr": 0.5666119737473988
+  },
+  "Grappling Kraken": {
+   "gih_games": 13847,
+   "gih_wr": 0.5320285982523291
+  },
+  "Grim Tutor": {
+   "gih_games": 188,
+   "gih_wr": 0.48404255319148937
+  },
+  "Grow from the Ashes": {
+   "gih_games": 22592,
+   "gih_wr": 0.4809224504249292
+  },
+  "Guarded Heir": {
+   "gih_games": 33729,
+   "gih_wr": 0.5676124403332444
+  },
+  "Gutless Plunderer": {
+   "gih_games": 49628,
+   "gih_wr": 0.5390706859031192
+  },
+  "Hare Apparent": {
+   "gih_games": 18121,
+   "gih_wr": 0.5070912201313393
+  },
+  "Healer's Hawk": {
+   "gih_games": 87748,
+   "gih_wr": 0.5751470118977071
+  },
+  "Heartfire Immolator": {
+   "gih_games": 35587,
+   "gih_wr": 0.5692528170399304
+  },
+  "Helpful Hunter": {
+   "gih_games": 96500,
+   "gih_wr": 0.5744974093264249
+  },
+  "Herald of Eternal Dawn": {
+   "gih_games": 6790,
+   "gih_wr": 0.5773195876288659
+  },
+  "Heraldic Banner": {
+   "gih_games": 18585,
+   "gih_wr": 0.5479149852031208
+  },
+  "Hero's Downfall": {
+   "gih_games": 40814,
+   "gih_wr": 0.5708335375116381
+  },
+  "Heroic Reinforcements": {
+   "gih_games": 21623,
+   "gih_wr": 0.5577856911621885
+  },
+  "Hidetsugu's Second Rite": {
+   "gih_games": 3215,
+   "gih_wr": 0.5623639191290825
+  },
+  "High Fae Trickster": {
+   "gih_games": 16314,
+   "gih_wr": 0.5498344979771975
+  },
+  "High-Society Hunter": {
+   "gih_games": 20029,
+   "gih_wr": 0.586200009985521
+  },
+  "Homunculus Horde": {
+   "gih_games": 11285,
+   "gih_wr": 0.5104120513956579
+  },
+  "Hungry Ghoul": {
+   "gih_games": 89986,
+   "gih_wr": 0.5561754050630098
+  },
+  "Icewind Elemental": {
+   "gih_games": 48529,
+   "gih_wr": 0.5381112324589421
+  },
+  "Imprisoned in the Moon": {
+   "gih_games": 13620,
+   "gih_wr": 0.5005139500734215
+  },
+  "Incinerating Blast": {
+   "gih_games": 29689,
+   "gih_wr": 0.5237966923776483
+  },
+  "Infernal Vessel": {
+   "gih_games": 43948,
+   "gih_wr": 0.5823473195594794
+  },
+  "Infestation Sage": {
+   "gih_games": 89843,
+   "gih_wr": 0.5668555146199481
+  },
+  "Inspiration from Beyond": {
+   "gih_games": 10544,
+   "gih_wr": 0.5329097116843703
+  },
+  "Inspiring Call": {
+   "gih_games": 3632,
+   "gih_wr": 0.46062775330396477
+  },
+  "Inspiring Paladin": {
+   "gih_games": 50211,
+   "gih_wr": 0.5387066579036466
+  },
+  "Involuntary Employment": {
+   "gih_games": 30938,
+   "gih_wr": 0.5556920292197298
+  },
+  "Island": {
+   "gih_games": 341013,
+   "gih_wr": 0.5450378724564753
+  },
+  "Joust Through": {
+   "gih_games": 31321,
+   "gih_wr": 0.5637112480444431
+  },
+  "Juggernaut": {
+   "gih_games": 5966,
+   "gih_wr": 0.48625544753603755
+  },
+  "Jungle Hollow": {
+   "gih_games": 23496,
+   "gih_wr": 0.5277068437180796
+  },
+  "Kaito, Cunning Infiltrator": {
+   "gih_games": 8593,
+   "gih_wr": 0.582683579657861
+  },
+  "Kellan, Planar Trailblazer": {
+   "gih_games": 15818,
+   "gih_wr": 0.5902136806170186
+  },
+  "Kiora, the Rising Tide": {
+   "gih_games": 20176,
+   "gih_wr": 0.6037866772402855
+  },
+  "Koma, World-Eater": {
+   "gih_games": 11705,
+   "gih_wr": 0.5693293464331483
+  },
+  "Krenko, Mob Boss": {
+   "gih_games": 14578,
+   "gih_wr": 0.5532994923857868
+  },
+  "Kykar, Zephyr Awakener": {
+   "gih_games": 15826,
+   "gih_wr": 0.5743712877543283
+  },
+  "Lathril, Blade of the Elves": {
+   "gih_games": 6112,
+   "gih_wr": 0.49165575916230364
+  },
+  "Leyline Axe": {
+   "gih_games": 18540,
+   "gih_wr": 0.6118122977346279
+  },
+  "Lightshell Duo": {
+   "gih_games": 46716,
+   "gih_wr": 0.5571538659131775
+  },
+  "Liliana, Dreadhorde General": {
+   "gih_games": 9890,
+   "gih_wr": 0.6411526794742164
+  },
+  "Llanowar Elves": {
+   "gih_games": 62210,
+   "gih_wr": 0.5705192091303649
+  },
+  "Loot, Exuberant Explorer": {
+   "gih_games": 11620,
+   "gih_wr": 0.5583476764199655
+  },
+  "Luminous Rebuke": {
+   "gih_games": 83740,
+   "gih_wr": 0.5771196560783377
+  },
+  "Lunar Insight": {
+   "gih_games": 5042,
+   "gih_wr": 0.5279650932169774
+  },
+  "Macabre Waltz": {
+   "gih_games": 41844,
+   "gih_wr": 0.5185450721728324
+  },
+  "Make Your Move": {
+   "gih_games": 48775,
+   "gih_wr": 0.5526191696565864
+  },
+  "Marauding Blight-Priest": {
+   "gih_games": 30300,
+   "gih_wr": 0.5272277227722773
+  },
+  "Meteor Golem": {
+   "gih_games": 19494,
+   "gih_wr": 0.5453472863445162
+  },
+  "Micromancer": {
+   "gih_games": 39893,
+   "gih_wr": 0.5910560750006266
+  },
+  "Midnight Snack": {
+   "gih_games": 3847,
+   "gih_wr": 0.4863530023394853
+  },
+  "Mild-Mannered Librarian": {
+   "gih_games": 27049,
+   "gih_wr": 0.5677104514030094
+  },
+  "Mischievous Mystic": {
+   "gih_games": 49923,
+   "gih_wr": 0.5957374356509024
+  },
+  "Mischievous Pup": {
+   "gih_games": 18204,
+   "gih_wr": 0.5158756317292903
+  },
+  "Mocking Sprite": {
+   "gih_games": 28201,
+   "gih_wr": 0.49976951171944256
+  },
+  "Mossborn Hydra": {
+   "gih_games": 11036,
+   "gih_wr": 0.550289960130482
+  },
+  "Mountain": {
+   "gih_games": 289257,
+   "gih_wr": 0.5505657598606084
+  },
+  "Muldrotha, the Gravetide": {
+   "gih_games": 5305,
+   "gih_wr": 0.5417530631479736
+  },
+  "Needletooth Pack": {
+   "gih_games": 20776,
+   "gih_wr": 0.5341740469772814
+  },
+  "Nessian Hornbeetle": {
+   "gih_games": 27128,
+   "gih_wr": 0.5641035092892952
+  },
+  "Nine-Lives Familiar": {
+   "gih_games": 12345,
+   "gih_wr": 0.5366545159983799
+  },
+  "Niv-Mizzet, Visionary": {
+   "gih_games": 2406,
+   "gih_wr": 0.4679966749792186
+  },
+  "Omniscience": {
+   "gih_games": 27,
+   "gih_wr": 0.37037037037037035
+  },
+  "Overrun": {
+   "gih_games": 21347,
+   "gih_wr": 0.5498664917787043
+  },
+  "Painful Quandary": {
+   "gih_games": 2422,
+   "gih_wr": 0.4479768786127168
+  },
+  "Paradise Druid": {
+   "gih_games": 1063,
+   "gih_wr": 0.5380997177798683
+  },
+  "Perforating Artist": {
+   "gih_games": 25534,
+   "gih_wr": 0.5748022244850004
+  },
+  "Phyrexian Arena": {
+   "gih_games": 13804,
+   "gih_wr": 0.5436829904375543
+  },
+  "Pilfer": {
+   "gih_games": 41835,
+   "gih_wr": 0.556519660571292
+  },
+  "Plains": {
+   "gih_games": 370801,
+   "gih_wr": 0.5547638760413267
+  },
+  "Preposterous Proportions": {
+   "gih_games": 5237,
+   "gih_wr": 0.5401947679969448
+  },
+  "Prideful Parent": {
+   "gih_games": 75132,
+   "gih_wr": 0.5481153170420061
+  },
+  "Progenitus": {
+   "gih_games": 105,
+   "gih_wr": 0.3619047619047619
+  },
+  "Quakestrider Ceratops": {
+   "gih_games": 8521,
+   "gih_wr": 0.5251731017486211
+  },
+  "Quick-Draw Katana": {
+   "gih_games": 9778,
+   "gih_wr": 0.5091020658621395
+  },
+  "Quilled Greatwurm": {
+   "gih_games": 6298,
+   "gih_wr": 0.5500158780565259
+  },
+  "Raise the Past": {
+   "gih_games": 3406,
+   "gih_wr": 0.5093951849677041
+  },
+  "Ravenous Amulet": {
+   "gih_games": 12165,
+   "gih_wr": 0.5171393341553637
+  },
+  "Reassembling Skeleton": {
+   "gih_games": 29698,
+   "gih_wr": 0.5235706108155431
+  },
+  "Reclamation Sage": {
+   "gih_games": 13785,
+   "gih_wr": 0.49561117156329343
+  },
+  "Refute": {
+   "gih_games": 91672,
+   "gih_wr": 0.5755410594292696
+  },
+  "Resolute Reinforcements": {
+   "gih_games": 30377,
+   "gih_wr": 0.5394871119597063
+  },
+  "Revenge of the Rats": {
+   "gih_games": 9067,
+   "gih_wr": 0.513951692952465
+  },
+  "Rise of the Dark Realms": {
+   "gih_games": 3232,
+   "gih_wr": 0.5396039603960396
+  },
+  "Rite of the Dragoncaller": {
+   "gih_games": 3407,
+   "gih_wr": 0.5162899911945994
+  },
+  "Rogue's Passage": {
+   "gih_games": 13737,
+   "gih_wr": 0.555798209215986
+  },
+  "Ruby, Daring Tracker": {
+   "gih_games": 16871,
+   "gih_wr": 0.5699128682354336
+  },
+  "Rugged Highlands": {
+   "gih_games": 20668,
+   "gih_wr": 0.5391426359589704
+  },
+  "Run Away Together": {
+   "gih_games": 32216,
+   "gih_wr": 0.5149615098087906
+  },
+  "Rune-Scarred Demon": {
+   "gih_games": 16426,
+   "gih_wr": 0.5753074394253014
+  },
+  "Rune-Sealed Wall": {
+   "gih_games": 20216,
+   "gih_wr": 0.5177087455480808
+  },
+  "Sanguine Syphoner": {
+   "gih_games": 36438,
+   "gih_wr": 0.5325758823206542
+  },
+  "Savannah Lions": {
+   "gih_games": 16875,
+   "gih_wr": 0.5328
+  },
+  "Scavenging Ooze": {
+   "gih_games": 14819,
+   "gih_wr": 0.6173156083406438
+  },
+  "Scoured Barrens": {
+   "gih_games": 38114,
+   "gih_wr": 0.5485910688985675
+  },
+  "Scrawling Crawler": {
+   "gih_games": 18747,
+   "gih_wr": 0.5755054141996053
+  },
+  "Searslicer Goblin": {
+   "gih_games": 17141,
+   "gih_wr": 0.6029403185345079
+  },
+  "Secluded Courtyard": {
+   "gih_games": 1683,
+   "gih_wr": 0.46761734997029114
+  },
+  "Seeker's Folly": {
+   "gih_games": 26840,
+   "gih_wr": 0.5662444113263786
+  },
+  "Seismic Rupture": {
+   "gih_games": 4357,
+   "gih_wr": 0.5012623364700483
+  },
+  "Self-Reflection": {
+   "gih_games": 9067,
+   "gih_wr": 0.5450534906804897
+  },
+  "Serra Angel": {
+   "gih_games": 27660,
+   "gih_wr": 0.54765003615329
+  },
+  "Shivan Dragon": {
+   "gih_games": 11533,
+   "gih_wr": 0.5118356021850342
+  },
+  "Sire of Seven Deaths": {
+   "gih_games": 9975,
+   "gih_wr": 0.620250626566416
+  },
+  "Skyknight Squire": {
+   "gih_games": 17195,
+   "gih_wr": 0.5885431811573132
+  },
+  "Skyship Buccaneer": {
+   "gih_games": 37008,
+   "gih_wr": 0.5648508430609598
+  },
+  "Slagstorm": {
+   "gih_games": 8269,
+   "gih_wr": 0.555810859837949
+  },
+  "Slumbering Cerberus": {
+   "gih_games": 29907,
+   "gih_wr": 0.5575283378473267
+  },
+  "Snakeskin Veil": {
+   "gih_games": 22863,
+   "gih_wr": 0.545378996632113
+  },
+  "Solemn Simulacrum": {
+   "gih_games": 16979,
+   "gih_wr": 0.5657577006890865
+  },
+  "Soul-Shackled Zombie": {
+   "gih_games": 48392,
+   "gih_wr": 0.5505455447181352
+  },
+  "Soulstone Sanctuary": {
+   "gih_games": 13712,
+   "gih_wr": 0.5675320886814469
+  },
+  "Sower of Chaos": {
+   "gih_games": 13002,
+   "gih_wr": 0.542455006922012
+  },
+  "Spectral Sailor": {
+   "gih_games": 46061,
+   "gih_wr": 0.5862226178328738
+  },
+  "Sphinx of Forgotten Lore": {
+   "gih_games": 8960,
+   "gih_wr": 0.5771205357142857
+  },
+  "Sphinx's Tutelage": {
+   "gih_games": 760,
+   "gih_wr": 0.5039473684210526
+  },
+  "Spinner of Souls": {
+   "gih_games": 16634,
+   "gih_wr": 0.6210773115306
+  },
+  "Spitfire Lagac": {
+   "gih_games": 4484,
+   "gih_wr": 0.4870651204281891
+  },
+  "Squad Rallier": {
+   "gih_games": 42029,
+   "gih_wr": 0.5559494634657023
+  },
+  "Stab": {
+   "gih_games": 110637,
+   "gih_wr": 0.5785858257183402
+  },
+  "Strix Lookout": {
+   "gih_games": 79428,
+   "gih_wr": 0.5495543133403837
+  },
+  "Stroke of Midnight": {
+   "gih_games": 9819,
+   "gih_wr": 0.5113555351868826
+  },
+  "Stromkirk Bloodthief": {
+   "gih_games": 17878,
+   "gih_wr": 0.5253384047432599
+  },
+  "Strongbox Raider": {
+   "gih_games": 24677,
+   "gih_wr": 0.5525388013129635
+  },
+  "Sun-Blessed Healer": {
+   "gih_games": 41840,
+   "gih_wr": 0.5848470363288719
+  },
+  "Sure Strike": {
+   "gih_games": 25074,
+   "gih_wr": 0.5241285794049613
+  },
+  "Swamp": {
+   "gih_games": 395307,
+   "gih_wr": 0.5473922799242108
+  },
+  "Swiftblade Vindicator": {
+   "gih_games": 6541,
+   "gih_wr": 0.5332517963614126
+  },
+  "Swiftfoot Boots": {
+   "gih_games": 4240,
+   "gih_wr": 0.4384433962264151
+  },
+  "Swiftwater Cliffs": {
+   "gih_games": 25493,
+   "gih_wr": 0.5420703722590515
+  },
+  "Sylvan Scavenging": {
+   "gih_games": 14483,
+   "gih_wr": 0.6183111233860388
+  },
+  "Tatyova, Benthic Druid": {
+   "gih_games": 21624,
+   "gih_wr": 0.5237698853126156
+  },
+  "Temporal Manipulation": {
+   "gih_games": 1187,
+   "gih_wr": 0.5383319292333614
+  },
+  "Think Twice": {
+   "gih_games": 90931,
+   "gih_wr": 0.5658466309619382
+  },
+  "Thornwood Falls": {
+   "gih_games": 25862,
+   "gih_wr": 0.5377774340731575
+  },
+  "Thousand-Year Storm": {
+   "gih_games": 710,
+   "gih_wr": 0.34788732394366195
+  },
+  "Thrill of Possibility": {
+   "gih_games": 28441,
+   "gih_wr": 0.5148904750184593
+  },
+  "Time Stop": {
+   "gih_games": 4873,
+   "gih_wr": 0.4750666940283193
+  },
+  "Tinybones, Bauble Burglar": {
+   "gih_games": 17035,
+   "gih_wr": 0.5711182858820076
+  },
+  "Tolarian Terror": {
+   "gih_games": 54456,
+   "gih_wr": 0.5219810489202292
+  },
+  "Tragic Banshee": {
+   "gih_games": 45920,
+   "gih_wr": 0.5817290940766551
+  },
+  "Tranquil Cove": {
+   "gih_games": 35943,
+   "gih_wr": 0.5562974709957432
+  },
+  "Treetop Snarespinner": {
+   "gih_games": 48558,
+   "gih_wr": 0.5462127764734956
+  },
+  "Twinblade Blessing": {
+   "gih_games": 3908,
+   "gih_wr": 0.46827021494370524
+  },
+  "Twinflame Tyrant": {
+   "gih_games": 7386,
+   "gih_wr": 0.6047928513403736
+  },
+  "Uncharted Voyage": {
+   "gih_games": 79721,
+   "gih_wr": 0.5632142095558259
+  },
+  "Valkyrie's Call": {
+   "gih_games": 7440,
+   "gih_wr": 0.5790322580645161
+  },
+  "Vampire Gourmand": {
+   "gih_games": 50062,
+   "gih_wr": 0.5838160680755863
+  },
+  "Vampire Nighthawk": {
+   "gih_games": 41833,
+   "gih_wr": 0.5822675877895441
+  },
+  "Vampire Soulcaller": {
+   "gih_games": 52531,
+   "gih_wr": 0.5397574765376635
+  },
+  "Vanguard Seraph": {
+   "gih_games": 50345,
+   "gih_wr": 0.544900188697984
+  },
+  "Vengeful Bloodwitch": {
+   "gih_games": 29182,
+   "gih_wr": 0.5358097457336715
+  },
+  "Vivien Reid": {
+   "gih_games": 6939,
+   "gih_wr": 0.6139213143104194
+  },
+  "Wardens of the Cycle": {
+   "gih_games": 15094,
+   "gih_wr": 0.5115277593745859
+  },
+  "Wary Thespian": {
+   "gih_games": 55670,
+   "gih_wr": 0.5540147296569068
+  },
+  "Wildwood Scourge": {
+   "gih_games": 14605,
+   "gih_wr": 0.5120849024306744
+  },
+  "Wind-Scarred Crag": {
+   "gih_games": 24572,
+   "gih_wr": 0.53658635845678
+  },
+  "Witness Protection": {
+   "gih_games": 43883,
+   "gih_wr": 0.5281544105918009
+  },
+  "Youthful Valkyrie": {
+   "gih_games": 30274,
+   "gih_wr": 0.5569135231551826
+  },
+  "Zimone, Paradox Sculptor": {
+   "gih_games": 8661,
+   "gih_wr": 0.6262556286802909
+  },
+  "Zombify": {
+   "gih_games": 15509,
+   "gih_wr": 0.5314333612740989
+  },
+  "Zul Ashur, Lich Lord": {
+   "gih_games": 11488,
+   "gih_wr": 0.5457869080779945
+  }
+ },
+ "colors": {
+  "B": {
+   "games": 6693,
+   "wr": 0.5644703421485133
+  },
+  "BG": {
+   "games": 47161,
+   "wr": 0.5177159093318632
+  },
+  "BR": {
+   "games": 79140,
+   "wr": 0.5513267626990144
+  },
+  "BRG": {
+   "games": 1831,
+   "wr": 0.4855270344074276
+  },
+  "G": {
+   "games": 13504,
+   "wr": 0.5653139810426541
+  },
+  "R": {
+   "games": 2548,
+   "wr": 0.5627943485086342
+  },
+  "RG": {
+   "games": 57787,
+   "wr": 0.558239742502639
+  },
+  "U": {
+   "games": 6604,
+   "wr": 0.5237734706238644
+  },
+  "UB": {
+   "games": 104183,
+   "wr": 0.5484292063004521
+  },
+  "UBG": {
+   "games": 5537,
+   "wr": 0.4804045512010114
+  },
+  "UBR": {
+   "games": 2575,
+   "wr": 0.5064077669902912
+  },
+  "UG": {
+   "games": 43341,
+   "wr": 0.5252301515885651
+  },
+  "UR": {
+   "games": 58148,
+   "wr": 0.5292873357639127
+  },
+  "URG": {
+   "games": 1590,
+   "wr": 0.489937106918239
+  },
+  "W": {
+   "games": 8639,
+   "wr": 0.5971755990276653
+  },
+  "WB": {
+   "games": 123391,
+   "wr": 0.5514178505725701
+  },
+  "WBG": {
+   "games": 1984,
+   "wr": 0.4420362903225806
+  },
+  "WBR": {
+   "games": 2745,
+   "wr": 0.49326047358834246
+  },
+  "WG": {
+   "games": 61345,
+   "wr": 0.5427337191295134
+  },
+  "WR": {
+   "games": 57482,
+   "wr": 0.5563306774294562
+  },
+  "WRG": {
+   "games": 1692,
+   "wr": 0.483451536643026
+  },
+  "WU": {
+   "games": 93093,
+   "wr": 0.5595157530641401
+  },
+  "WUB": {
+   "games": 5377,
+   "wr": 0.5108796726799331
+  },
+  "WUG": {
+   "games": 2635,
+   "wr": 0.498292220113852
+  },
+  "WUR": {
+   "games": 1830,
+   "wr": 0.5005464480874317
+  }
+ }
+}
