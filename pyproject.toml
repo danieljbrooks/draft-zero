@@ -8,7 +8,7 @@ dependencies = [
     # Pinned to a commit, not a branch: a branch pin silently changes what a result was
     # produced against. Bump it deliberately, and record it (provenance.py does).
     # This is the mz-engine branch: framework only, no experiment code.
-    "magezero @ git+https://github.com/danieljbrooks/MageZero@512650a274ac5e1a157da7c18a512f2044561df5",
+    "magezero @ git+https://github.com/danieljbrooks/MageZero@7e38c12b9fb2debe7c79caf65fbf547ce76080da",
     "numpy>=1.24",
     "scipy>=1.10",
     "pyyaml>=6.0",

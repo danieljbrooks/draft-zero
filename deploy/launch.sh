@@ -33,6 +33,14 @@ print(f'== pools ok: {len(stems)} decks under ${MZ_DECK_DIR}')
 "
 
 TARGET="$(python -c "import yaml;print(yaml.safe_load(open('$CFG')).get('target_games') or 0)")"
+
+# One inference-server HTTP worker per game thread. Self-play opens one client per thread,
+# so a smaller pool leaves game threads queued in waitress before any inference starts --
+# the box then idles at half its CPU quota with the GPU barely warm and nothing obviously
+# at fault. Derived from the config so the two cannot drift apart.
+JVM_THREADS="$(python -c "import yaml;print((yaml.safe_load(open('$CFG')).get('jvm') or {}).get('threads') or 8)")"
+export MZ_SERVER_THREADS="${MZ_SERVER_THREADS:-$JVM_THREADS}"
+echo "== inference server threads: $MZ_SERVER_THREADS (jvm.threads=$JVM_THREADS)"
 echo "== config $CFG | target_games=$TARGET | persist=$DZ_PERSIST"
 nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo "   (no GPU: CPU-only worker)"
 
