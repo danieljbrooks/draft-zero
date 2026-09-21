@@ -1,0 +1,27 @@
+# Curriculum for the FDN generalist. Same lessons as experiments/fdn/configs/curriculum_laptop.yml:
+# binary priors from gen 2; priority priors stay off (at gen 3 they halved spells cast with an
+# undertrained policy head); target priors off until the target head has seen far more data.
+defaults:
+  td_discount: 0.70
+  prior_temperature: 1.5
+  priors:
+    binary: false
+    priority: false
+    target: false
+    opponent: false
+
+prior_schedule:
+  binary: 2
+  priority: null
+  target: null
+  opponent: null
+
+schedule:
+  - gen: 0
+    td_discount: 0.95
+  - gen: 1
+    td_discount: 0.92
+  - gen: 2
+    td_discount: 0.85
+  - gen: 3
+    td_discount: 0.70

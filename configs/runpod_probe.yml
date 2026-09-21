@@ -1,0 +1,22 @@
+# Throughput probe: gen 0 only (heuristic, no model needed), at the REAL search_budget of
+# 200 and with 12 game threads instead of 6. Compare against the smoke run's gen 0
+# (112.2 games/hr at search_budget=40, 6 threads) to separate two questions:
+#   - how much does raising search_budget 40 -> 200 cost in throughput?
+#   - does the idle CPU headroom (37-61% of a 7.65-core quota) convert into more games?
+# No eval, one generation, so it is bounded to ~20-30 minutes.
+model: FDN_generalist_probe
+version: 1
+generations: 1
+target_games: null
+resource_interval_s: 5
+
+bootstrap_games: 12
+games_per_gen: 12
+chunk_games: 12           # JVM thread pool = min(jvm.threads, chunk_games), so keep >= threads
+mix: {self: 0.7, past: 0.2, gen0: 0.1}
+replay_states: 6000
+
+eval: {baselines: [], pairs: 0, window_gens: 2}
+stats: {window_gens: 2, min_card_games: 1}
+
+jvm: {heap: 12g, threads: 12, search_budget: 200, timeout_ms: 8000, max_minutes: 10}

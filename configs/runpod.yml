@@ -1,0 +1,30 @@
+# FDN generalist on a RunPod RTX 4000 Ada (secure, EU-RO-1, $0.28/hr, 20 GB VRAM).
+#
+# Sizing: the pod is cgroup-capped to ~7.65 cores and 46.6 GB no matter what nproc says
+# (the container sees the host's 48 cores and 251 GB). 6 game threads leave headroom for
+# the inference server, the trainer and the OS.
+#
+# Throughput is MEASURED by the smoke run, not assumed -- set target_games from the
+# measured games/hour. target_games counts EVERY game in games.jsonl, including eval and
+# league games (~13% of the total), not just self-play.
+model: FDN_generalist
+version: 1
+generations: null           # open-ended; target_games is what actually stops the run
+target_games: 20000
+resource_interval_s: 15     # CPU/RAM/GPU sampling period
+
+bootstrap_games: 440        # gen 0: heuristic search on both sides
+games_per_gen: 440          # ~45 generations to reach the target -> enough points to see a trend
+chunk_games: 40             # dashboard refresh cadence; also caps the JVM thread pool (must be >= jvm.threads)
+mix: {self: 0.7, past: 0.2, gen0: 0.1}
+replay_states: 300000       # ~4 generations at ~100 states per player per game
+
+eval:
+  baselines: [offline, minimax]
+  pairs: 12                 # 48 eval games/gen: +-14pp per gen, +-6pp pooled over window_gens
+  window_gens: 5
+stats:
+  window_gens: 8
+  min_card_games: 50        # GIH rho is noisy below this; 20k games supports a higher bar
+
+jvm: {heap: 24g, threads: 6, search_budget: 200, timeout_ms: 8000, max_minutes: 30}

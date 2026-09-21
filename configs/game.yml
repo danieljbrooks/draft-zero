@@ -1,0 +1,82 @@
+# game.yml — base XMage-side config. The runner mutates deck paths, output files,
+# prior flags, td_discount, prior_temperature, offline_mode, games, and ports
+# before each JVM launch. Everything else passes through untouched — edit freely.
+
+goes_first: random  # player_a | player_b | random
+
+player_a:
+  deckPath: xmage/decks/UWTempo.dck
+  type: mcts
+  # output_file: set by runner
+
+  priors:
+    priority: false
+    target: false
+    binary: false
+    opponent: false
+    prior_temperature: 1.5
+
+  noise:
+    enabled: false
+    dirichlet_noise: 0.15
+    selection_temperature: 2
+
+  mcts:
+    search_budget: 4000
+    timeout_ms: 4000
+    td_discount: 0.85
+    offline_mode: false
+
+  gameplay:
+    mulligans_enabled: false
+    manual_tapping: false
+
+  hidden_info:
+    see_opponent_hand: true
+
+player_b:
+  deckPath: xmage/decks/UWTempo.dck
+  type: mcts
+  # output_file: set by runner
+
+  priors:
+    priority: false
+    target: false
+    binary: false
+    opponent: false
+    prior_temperature: 1.5
+
+  noise:
+    enabled: false
+    dirichlet_noise: 0.15
+    selection_temperature: 2
+
+  mcts:
+    search_budget: 4000
+    timeout_ms: 4000
+    td_discount: 0.85
+    offline_mode: false
+
+  gameplay:
+    mulligans_enabled: false
+    manual_tapping: false
+
+  hidden_info:
+    see_opponent_hand: true
+
+training:
+  games: 200
+  threads: 4
+  max_turns: 50
+
+server:
+  host: localhost
+  port: 50052
+  opponent_port: 50053
+
+logging:
+  sparse: false
+  all_threads: true
+  log_feature_hash: true
+  save_final_wr: true
+  show_mcts_info: true

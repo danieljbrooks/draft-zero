@@ -1,0 +1,29 @@
+[project]
+name = "draftzero"
+version = "0.1.0"
+description = "One agent that plays a whole Magic limited format with any deck"
+requires-python = ">=3.10"
+dependencies = [
+    # MageZero supplies the RL framework, the XMage bridge and the training/eval runner.
+    # Pinned to a commit, not a branch: a branch pin silently changes what a result was
+    # produced against. Bump it deliberately, and record it (provenance.py does).
+    # This is the mz-engine branch: framework only, no experiment code.
+    "magezero @ git+https://github.com/danieljbrooks/MageZero@bfb363c4d98e2f2511cc724da362ad026392f314",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pyyaml>=6.0",
+    "h5py>=3.8",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+dz = "draftzero.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+draftzero = ["py.typed"]

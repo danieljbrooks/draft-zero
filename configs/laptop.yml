@@ -1,0 +1,19 @@
+# FDN generalist on an M1 Pro laptop (3 game threads, fp16 inference; ~30 games/hour).
+# One generation is ~48 training games (~1.6 h) + training (~1 h) + 4 eval games, about 3 h.
+# Omitted keys take the defaults in src/draftzero/loop.py.
+model: FDN_generalist
+version: 1
+generations: null          # open-ended: stop the supervisor when done
+bootstrap_games: 96        # gen 0: heuristic search on both sides
+games_per_gen: 48
+chunk_games: 12            # dashboard refreshes after every chunk (~25 min)
+mix: {self: 0.7, past: 0.2, gen0: 0.1}
+replay_states: 40000       # ~5 generations of data at ~100 states per player per game
+eval:
+  baselines: [offline, minimax]
+  pairs: 1                 # per baseline per gen: 2 games, so 4 eval games/gen (~8% of games)
+  window_gens: 6
+stats:
+  window_gens: 10
+  min_card_games: 15
+jvm: {heap: 8g, threads: 3, search_budget: 200, timeout_ms: 8000, max_minutes: 30}

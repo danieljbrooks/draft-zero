@@ -1,0 +1,20 @@
+# Generated data: regenerate with `dz decks extract` / `dz pools build`, never commit.
+data/decks/
+data/pools/
+data/persist/
+runs/
+models/
+logs/
+.pools/
+.mz_tmp/
+
+# The XMage build is a pinned release artifact, not source (830MB).
+xmage
+xmage/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.DS_Store
