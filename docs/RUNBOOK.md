@@ -100,7 +100,35 @@ DZ_MAX_HOURS=<remaining> bash deploy/launch.sh configs/fdn_long.yml --resume
 `--resume` continues the newest unfinished run and redoes the interrupted stage. Worst case
 a crash costs one chunk (8 games) plus the current stage.
 
-## 6. How it stops
+## 6. Extending the run
+
+This run is deliberately small — it proves the pipeline and gives a learning curve. When it
+finishes, continue it rather than starting over:
+
+```bash
+# raise target_games in the config (or pass --target), then:
+DZ_MAX_HOURS=<more> bash deploy/launch.sh configs/fdn_3090.yml --extend
+```
+
+`--extend` reopens the **same** run: generation numbering, `games.jsonl`, the dashboard
+trend line and the pool of past checkpoints that the `past` mix draws from all carry over.
+A fresh run would restart at generation 0 and burn a heuristic bootstrap it does not need,
+and the strength curve would start over with it.
+
+It refuses to run if `target_games` has not been raised above the games already played,
+since the loop would otherwise stop again immediately. Each extension is recorded in
+`run.json` under `extensions`.
+
+Because extension is the plan, **pull the checkpoints off the pod before destroying it**:
+
+```bash
+rsync -rlptz --no-o --no-g -e "ssh -i ~/.ssh/id_ed25519 -p <port>" \
+  root@<ip>:/workspace/draftzero/{models,runs} ./recovered/
+```
+
+On community cloud there is no network volume, so this is the only copy.
+
+## 7. How it stops
 
 The watchdog ends the run on whichever comes first: `target_games` reached, `DZ_MAX_HOURS`
 elapsed, or no new game for `DZ_STALL_MINUTES` (45). In every case it syncs, **verifies the

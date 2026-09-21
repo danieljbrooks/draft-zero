@@ -117,6 +117,19 @@ class Run:
         return (self.models / f"{name}.pt.gz").exists()
 
 
+def find_latest(model: str) -> Optional[Path]:
+    """Newest run for this model, finished or not. Used by --extend."""
+    if not RUNS_DIR.exists():
+        return None
+    for d in sorted(RUNS_DIR.iterdir(), reverse=True):
+        f = d / "run.json"
+        if f.exists():
+            r = json.loads(f.read_text())
+            if r.get("generalist") and r["primary"]["deck"] == model and not r.get("abandoned_at"):
+                return d
+    return None
+
+
 def find_active(model: str) -> Optional[Path]:
     if not RUNS_DIR.exists():
         return None
@@ -442,7 +455,35 @@ def games_played(run: "Run") -> int:
     return len(read_games(run))
 
 
-def main(cfg: dict, resume: Optional[bool]) -> None:
+def main(cfg: dict, resume: Optional[bool], extend: bool = False) -> None:
+    if extend:
+        latest = find_latest(cfg["model"])
+        if latest is None:
+            print(f"[run] --extend: no run to extend for {cfg['model']}; starting fresh")
+        else:
+            state = json.loads((latest / "run.json").read_text())
+            done_at = state.pop("completed_at", None)
+            played = len([l for l in (latest / "games.jsonl").read_text().splitlines() if l.strip()]) \
+                if (latest / "games.jsonl").exists() else 0
+            target = cfg.get("target_games")
+            if target and played >= target:
+                raise SystemExit(
+                    f"[run] --extend: {latest.name} already has {played} games and target_games is "
+                    f"{target}. Raise target_games (or clear it) before extending, or the loop would "
+                    f"stop again immediately.")
+            # Reopening the SAME run keeps generation numbering, games.jsonl, the dashboard
+            # trend and the pool of past checkpoints the `past` mix draws from. A fresh run
+            # would restart at gen 0 and burn a heuristic bootstrap it does not need.
+            state["stage"] = state.get("stage") if state.get("stage") in STAGES else "play"
+            state["extended_at"] = datetime.now().isoformat()
+            state.setdefault("extensions", []).append(
+                {"at": state["extended_at"], "from_games": played, "to_target": target,
+                 "previously_completed_at": done_at})
+            (latest / "run.json").write_text(json.dumps(state, indent=2))
+            print(f"[run] extending {latest.name}: {played} games so far, "
+                  f"resuming at gen {state.get('current_gen')} toward {target}")
+            resume = True
+
     active = find_active(cfg["model"])
     if active and resume is None:
         resume = input(f"Active run found: {active.name}. Resume? [Y/n] ").strip().lower() in ("", "y", "yes")
@@ -528,5 +569,12 @@ if __name__ == "__main__":
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--resume", dest="resume", action="store_true", default=None)
     g.add_argument("--fresh", dest="resume", action="store_false")
+    g.add_argument("--extend", action="store_true",
+                   help="continue a finished run toward a raised target_games, keeping its "
+                        "generation numbering, history and past-checkpoint pool")
+    ap.add_argument("--target", type=int, help="override target_games for this invocation")
     args = ap.parse_args()
-    main(load_config(args.config), args.resume)
+    cfg = load_config(args.config)
+    if args.target:
+        cfg["target_games"] = args.target
+    main(cfg, args.resume, extend=args.extend)
