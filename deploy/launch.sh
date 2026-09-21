@@ -44,8 +44,20 @@ nohup python -u -m draftzero.loop --config "$CFG" "$MODE" > logs/loop.log 2>&1 &
 LOOP=$!
 echo "== loop pid $LOOP -> logs/loop.log"
 
+# --resume / --extend continue an EXISTING run dir, so no new one ever appears and the
+# newer-than-marker search below would spin for 3 minutes and then abort a healthy restart.
 RUN_DIR=""
+case "$MODE" in
+  --resume|--extend)
+    RUN_DIR="$(ls -1dt runs/*/ 2>/dev/null | head -1)"
+    RUN_DIR="${RUN_DIR%/}"
+    [ -n "$RUN_DIR" ] || { echo "!! $MODE but no existing run dir found"; rm -f "$MARKER"; exit 1; }
+    echo "== $MODE: continuing $RUN_DIR"
+    ;;
+esac
+
 for _ in $(seq 1 90); do
+  [ -n "$RUN_DIR" ] && break
   RUN_DIR="$(find runs -maxdepth 1 -mindepth 1 -type d -newer "$MARKER" 2>/dev/null | head -1)"
   [ -n "$RUN_DIR" ] && break
   kill -0 "$LOOP" 2>/dev/null || { echo "!! loop exited before creating a run dir:"; tail -20 logs/loop.log; rm -f "$MARKER"; exit 1; }
@@ -58,6 +70,7 @@ echo "== run dir $RUN_DIR"
 WD=(--run-dir "$RUN_DIR" --persist "$DZ_PERSIST" --interval "${DZ_WD_INTERVAL:-300}"
     --stall-minutes "${DZ_STALL_MINUTES:-45}")
 [ -n "${DZ_MAX_HOURS:-}" ] && WD+=(--max-hours "$DZ_MAX_HOURS")
+WD+=(--grace-hours "${DZ_GRACE_HOURS:-3}")   # finish the current generation before stopping
 [ "$TARGET" -gt 0 ] && WD+=(--target "$TARGET")
 [ -n "${DZ_ON_COMPLETE:-}" ] && WD+=(--on-complete "$DZ_ON_COMPLETE")
 

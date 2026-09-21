@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -31,6 +32,77 @@ from pathlib import Path
 
 def log(msg: str) -> None:
     print(f"[watchdog {datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def read_state(run_dir: Path) -> dict:
+    f = Path(run_dir) / "run.json"
+    try:
+        return json.loads(f.read_text()) if f.exists() else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def gens_done(run_dir: Path) -> int:
+    """Completed generations. A checkpoint exists for each, so this is the safe stop point."""
+    return len(read_state(run_dir).get("gens", {}))
+
+
+def loop_pids() -> list[int]:
+    """PIDs of actual trainer processes.
+
+    A bare `pgrep -f draftzero.loop` also matches any shell whose command line merely
+    mentions the module -- an ssh wrapper, a grep, this watchdog's own launcher. Killing
+    one of those would be at best confusing and at worst fatal to the run, so require the
+    executable to be python AND the argv to contain `-m draftzero.loop`, and never match
+    our own process.
+    """
+    me = os.getpid()
+    out = []
+    try:
+        listing = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True)
+    except Exception:
+        return []
+    for line in listing.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        pid_s, _, args = line.partition(" ")
+        try:
+            pid = int(pid_s)
+        except ValueError:
+            continue
+        if pid == me:
+            continue
+        argv = args.split()
+        if not argv or "python" not in os.path.basename(argv[0]):
+            continue
+        if "-m" in argv and "draftzero.loop" in argv:
+            out.append(pid)
+    return out
+
+
+def stop_loop(timeout: int = 300) -> str:
+    """Ask the trainer to exit, then make sure it has. Only ever called at a generation
+    boundary (or after the grace period), so nothing half-written is lost."""
+    pids = loop_pids()
+    if not pids:
+        return "trainer already exited"
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not loop_pids():
+            return f"trainer stopped ({len(pids)} pid(s))"
+        time.sleep(5)
+    for pid in loop_pids():
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    return "trainer killed after timeout"
 
 
 def count_games(run_dir: Path) -> int:
@@ -92,6 +164,11 @@ def main() -> int:
     ap.add_argument("--models", type=Path, default=Path("models"))
     ap.add_argument("--interval", type=int, default=300, help="seconds between checks")
     ap.add_argument("--stall-minutes", type=int, default=45)
+    ap.add_argument("--grace-hours", type=float, default=3.0,
+                    help="once the cap or target is hit, wait up to this long for the current "
+                         "generation to finish before stopping. A checkpoint is only written at "
+                         "a generation boundary, so cutting mid-generation throws that work away. "
+                         "If the grace expires the run is stopped anyway, to protect the budget.")
     ap.add_argument("--max-hours", type=float, default=0,
                     help="stop after this many hours of wall clock (0 = no limit). "
                          "A rented worker bills by the second, so this is the budget cap: "
@@ -105,6 +182,8 @@ def main() -> int:
 
     started = time.time()
     last_count, last_progress = -1, started
+    pending_since: Optional[float] = None
+    pending_reason, pending_gens = "", 0
     log(f"watching {a.run_dir} -> target {a.target} games, persist {a.persist}")
 
     while True:
@@ -125,15 +204,33 @@ def main() -> int:
         budget = f" | {elapsed_h:.1f}/{a.max_hours:g}h" if a.max_hours else ""
         log(f"{n}/{a.target} games | idle {idle_min:.0f}m{budget} | sync {'ok' if ok else 'FAILED'}")
 
-        if done or stalled or over_budget:
-            reason = ("target reached" if done else
-                      f"budget cap: {elapsed_h:.1f}h of {a.max_hours:g}h" if over_budget else
-                      f"stalled {idle_min:.0f}m with no new game")
+        if (done or stalled or over_budget) and pending_since is None:
+            pending_reason = ("target reached" if done else
+                              f"budget cap: {elapsed_h:.1f}h of {a.max_hours:g}h" if over_budget else
+                              f"stalled {idle_min:.0f}m with no new game")
+            pending_since, pending_gens = now, gens_done(a.run_dir)
+            log(f"stop requested ({pending_reason}); finishing generation {pending_gens} "
+                f"before shutting down (grace {a.grace_hours:g}h)")
+
+        if pending_since is not None:
+            waited_h = (now - pending_since) / 3600
+            at_boundary = gens_done(a.run_dir) > pending_gens or read_state(a.run_dir).get("completed_at")
+            expired = waited_h >= a.grace_hours
+            if stalled and not at_boundary:
+                at_boundary = True   # nothing is progressing; waiting for a boundary is pointless
+            if not (at_boundary or expired):
+                log(f"waiting for generation boundary: {waited_h:.1f}/{a.grace_hours:g}h")
+                time.sleep(a.interval)
+                continue
+            reason = pending_reason + (" (generation completed)" if at_boundary else
+                                       f" (grace {a.grace_hours:g}h expired mid-generation)")
             log(f"stopping: {reason}")
+            log(stop_loop())
             ok, detail = sync([a.models, a.run_dir], a.persist)
             vok, vdetail = verify(a.persist, a.run_dir.name)
             status = {"reason": reason, "games": n, "target": a.target,
                       "elapsed_hours": round(elapsed_h, 2), "max_hours": a.max_hours or None,
+                      "generations_completed": gens_done(a.run_dir),
                       "final_sync_ok": ok, "sync_detail": detail,
                       "verified": vok, "verify_detail": vdetail,
                       "at": datetime.now(timezone.utc).isoformat(),
