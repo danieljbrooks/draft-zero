@@ -5,10 +5,10 @@ description = "One agent that plays a whole Magic limited format with any deck"
 requires-python = ">=3.10"
 dependencies = [
     # MageZero supplies the RL framework, the XMage bridge and the training/eval runner.
-    # This must point at a branch that actually exists on the remote. Replace the branch
-    # with a commit SHA before any run you intend to reproduce -- a branch pin silently
-    # changes what your results were produced against.
-    "magezero @ git+https://github.com/danieljbrooks/MageZero@fdn-generalist",
+    # Pinned to a commit, not a branch: a branch pin silently changes what a result was
+    # produced against. Bump it deliberately, and record it (provenance.py does).
+    # This is the mz-engine branch: framework only, no experiment code.
+    "magezero @ git+https://github.com/danieljbrooks/MageZero@bfb363c4d98e2f2511cc724da362ad026392f314",
     "numpy>=1.24",
     "scipy>=1.10",
     "pyyaml>=6.0",

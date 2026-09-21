@@ -44,7 +44,7 @@ PY
 
 echo "== capacity (what the container may ACTUALLY use, not what it advertises)"
 python -c "
-from draftzero.resources import cpu_quota, mem_limit_gb
+from magezero.resources import cpu_quota, mem_limit_gb
 import psutil
 print(f'   visible: {psutil.cpu_count()} cores / {psutil.virtual_memory().total/1024**3:.0f} GB')
 print(f'   quota  : {cpu_quota()} cores / {mem_limit_gb() and round(mem_limit_gb())} GB')

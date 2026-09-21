@@ -34,8 +34,8 @@ import yaml
 from draftzero import paths as dzpaths
 from draftzero import provenance
 from draftzero import stats as gstats
-from draftzero.resources import ResourceMonitor
 from magezero import metrics
+from magezero.resources import ResourceMonitor
 from magezero.runner import (OPPONENT_PORT, PRIMARY_PORT, TMP_DIR, launch_jvm, refresh_dashboard, run_test,
                              run_train, start_server, stop_server)
 from magezero.util.config import GenSettings, load_curriculum, resolve_gen

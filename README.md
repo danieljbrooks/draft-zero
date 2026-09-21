@@ -112,6 +112,15 @@ cores / 46 GB), so never size threads from `nproc`; and the JVM thread pool is
 `min(jvm.threads, chunk_games)`, so `chunk_games` must be ≥ `threads` or the extra threads
 do nothing.
 
+## Known gap
+
+MageZero's dashboard renders the generic charts (throughput, losses, win rates, CPU/GPU/RAM).
+The **format-level** sections — card GIH win rate tables, Spearman ρ against 17lands, deck
+colour records — are computed here by `stats.py` but not yet rendered: that rendering lived
+in a patched `report.py` inside the old fork and was deliberately left out of the engine
+branch, since MageZero should not know what a draft format is. DraftZero needs to own that
+rendering. `stats.py` already produces the payload; only the HTML/JS side is missing.
+
 ## Measured throughput
 
 RTX 4000 Ada, 7.65-core quota, 9 vCPU pod:
