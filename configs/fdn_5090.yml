@@ -1,0 +1,48 @@
+# FDN generalist on a secure RTX 5090: 48 vCPU / 94 GB / 32 GB VRAM, $0.99/hr, EUR-IS-1.
+#
+# Why this box. Self-play is CPU-bound XMage/MCTS and the GPU measured 2-8% utilisation, so
+# the axis that matters is vCPU per dollar, not VRAM: 48.5 vCPU/$ here against 28.6 for an
+# RTX 4000 Ada. Cheaper offers appear and vanish within the hour (an RTX 3090 at 114 vCPU/$
+# and an L4 at 43 both sold out mid-survey), and the cheap ones are community cloud with no
+# network volume. This is a secure datacenter, so the weights survive any pod failure.
+#
+# MEASURED on the pod, not assumed: nproc reports 384 (the host's core count) but the
+# cgroup caps this container at 40.8 cores and 87 GB. Size threads from the cgroup.
+#
+# Throughput. The 4000 Ada measured 20.7 games/hr at search_budget 96 on a 7.65-core quota.
+# Scaling to 40.8 cores at 0.85 efficiency -- threads block on inference roughly 40% of the
+# time, so extra cores do not return linearly -- predicts ~86 games/hr. The single-threaded
+# inference worker may bottleneck well before that; watch res_cpu against env_gph.
+# THIS IS AN EXTRAPOLATION. Generation 1 confirms or refutes it; see docs/RUNBOOK.md.
+#
+# Scope. This is the proving run: enough generations to see whether strength trends up,
+# cheap enough to leave most of the budget for the real one. When the curve looks right,
+# raise target_games and continue with --extend, which keeps the generation numbering,
+# history and past-checkpoint pool rather than restarting at gen 0.
+model: FDN_generalist
+version: 1
+generations: null
+target_games: 2500           # counts every game in games.jsonl, eval and league included
+resource_interval_s: 30
+
+bootstrap_games: 96          # gen 0: heuristic both sides, much faster than network play
+games_per_gen: 72            # ~0.9h of play -> a ~1.5h generation, so ~30 generations
+chunk_games: 32              # ALSO caps the JVM thread pool, so must stay >= jvm.threads.
+                             # A crash costs at most one chunk.
+mix: {self: 0.7, past: 0.2, gen0: 0.1}
+replay_states: 150000        # ~10 generations at 72 games x 2 players x ~100 states
+
+eval:
+  baselines: [offline, minimax]
+  pairs: 2                   # 8 eval games/gen; the dashboard pools window_gens for the CI
+  window_gens: 8
+stats:
+  window_gens: 10
+  min_card_games: 30
+
+jvm:
+  heap: 56g                  # of 87 GB; the 4000 Ada peaked at 17.5 GB total with 8 threads
+  threads: 32                # of 40.8 cores, leaving ~9 for the inference server and trainer
+  search_budget: 96          # 200 would buy deeper search but ~2x fewer generations; see RUNBOOK
+  timeout_ms: 12000          # generous, so searches reach the visit budget instead of truncating
+  max_minutes: 25

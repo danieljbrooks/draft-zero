@@ -6,11 +6,11 @@ it is actually improving.
 
 | | |
 |---|---|
-| Config | `configs/fdn_long.yml` |
-| Worker | RunPod RTX 4000 Ada, **secure**, EU-RO-1, $0.28/hr |
-| Volume | `magezero-fdn` (`uot2qdgwry`), 50 GB, EU-RO-1, $0.013/hr — already holds the code, decks and XMage build |
-| Budget cap | `DZ_MAX_HOURS=230` → ~$67 of compute, leaving headroom in the $98 balance |
-| Expected | ~72 generations, ~4,100 games |
+| Config | `configs/fdn_5090.yml` (see also `fdn_long.yml` for an 8-vCPU box) |
+| Worker | RunPod RTX 5090, **secure**, EUR-IS-1, $0.99/hr — 48 vCPU (40.8 after cgroup), 94 GB |
+| Volume | `draftzero-l4` (`ejj4atzg14`), 60 GB, EUR-IS-1 — holds the code, decks and XMage build |
+| Budget cap | `DZ_MAX_HOURS=40` → ~$40 of compute, leaving most of the $98 for the extended run |
+| Expected | ~30 generations, ~2,500 games, ~2 days |
 
 Secure cloud is required: network volumes do not exist on community cloud, and without the
 volume a terminated pod takes the weights with it.
