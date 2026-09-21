@@ -61,3 +61,9 @@ def test_normalize_pool_file_is_idempotent(tmp_path):
     paths.normalize_pool_file(f)
     assert f.read_text().strip() == "FDN_x"
     assert paths.normalize_pool_file(f) == 0
+
+
+def test_build_pools_ignores_blank_trailing_line(tmp_path):
+    meta = tmp_path / "decks.tsv"
+    meta.write_text("deck\tsplit\nd1\ttrain\nd2\teval\n\n")
+    assert paths.build_pools(meta, tmp_path / "p") == {"train": 1, "eval": 1}

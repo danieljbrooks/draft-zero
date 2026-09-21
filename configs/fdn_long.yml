@@ -1,0 +1,48 @@
+# FDN generalist: the long run. One machine, ~10 days, ~$70.
+#
+# Worker: RunPod RTX 4000 Ada, secure, EU-RO-1, $0.28/hr + $0.013/hr for the 50 GB volume.
+# Sold as 9 vCPU / 50 GB; actually cgroup-capped to ~7.65 cores / 46 GB, and the container
+# reports the host's 48 cores / 251 GB. Never size threads from nproc.
+#
+# Throughput model, fitted to two measurements on that exact pod (network self-play, not
+# gen-0 heuristic, which is ~4x faster and misleading to plan from):
+#     hours_per_game = 0.0132 + 0.000365 * search_budget
+#     budget  64 -> 27 games/hr    budget 128 -> 17 games/hr
+#     budget  96 -> 21 games/hr    budget 200 -> 12 games/hr
+#
+# search_budget 96 is chosen over 200 deliberately. At 200 this pod yields ~43 generations
+# in the budget; at 96 it yields ~72. For a generalist that has to learn card values across
+# 31.5k decks, more policy-improvement steps and more games beat deeper search per move --
+# and calibrate_search.py found 200 visits only completes 99% of searches at 3 threads on an
+# M1. A cloud vCPU is slower and this runs 8 threads, so at 200 many searches would hit
+# timeout_ms and be truncated anyway: paying for depth and not getting it.
+# WATCH env_timeout on the dashboard. If searches are being cut off, raise timeout_ms before
+# touching search_budget.
+model: FDN_generalist
+version: 1
+generations: null            # open-ended; target_games and the watchdog's budget cap stop it
+target_games: 4200           # counts EVERY game in games.jsonl, eval and league included
+resource_interval_s: 30
+
+bootstrap_games: 96          # gen 0: heuristic search both sides, ~45 games/hr, ~2h
+games_per_gen: 48            # ~2.3h of play -> a ~3.2h generation, so a checkpoint every ~3h
+chunk_games: 8               # games per JVM launch. ALSO caps the JVM thread pool, so it
+                             # must stay >= jvm.threads. A crash loses at most one chunk.
+mix: {self: 0.7, past: 0.2, gen0: 0.1}
+replay_states: 100000        # ~10 generations of history at ~100 states per player per game
+
+eval:
+  baselines: [offline, minimax]
+  pairs: 2                   # 8 eval games/gen (~13% overhead). Per-gen CI is wide; the
+  window_gens: 8             # dashboard pools 8 gens -> ~64 games/point, tight enough for trend
+stats:
+  window_gens: 10
+  min_card_games: 30         # GIH rho is noise below this; 4k games gives most cards far more
+
+jvm:
+  heap: 20g                  # of 46 GB; measured peak was 17.5 GB total with a 12g heap
+  threads: 8                 # slightly over the 7.65-core quota on purpose: threads block on
+                             # inference round-trips, and CPU measured only 37-61% of quota at 6
+  search_budget: 96
+  timeout_ms: 12000          # generous, so searches reach the visit budget instead of truncating
+  max_minutes: 25            # XMage kills games at 20 min anyway; this bounds a pathological game

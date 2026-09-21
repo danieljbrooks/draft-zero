@@ -7,6 +7,7 @@
 #   DZ_PERSIST       where checkpoints are mirrored (default data/persist)
 #   DZ_ON_COMPLETE   shell command run after a verified final sync (e.g. destroy the pod)
 #   DZ_STALL_MINUTES no-new-game timeout before the run is declared stalled (default 45)
+#   DZ_MAX_HOURS     wall-clock budget cap; the worker stops itself after this many hours
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -56,6 +57,7 @@ echo "== run dir $RUN_DIR"
 
 WD=(--run-dir "$RUN_DIR" --persist "$DZ_PERSIST" --interval "${DZ_WD_INTERVAL:-300}"
     --stall-minutes "${DZ_STALL_MINUTES:-45}")
+[ -n "${DZ_MAX_HOURS:-}" ] && WD+=(--max-hours "$DZ_MAX_HOURS")
 [ "$TARGET" -gt 0 ] && WD+=(--target "$TARGET")
 [ -n "${DZ_ON_COMPLETE:-}" ] && WD+=(--on-complete "$DZ_ON_COMPLETE")
 

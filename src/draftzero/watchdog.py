@@ -71,7 +71,7 @@ def verify(dest: Path, run_name: str) -> tuple[bool, str]:
     if not (dest / "runs" / run_name).exists() and not (dest / run_name).exists():
         return False, "run artifacts not present in persist dir"
     total_mb = sum(c.stat().st_size for c in ckpts) / 1024 ** 2
-    return True, f"{len(ckpts)} checkpoints, {total_mb:.0f} MB"
+    return True, f"{len(ckpts)} checkpoints, {total_mb:.1f} MB"
 
 
 def run_on_complete(cmd: str) -> tuple[bool, str]:
@@ -92,6 +92,10 @@ def main() -> int:
     ap.add_argument("--models", type=Path, default=Path("models"))
     ap.add_argument("--interval", type=int, default=300, help="seconds between checks")
     ap.add_argument("--stall-minutes", type=int, default=45)
+    ap.add_argument("--max-hours", type=float, default=0,
+                    help="stop after this many hours of wall clock (0 = no limit). "
+                         "A rented worker bills by the second, so this is the budget cap: "
+                         "hours x rate. Deterministic, and needs no API credentials on the worker.")
     ap.add_argument("--on-complete", default=os.environ.get("DZ_ON_COMPLETE", ""),
                     help="shell command to run after a VERIFIED final sync (e.g. destroy the pod)")
     a = ap.parse_args()
@@ -99,7 +103,8 @@ def main() -> int:
     if a.on_complete:
         log(f"on-complete: {a.on_complete}")
 
-    last_count, last_progress = -1, time.time()
+    started = time.time()
+    last_count, last_progress = -1, started
     log(f"watching {a.run_dir} -> target {a.target} games, persist {a.persist}")
 
     while True:
@@ -113,16 +118,22 @@ def main() -> int:
         if not ok:
             log(f"sync FAILED: {detail}")
 
+        elapsed_h = (now - started) / 3600
         done = n >= a.target
         stalled = idle_min >= a.stall_minutes
-        log(f"{n}/{a.target} games | idle {idle_min:.0f}m | sync {'ok' if ok else 'FAILED'}")
+        over_budget = bool(a.max_hours) and elapsed_h >= a.max_hours
+        budget = f" | {elapsed_h:.1f}/{a.max_hours:g}h" if a.max_hours else ""
+        log(f"{n}/{a.target} games | idle {idle_min:.0f}m{budget} | sync {'ok' if ok else 'FAILED'}")
 
-        if done or stalled:
-            reason = "target reached" if done else f"stalled {idle_min:.0f}m with no new game"
+        if done or stalled or over_budget:
+            reason = ("target reached" if done else
+                      f"budget cap: {elapsed_h:.1f}h of {a.max_hours:g}h" if over_budget else
+                      f"stalled {idle_min:.0f}m with no new game")
             log(f"stopping: {reason}")
             ok, detail = sync([a.models, a.run_dir], a.persist)
             vok, vdetail = verify(a.persist, a.run_dir.name)
             status = {"reason": reason, "games": n, "target": a.target,
+                      "elapsed_hours": round(elapsed_h, 2), "max_hours": a.max_hours or None,
                       "final_sync_ok": ok, "sync_detail": detail,
                       "verified": vok, "verify_detail": vdetail,
                       "at": datetime.now(timezone.utc).isoformat(),

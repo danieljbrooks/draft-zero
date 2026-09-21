@@ -37,7 +37,7 @@ Dependencies point one way only. Nothing in MageZero knows DraftZero exists.
 | `src/draftzero/watchdog.py` | persist weights, detect stalls, end the run |
 | `src/draftzero/workers/` | where self-play runs: local, ssh, runpod |
 | `assets/` | small versioned inputs: deck metadata, action vocab, GIH reference |
-| `configs/` | run configs and the hyperparameter curriculum |
+| `configs/` | run configs (`fdn_long.yml` is the long run) and the curriculum |
 | `data/` | **generated, gitignored**: decks, pools, runs, checkpoints |
 
 `assets/` versus `data/` is the important line. Assets are small and reviewable and you
@@ -75,15 +75,21 @@ The `.dck` files themselves and the XMage build are fetched separately; point at
 ## Running
 
 ```bash
-bash deploy/bootstrap.sh                       # install deps, report the REAL cpu/ram quota
-bash deploy/launch.sh configs/smoke.yml        # ~20 min end-to-end check
-bash deploy/launch.sh configs/runpod.yml       # the real run
+bash deploy/bootstrap.sh                          # install deps, report the REAL cpu/ram quota
+bash deploy/launch.sh configs/runpod_smoke.yml    # ~20 min end-to-end check
+DZ_MAX_HOURS=230 bash deploy/launch.sh configs/fdn_long.yml   # the long run
 ```
 
+**[docs/RUNBOOK.md](docs/RUNBOOK.md)** is the operating guide for the long run: provisioning,
+what to verify in the first 24 hours, how to tell whether it is actually learning, and how to
+resume after a crash.
+
 `launch.sh` starts the loop and a watchdog. The watchdog mirrors checkpoints to
-`$DZ_PERSIST`, and when the run finishes or stalls it runs `$DZ_ON_COMPLETE` — **but only
-after verifying the final sync**. A failed sync never triggers it. Losing a worker is
-cheap; losing the weights is not.
+`$DZ_PERSIST` and ends the run on whichever comes first: `target_games`, `DZ_MAX_HOURS`
+(a wall-clock budget cap — hours × rate, needing no credentials on the worker), or
+`DZ_STALL_MINUTES` with no new game. Then it runs `$DZ_ON_COMPLETE` — **but only after
+verifying the final sync**. A failed sync never triggers it. Losing a worker is cheap;
+losing the weights is not.
 
 ## Workers
 
