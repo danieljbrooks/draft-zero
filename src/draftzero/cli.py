@@ -2,6 +2,7 @@
 
     dz status                     what the local run is doing
     dz pools normalize            rewrite pool files to machine-independent deck stems
+    dz dashboard runs/<id>        render the format-knowledge page
     dz workers rank               in-stock RunPod GPUs ranked by vCPU per dollar
     dz provenance                 what code is in play here
 """
@@ -26,6 +27,11 @@ def main(argv=None) -> int:
     p_w = sub.add_parser("workers", help="worker helpers")
     p_w.add_argument("action", choices=["rank"])
     p_w.add_argument("--min-vcpu", type=int, default=8)
+
+    p_dash = sub.add_parser("dashboard", help="render the format-knowledge page for a run")
+    p_dash.add_argument("run_dir")
+    p_dash.add_argument("--meta")
+    p_dash.add_argument("--reference")
 
     sub.add_parser("status", help="local run status")
 
@@ -65,6 +71,17 @@ def main(argv=None) -> int:
         for r in rows[:12]:
             print(f"{r['name']:<22}{r['price']:>7}{r['vcpu']:>6}{str(r['ram'])+'G':>6}"
                   f"{r['vcpu_per_dollar']:>8}  {','.join(r['datacenters'][:3])}")
+        return 0
+
+    if a.cmd == "dashboard":
+        from draftzero import dashboard
+        out = dashboard.render(Path(a.run_dir),
+                               meta_path=Path(a.meta) if a.meta else None,
+                               reference_path=Path(a.reference) if a.reference else None)
+        if out is None:
+            print("no games in that run yet; nothing rendered", file=sys.stderr)
+            return 1
+        print(out)
         return 0
 
     if a.cmd == "status":

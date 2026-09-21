@@ -31,6 +31,7 @@ from typing import Optional
 
 import yaml
 
+from draftzero import dashboard
 from draftzero import paths as dzpaths
 from draftzero import provenance
 from draftzero import stats as gstats
@@ -226,7 +227,12 @@ def refresh(run: Run) -> None:
                 f.write(f"{d}\t{run.meta.get(d, {}).get('main_colors', '?')}\t{n}\t{w}\n")
     except Exception as e:
         print(f"[metrics] WARNING deck records failed: {e}")
-    refresh_dashboard(run.dir)
+    refresh_dashboard(run.dir)          # MageZero: generic training health
+    try:
+        dashboard.render(run.dir)       # DraftZero: format knowledge
+    except Exception as e:
+        # a rendering problem must never take down a run that is generating games fine
+        print(f"[metrics] WARNING format dashboard failed: {e}")
 
 
 # ── play ─────────────────────────────────────────────────────

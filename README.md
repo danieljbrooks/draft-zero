@@ -30,6 +30,7 @@ Dependencies point one way only. Nothing in MageZero knows DraftZero exists.
 | `src/draftzero/stats.py` | GIH win rate, Spearman ρ vs 17lands, deck/colour records |
 | `src/draftzero/pools.py` | build deck pools from 17lands exports |
 | `src/draftzero/reference.py` | build the 17lands GIH reference |
+| `src/draftzero/dashboard.py` | the format-knowledge page (`format.html`) |
 | `src/draftzero/paths.py` | resolve deck stems against a machine-local `deck_root` |
 | `src/draftzero/provenance.py` | record which code produced a run |
 | `src/draftzero/resources.py` | CPU/RAM/GPU sampling that respects cgroup limits |
@@ -112,14 +113,27 @@ cores / 46 GB), so never size threads from `nproc`; and the JVM thread pool is
 `min(jvm.threads, chunk_games)`, so `chunk_games` must be ≥ `threads` or the extra threads
 do nothing.
 
-## Known gap
+## Dashboards
 
-MageZero's dashboard renders the generic charts (throughput, losses, win rates, CPU/GPU/RAM).
-The **format-level** sections — card GIH win rate tables, Spearman ρ against 17lands, deck
-colour records — are computed here by `stats.py` but not yet rendered: that rendering lived
-in a patched `report.py` inside the old fork and was deliberately left out of the engine
-branch, since MageZero should not know what a draft format is. DraftZero needs to own that
-rendering. `stats.py` already produces the payload; only the HTML/JS side is missing.
+Each run writes three pages into `runs/<id>/`:
+
+| Page | Rendered by | Shows |
+|---|---|---|
+| `index.html` | DraftZero | landing page linking the other two |
+| `dashboard.html` | MageZero | win rates, losses, throughput, CPU/GPU/RAM |
+| `format.html` | DraftZero | card GIH WR vs 17lands, Spearman ρ, deck colour records |
+
+The split follows the dependency direction: MageZero renders generic training health and
+has no idea what a draft format is, so DraftZero renders the format view itself rather
+than patching a template it does not own. `format.html` is standalone — no build step, no
+CDN, and no use of MageZero's internal chart helpers, which would break silently the next
+time that template changes.
+
+Both refresh automatically after every chunk of games. To rebuild by hand:
+
+```bash
+dz dashboard runs/<run_id>
+```
 
 ## Measured throughput
 
