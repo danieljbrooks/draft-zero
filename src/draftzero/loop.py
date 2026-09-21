@@ -490,10 +490,14 @@ def main(cfg: dict, resume: Optional[bool], extend: bool = False) -> None:
     if active and resume:
         run = Run(cfg, active)
         gen, stage = run.state["current_gen"], run.state["stage"]
+        # Map sub-stages to their owning stage BEFORE the membership test. Reversed, the
+        # test clobbers "eval_prev" to "play" and the mapping below becomes dead code: a
+        # resume then replays the whole generation and discards games already in the bank.
+        # Generation 1 lost 67 completed games to exactly this.
+        if stage == "eval_prev":
+            stage = "train"          # eval_prev runs inside train_generation
         if stage not in STAGES:
             stage = "play"
-        if stage == "eval_prev":
-            stage = "train"
         print(f"[run] resuming {active.name} at gen {gen}, stage {stage}")
         if stage == "play":
             # redo the generation's games: drop its half-written data and logged games

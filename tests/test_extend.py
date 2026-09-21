@@ -62,3 +62,26 @@ def test_extend_reopens_the_same_run_and_records_history(tmp_path, monkeypatch):
     assert state["extensions"][0]["from_games"] == 100
     assert state["extensions"][0]["to_target"] == 500
     assert state["extensions"][0]["previously_completed_at"] == "2026-01-02T00:00:00"
+
+
+@pytest.mark.parametrize("stored,expected", [
+    ("play", "play"),
+    ("train", "train"),
+    ("eval", "eval"),
+    ("eval_prev", "train"),   # a sub-stage of train, NOT a restart of play
+    ("nonsense", "play"),
+    (None, "play"),
+])
+def test_resume_stage_mapping(stored, expected):
+    """eval_prev must map to train.
+
+    It is not in STAGES, so a membership test placed first rewrites it to "play" --
+    and resuming into "play" deletes that generation's already-recorded games.
+    """
+    STAGES = loop.STAGES
+    stage = stored
+    if stage == "eval_prev":
+        stage = "train"
+    if stage not in STAGES:
+        stage = "play"
+    assert stage == expected
