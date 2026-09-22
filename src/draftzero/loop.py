@@ -64,7 +64,8 @@ DEFAULTS = {
     "replay_states": 40000,
     "epochs_bootstrap": 2,
     "epochs": 1,
-    "eval": {"baselines": ["offline", "minimax"], "pairs": 1, "window_gens": 6},
+    "eval": {"baselines": ["offline", "minimax"], "pairs": 1, "window_gens": 6,
+             "every_n_gens": 1, "fixed_decks": True},
     "stats": {"window_gens": 10, "min_card_games": 15},
     "jvm": {"heap": "8g", "threads": 3, "search_budget": 200, "timeout_ms": 8000, "max_minutes": 30},
 }
@@ -397,7 +398,13 @@ def eval_generation(run: Run, gen: int, settings: GenSettings) -> dict:
     server = start_server(run.model, run.version, PRIMARY_PORT, run.dir, checkpoint=f"gen{gen}")
     try:
         for baseline in ev["baselines"]:
-            rng = random.Random(f"eval-{gen}-{baseline}")
+            # Seeding on the generation resamples the eval decks every time, so each point
+            # is measured against a different set of matchups and deck variance is added on
+            # top of the agent's. With a fixed set the same matchups recur, every generation
+            # becomes a PAIRED comparison with the last, and a real change is far easier to
+            # see than it is through a fresh random sample each time.
+            seed = f"eval-{baseline}" if ev.get("fixed_decks", True) else f"eval-{gen}-{baseline}"
+            rng = random.Random(seed)
             pool_a, pool_b = [], []
             for _ in range(ev["pairs"]):
                 x, y = rng.sample(run.eval_pool, 2)
@@ -546,8 +553,16 @@ def main(cfg: dict, resume: Optional[bool], extend: bool = False) -> None:
             stage = "eval"
         if stage == "eval":
             run.update(current_gen=gen, stage="eval")
-            if run.cfg["eval"]["baselines"]:
+            ev_cfg = run.cfg["eval"]
+            every = int(ev_cfg.get("every_n_gens", 1) or 1)
+            # A run of 8-game evals buys 30 useless points; the same budget spent every Nth
+            # generation buys a handful of points each big enough to read.
+            due = (gen % every == 0) or (gen == 0)
+            if ev_cfg["baselines"] and due:
                 record.update(eval_generation(run, gen, settings))
+            elif ev_cfg["baselines"]:
+                print(f"[eval] gen {gen}: skipped (every {every} generations; next at "
+                      f"gen {((gen // every) + 1) * every})")
         record["gen_seconds"] = record.get("gen_seconds", 0) + time.time() - t0
         record["completed_at"] = datetime.now().isoformat()
         gens = run.state["gens"]

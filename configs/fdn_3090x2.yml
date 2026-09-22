@@ -27,9 +27,20 @@ mix: {self: 0.7, past: 0.2, gen0: 0.1}
 replay_states: 150000
 
 eval:
-  baselines: [offline, minimax]
-  pairs: 2                   # 8 eval games/gen, ~10% overhead; pooled over window_gens
-  window_gens: 8
+  # Milestone evaluation. 8 games a generation gives +/-28pp at 95% -- thirty points, none
+  # of them readable. The same ~10% budget spent every fifth generation buys 6 points of 40
+  # games at +/-15pp, which can actually be read.
+  baselines: [offline]       # search at the same budget with no network. Beating it is the
+                             # question that matters: does the network add value over raw
+                             # search? minimax is a much stronger scripted AI (gen 0 scored
+                             # 0/4) and would read ~0% for a long time -- run it by hand for
+                             # an absolute reference rather than spending the budget on it.
+  every_n_gens: 5            # 6 evals over ~30 generations
+  pairs: 20                  # 20 pairs x 2 orders = 40 games per eval, 240 total (9.6%)
+  fixed_decks: true          # THE important one: the same deck pairs every milestone, so
+                             # each point is a paired comparison with the last instead of a
+                             # fresh random sample carrying its own matchup variance
+  window_gens: 10            # dashboard pools two milestones -> n=80, +/-11pp
 stats:
   window_gens: 10
   min_card_games: 30
