@@ -202,7 +202,23 @@ def run_on_complete(cmd: str) -> tuple[bool, str]:
         return False, str(e)
 
 
+def _watchdog_count() -> int:
+    """How many watchdog processes are running, this one included."""
+    try:
+        out = subprocess.run(["pgrep", "-fc", "draftzero.watchdog"], capture_output=True, text=True)
+        return int(out.stdout.strip() or "0")
+    except Exception:
+        return 1
+
+
 def main() -> int:
+    # Singleton guard. Never let two watchdogs run at once: a second one doubles restarts
+    # and, since a restart used to relaunch launch.sh (which starts a watchdog), that once
+    # cascaded into hundreds. Even with that fixed, two watchdogs racing on the sync and HF
+    # push is a bug, so a duplicate exits immediately.
+    if _watchdog_count() > 1:
+        print("[watchdog] another watchdog is already running; exiting to stay singleton", flush=True)
+        return 0
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-dir", required=True, type=Path)
     ap.add_argument("--target", type=int, default=20000)

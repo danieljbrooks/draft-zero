@@ -88,7 +88,11 @@ WD=(--run-dir "$RUN_DIR" --persist "$DZ_PERSIST" --interval "${DZ_WD_INTERVAL:-3
 # Let the watchdog bring the trainer back itself. Without this a crash idles a rented
 # machine until the stall timer fires -- hours of paid-for nothing, which is exactly what
 # happened twice on the first run.
-WD+=(--restart-cmd "cd $(pwd) && bash deploy/launch.sh $CFG --resume")
+# Restart relaunches ONLY the trainer loop -- never launch.sh, which would start another
+# watchdog. A watchdog spawning a watchdog is exponential: one crash cascaded to 269
+# watchdogs, DoS'd the box and the HF API, and truncated games.jsonl. The loop inherits
+# this shell's exported env (PYTHONPATH, MZ_*), so a bare module invocation is enough.
+WD+=(--restart-cmd "cd $(pwd) && setsid python -u -m draftzero.loop --config $CFG --resume < /dev/null >> logs/loop.log 2>&1 &")
 [ -n "${DZ_HF_ENV:-}" ] && WD+=(--hf-env "$DZ_HF_ENV")
 WD+=(--max-restarts "${DZ_MAX_RESTARTS:-3}")
 WD+=(--grace-hours "${DZ_GRACE_HOURS:-3}")   # finish the current generation before stopping
