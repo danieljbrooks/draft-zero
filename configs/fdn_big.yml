@@ -1,0 +1,32 @@
+# FDN generalist on a large multi-GPU community pod (2x/4x, ~74-80 vCPU, no network volume).
+# Durability is the HF push, not a volume. Sized to run safely on any box with >=54 usable
+# cores after the cgroup cap; deploy/bootstrap.sh prints the real quota, and the [PHASE] line
+# in the server log reveals whether the extra cores convert to games.
+model: FDN_generalist
+version: 1
+generations: null
+target_games: 2500
+resource_interval_s: 30
+
+bootstrap_games: 96
+games_per_gen: 72
+chunk_games: 48              # ALSO caps the JVM thread pool; must stay >= jvm.threads
+mix: {self: 0.7, past: 0.2, gen0: 0.1}
+replay_states: 150000
+
+eval:
+  baselines: [offline]       # search at the same budget, no network -- the question that matters
+  every_n_gens: 5            # 40-game milestone every 5th gen; ~10% budget, +/-15pp per point
+  pairs: 20
+  fixed_decks: true          # same deck pairs each milestone -> paired comparison across gens
+  window_gens: 10
+stats:
+  window_gens: 10
+  min_card_games: 30
+
+jvm:
+  heap: 48g                  # of ~270 GB; ample
+  threads: 44                # of ~54-63 usable cores, leaving room for torch collate + trainer
+  search_budget: 96
+  timeout_ms: 12000
+  max_minutes: 25
