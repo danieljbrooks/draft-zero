@@ -31,6 +31,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from draftzero import alerts
+
 def log(msg: str) -> None:
     print(f"[watchdog {datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -55,6 +57,16 @@ def seconds_since_activity(run_dir: Path) -> float:
     except OSError:
         return 0.0
     return (time.time() - newest) if newest else 0.0
+
+
+def _tail(run_dir: Path, lines: int = 25) -> str:
+    """Last lines of the trainer log, so an alert carries the traceback not just a verdict."""
+    for cand in (Path(run_dir).parent.parent / "logs" / "loop.log", Path("logs/loop.log")):
+        try:
+            return "\n".join(cand.read_text().splitlines()[-lines:])
+        except OSError:
+            continue
+    return ""
 
 
 def read_state(run_dir: Path) -> dict:
@@ -187,6 +199,11 @@ def main() -> int:
     ap.add_argument("--models", type=Path, default=Path("models"))
     ap.add_argument("--interval", type=int, default=300, help="seconds between checks")
     ap.add_argument("--stall-minutes", type=int, default=45)
+    ap.add_argument("--restart-cmd", default=os.environ.get("DZ_RESTART_CMD", ""),
+                    help="shell command that relaunches the trainer (typically launch.sh "
+                         "--resume). Without it a crashed trainer just idles the worker until "
+                         "the stall timer fires, which is hours of paid-for nothing.")
+    ap.add_argument("--max-restarts", type=int, default=3)
     ap.add_argument("--grace-hours", type=float, default=3.0,
                     help="once the cap or target is hit, wait up to this long for the current "
                          "generation to finish before stopping. A checkpoint is only written at "
@@ -202,6 +219,12 @@ def main() -> int:
 
     if a.on_complete:
         log(f"on-complete: {a.on_complete}")
+    if a.restart_cmd:
+        log(f"restart-cmd: {a.restart_cmd} (up to {a.max_restarts}x)")
+    if os.environ.get("DZ_ALERT_TOPIC"):
+        log(f"alerts -> ntfy topic set" + (", email on" if os.environ.get("DZ_ALERT_EMAIL") else ""))
+    restarts = 0
+    sync_warned = False
 
     started = time.time()
     last_count, last_progress = -1, started
@@ -224,9 +247,47 @@ def main() -> int:
         ok, detail = sync([a.models, a.run_dir], a.persist)
         if not ok:
             log(f"sync FAILED: {detail}")
+            if not sync_warned:
+                sync_warned = True
+                alerts.send(alerts.SYNC_FAILED,
+                            "Checkpoint sync to the volume is failing. Weights may not be "
+                            "safe, and the worker will NOT self-terminate while this is true.",
+                            detail, a.run_dir)
 
         elapsed_h = (now - started) / 3600
         done = n >= a.target
+
+        # The trainer died and the run is not finished. Restart it: the loop resumes at the
+        # interrupted stage, so the cost is one chunk, versus idling a rented machine until
+        # the stall timer eventually declares the whole run dead.
+        if not trainer_alive and not done and a.restart_cmd and pending_since is None:
+            if restarts < a.max_restarts:
+                restarts += 1
+                backoff = 30 * restarts
+                log(f"TRAINER GONE ({n} games). restart {restarts}/{a.max_restarts} in {backoff}s")
+                alerts.send(alerts.CRASH,
+                            f"Trainer stopped at {n} games (gen {gens_done(a.run_dir)}). "
+                            f"Restarting ({restarts}/{a.max_restarts}).",
+                            _tail(a.run_dir), a.run_dir)
+                time.sleep(backoff)
+                r = subprocess.run(a.restart_cmd, shell=True, capture_output=True,
+                                   text=True, timeout=600)
+                ok_restart = r.returncode == 0 and bool(loop_pids())
+                log(f"restart {'ok' if ok_restart else 'FAILED'}: "
+                    f"{(r.stdout or r.stderr).strip()[:200]}")
+                alerts.send(alerts.RESTART if ok_restart else alerts.RESTART_FAILED,
+                            f"Restart {restarts}/{a.max_restarts} "
+                            f"{'succeeded' if ok_restart else 'FAILED'} at {n} games.",
+                            (r.stdout or r.stderr)[-1000:], a.run_dir)
+                if ok_restart:
+                    last_progress = time.time()   # give the new trainer a fresh stall window
+                    time.sleep(a.interval)
+                    continue
+            else:
+                log(f"restart budget exhausted ({a.max_restarts}); letting the stall timer run")
+                alerts.send(alerts.RESTART_FAILED,
+                            f"Trainer down and {a.max_restarts} restarts exhausted at {n} games. "
+                            f"Worker will shut down.", _tail(a.run_dir), a.run_dir)
         stalled = (idle_min >= a.stall_minutes
                    and quiet_min >= a.stall_minutes
                    and not trainer_alive)
@@ -257,6 +318,9 @@ def main() -> int:
             reason = pending_reason + (" (generation completed)" if at_boundary else
                                        f" (grace {a.grace_hours:g}h expired mid-generation)")
             log(f"stopping: {reason}")
+            alerts.send(alerts.DONE if done else alerts.BUDGET if over_budget else alerts.STALLED,
+                        f"Run stopping: {reason}. {n} games, "
+                        f"{gens_done(a.run_dir)} generations.", "", a.run_dir)
             log(stop_loop())
             ok, detail = sync([a.models, a.run_dir], a.persist)
             vok, vdetail = verify(a.persist, a.run_dir.name)
@@ -276,6 +340,10 @@ def main() -> int:
                     "Worker left alive for inspection.")
                 return 1
             if a.on_complete:
+                alerts.send(alerts.TERMINATING,
+                            f"Weights verified on the volume ({vdetail}). Destroying the "
+                            f"worker now. {n} games, {gens_done(a.run_dir)} generations.",
+                            "", a.run_dir)
                 tok, tdetail = run_on_complete(a.on_complete)
                 log(f"on-complete {'ok' if tok else 'FAILED'}: {tdetail}")
                 return 0 if tok else 1

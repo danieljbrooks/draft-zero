@@ -128,7 +128,32 @@ rsync -rlptz --no-o --no-g -e "ssh -i ~/.ssh/id_ed25519 -p <port>" \
 
 On community cloud there is no network volume, so this is the only copy.
 
-## 7. How it stops
+## 7. Alerts and auto-restart
+
+The first run lost hours to a crashed trainer sitting on a billing machine with nobody
+watching, so the watchdog now handles both.
+
+**Auto-restart.** If the trainer process disappears while the run is unfinished, the
+watchdog relaunches it with `--resume` (3 attempts, 30s/60s/90s backoff). Resuming costs
+at most one chunk. Set `DZ_MAX_RESTARTS` to change the budget.
+
+**Alerts.** Set an unguessable topic and the watchdog pushes crash, restart, stall, budget,
+shutdown and sync-failure events:
+
+```bash
+export DZ_ALERT_TOPIC="draftzero-<random hex>"    # see ~/.runpod/alert_topic
+```
+
+Subscribe on your phone with the ntfy app, or open `https://ntfy.sh/<topic>` in a browser.
+No account required.
+
+**E-mail** needs a free ntfy account: create one, then set `DZ_ALERT_EMAIL` and
+`DZ_ALERT_TOKEN`. Without a token ntfy rejects anonymous e-mail with HTTP 400, and the
+alert falls back to push only rather than failing — push is the channel that must not break.
+
+Every alert is also appended to `runs/<id>/alerts.jsonl` regardless of transport.
+
+## 8. How it stops
 
 The watchdog ends the run on whichever comes first: `target_games` reached, `DZ_MAX_HOURS`
 elapsed, or no new game for `DZ_STALL_MINUTES` (45). In every case it syncs, **verifies the

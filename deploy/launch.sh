@@ -8,6 +8,9 @@
 #   DZ_ON_COMPLETE   shell command run after a verified final sync (e.g. destroy the pod)
 #   DZ_STALL_MINUTES no-new-game timeout before the run is declared stalled (default 45)
 #   DZ_MAX_HOURS     wall-clock budget cap; the worker stops itself after this many hours
+#   DZ_ALERT_TOPIC   ntfy topic for crash/restart/shutdown alerts (no account needed)
+#   DZ_ALERT_EMAIL   ntfy also forwards those alerts to this address
+#   DZ_MAX_RESTARTS  how many times to relaunch a crashed trainer (default 3)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -78,6 +81,11 @@ echo "== run dir $RUN_DIR"
 WD=(--run-dir "$RUN_DIR" --persist "$DZ_PERSIST" --interval "${DZ_WD_INTERVAL:-300}"
     --stall-minutes "${DZ_STALL_MINUTES:-45}")
 [ -n "${DZ_MAX_HOURS:-}" ] && WD+=(--max-hours "$DZ_MAX_HOURS")
+# Let the watchdog bring the trainer back itself. Without this a crash idles a rented
+# machine until the stall timer fires -- hours of paid-for nothing, which is exactly what
+# happened twice on the first run.
+WD+=(--restart-cmd "cd $(pwd) && bash deploy/launch.sh $CFG --resume")
+WD+=(--max-restarts "${DZ_MAX_RESTARTS:-3}")
 WD+=(--grace-hours "${DZ_GRACE_HOURS:-3}")   # finish the current generation before stopping
 [ "$TARGET" -gt 0 ] && WD+=(--target "$TARGET")
 [ -n "${DZ_ON_COMPLETE:-}" ] && WD+=(--on-complete "$DZ_ON_COMPLETE")
