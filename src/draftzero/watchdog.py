@@ -29,9 +29,32 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 def log(msg: str) -> None:
     print(f"[watchdog {datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def seconds_since_activity(run_dir: Path) -> float:
+    """Age of the most recent write anywhere in the run directory.
+
+    games.jsonl only grows when a whole CHUNK finishes -- about every 27 minutes here --
+    so using it alone as the liveness signal declares a perfectly healthy run dead the
+    moment one chunk runs long. The JVM writes its log continuously, so file activity is
+    the honest signal. This exact mistake destroyed a working pod: idle_min was climbing
+    past the threshold while the JVM log had been written 0 seconds earlier.
+    """
+    newest = 0.0
+    try:
+        for f in Path(run_dir).rglob("*"):
+            if f.is_file():
+                try:
+                    newest = max(newest, f.stat().st_mtime)
+                except OSError:
+                    continue
+    except OSError:
+        return 0.0
+    return (time.time() - newest) if newest else 0.0
 
 
 def read_state(run_dir: Path) -> dict:
@@ -192,6 +215,11 @@ def main() -> int:
         if n > last_count:
             last_count, last_progress = n, now
         idle_min = (now - last_progress) / 60
+        # Two independent liveness signals. A run is only stalled when BOTH say so: no new
+        # games AND nothing written to the run dir AND no trainer process. Any one of these
+        # alone produces false positives that cost a pod.
+        quiet_min = seconds_since_activity(a.run_dir) / 60
+        trainer_alive = bool(loop_pids())
 
         ok, detail = sync([a.models, a.run_dir], a.persist)
         if not ok:
@@ -199,10 +227,14 @@ def main() -> int:
 
         elapsed_h = (now - started) / 3600
         done = n >= a.target
-        stalled = idle_min >= a.stall_minutes
+        stalled = (idle_min >= a.stall_minutes
+                   and quiet_min >= a.stall_minutes
+                   and not trainer_alive)
         over_budget = bool(a.max_hours) and elapsed_h >= a.max_hours
         budget = f" | {elapsed_h:.1f}/{a.max_hours:g}h" if a.max_hours else ""
-        log(f"{n}/{a.target} games | idle {idle_min:.0f}m{budget} | sync {'ok' if ok else 'FAILED'}")
+        live = "alive" if trainer_alive else "NO TRAINER"
+        log(f"{n}/{a.target} games | idle {idle_min:.0f}m | quiet {quiet_min:.0f}m | {live}"
+            f"{budget} | sync {'ok' if ok else 'FAILED'}")
 
         if (done or stalled or over_budget) and pending_since is None:
             pending_reason = ("target reached" if done else
