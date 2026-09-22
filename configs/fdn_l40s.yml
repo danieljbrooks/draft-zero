@@ -1,0 +1,34 @@
+# FDN generalist on L40S community single-GPU: 28 vCPU (23.8 usable), 116GB, $0.79/hr. HF push for durability.
+# Network volume + HF push, so weights are doubly safe. Sized to actually USE the cores:
+# 96 game threads of 163, so self-play runs wide. Whether that converts to games is the open
+# question -- the inference server is a single worker_loop, and the [PHASE] line reveals if it
+# saturates. Cost is bounded by DZ_MAX_HOURS at launch, since $3.96/hr only pays off if the
+# extra cores convert.
+model: FDN_generalist
+version: 1
+generations: null
+target_games: 2500
+resource_interval_s: 30
+
+bootstrap_games: 96
+games_per_gen: 72
+chunk_games: 24             # >= threads
+mix: {self: 0.7, past: 0.2, gen0: 0.1}
+replay_states: 150000
+
+eval:
+  baselines: [offline]
+  every_n_gens: 5
+  pairs: 20
+  fixed_decks: true
+  window_gens: 10
+stats:
+  window_gens: 10
+  min_card_games: 30
+
+jvm:
+  heap: 48g                  # of 116GB
+  threads: 18                # of 23.8 usable cores, feeding the inference server near its ceiling
+  search_budget: 96
+  timeout_ms: 12000
+  max_minutes: 25
