@@ -1,0 +1,43 @@
+# FDN generalist on 2x RTX 3090, secure, EU-CZ-1: 64 vCPU / 250 GB / 2x24 GB VRAM, $1.00/hr.
+#
+# This is ONE pod with two GPUs attached -- a single container, one filesystem, one process
+# space, 64 vCPU and 250 GB shared. Not two machines. We use only the first GPU: the
+# inference server binds one device and measured 11-14% utilisation, so the second sits
+# idle. That is fine and deliberate. At 64 vCPU/$ this is simply the cheapest way to buy 64
+# cores, and cores are what self-play actually consumes.
+#
+# Sizing: earlier pods were cgroup-capped to ~85% of the advertised vCPU (48 -> 40.8), so
+# expect ~54 usable cores here. CONFIRM with deploy/bootstrap.sh before trusting these
+# numbers -- nproc reports the host's count, which was 384 on the last box.
+#
+# Throughput: 66 games/hr measured on 40.8 cores. Scaling at 0.85 efficiency predicts ~84
+# games/hr. That extrapolation has failed once already (the waitress fix moved every input
+# metric and left games/hr unchanged), so treat it as a hypothesis. The [PHASE] line in the
+# server log is what settles whether more cores convert into more games.
+model: FDN_generalist
+version: 1
+generations: null
+target_games: 2500
+resource_interval_s: 30
+
+bootstrap_games: 96          # gen 0: heuristic both sides, no network
+games_per_gen: 72            # ~51 min of play at 84 games/hr -> a ~1h generation
+chunk_games: 48              # ALSO caps the JVM thread pool, so must stay >= jvm.threads
+mix: {self: 0.7, past: 0.2, gen0: 0.1}
+replay_states: 150000
+
+eval:
+  baselines: [offline, minimax]
+  pairs: 2                   # 8 eval games/gen, ~10% overhead; pooled over window_gens
+  window_gens: 8
+stats:
+  window_gens: 10
+  min_card_games: 30
+
+jvm:
+  heap: 48g                  # of 250 GB, so ample; the 5090 peaked at 61 GB total
+  threads: 44                # of ~54 usable cores, leaving 4 for torch collate and ~6 for
+                             # the trainer and OS. MZ_SERVER_THREADS is derived from this.
+  search_budget: 96
+  timeout_ms: 12000
+  max_minutes: 25

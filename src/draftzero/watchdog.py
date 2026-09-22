@@ -59,6 +59,15 @@ def seconds_since_activity(run_dir: Path) -> float:
     return (time.time() - newest) if newest else 0.0
 
 
+def _sync_set(a) -> list:
+    """What must survive the worker. Weights alone are not enough: without the replay
+    shards a resumed run trains its next generation on almost nothing."""
+    out = [a.models, a.run_dir]
+    if a.data and Path(a.data).exists():
+        out.append(a.data)
+    return out
+
+
 def _tail(run_dir: Path, lines: int = 25) -> str:
     """Last lines of the trainer log, so an alert carries the traceback not just a verdict."""
     for cand in (Path(run_dir).parent.parent / "logs" / "loop.log", Path("logs/loop.log")):
@@ -197,6 +206,10 @@ def main() -> int:
     ap.add_argument("--target", type=int, default=20000)
     ap.add_argument("--persist", required=True, type=Path)
     ap.add_argument("--models", type=Path, default=Path("models"))
+    ap.add_argument("--data", type=Path, default=Path("data"),
+                    help="replay-buffer HDF5 shards. Synced too: the first run backed up only "
+                         "weights and run artifacts, so when the pod died the training states "
+                         "went with it and a resume would have had an empty replay buffer.")
     ap.add_argument("--interval", type=int, default=300, help="seconds between checks")
     ap.add_argument("--stall-minutes", type=int, default=45)
     ap.add_argument("--restart-cmd", default=os.environ.get("DZ_RESTART_CMD", ""),
@@ -244,7 +257,7 @@ def main() -> int:
         quiet_min = seconds_since_activity(a.run_dir) / 60
         trainer_alive = bool(loop_pids())
 
-        ok, detail = sync([a.models, a.run_dir], a.persist)
+        ok, detail = sync(_sync_set(a), a.persist)
         if not ok:
             log(f"sync FAILED: {detail}")
             if not sync_warned:
@@ -322,7 +335,7 @@ def main() -> int:
                         f"Run stopping: {reason}. {n} games, "
                         f"{gens_done(a.run_dir)} generations.", "", a.run_dir)
             log(stop_loop())
-            ok, detail = sync([a.models, a.run_dir], a.persist)
+            ok, detail = sync(_sync_set(a), a.persist)
             vok, vdetail = verify(a.persist, a.run_dir.name)
             status = {"reason": reason, "games": n, "target": a.target,
                       "elapsed_hours": round(elapsed_h, 2), "max_hours": a.max_hours or None,
