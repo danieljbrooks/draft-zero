@@ -32,6 +32,8 @@ from pathlib import Path
 from typing import Optional
 
 from draftzero import alerts
+from draftzero import hfsync
+from draftzero import secrets
 
 def log(msg: str) -> None:
     print(f"[watchdog {datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -212,6 +214,8 @@ def main() -> int:
                          "went with it and a resume would have had an empty replay buffer.")
     ap.add_argument("--interval", type=int, default=300, help="seconds between checks")
     ap.add_argument("--stall-minutes", type=int, default=45)
+    ap.add_argument("--hf-env", default=os.environ.get("DZ_HF_ENV", "/root/.dz_env"),
+                    help="file with HF_TOKEN and HF_REPO for the off-pod checkpoint push")
     ap.add_argument("--restart-cmd", default=os.environ.get("DZ_RESTART_CMD", ""),
                     help="shell command that relaunches the trainer (typically launch.sh "
                          "--resume). Without it a crashed trainer just idles the worker until "
@@ -230,6 +234,14 @@ def main() -> int:
                     help="shell command to run after a VERIFIED final sync (e.g. destroy the pod)")
     a = ap.parse_args()
 
+    # Off-pod durable store. On a pod with no network volume this is the ONLY copy that
+    # survives termination, so it is loaded here and verified in the repo before the pod may
+    # be destroyed. Parsed, never sourced (a bare-value file once leaked a token by sourcing).
+    if a.hf_env and Path(a.hf_env).expanduser().exists():
+        secrets.load(a.hf_env)
+    hf_on = hfsync.configured()
+    log(f"HF push: {'on -> ' + os.environ['HF_REPO'] if hf_on else 'off (no HF_TOKEN/HF_REPO)'}")
+
     if a.on_complete:
         log(f"on-complete: {a.on_complete}")
     if a.restart_cmd:
@@ -238,6 +250,7 @@ def main() -> int:
         log(f"alerts -> ntfy topic set" + (", email on" if os.environ.get("DZ_ALERT_EMAIL") else ""))
     restarts = 0
     sync_warned = False
+    hf_pushed_gens = 0
 
     started = time.time()
     last_count, last_progress = -1, started
@@ -260,6 +273,19 @@ def main() -> int:
         ok, detail = sync(_sync_set(a), a.persist)
         if not ok:
             log(f"sync FAILED: {detail}")
+
+        # Push off the pod once per completed generation (checkpoints only change then).
+        cur_gens = gens_done(a.run_dir)
+        if hf_on and cur_gens > hf_pushed_gens:
+            hok, hdetail = hfsync.push(a.run_dir, a.models, gen=cur_gens - 1)
+            log(f"HF push: {hdetail}")
+            if hok:
+                hf_pushed_gens = cur_gens
+            else:
+                alerts.send(alerts.SYNC_FAILED,
+                            "Off-pod checkpoint push to Hugging Face failed. The pod will "
+                            "NOT self-terminate until weights are safely off it.",
+                            hdetail, a.run_dir)
             if not sync_warned:
                 sync_warned = True
                 alerts.send(alerts.SYNC_FAILED,
@@ -337,25 +363,48 @@ def main() -> int:
             log(stop_loop())
             ok, detail = sync(_sync_set(a), a.persist)
             vok, vdetail = verify(a.persist, a.run_dir.name)
+
+            # Off-pod durability gate. On a pod with no network volume, `persist` IS the
+            # container disk that dies with the pod, so a passing local verify() means
+            # nothing for survival. When HF is configured, the weights are only safe once a
+            # final push lands AND the repo confirms it, and that gate -- not the local one
+            # -- decides whether the pod may be destroyed.
+            hf_ok, hf_detail = (True, "HF off")
+            if hf_on:
+                hfsync.push(a.run_dir, a.models, gen=gens_done(a.run_dir) - 1)
+                hf_ok, hf_detail = hfsync.has_checkpoint(a.run_dir.name)
+                log(f"final HF push -> {hf_detail}")
+
             status = {"reason": reason, "games": n, "target": a.target,
                       "elapsed_hours": round(elapsed_h, 2), "max_hours": a.max_hours or None,
                       "generations_completed": gens_done(a.run_dir),
                       "final_sync_ok": ok, "sync_detail": detail,
                       "verified": vok, "verify_detail": vdetail,
+                      "hf_verified": hf_ok, "hf_detail": hf_detail,
                       "at": datetime.now(timezone.utc).isoformat(),
                       "on_complete": a.on_complete or None}
             (a.persist).mkdir(parents=True, exist_ok=True)
             (a.persist / "STATUS.json").write_text(json.dumps(status, indent=2))
-            log(f"final sync {'ok' if ok else 'FAILED'} ({detail}); verify {'ok' if vok else 'FAILED'} ({vdetail})")
+            log(f"final sync {'ok' if ok else 'FAILED'} ({detail}); "
+                f"verify {'ok' if vok else 'FAILED'} ({vdetail})")
 
-            if not (ok and vok):
-                log("NOT running --on-complete: weights are not safely persisted. "
+            # Safe if EITHER durable store confirms the weights: a network volume (local
+            # verify) or the HF repo. On a volume-less pod only the HF gate can pass, so it
+            # is required there; local verify alone must never authorize destroying the pod.
+            safe = (ok and vok) or (hf_on and hf_ok)
+            if not safe:
+                why = f"local verify {vdetail}" + (f"; HF {hf_detail}" if hf_on else "")
+                log(f"NOT running --on-complete: weights are not safely off the pod ({why}). "
                     "Worker left alive for inspection.")
+                alerts.send(alerts.SYNC_FAILED,
+                            f"Run stopped but weights are NOT safely off the pod. Leaving it "
+                            f"alive so nothing is lost. {why}", "", a.run_dir)
                 return 1
             if a.on_complete:
+                where = hf_detail if hf_on else vdetail
                 alerts.send(alerts.TERMINATING,
-                            f"Weights verified on the volume ({vdetail}). Destroying the "
-                            f"worker now. {n} games, {gens_done(a.run_dir)} generations.",
+                            f"Weights verified ({where}). Destroying the worker now. "
+                            f"{n} games, {gens_done(a.run_dir)} generations.",
                             "", a.run_dir)
                 tok, tdetail = run_on_complete(a.on_complete)
                 log(f"on-complete {'ok' if tok else 'FAILED'}: {tdetail}")

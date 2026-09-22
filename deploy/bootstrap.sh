@@ -38,7 +38,7 @@ if python -c "import torch" 2>/dev/null; then
   echo "   pinning $(cat "$CONSTRAINTS") so the driver-matched build survives"
 fi
 
-python -m pip install -q $PIPFLAGS -c "$CONSTRAINTS" --ignore-installed blinker -e . || {
+python -m pip install -q $PIPFLAGS -c "$CONSTRAINTS" --ignore-installed blinker huggingface_hub -e . || {
   echo "!! editable install failed; falling back to PYTHONPATH=src"; }
 rm -f "$CONSTRAINTS"
 

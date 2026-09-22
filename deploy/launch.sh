@@ -89,6 +89,7 @@ WD=(--run-dir "$RUN_DIR" --persist "$DZ_PERSIST" --interval "${DZ_WD_INTERVAL:-3
 # machine until the stall timer fires -- hours of paid-for nothing, which is exactly what
 # happened twice on the first run.
 WD+=(--restart-cmd "cd $(pwd) && bash deploy/launch.sh $CFG --resume")
+[ -n "${DZ_HF_ENV:-}" ] && WD+=(--hf-env "$DZ_HF_ENV")
 WD+=(--max-restarts "${DZ_MAX_RESTARTS:-3}")
 WD+=(--grace-hours "${DZ_GRACE_HOURS:-3}")   # finish the current generation before stopping
 [ "$TARGET" -gt 0 ] && WD+=(--target "$TARGET")
