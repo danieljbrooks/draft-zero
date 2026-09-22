@@ -20,6 +20,10 @@ export MZ_DECK_DIR="${MZ_DECK_DIR:-$(pwd)/data/decks}"
 export DZ_PERSIST="${DZ_PERSIST:-$(pwd)/data/persist}"
 export MZ_BATCH_SIZE="${MZ_BATCH_SIZE:-32}"
 export MZ_INFER_DTYPE="${MZ_INFER_DTYPE:-float16}"
+# CPU-side intra-op parallelism for the inference server's collate step. Only helps if
+# collate is where batch time goes -- watch the [PHASE] line in the server log before
+# raising it, and drop jvm.threads to match so total CPU demand stays flat.
+export MZ_TORCH_THREADS="${MZ_TORCH_THREADS:-1}"
 
 CFG="${1:-configs/runpod.yml}"
 MODE="${2:---fresh}"
@@ -43,7 +47,7 @@ TARGET="$(python -c "import yaml;print(yaml.safe_load(open('$CFG')).get('target_
 # at fault. Derived from the config so the two cannot drift apart.
 JVM_THREADS="$(python -c "import yaml;print((yaml.safe_load(open('$CFG')).get('jvm') or {}).get('threads') or 8)")"
 export MZ_SERVER_THREADS="${MZ_SERVER_THREADS:-$JVM_THREADS}"
-echo "== inference server threads: $MZ_SERVER_THREADS (jvm.threads=$JVM_THREADS)"
+echo "== inference server threads: $MZ_SERVER_THREADS (jvm.threads=$JVM_THREADS) torch=$MZ_TORCH_THREADS"
 echo "== config $CFG | target_games=$TARGET | persist=$DZ_PERSIST"
 nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo "   (no GPU: CPU-only worker)"
 

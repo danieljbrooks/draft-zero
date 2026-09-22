@@ -42,7 +42,10 @@ stats:
 
 jvm:
   heap: 56g                  # of 87 GB; the 4000 Ada peaked at 17.5 GB total with 8 threads
-  threads: 32                # of 40.8 cores, leaving ~9 for the inference server and trainer
+  threads: 28                # of 40.8 cores. Dropped from 32 to hold total CPU demand flat
+                             # while MZ_TORCH_THREADS=4 gives the inference server's collate
+                             # step real parallelism: at 93% CPU there are no spare cores, so
+                             # handing torch 4 without giving any back just starves self-play.
   search_budget: 96          # 200 would buy deeper search but ~2x fewer generations; see RUNBOOK
   timeout_ms: 12000          # generous, so searches reach the visit budget instead of truncating
   max_minutes: 25
