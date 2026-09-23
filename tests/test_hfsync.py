@@ -71,3 +71,25 @@ def test_has_checkpoint_requires_a_pt_in_the_repo(monkeypatch):
     monkeypatch.setattr(hfsync, "_api", lambda: (EmptyApi(), "u/r"))
     ok, detail = hfsync.has_checkpoint("run")
     assert ok is False   # artifacts present but NO checkpoint -> not safe to terminate
+
+
+def test_push_logs_uploads_one_archive_with_every_log(tmp_path, monkeypatch):
+    import tarfile
+    monkeypatch.setenv("HF_TOKEN", "hf_x"); monkeypatch.setenv("HF_REPO", "u/r")
+    run = tmp_path / "runs" / "r1"; run.mkdir(parents=True)
+    (run / "jvm_gen1_00_self.log").write_text("game log")
+    (run / "games.jsonl").write_text("{}")          # not a log: pushed elsewhere
+    logs = tmp_path / "logs"; logs.mkdir()
+    (logs / "loop.log").write_text("loop")
+    seen = {}
+
+    class FakeApi:
+        def upload_file(self, path_or_fileobj, path_in_repo, **kw):
+            with tarfile.open(path_or_fileobj) as t:
+                seen["names"] = sorted(t.getnames())
+            seen["remote"] = path_in_repo
+    monkeypatch.setattr(hfsync, "_api", lambda: (FakeApi(), "u/r"))
+
+    ok, detail = hfsync.push_logs(run, extra=(logs,))
+    assert ok and seen["remote"] == "r1/logs.tar.gz"
+    assert seen["names"] == ["r1/jvm_gen1_00_self.log", "r1/logs/loop.log"]

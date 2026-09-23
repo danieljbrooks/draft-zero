@@ -96,3 +96,51 @@ def has_checkpoint(run_name: str) -> tuple[bool, str]:
     if not ckpts:
         return False, f"no checkpoints under {run_name}/ in {repo}"
     return True, f"{len(ckpts)} checkpoints in {repo}/{run_name}"
+
+
+def push_logs(run_dir: Path, extra: tuple = (Path("logs"),)) -> tuple[bool, str]:
+    """Upload every log of a run as one archive, <run_name>/logs.tar.gz. Never raises.
+
+    The per-game JVM logs are the only record of individual decisions (casts, targets,
+    search visit counts), which is what card-usage and 17lands-style analysis needs. They
+    are too big to push every generation, so this runs on demand and once more right
+    before teardown. Each call replaces the previous archive with a complete one.
+    """
+    import tarfile
+    import tempfile
+    if not configured():
+        return False, "HF_TOKEN / HF_REPO not set"
+    run_dir = Path(run_dir)
+    files = sorted(run_dir.glob("*.log")) + [f for d in extra for f in sorted(Path(d).glob("*.log"))]
+    if not files:
+        return False, "no logs to push"
+    try:
+        api, repo = _api()
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "logs.tar.gz"
+            with tarfile.open(archive, "w:gz") as tar:
+                for f in files:
+                    sub = "" if f.parent == run_dir else f"{f.parent.name}/"
+                    tar.add(f, arcname=f"{run_dir.name}/{sub}{f.name}")
+            mb = archive.stat().st_size / 1024 ** 2
+            api.upload_file(path_or_fileobj=str(archive), path_in_repo=f"{run_dir.name}/logs.tar.gz",
+                            repo_id=repo, repo_type="model",
+                            commit_message=f"draftzero logs: {len(files)} files")
+        return True, f"pushed {len(files)} logs ({mb:.0f} MB compressed) to {repo}/{run_dir.name}/logs.tar.gz"
+    except Exception as e:  # noqa: BLE001
+        return False, f"log push failed: {str(e)[:120]}"
+
+
+if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser(description="Push a run's artifacts to HF.")
+    ap.add_argument("run_dir", type=Path)
+    ap.add_argument("--logs", action="store_true", help="push all logs as <run>/logs.tar.gz")
+    ap.add_argument("--hf-env", default="/root/.dz_env")
+    a = ap.parse_args()
+    from draftzero import secrets
+    if a.hf_env and Path(a.hf_env).expanduser().exists():
+        secrets.load(a.hf_env)
+    ok, detail = push_logs(a.run_dir) if a.logs else push(a.run_dir, None)
+    print(detail)
+    raise SystemExit(0 if ok else 1)

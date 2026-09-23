@@ -17,6 +17,9 @@ HOURS=${DZ_FINAL_EVAL_HOURS:-6}
 
 echo "[final_eval.sh] $(date -u +%FT%TZ) starting (timeout ${HOURS}h, then: $TEARDOWN)"
 timeout -k 10m "${HOURS}h" python -u -m draftzero.final_eval --run-dir "$RUN_DIR" "$@"
-echo "[final_eval.sh] $(date -u +%FT%TZ) eval exited $?; tearing down"
+echo "[final_eval.sh] $(date -u +%FT%TZ) eval exited $?; pushing all logs to HF"
+# Game logs are the only record of individual decisions; keep them before the disk goes away.
+timeout 45m python -u -m draftzero.hfsync "$RUN_DIR" --logs
+echo "[final_eval.sh] $(date -u +%FT%TZ) log push exited $?; tearing down"
 sh -c "$TEARDOWN"
 echo "[final_eval.sh] teardown exited $?"
