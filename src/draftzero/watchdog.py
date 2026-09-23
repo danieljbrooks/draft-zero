@@ -289,6 +289,12 @@ def main() -> int:
         ok, detail = sync(_sync_set(a), a.persist)
         if not ok:
             log(f"sync FAILED: {detail}")
+            if not sync_warned:
+                sync_warned = True
+                alerts.send(alerts.SYNC_FAILED,
+                            "Checkpoint sync to the volume is failing. Weights may not be "
+                            "safe, and the worker will NOT self-terminate while this is true.",
+                            detail, a.run_dir)
 
         # Push off the pod once per completed generation (checkpoints only change then).
         cur_gens = gens_done(a.run_dir)
@@ -302,12 +308,6 @@ def main() -> int:
                             "Off-pod checkpoint push to Hugging Face failed. The pod will "
                             "NOT self-terminate until weights are safely off it.",
                             hdetail, a.run_dir)
-            if not sync_warned:
-                sync_warned = True
-                alerts.send(alerts.SYNC_FAILED,
-                            "Checkpoint sync to the volume is failing. Weights may not be "
-                            "safe, and the worker will NOT self-terminate while this is true.",
-                            detail, a.run_dir)
 
         elapsed_h = (now - started) / 3600
         done = n >= a.target
@@ -419,7 +419,7 @@ def main() -> int:
             if a.on_complete:
                 where = hf_detail if hf_on else vdetail
                 alerts.send(alerts.TERMINATING,
-                            f"Weights verified ({where}). Destroying the worker now. "
+                            f"Weights verified ({where}). Running on-complete: {a.on_complete[:120]}. "
                             f"{n} games, {gens_done(a.run_dir)} generations.",
                             "", a.run_dir)
                 tok, tdetail = run_on_complete(a.on_complete)

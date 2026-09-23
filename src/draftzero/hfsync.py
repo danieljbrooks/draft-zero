@@ -19,7 +19,7 @@ from typing import Optional
 
 # What to push, in priority order. Weights first: if only one file makes it, make it a model.
 PATTERNS = ("*.pt.gz", "run.json", "metrics.jsonl", "games.jsonl", "STATUS.json",
-            "deck_records.tsv", "alerts.jsonl")
+            "deck_records.tsv", "alerts.jsonl", "final_eval.json")
 
 
 def configured() -> bool:
@@ -31,8 +31,9 @@ def _api():
     return HfApi(token=os.environ["HF_TOKEN"]), os.environ["HF_REPO"]
 
 
-def push(run_dir: Path, models_dir: Path, gen: Optional[int] = None) -> tuple[bool, str]:
+def push(run_dir: Path, models_dir: Optional[Path], gen: Optional[int] = None) -> tuple[bool, str]:
     """Upload checkpoints and run artifacts. Returns (ok, detail). Never raises.
+    models_dir=None pushes only the run artifacts (e.g. results after the weights are safe).
 
     Files land under a prefix so several runs can share one repo:
         <run_name>/models/...   <run_name>/metrics.jsonl   etc.
@@ -44,13 +45,14 @@ def push(run_dir: Path, models_dir: Path, gen: Optional[int] = None) -> tuple[bo
     except Exception as e:  # noqa: BLE001 - import or auth shape varies
         return False, f"hf init failed: {e}"
 
-    run_dir, models_dir = Path(run_dir), Path(models_dir)
+    run_dir = Path(run_dir)
+    models_dir = Path(models_dir) if models_dir is not None else None
     prefix = run_dir.name
     label = f"gen {gen}" if gen is not None else "sync"
 
     # (local path, path in repo) pairs
     items: list[tuple[Path, str]] = []
-    if models_dir.exists():
+    if models_dir is not None and models_dir.exists():
         for f in models_dir.rglob("*.pt.gz"):
             items.append((f, f"{prefix}/models/{f.relative_to(models_dir)}"))
     for pat in PATTERNS:
