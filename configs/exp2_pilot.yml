@@ -1,0 +1,38 @@
+# Experiment #2 pilot: a handful of games with exp #2's settings, to check that searches
+# complete, the value labels look right at a fixed λ, and the audit logs work. Not a strength
+# test. Runs on exp #1's engine (the v0.1 fork plus the generalist XMage build), because v0.2's
+# Java source isn't public yet (ROADMAP B1). See docs/exp2-pilot.md.
+#
+# Sized for a 16 GB / 6-performance-core laptop: one JVM, three game threads. Parallel JVMs
+# aren't implemented in draft-zero yet, and this RAM couldn't hold several large heaps anyway.
+model: FDN_exp2_pilot
+version: 1
+curriculum: configs/curriculum_exp2.yml
+generations: 2              # gen 0 (heuristic search, no network) + gen 1 (network self-play)
+target_games: null
+resource_interval_s: 30
+
+deck_root: data/deckgen/FDN_PremierDraft_wr60/top_player_FDN_decks
+
+bootstrap_games: 3          # gen 0
+games_per_gen: 3            # gen 1
+chunk_games: 3              # >= jvm.threads
+mix: {self: 0.2, past: 0.7, gen0: 0.1}   # exp #2's mix (exp #1: 70 / 20 / 10)
+replay_states: 150000       # kept from exp #1
+
+eval:
+  baselines: [offline]      # offline MCTS only; minimax dropped
+  every_n_gens: 99          # no strength eval in the pilot: too few games to mean anything
+  pairs: 1
+  fixed_decks: true
+  window_gens: 2
+stats:
+  window_gens: 2
+  min_card_games: 1         # show every card; the pilot is for eyeballing, not ranking
+
+jvm:
+  heap: 8g
+  threads: 3
+  search_budget: 300        # exp #1: 96
+  timeout_ms: 60000         # exp #1: 12000. Searches should finish; the pilot measures whether they do
+  max_minutes: 50           # exp #1: 25
