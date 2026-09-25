@@ -57,6 +57,22 @@ with 96 threads in one JVM, so the cap may have been the JVM layout rather than 
 same caveat applies to every throughput number in this file and the report until Phase 3
 re-measures them.
 
+## Blocked on Will (2026-09-25)
+
+| ID | Waiting for | Blocks | Doesn't block |
+|---|---|---|---|
+| **B1** | **The Java source behind the v0.2 bundle**, pushed to `WillWroble/mage` (to be asked on [#7](https://github.com/WillWroble/MageZero/issues/7)). The newest public commit is `2f35d9f7` (Sep 16), where `Features.TABLE_SIZE = 2_000_000`; the v0.2 jars have `2147483647`. | **Exp #2's engine.** Our training-only XMage additions (vocab, deck pools, per-game summaries) have to be rebuilt on v0.2's Java, so Phase 3 pilots and Phase 4 wait on this. | The Python migration, the vocab prototype on `2f35d9f7`, the XMage fork for exp #1, and the design docs |
+| **B2** | **Will's answer on #7** (action vocab) | Upstream PRs, and our agents running through the normal `mz import` flow | Implementing it in our forks |
+| **B3** | **Will's preference for inference servers with parallel JVMs** (one per JVM, or shared). Not asked yet; the parallel-JVMs design doc drafts the question. | An upstream-compatible parallel-JVM implementation | The design itself |
+
+**Can run now, in parallel, without touching the same files:**
+- **A. Action vocab in our forks:** Python off v0.2, Java off `2f35d9f7`, plus moving `VocabDump`
+  into draft-zero.
+- **B. XMage fork on GitHub:** makes exp #1 playable. Start it first, because A's Java half needs
+  this fork.
+- **C. Python migration** of draft-zero onto Will's v0.2.
+- **D. Design docs:** parallel JVMs (including the B3 question) and exp #2.
+
 ## Plan
 
 ```
@@ -99,6 +115,8 @@ conclusions are posted on Discord.
 - [x] ~~Check whether v0.1 checkpoints load under MageZero v0.2.0~~: moved to Phase 2, where
       it's easiest to test. The release says it's untested.
 - [ ] Post conclusions and the exp #2 direction on the MageZero Discord (promised in the thread).
+- [ ] HF model card: replace "whether the checkpoints load under v0.2.0 is untested" with
+      "v0.1-only". Will's v0.2 release notes say v0.1 models and data are no longer compatible.
 - [x] Delete the `perf/feature-reset` branch (it was correct but measured no end-to-end gain).
       Deleted 2026-09-25. The next attempt starts from a clean branch.
 - [x] Archive the pre-draft-zero workspace. It's renamed to
@@ -108,26 +126,72 @@ conclusions are posted on Discord.
       from scratch and checked. The clones were shallow, so the first bundles couldn't be
       restored; they were rebuilt after fetching full history.
 
-### Phase 2 — MageZero v0.2.0 and repo boundaries
+### Phase 2 — Migrate to Will's v0.2 engine
 
-**Done when:** draft-zero is pinned to a v0.2.0-based engine, the fork fixes are upstream PRs,
-draft-zero can run several JVMs in parallel, and a v0.2 smoke run passes.
+**The principle (agreed 2026-09-25):** Will's engine stays clean.
+- **MageZero and his XMage fork** get only generic, opt-in mechanisms he agrees to, as proposed
+  in [#7](https://github.com/WillWroble/MageZero/issues/7).
+- **draft-zero** keeps everything limited-specific: 17lands stats, the deck pools built from
+  17lands, metrics and dashboards, and extra logging.
+- **Our agents** ship as artifacts that plug into his ecosystem: `.mz` bundles with the action
+  vocab inside the checkpoint, plus curated `.dck` decks, the way his 16-deck Standard pool ships
+  in `xmage/decks/`.
+
+**Done when:**
+- draft-zero runs on Will's v0.2, with no MageZero fork in between
+- the action vocab exists as PR-shaped branches in our forks
+- draft-zero can run several JVMs in parallel
+- a v0.2 smoke run passes
 
 **What v0.2.0 changes** ([release notes](https://github.com/WillWroble/MageZero/releases/tag/v0.2.0-alpha)):
-- It **ships its own XMage bundle** (`magezero-xmage-v0.2.0-alpha.zip`).
-- It **widens the feature hash from 2M to 2^31 bins**.
-- It **upgrades the state encoder**: fewer redundant features, dynamic subtypes, and per-turn
-  watchers.
-- It adds `game.yml` knobs: `prune_duplicate_states` (on by default), `backprop_discount`
-  (default 0.99), `max_minutes` and `prior_bonus`.
+- It **ships its own XMage bundle**, built from Java source that isn't public yet (B1).
+- It **widens the feature hash from 2M to 2^31 bins**, and **upgrades the state encoder**: fewer
+  redundant features, dynamic subtypes, and per-turn watchers.
+- **"No longer compatible with models and data generated with v0.1.0"**, so exp #1's checkpoints
+  can't be v0.2 opponents, and exp #2 starts from gen 0.
+- It fixes parallel JVM launches colliding on the H2 card DB.
+- It needs a MageZero runner from 2026-09-20 or later.
+- New `game.yml` knobs: `prune_duplicate_states` (on by default), `backprop_discount` (default
+  0.99), `max_minutes` and `prior_bonus`.
 
-That has three consequences:
-1. The XMage fork commit has to be **rebased onto v0.2's XMage**, not just published.
-2. Exp #1's checkpoints are **probably unusable as v0.2 opponents**, because the features they
-   learned from changed. The load check below must test play, not just loading. Exp #2 starts
-   from gen 0.
-3. The fork's embedding and dense-vocab commits need re-checking against the 2^31 hash.
+**Bytecode comparison (2026-09-25).** 39 classes compiled from the public source (`2f35d9f7`)
+were compared with the v0.2 jars: 34 are identical. `Features` and `StateEncoder` differ where
+the release notes say. For the vocab change:
+- **Identical in v0.2, so the change applies cleanly:** `ActionEncoder`, `ComputerPlayerMCTS2`,
+  `Config$PlayerConfig`.
+- **Changed in v0.2, where the rebase will conflict:** `LabeledStateWriter` and
+  `ParallelDataGenerator`.
+- Each player already gets its own `ActionEncoder`, so a per-player vocab is plumbing, not a
+  redesign.
 
+- [x] ~~Check whether exp #1's checkpoints load under v0.2~~: answered by the release notes.
+      They're incompatible.
+- [ ] **Python: pin Will's v0.2 directly.**
+  - Move the fork-only modules (`metrics`, `report`, `resources`, `refresh_dashboard`) into
+    draft-zero.
+  - Check every MageZero call against v0.2. The names all exist upstream, but the fork rewrote
+    ~480 lines of `runner.py`, so arguments and behavior need checking too.
+  - Pin a runner commit from 2026-09-20 or later.
+  - The four small fork fixes (two embedding-size bugs in the dense-vocab code, a test import,
+    helper-script paths): re-test them on v0.2, and offer Will any that still reproduce as small
+    fixes. Drop the two server-tuning commits.
+  - `danieljbrooks/MageZero` `mz-engine` stays as exp #1's pinned engine. No new work there.
+- [ ] **Action vocab in our forks, PR-shaped** (#7, D6).
+  - Python: `danieljbrooks/MageZero`, branch `action-vocab`, off Will's v0.2 `main`.
+  - Java: `danieljbrooks/mage`, branch `action-vocab`, off `2f35d9f7`. Rebase onto v0.2's Java
+    when Will pushes it (B1).
+  - A configurable width (default 128), plus an optional exact vocab stored in the checkpoint and
+    set per player.
+  - **Done when:** with no vocab, seeded games match upstream exactly; a vocab agent plays a
+    128-slot agent in the same game; and the vocab survives `mz export` / `mz import`.
+  - No PRs to Will until he answers #7.
+- [ ] **Move `VocabDump` into draft-zero** `tools/`. Its only copy is in the archive's MageZero
+      experiments branch, inside the verified bundle. Then rebuild the FDN vocab from the v0.2
+      bundle's jars: the vocab keys are ability text, which may have changed.
+- [ ] **XMage fork on GitHub:** `danieljbrooks/mage`, public, a fork of `WillWroble/mage`. It
+      gets a branch with exp #1's commit (`5a32441c` on `2f35d9f7`) and a built release, and the
+      HF model card's "not published yet" line becomes a link. This makes exp #1's checkpoints
+      playable.
 - [ ] **Run several JVMs in parallel** (Will's issue #1). `loop.py` calls MageZero's `launch_jvm`
       one chunk at a time; make it run several concurrently, with 4 threads each and ZGC.
   - **Design question: inference servers.** Every exp #2 game is networked on both sides.
@@ -137,40 +201,22 @@ That has three consequences:
     takes several JVMs. Ask Will which he'd accept upstream before building it.
   - **RAM limits the JVM count.** At 48 GB of heap per JVM, exp #1's L40S pod (~116 GB usable)
     fits only 2. The Phase 3 pilot has to trade heap per JVM against JVM count.
+  - v0.2 fixes "parallel JVM launches colliding on the H2 card DB", so build this on v0.2.
+- [ ] **Training-only XMage additions on v0.2:** deck pools and the per-game summary line.
+      They live in `ParallelDataGenerator` and `Config`, which v0.2 changed, so they wait for B1.
+      Last resort if B1 stalls: patch the v0.2 jars from decompiled classes. That's fine for our
+      own training, but never something to hand to Will.
 
-- [ ] Rebase the fork onto `v0.2.0-alpha` (released 2026-09-22). Merge, don't copy files:
-      copying from the pre-dense-vocab `fdn-generalist` branch silently reverts
-      `require_encoding`, `initial_rows` and `map_csr`.
-- [ ] Open upstream PRs for the seven fork commits (report §7.2). Lead with backward
-      compatibility; Will won't accept changes that force retrains.
-  - [ ] Two embedding bugs: a stale `num_embeddings` after the table grows, and trusting stale
-        `embed_rows` metadata. These crash any run whose vocabulary grows.
-  - [ ] Server threading: a configurable CPU thread count, and an HTTP pool sized to game threads.
-  - [ ] Runner path resolution, a test import fix, and the metrics/runner module.
-- [ ] Check whether experiment #1's v0.1 checkpoints load under v0.2.0 (moved from Phase 1).
-      The HF release says it's untested; update its model card with the answer either way.
-- [ ] Re-pin draft-zero to the v0.2.0-based engine. Start from a fresh clone of
-      `danieljbrooks/MageZero`. The existing `~/Desktop/Code/mz-engine` checkout is a git
-      worktree of the archived repo (see its `README_ARCHIVE.md`), so it shouldn't be used for
-      new work.
-- [ ] **Give the XMage fork source a real home.** draft-zero runs on "the fdn-generalist XMage
-      build" (`deploy/bootstrap.sh`). That build's source is one commit on top of
-      WillWroble/mage (`5a32441c`: set-wide action vocabulary, deck pools, per-game summaries),
-      and it isn't on GitHub. Its only copy is the patch in the archive's `_git_bundles/`.
-      Push it to a private `danieljbrooks/mage` fork, and rebase it along with the v0.2.0
-      work above.
-
-**Repo boundaries.** The rule is: a thing goes in MageZero only if it would make sense to
-someone who has never heard of FDN draft. Machinery goes upstream; content gets published.
+**Repo boundaries.**
 
 | Where | What |
 |---|---|
-| MageZero (upstream) | Deck-pool sampling for any format, eval harness, value-label histograms, report renderer |
-| draft-zero (this repo) | FDN pools, 17lands stats, workers and pod layer. The worker layer is arguably generic, so it's a candidate for upstream later. |
-| Published artifacts (HF) | Decks, checkpoints, reports. Link to them from MageZero; never commit them into it. |
+| Will's MageZero and XMage fork | Only generic, opt-in mechanisms he agrees to: the configurable action width and optional action vocab (#7), maybe deck pools. Plus bug fixes to code already there. |
+| draft-zero (this repo) | The FDN pools and deck builder, `VocabDump` and the FDN vocab, 17lands stats, metrics, reports and resource sampling, orchestration, workers, and the per-game stats hook |
+| Published artifacts | `.mz` bundles (vocab inside the checkpoint) plus curated `.dck` decks for his ecosystem; full HF releases for research |
 
-- [ ] Ask Will whether he wants MageZero to link published baselines, for example from a
-      "community baselines" section.
+- [ ] Ask Will whether MageZero should link published baselines, and whether FDN decks could
+      ship the way his Standard pool does in `xmage/decks/`. Both belong in the #7 conversation.
 
 ### Phase 3 — Pilots before the big run
 
@@ -228,8 +274,8 @@ which change helped. That's acceptable: the goal is a better player, not attribu
       against 58%.
 - [ ] Strength against a yardstick that stays fixed across experiments. Raw search at budget
       300 is stronger than at 96, so a raw-search win rate at 300 isn't comparable to exp #1's
-      55.8%. Keep a raw-search-at-96 opponent. Exp #1's gen 33 is probably unusable under v0.2
-      (see "What v0.2.0 changes" in Phase 2), so don't plan on playing it directly.
+      55.8%. Keep a raw-search-at-96 opponent. Exp #1's gen 33 is incompatible with v0.2
+      (per Will's release notes), so it can't be played directly.
 - [ ] Qualitative: Dan plays it, and it doesn't make exp #1's blunders (like chumping a 2/2
       with a 1/1).
 
@@ -246,7 +292,7 @@ which change helped. That's acceptable: the goal is a better player, not attribu
 | D2 | **Scale vs. money** | Depends on the JVM-layout pilot. If parallel JVMs recover the headroom Will's numbers suggest, the remaining balance buys far more than the ~1,700-game ceiling estimate. Decide after the pilot, and use its number for any funding ask. | Open |
 | D3 | **What "num_trees" refers to** | Not found in draft-zero, MageZero, or upstream v0.2. If it means search budget, it's already the throughput pilot. | Open |
 | D4 | **Kaggle** | Sticking with RunPod. Kaggle results abandoned; summarized in report Appendix A. | Decided 2026-09-25 |
-| D6 | **Will's answer on the action vocabulary** ([WillWroble/MageZero#7](https://github.com/WillWroble/MageZero/issues/7)) | This decides whether our FDN agents can run in the normal MageZero flow (`mz import`, add a deck, play). The proposal is two opt-in pieces: a configurable policy width (default 128), and an optional exact action vocabulary stored inside the checkpoint and set per player. MageZero gets only that generic mechanism. The FDN vocab, the `VocabDump` builder, deck pools, 17lands stats and logging stay in draft-zero and ship with our models. If Will says no, our agents stay runnable only through draft-zero. **Don't start engine work that assumes either answer.** | Waiting on Will (posted 2026-09-25) |
+| D6 | **Will's answer on the action vocabulary** ([WillWroble/MageZero#7](https://github.com/WillWroble/MageZero/issues/7)) | This decides whether our FDN agents can run in the normal MageZero flow (`mz import`, add a deck, play). The proposal is two opt-in pieces: a configurable policy width (default 128), and an optional exact action vocabulary stored inside the checkpoint and set per player. MageZero gets only that generic mechanism. The FDN vocab, the `VocabDump` builder, deck pools, 17lands stats and logging stay in draft-zero and ship with our models. If Will says no, our agents stay runnable only through draft-zero. Implementation proceeds in our forks, PR-shaped, which is useful either way. No PRs to Will until he answers. | Waiting on Will (posted 2026-09-25) |
 | D5 | **Public or private draft-zero** | **Public, MIT**, since 2026-09-25. Deck data stays CC BY 4.0. Because everything pushed is now public, any experiment that should stay private needs a separate private repo. | Decided 2026-09-25 |
 
 ## Side tracks
@@ -305,6 +351,14 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 
 Add dated entries, newest first.
 
+- **2026-09-25** — Blocked on Will's v0.2 Java source (B1).
+  - The v0.2 bundle's jars have the 2^31 hash, but the public `WillWroble/mage` source doesn't.
+  - A bytecode comparison shows the vocab change's core classes are unchanged in v0.2, so it
+    proceeds in our forks on `2f35d9f7`.
+  - Phase 2 is rewritten around the agreed principle: Will's engine gets only generic, opt-in
+    mechanisms (#7), and everything limited-specific stays in draft-zero. That drops the old
+    plan to upstream all seven fork commits.
+  - v0.1 checkpoints are confirmed incompatible with v0.2 (release notes).
 - **2026-09-25** — Will's review of exp #1 added. His three main issues: the single-JVM layout,
   λ too low, and too much self-play. Parallel JVMs added to Phase 2, the Phase 3 budget estimate
   downgraded to a ceiling, minimax dropped as a baseline, and D1 strengthened. It also puts the
