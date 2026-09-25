@@ -88,7 +88,10 @@ and a v0.2 smoke run passes.
         `embed_rows` metadata. These crash any run whose vocabulary grows.
   - [ ] Server threading: a configurable CPU thread count, and an HTTP pool sized to game threads.
   - [ ] Runner path resolution, a test import fix, and the metrics/runner module.
-- [ ] Re-pin draft-zero to the v0.2.0-based engine.
+- [ ] Re-pin draft-zero to the v0.2.0-based engine. Start from a fresh clone of
+      `danieljbrooks/MageZero`. The existing `~/Desktop/Code/mz-engine` checkout is a git
+      worktree of the archived repo (see its `README_ARCHIVE.md`), so it shouldn't be used for
+      new work.
 - [ ] **Give the XMage fork source a real home.** draft-zero runs on "the fdn-generalist XMage
       build" (`deploy/bootstrap.sh`). That build's source is one commit on top of
       WillWroble/mage (`5a32441c`: set-wide action vocabulary, deck pools, per-game summaries),
