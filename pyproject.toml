@@ -3,6 +3,7 @@ name = "draftzero"
 version = "0.1.0"
 description = "One agent that plays a whole Magic limited format with any deck"
 requires-python = ">=3.10"
+license = { text = "MIT" }
 dependencies = [
     # MageZero supplies the RL framework, the XMage bridge and the training/eval runner.
     # Pinned to a commit, not a branch: a branch pin silently changes what a result was

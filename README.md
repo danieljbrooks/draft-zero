@@ -217,5 +217,8 @@ a net is driving them (20 → 40 turns). Budget from network self-play, not gen 
   performance ([WillWroble/MageZero#3](https://github.com/WillWroble/MageZero/issues/3)).
 - **[XMage](https://github.com/magefree/mage)** — the rules engine every game runs in.
 
-Deck files and statistics derived from 17lands data (`assets/`, the published releases)
-carry CC BY 4.0.
+**License.** The code is [MIT](LICENSE). That covers every version of this repository,
+including commits from before `LICENSE` was added, such as the `exp1-fdn-generalist` tag.
+Deck files and statistics derived from 17lands
+data (`assets/decks.tsv`, `assets/sample/`, `assets/reference/`, and the published
+releases) carry CC BY 4.0.

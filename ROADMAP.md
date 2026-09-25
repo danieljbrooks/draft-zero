@@ -177,7 +177,7 @@ which change helped. That's acceptable: the goal is a better player, not attribu
 | D2 | **Scale vs. money** | Run ~1,700 games on the remaining balance, or raise funds first. The throughput pilot gives the number to ask for. | Open |
 | D3 | **What "num_trees" refers to** | Not found in draft-zero, MageZero, or upstream v0.2. If it means search budget, it's already the throughput pilot. | Open |
 | D4 | **Kaggle** | Sticking with RunPod. Kaggle results abandoned; summarized in report Appendix A. | Decided 2026-09-25 |
-| D5 | **Public or private draft-zero** | Private for now; to be made public later, which will need a code license (there is no LICENSE file yet). Until then the HF release is self-contained and says the code is available on request. | Decided 2026-09-25 |
+| D5 | **Public or private draft-zero** | **Public, MIT**, since 2026-09-25. Deck data stays CC BY 4.0. Because everything pushed is now public, any experiment that should stay private needs a separate private repo. | Decided 2026-09-25 |
 
 ## Side tracks
 
@@ -229,6 +229,9 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 
 Add dated entries, newest first.
 
+- **2026-09-25** — draft-zero made public under MIT (D5 revised). The `exp1-fdn-generalist` tag
+  predates `LICENSE`. It was left in place rather than moved, because Will has repo access
+  and may already have fetched it, and the README states that MIT covers every version.
 - **2026-09-25** — Experiment #1 release published on HF: `danbrooks/draftzero-fdn-exp1`.
   The Discord wrap-up post can go out now that its link resolves.
 - **2026-09-25** — draft-zero stays private for now (D5). HF release approved: public,
