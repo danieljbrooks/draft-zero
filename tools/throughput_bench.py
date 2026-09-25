@@ -161,10 +161,16 @@ def main() -> int:
             game_yml(yml, a, port, port, out)
             cmd, _ = jvm_command(str(yml), heap)
             cmd = [c for c in cmd if c != "-XX:+UseZGC"]
-            cmd[1:1] = gc_flags(a.gc)
+            # A private temp dir per JVM: jhdf5 unpacks its native library into java.io.tmpdir,
+            # and two JVMs starting at once race on that file. Locally the loser died at startup
+            # with "No suitable HDF5 native library found", leaving a 2-JVM run doing 1 JVM's work.
+            (wd / "tmp").mkdir(exist_ok=True)
+            cmd[1:1] = gc_flags(a.gc) + [f"-Djava.io.tmpdir={(wd / 'tmp').resolve()}"]
             log = out / f"jvm_{j}.log"
             logs.append(log)
             procs.append(subprocess.Popen(cmd, cwd=wd, stdout=open(log, "w"), stderr=subprocess.STDOUT))
+            if j < a.jvms - 1:
+                time.sleep(5)   # stagger starts too, so card-DB bootstraps don't all hit the disk at once
         threading.Thread(target=sample_cpu, daemon=True).start()
         deadline = t0 + a.minutes * 60
         while time.time() < deadline and any(p.poll() is None for p in procs):
@@ -198,7 +204,10 @@ def main() -> int:
         jv_to = txt.count("timed out, ending search")
         jv_done = txt.count("required visits reached")
         jv_games = txt.count("GAME_SUMMARY")
-        per_jvm.append({"log": log.name, "sims": jv_sims, "searches": len(pairs), "search_seconds": round(jv_secs, 1),
+        if len(pairs) == 0 or "Exception in thread \"main\"" in txt:
+            print(f"[bench] WARNING {log.name}: {len(pairs)} searches"
+                  f"{'; died with an exception in main' if 'Exception in thread' in txt else ''}", flush=True)
+        per_jvm.append({"log": log.name, "sims": jv_sims, "died": "Exception in thread \"main\"" in txt, "searches": len(pairs), "search_seconds": round(jv_secs, 1),
                         "timeouts": jv_to, "completed": jv_done, "games": jv_games})
         sims += jv_sims; searches += len(pairs); search_seconds += jv_secs
         timeouts += jv_to; completed += jv_done; games += jv_games
@@ -213,6 +222,7 @@ def main() -> int:
         "timeout_rate": round(timeouts / (timeouts + completed), 4) if (timeouts + completed) else None,
         "games_finished": games, "games_per_hour": round(games * 3600 / wall, 1) if wall else None,
         "cpu_percent_mean": round(sum(cpu_samples) / len(cpu_samples), 1) if cpu_samples else None,
+        "jvms_dead": sum(1 for j in per_jvm if j.get("died") or not j.get("searches")),
         "per_jvm": per_jvm,
     }
     (out / "result.json").write_text(json.dumps(result, indent=2))
