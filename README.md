@@ -9,6 +9,14 @@ This is deliberately the opposite of [MageZero](https://github.com/WillWroble/Ma
 which decomposes Magic into deck-local subgames. DraftZero uses MageZero as a library —
 its RL framework, XMage bridge, trainer and evaluator — and adds the format-level parts.
 
+## Experiments
+
+| # | What | Result | Code | Artifacts |
+|---|---|---|---|---|
+| 1 | One agent for all of FDN: 2,507 games, 34 generations, one L40S, ~$28 | Beats raw search 110/197 (55.8%); plateaued by gen 10 | tag [`exp1-fdn-generalist`](https://github.com/danieljbrooks/draft-zero/tree/exp1-fdn-generalist) | [report](docs/fdn-generalist-report.md) · [Hugging Face](https://huggingface.co/danbrooks/draftzero-fdn-exp1) |
+
+What comes next, and why: **[ROADMAP.md](ROADMAP.md)**.
+
 ## How the pieces relate
 
 ```
@@ -36,9 +44,12 @@ Dependencies point one way only. Nothing in MageZero knows DraftZero exists.
 | `src/draftzero/resources.py` | CPU/RAM/GPU sampling that respects cgroup limits |
 | `src/draftzero/watchdog.py` | persist weights, detect stalls, end the run |
 | `src/draftzero/workers/` | where self-play runs: local, ssh, runpod |
+| `tools/extract_decks.py` | build the deck pool from 17lands public game data |
 | `assets/` | small versioned inputs: deck metadata, action vocab, GIH reference |
-| `configs/` | run configs (`fdn_long.yml` is the long run) and the curriculum |
-| `data/` | **generated, gitignored**: decks, pools, runs, checkpoints |
+| `assets/sample/` | 80 decks and pools, so a fresh clone runs without the full pool |
+| `configs/` | run configs (`fdn_l40s.yml` produced experiment #1) and the curriculum |
+| `docs/` | experiment reports and the [RUNBOOK](docs/RUNBOOK.md) |
+| `data/` | **generated, gitignored**: decks, pools, 17lands downloads, runs, checkpoints |
 
 `assets/` versus `data/` is the important line. Assets are small and reviewable and you
 want to diff them. Data is large and regenerable and must never be committed.
@@ -61,24 +72,47 @@ pip install -e ../MageZero && pip install -e . --no-deps
 
 ## Data
 
-Nothing large is committed. `assets/decks.tsv` is the source of truth for the train/eval
-split; the pool files derive from it:
+**Decks come from [17lands](https://www.17lands.com/)**, whose
+[public datasets](https://www.17lands.com/public_datasets) are licensed
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The pool is every deck in the
+FDN Premier Draft game data whose player sits in the ≥60% win-rate bucket: 31,516 decks,
+split by draft into 28,366 train and 3,150 eval.
+
+**To try it without the full pool**, use the 80 decks committed in
+[`assets/sample/`](assets/sample/README.md) with `configs/sample.yml`.
+
+**To build the full pool** (downloads ~57 MB from 17lands, writes ~150 MB of `.dck` files):
 
 ```bash
-dz pools build                 # assets/decks.tsv -> data/pools/{train,eval}.txt
-dz pools check                 # confirm every stem resolves under data/decks
+python tools/extract_decks.py --set FDN --format PremierDraft --min-winrate 0.60 --dck
+dz pools build          # assets/decks.tsv -> data/pools/{train,eval}.txt
+export MZ_DECK_DIR=data/deckgen/FDN_PremierDraft_wr60/top_player_FDN_decks
+dz pools check --deck-root $MZ_DECK_DIR
 ```
 
-The `.dck` files themselves and the XMage build are fetched separately; point at them with
-`MZ_DECK_DIR` and the `xmage` symlink.
+`extract_decks.py` reads XMage collector numbers from the XMage build's set jar, via the
+`xmage` symlink or `--xmage-jar`. After one run it caches them under `data/17lands/`. This
+reproduces experiment #1's pool **byte for byte**: all 31,516 `.dck` files. That was checked
+on 2026-09-25. The committed split is regenerated the same way with
+`python -m draftzero.pools --decks data/deckgen/FDN_PremierDraft_wr60 --out <dir>`. Its
+`decks.tsv` also matched `assets/decks.tsv` exactly.
+
+`assets/decks.tsv` is the source of truth for the train/eval split, and nothing large is
+committed. Point a run at the `.dck` files with `deck_root` in the config or `MZ_DECK_DIR`,
+and at the XMage build with the `xmage` symlink. The full pool is also published with the
+experiment #1 release on [Hugging Face](https://huggingface.co/danbrooks/draftzero-fdn-exp1).
 
 ## Running
 
 ```bash
 bash deploy/bootstrap.sh                          # install deps, report the REAL cpu/ram quota
-bash deploy/launch.sh configs/runpod_smoke.yml    # ~20 min end-to-end check
-DZ_MAX_HOURS=230 bash deploy/launch.sh configs/fdn_long.yml   # the long run
+bash deploy/launch.sh configs/sample.yml          # ~15 min, on the committed sample decks
+bash deploy/launch.sh configs/runpod_smoke.yml    # ~20 min end-to-end check on the full pool
+bash deploy/launch.sh configs/fdn_l40s.yml        # experiment #1's config
 ```
+
+`configs/sample.yml` is verified to load and to resolve every deck. A full game run from a
+fresh clone still needs MageZero installed and the XMage build linked.
 
 **[docs/RUNBOOK.md](docs/RUNBOOK.md)** is the operating guide for the long run: provisioning,
 what to verify in the first 24 hours, how to tell whether it is actually learning, and how to
@@ -106,8 +140,11 @@ if the machine is rented. Everything above that interface is identical.
 
 ### Sizing a worker
 
-Self-play is **CPU-bound** XMage/MCTS. The GPU only serves small batched inference and
-measures 2–8% utilisation. Pick a machine by vCPU, not VRAM:
+Self-play is **CPU-bound** XMage/MCTS up to about 24 cores per GPU. The GPU only serves
+small batched inference: 2% utilization during heuristic play, 11–14% during network
+self-play. Past ~24 cores, MageZero's single-worker inference server (~200 requests/s)
+becomes the cap, and more cores or GPUs stop helping until inference scales out
+(report §4.1). Pick a machine by vCPU, not VRAM:
 
 ```bash
 dz workers rank --min-vcpu 8    # in-stock RunPod GPUs by vCPU per dollar
@@ -143,7 +180,20 @@ dz dashboard runs/<run_id>
 
 ## Measured throughput
 
-RTX 4000 Ada, 7.65-core quota, 9 vCPU pod:
+**Experiment #1** — L40S, ~24 usable cores, 18 game threads, `search_budget` 96, $0.79/hr:
+
+| Setting | Measured |
+|---|---|
+| network self-play | ~64–90 games/hr |
+| simulations/s, with the network | ~41 |
+| simulations/s, without it (gen 0) | ~84 |
+| cost | 2,507 games for ~$28, about $0.011/game |
+
+The network roughly halves simulations per second, so inference is about half the cost of
+a simulation. Throughput scales with `search_budget`, so expect up to ~3× the cost per
+game at 300 simulations. [ROADMAP.md](ROADMAP.md) Phase 3 measures that directly.
+
+*Early smoke-test pod* — RTX 4000 Ada, 7.65-core quota:
 
 | Setting | games/hr |
 |---|---|
@@ -153,4 +203,17 @@ RTX 4000 Ada, 7.65-core quota, 9 vCPU pod:
 | network self-play, `search_budget` 200 (projected) | ~12 |
 
 Network play is ~4× slower than gen-0 heuristic, and games roughly double in length once
-a net is driving them (20 → 40 turns). Budget from the bottom row, not the top.
+a net is driving them (20 → 40 turns). Budget from network self-play, not gen 0.
+
+## Credits and license
+
+- **[17lands](https://www.17lands.com/)** — every deck and the human reference statistics
+  come from its public datasets, licensed
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Thank you to 17lands and the
+  players who share their data.
+- **[MageZero](https://github.com/WillWroble/MageZero)** by Will Wroble — the RL
+  framework, model, trainer and evaluator this repo builds on.
+- **[XMage](https://github.com/magefree/mage)** — the rules engine every game runs in.
+
+Deck files and statistics derived from 17lands data (`assets/`, the published releases)
+carry CC BY 4.0.
