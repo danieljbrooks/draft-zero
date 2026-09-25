@@ -59,9 +59,10 @@ conclusions are posted on Discord.
 - [x] WillWroble/MageZero#3: the correction was posted on 2026-09-21.
 - [x] Commit the report (it had never been committed), merge `final-eval` into `main`, and tag
       `exp1-fdn-generalist`. Done 2026-09-25.
-- [ ] Publish `danbrooks/draftzero-fdn-exp1` on HF: public, CC BY 4.0, approved 2026-09-25.
-      It's staged locally (534 MB) and **waits on a write token**, because the laptop's cached
-      HF token is read-only.
+- [x] Publish [`danbrooks/draftzero-fdn-exp1`](https://huggingface.co/danbrooks/draftzero-fdn-exp1)
+      on HF: public, CC BY 4.0. Published 2026-09-25 (commit `069f76c`). All 17 files are
+      verified against the staged copy, with sha256 checks on the checkpoints and deck pool,
+      and it's reachable without a token.
 - [ ] Check whether v0.1 checkpoints load under MageZero v0.2.0. The release says it's
       untested. Easiest to check during Phase 2.
 - [ ] Post conclusions and the exp #2 direction on the MageZero Discord (promised in the thread).
@@ -228,6 +229,8 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 
 Add dated entries, newest first.
 
+- **2026-09-25** — Experiment #1 release published on HF: `danbrooks/draftzero-fdn-exp1`.
+  The Discord wrap-up post can go out now that its link resolves.
 - **2026-09-25** — draft-zero stays private for now (D5). HF release approved: public,
   CC BY 4.0. `final-eval` merged into `main` and tagged `exp1-fdn-generalist`.
   `perf/feature-reset` deleted. `MageZero-Experiments` archived as
