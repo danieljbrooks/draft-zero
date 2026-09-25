@@ -113,6 +113,21 @@ conclusions are posted on Discord.
 **Done when:** draft-zero is pinned to a v0.2.0-based engine, the fork fixes are upstream PRs,
 draft-zero can run several JVMs in parallel, and a v0.2 smoke run passes.
 
+**What v0.2.0 changes** ([release notes](https://github.com/WillWroble/MageZero/releases/tag/v0.2.0-alpha)):
+- It **ships its own XMage bundle** (`magezero-xmage-v0.2.0-alpha.zip`).
+- It **widens the feature hash from 2M to 2^31 bins**.
+- It **upgrades the state encoder**: fewer redundant features, dynamic subtypes, and per-turn
+  watchers.
+- It adds `game.yml` knobs: `prune_duplicate_states` (on by default), `backprop_discount`
+  (default 0.99), `max_minutes` and `prior_bonus`.
+
+That has three consequences:
+1. The XMage fork commit has to be **rebased onto v0.2's XMage**, not just published.
+2. Exp #1's checkpoints are **probably unusable as v0.2 opponents**, because the features they
+   learned from changed. The load check below must test play, not just loading. Exp #2 starts
+   from gen 0.
+3. The fork's embedding and dense-vocab commits need re-checking against the 2^31 hash.
+
 - [ ] **Run several JVMs in parallel** (Will's issue #1). `loop.py` calls MageZero's `launch_jvm`
       one chunk at a time; make it run several concurrently, with 4 threads each and ZGC.
   - **Design question: inference servers.** Every exp #2 game is networked on both sides.
@@ -213,8 +228,8 @@ which change helped. That's acceptable: the goal is a better player, not attribu
       against 58%.
 - [ ] Strength against a yardstick that stays fixed across experiments. Raw search at budget
       300 is stronger than at 96, so a raw-search win rate at 300 isn't comparable to exp #1's
-      55.8%. Keep a raw-search-at-96 opponent, or play exp #1's gen 33 directly if it loads
-      under v0.2.
+      55.8%. Keep a raw-search-at-96 opponent. Exp #1's gen 33 is probably unusable under v0.2
+      (see "What v0.2.0 changes" in Phase 2), so don't plan on playing it directly.
 - [ ] Qualitative: Dan plays it, and it doesn't make exp #1's blunders (like chumping a 2/2
       with a 1/1).
 
