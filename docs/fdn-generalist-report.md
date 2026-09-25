@@ -415,7 +415,7 @@ Several choices here drifted from MageZero's own, and at least two likely cost s
 Two earlier setups preceded the RunPod generalist. Both trained per-deck agents in MageZero's own style, not a format-wide one.
 
 - **Laptop (M1 Pro, 16 GB).** FDN RG vs UB co-training ran for 8 generations × 48 games (run `2026-09-17_06-55-47`). Throughput was about 85–100 games/hr without the network and 14–27 games/hr with it. That was too slow for the generalist.
-- **Kaggle GPU notebooks** (2× T4, 4 vCPU, 31 GB, free tier). FDN UW vs BR co-training ran in two variants: standard 128-slot action heads, and an FDN set-wide action vocabulary.
+- **Kaggle GPU notebooks** (2× T4, 4 vCPU, 31 GB, free tier), suggested by chrismaghuhn on the MageZero Discord. FDN UW vs BR co-training ran in two variants: standard 128-slot action heads, and an FDN set-wide action vocabulary.
   - **Scale.** 319 games completed (1 failed, 5 timed out) in 18.2 h of self-play, across 24.9 notebook-hours in four sessions: **17.5 games/hr**.
   - **Progress.** The standard variant reached 4 of 8 generations and the vocabulary variant 6 of 8. A third session was pushed for each but never pulled.
   - **Strength.** Evals were 6 games per matchup, with 95% intervals about ±30 points, so they can't show learning either way.
@@ -425,4 +425,5 @@ Two earlier setups preceded the RunPod generalist. Both trained per-deck agents 
 
 - **[17lands](https://www.17lands.com/)** for the public game data (CC BY 4.0) behind every deck and every human reference number in this report.
 - **Will Wroble** for [MageZero](https://github.com/WillWroble/MageZero), and for the review and advice summarized in the Addendum.
+- **[chrismaghuhn](https://github.com/chrismaghuhn)** for advice on compute (the suggestion to try Kaggle notebooks, Appendix A) and on performance ([WillWroble/MageZero#3](https://github.com/WillWroble/MageZero/issues/3)).
 - The **[XMage](https://github.com/magefree/mage)** project for the rules engine.

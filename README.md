@@ -212,7 +212,9 @@ a net is driving them (20 → 40 turns). Budget from network self-play, not gen 
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Thank you to 17lands and the
   players who share their data.
 - **[MageZero](https://github.com/WillWroble/MageZero)** by Will Wroble — the RL
-  framework, model, trainer and evaluator this repo builds on.
+  framework, model, trainer and evaluator this repo builds on, plus advice on training it.
+- **[chrismaghuhn](https://github.com/chrismaghuhn)** — advice on compute and on
+  performance ([WillWroble/MageZero#3](https://github.com/WillWroble/MageZero/issues/3)).
 - **[XMage](https://github.com/magefree/mage)** — the rules engine every game runs in.
 
 Deck files and statistics derived from 17lands data (`assets/`, the published releases)
