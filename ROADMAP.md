@@ -57,21 +57,22 @@ conclusions are posted on Discord.
 - [x] Kaggle: abandoned. Summarized in report Appendix A: 319 games, 17.5 games/hr, and
       6-game evals too small to show anything. Session 3 of each run stays unpulled.
 - [x] WillWroble/MageZero#3: the correction was posted on 2026-09-21.
-- [ ] Commit the report (it had never been committed), merge `final-eval` into `main`, and tag
-      `exp1-fdn-generalist`. **Do this after the HF upload**, so every link resolves the moment
-      the tag exists.
-- [ ] Publish `danbrooks/draftzero-fdn-exp1` on HF. It's staged locally, and **uploading
-      needs a write token**: the laptop's cached HF token is read-only.
+- [x] Commit the report (it had never been committed), merge `final-eval` into `main`, and tag
+      `exp1-fdn-generalist`. Done 2026-09-25.
+- [ ] Publish `danbrooks/draftzero-fdn-exp1` on HF: public, CC BY 4.0, approved 2026-09-25.
+      It's staged locally (534 MB) and **waits on a write token**, because the laptop's cached
+      HF token is read-only.
 - [ ] Check whether v0.1 checkpoints load under MageZero v0.2.0. The release says it's
       untested. Easiest to check during Phase 2.
 - [ ] Post conclusions and the exp #2 direction on the MageZero Discord (promised in the thread).
-- [ ] Delete the local `perf/feature-reset` branch in the mage fork. It's correct but measured
-      no end-to-end gain.
-- [ ] Retire `MageZero-Experiments/` (~23 GB). **Archive it before deleting.** It holds 16
-      commits that exist on no remote: 8 in `MageZero`, 3 in `MageZero-dev` and 5 in
-      `generalist-MageZero`, including the Kaggle harness. The experiments were stripped from
-      the public fork on purpose, so these clones are the only copy. A `git bundle` of each
-      takes seconds and keeps the history.
+- [x] Delete the `perf/feature-reset` branch (it was correct but measured no end-to-end gain).
+      Deleted 2026-09-25. The next attempt starts from a clean branch.
+- [x] Archive the pre-draft-zero workspace. It's renamed to
+      `~/Desktop/Code/DEPRECATED_PREDRAFTZERO_MageZero-Experiments/`, and its `README_ARCHIVE.md`
+      explains what it held. `_git_bundles/` keeps the 12 commits that exist on no remote,
+      including the Kaggle harness, plus the XMage fork commit as a patch. Each was restored
+      from scratch and checked. The clones were shallow, so the first bundles couldn't be
+      restored; they were rebuilt after fetching full history.
 
 ### Phase 2 — MageZero v0.2.0 and repo boundaries
 
@@ -88,6 +89,12 @@ and a v0.2 smoke run passes.
   - [ ] Server threading: a configurable CPU thread count, and an HTTP pool sized to game threads.
   - [ ] Runner path resolution, a test import fix, and the metrics/runner module.
 - [ ] Re-pin draft-zero to the v0.2.0-based engine.
+- [ ] **Give the XMage fork source a real home.** draft-zero runs on "the fdn-generalist XMage
+      build" (`deploy/bootstrap.sh`). That build's source is one commit on top of
+      WillWroble/mage (`5a32441c`: set-wide action vocabulary, deck pools, per-game summaries),
+      and it isn't on GitHub. Its only copy is the patch in the archive's `_git_bundles/`.
+      Push it to a private `danieljbrooks/mage` fork, and rebase it along with the v0.2.0
+      work above.
 
 **Repo boundaries.** The rule is: a thing goes in MageZero only if it would make sense to
 someone who has never heard of FDN draft. Machinery goes upstream; content gets published.
@@ -166,7 +173,7 @@ which change helped. That's acceptable: the goal is a better player, not attribu
 | D2 | **Scale vs. money** | Run ~1,700 games on the remaining balance, or raise funds first. The throughput pilot gives the number to ask for. | Open |
 | D3 | **What "num_trees" refers to** | Not found in draft-zero, MageZero, or upstream v0.2. If it means search budget, it's already the throughput pilot. | Open |
 | D4 | **Kaggle** | Sticking with RunPod. Kaggle results abandoned; summarized in report Appendix A. | Decided 2026-09-25 |
-| D5 | **Public or private draft-zero** | The HF release is public, but this repo is private, so the release's links to the code only work for people with access. Options: make the repo public, which needs a code license (there is no LICENSE file); give Will and others access; or leave the release self-contained. | Open |
+| D5 | **Public or private draft-zero** | Private for now; to be made public later, which will need a code license (there is no LICENSE file yet). Until then the HF release is self-contained and says the code is available on request. | Decided 2026-09-25 |
 
 ## Side tracks
 
@@ -218,6 +225,11 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 
 Add dated entries, newest first.
 
+- **2026-09-25** — draft-zero stays private for now (D5). HF release approved: public,
+  CC BY 4.0. `final-eval` merged into `main` and tagged `exp1-fdn-generalist`.
+  `perf/feature-reset` deleted. `MageZero-Experiments` archived as
+  `DEPRECATED_PREDRAFTZERO_MageZero-Experiments`. Found that the XMage fork source exists
+  only as a patch in that archive; it's tracked in Phase 2.
 - **2026-09-25** — Phase 1 work: the deck builder was rescued and reproduces the pool byte for
   byte, the sample decks were added, and the docs were cross-linked. 17lands data confirmed
   CC BY 4.0. Kaggle abandoned. The HF release is staged and waits on a write token and D5.
