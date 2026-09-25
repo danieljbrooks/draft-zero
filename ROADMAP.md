@@ -24,6 +24,39 @@ Experiment #1 (run `2026-09-22_02-46-01`) is finished. See the
 The next goal: **a player strong enough that its gameplay statistics can be trusted**, so
 removal and control decks get played correctly and card-level stats mean something.
 
+## Will's review of experiment #1 (2026-09-25)
+
+Will named three main issues. The rest of this file is organized around them.
+
+1. **A throughput bottleneck from the JVM layout.** Exp #1 ran **one JVM with 18 threads**.
+   His advice: run **several JVMs in parallel** (one per opponent, as MageZero's runner does),
+   with **4 threads, ZGC and a 48 GB heap per JVM** if RAM allows, and **don't cut search budget
+   to buy throughput**.
+   - His reference point: a 32-core, 128 GB machine plays **~1,600 games/day (~1/min) at a search
+     budget of 1,000**. Exp #1 played ~1,500–2,200 games/day (64–90 games/hr) on ~24 cores, but at
+     a budget of **96**. That's roughly 10× less search per game at a similar game rate, which
+     points to a lot of headroom. His runs are single-deck and his hardware differs, so treat
+     this as a direction, not a promise.
+   - MageZero already supports this. Parallel JVMs arrived in `59ce546` (`max_jvms`), which *is*
+     in exp #1's engine (`bcc76de`), but draft-zero's loop calls `launch_jvm` itself, one at a
+     time, and never used it.
+2. **λ too low.** This is the second time he's said it (after 2026-09-23). See D1.
+3. **Too many games against itself.** Already planned: the 20 / 70 / 10 mix in Phase 4.
+
+Two more notes:
+- **Drop minimax as a baseline.** Offline MCTS with the heuristic value function beats XMage's
+  minimax bot almost always, and a trained model beats both. Exp #1's evals already used only
+  offline MCTS; the defaults and smaller configs still include minimax.
+- **Expect trial and error.** "There are so many parameters. Deep RL is hard." That's an
+  argument for making each iteration cheap and fast, which is one more reason to fix throughput
+  first.
+
+**What this puts in doubt.** The report concluded that throughput was "capped by inference, not
+CPU" (§4.1). Every run behind that conclusion used a single JVM, including the 4× RTX 5090 box
+with 96 threads in one JVM, so the cap may have been the JVM layout rather than inference. The
+same caveat applies to every throughput number in this file and the report until Phase 3
+re-measures them.
+
 ## Plan
 
 ```
@@ -78,7 +111,17 @@ conclusions are posted on Discord.
 ### Phase 2 — MageZero v0.2.0 and repo boundaries
 
 **Done when:** draft-zero is pinned to a v0.2.0-based engine, the fork fixes are upstream PRs,
-and a v0.2 smoke run passes.
+draft-zero can run several JVMs in parallel, and a v0.2 smoke run passes.
+
+- [ ] **Run several JVMs in parallel** (Will's issue #1). `loop.py` calls MageZero's `launch_jvm`
+      one chunk at a time; make it run several concurrently, with 4 threads each and ZGC.
+  - **Design question: inference servers.** Every exp #2 game is networked on both sides.
+    MageZero's runner uses two fixed ports (`PRIMARY_PORT`, `OPPONENT_PORT`), and its own
+    parallel path refuses networked opponents ("online mcts opponents need a server port each;
+    not supported", `59ce546`). So either each JVM gets its own server and port, or one server
+    takes several JVMs. Ask Will which he'd accept upstream before building it.
+  - **RAM limits the JVM count.** At 48 GB of heap per JVM, exp #1's L40S pod (~116 GB usable)
+    fits only 2. The Phase 3 pilot has to trade heap per JVM against JVM count.
 
 - [ ] Rebase the fork onto `v0.2.0-alpha` (released 2026-09-22). Merge, don't copy files:
       copying from the pre-dense-vocab `fdn-generalist` branch silently reverts
@@ -117,16 +160,23 @@ someone who has never heard of FDN draft. Machinery goes upstream; content gets 
 ### Phase 3 — Pilots before the big run
 
 The main reason to pilot is budget. Exp #1 cost about **$0.011 per game** ($28 / 2,507) at a
-96-simulation search budget. A 300-simulation budget could cost up to ~3× per game. With about
-**$61 left** of the $100 RunPod balance ($38.68 spent per report §4.4), that's roughly **1,700
-games — fewer than exp #1**. The report's 20,000-game target (§8.3) becomes about **$700**,
-not $200. These are estimates; the throughput pilot replaces them with measurements.
+96-simulation search budget, and there's about **$61 left** of the $100 RunPod balance ($38.68
+spent per report §4.4).
+
+The earlier estimate for exp #2 was up to ~3× that per game at budget 300: roughly 1,700
+games for $61, and ~$700 for the report's 20,000-game target. That estimate scaled exp #1's
+*single-JVM* throughput. **Will's review suggests that layout was the bottleneck, so treat the
+estimate as a pessimistic ceiling.** The JVM-layout pilot below replaces it with measurements.
 
 Each pilot costs a few dollars. **Every pilot gets an external hard time limit.**
 
 - [ ] **v0.2 smoke test.** Does the pipeline run end to end?
-- [ ] **Throughput at budget 300** on the pod type you'd actually rent. Measure cost per game.
-      This sizes exp #2 and the funding ask.
+- [ ] **JVM layout × search budget** on the pod type you'd actually rent. Run exp #1's layout
+      (1 JVM × 18 threads) against N JVMs × 4 threads, with heap per JVM as RAM allows, at budget
+      300 and, if affordable, 1,000.
+  - Measure games/hr, sims/s, cost per game, and the inference server's request rate, to see
+    whether inference becomes the cap once the JVM stops being one.
+  - This sizes exp #2 and the funding ask. Don't lower the budget to hit a throughput target.
 - [ ] **Dedup off.** Will measured it at ~25% of each inference request. Verify the speedup,
       and check that outputs are identical.
 - [ ] **λ sweep**, 2–3 generations per arm at budget 96. Which λ gives roughly flat value-label
@@ -146,7 +196,9 @@ which change helped. That's acceptable: the goal is a better player, not attribu
 | Setting | Exp #1 | Exp #2 |
 |---|---|---|
 | Engine | 0.1.0-based fork | v0.2.0 |
-| Search budget | 96 | 300 |
+| JVM layout | 1 JVM × 18 threads, 48 GB heap, ZGC | Several JVMs × 4 threads, ZGC, heap as RAM allows (Will: 48 GB each) |
+| Search budget | 96 | At least 300. Higher if the pilot allows (Will runs 1,000); never lower to buy throughput |
+| Heuristic baseline | Offline MCTS (defaults still list minimax) | Offline MCTS only; remove minimax from the defaults and configs |
 | λ (TD discount) | 0.70 from gen 3 (schedule) | Fixed, value from the pilot |
 | Opponent mix (self / previous / gen 0) | 70 / 20 / 10 | 20 / 70 / 10 |
 | Priors | Yes/no prior on, others off | All off |
@@ -175,8 +227,8 @@ which change helped. That's acceptable: the goal is a better player, not attribu
 
 | ID | Decision | Context | Status |
 |---|---|---|---|
-| D1 | **Which direction to move λ** | The report (§7.3, §8.2) reads 0.70 as not too high and proposes sweeping 0.6 / 0.7 / 0.8. Will's rule is that bimodal histograms mean λ is too high and roughly flat is the target, so he recommends fixing it at ~0.95. Exp #1's labels narrowed to a single hump (§6.2), which by his rule is the *too-low* side. The report's sweep can't test his hypothesis. Suggested: sweep upward, 0.8 / 0.9 / 0.95. | Open |
-| D2 | **Scale vs. money** | Run ~1,700 games on the remaining balance, or raise funds first. The throughput pilot gives the number to ask for. | Open |
+| D1 | **Which direction to move λ** | The report (§7.3, §8.2) reads 0.70 as not too high and proposes sweeping 0.6 / 0.7 / 0.8. Will's rule is that bimodal histograms mean λ is too high and roughly flat is the target, so he recommends fixing it at ~0.95. Exp #1's labels narrowed to a single hump (§6.2), which by his rule is the *too-low* side. The report's sweep can't test his hypothesis. **Will has now named "λ too low" as one of three main issues twice** (2026-09-23 and 2026-09-25). Suggested: decide on a fixed ~0.95, and use the pilot only to check histogram shape at 0.9 / 0.95. | Open, strongly indicated |
+| D2 | **Scale vs. money** | Depends on the JVM-layout pilot. If parallel JVMs recover the headroom Will's numbers suggest, the remaining balance buys far more than the ~1,700-game ceiling estimate. Decide after the pilot, and use its number for any funding ask. | Open |
 | D3 | **What "num_trees" refers to** | Not found in draft-zero, MageZero, or upstream v0.2. If it means search budget, it's already the throughput pilot. | Open |
 | D4 | **Kaggle** | Sticking with RunPod. Kaggle results abandoned; summarized in report Appendix A. | Decided 2026-09-25 |
 | D5 | **Public or private draft-zero** | **Public, MIT**, since 2026-09-25. Deck data stays CC BY 4.0. Because everything pushed is now public, any experiment that should stay private needs a separate private repo. | Decided 2026-09-25 |
@@ -187,7 +239,8 @@ These can happen anytime, and none blocks the main plan.
 
 **Compute funding.** The pitch is the exp #1 public release plus the exp #2 design. Ask for
 CPU hours, not GPU hours: the GPU ran at 11–14% during network self-play while the CPU
-saturated at 93%. Rank RunPod offers by vCPU per dollar.
+saturated at 93%. Rank RunPod offers by vCPU per dollar, **and now by RAM too**: parallel JVMs
+want a lot of heap (Will: 48 GB each), so RAM per core limits the JVM count.
 - [ ] SaladCloud benchmark (suggested on Discord). It fits CPU-only, interruptible, retryable
       work: gen-0 games and raw-search evals. It doesn't fit network self-play, which needs a
       GPU for inference. The minimum is €5.
@@ -198,7 +251,9 @@ report §4.1). The earlier JFR profile ran without the network, so it only saw t
 It found copy machinery at 37% of samples, `getPlayable` / `canActivate` / mana options at 15%,
 and `stateRefresh` at 0.0%.
 - [ ] Profile v0.2 **with the network on**. Split XMage time from inference time *before*
-      changing any code.
+      changing any code. Do it **after** the parallel-JVM change: every measurement so far,
+      including the local profile's ~1.9 s ZGC allocation stalls, came from a single JVM, and
+      the layout change may move the bottleneck entirely.
 
 **Study.** Read with a specific question in mind.
 - [ ] KataGo paper (Wu, 2019): AlphaZero on a small compute budget. Its "playout cap
@@ -215,6 +270,9 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 - **One session per workstream.** Read this file first, and update it last.
 - **Profile before optimizing.** A synthetic benchmark once put `stateRefresh` at ~32% of a
   simulation. A real profile showed 0.0%, and the 27× speedup changed nothing end to end.
+- **Check how MageZero does it before building infrastructure.** Exp #1 ran one JVM with 18
+  threads, which Will called "a very LLM thing to do", while MageZero already parallelized
+  across JVMs (`max_jvms`). Read the upstream runner and ask Will before inventing a layout.
 - **Every long job gets an external hard kill.** A config cap isn't enough: a "8-minute" run
   with `games: 500` ran for 5h43m because the game count bound before the time cap did.
 - **Verify that the binary matches the commit.** Run `package`, not just `compile`, then check
@@ -231,6 +289,10 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 
 Add dated entries, newest first.
 
+- **2026-09-25** — Will's review of exp #1 added. His three main issues: the single-JVM layout,
+  λ too low, and too much self-play. Parallel JVMs added to Phase 2, the Phase 3 budget estimate
+  downgraded to a ceiling, minimax dropped as a baseline, and D1 strengthened. It also puts the
+  report's "capped by inference" conclusion (§4.1) in doubt, because every run was a single JVM.
 - **2026-09-25** — draft-zero made public under MIT (D5 revised). The `exp1-fdn-generalist` tag
   predates `LICENSE`. It was left in place rather than moved, because Will has repo access
   and may already have fetched it, and the README states that MIT covers every version.
