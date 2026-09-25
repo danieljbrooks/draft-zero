@@ -1,5 +1,5 @@
 """
-Split a deck set (from deckgen/extract_decks.py --dck) into train / held-out eval deck pools.
+Split a deck set (from tools/extract_decks.py --dck) into train / held-out eval deck pools.
 
   python -m draftzero.pools --decks data/decks --out data/pools/
 

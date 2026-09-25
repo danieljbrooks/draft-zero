@@ -1,5 +1,7 @@
-# Generated data: regenerate with `dz decks extract` / `dz pools build`, never commit.
+# Generated data: regenerate with `tools/extract_decks.py` / `dz pools build`, never commit.
 data/decks/
+data/17lands/
+data/deckgen/
 data/pools/
 data/persist/
 runs/

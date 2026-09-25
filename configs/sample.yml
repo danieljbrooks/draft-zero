@@ -1,0 +1,21 @@
+# The smoke test, run against the 80-deck sample committed in assets/sample/, so a fresh
+# clone runs end to end without building the full 31,516-deck pool first. Same scale as
+# smoke.yml: tiny games, 4 gens, ~15 minutes.
+#
+# Still needs the XMage build (`xmage` symlink) and MageZero installed; see the README.
+# For the real deck pool, see "Data" in the README.
+model: FDN_generalist_sample
+version: 1
+generations: 4
+deck_root: assets/sample/decks
+pools:
+  train: assets/sample/train.txt
+  eval: assets/sample/eval.txt
+bootstrap_games: 4
+games_per_gen: 6
+chunk_games: 2
+mix: {self: 0.5, past: 0.3, gen0: 0.2}
+replay_states: 3000
+eval: {baselines: [offline, minimax], pairs: 1, window_gens: 2}
+stats: {window_gens: 2, min_card_games: 1}
+jvm: {heap: 6g, threads: 2, search_budget: 30, timeout_ms: 2000, max_minutes: 6}
