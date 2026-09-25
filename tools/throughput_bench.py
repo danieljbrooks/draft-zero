@@ -216,6 +216,9 @@ def main() -> int:
         "per_jvm": per_jvm,
     }
     (out / "result.json").write_text(json.dumps(result, indent=2))
+    # the per-JVM XMage copies are ~0.3 GB each (the card DB); keep the logs, drop the copies
+    for wd in out.glob("xmage_*"):
+        shutil.rmtree(wd, ignore_errors=True)
     print(json.dumps({k: v for k, v in result.items() if k != "per_jvm"}), flush=True)
     return 0
 
