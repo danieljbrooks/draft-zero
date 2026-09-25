@@ -63,8 +63,8 @@ conclusions are posted on Discord.
       on HF: public, CC BY 4.0. Published 2026-09-25 (commit `069f76c`). All 17 files are
       verified against the staged copy, with sha256 checks on the checkpoints and deck pool,
       and it's reachable without a token.
-- [ ] Check whether v0.1 checkpoints load under MageZero v0.2.0. The release says it's
-      untested. Easiest to check during Phase 2.
+- [x] ~~Check whether v0.1 checkpoints load under MageZero v0.2.0~~: moved to Phase 2, where
+      it's easiest to test. The release says it's untested.
 - [ ] Post conclusions and the exp #2 direction on the MageZero Discord (promised in the thread).
 - [x] Delete the `perf/feature-reset` branch (it was correct but measured no end-to-end gain).
       Deleted 2026-09-25. The next attempt starts from a clean branch.
@@ -89,6 +89,8 @@ and a v0.2 smoke run passes.
         `embed_rows` metadata. These crash any run whose vocabulary grows.
   - [ ] Server threading: a configurable CPU thread count, and an HTTP pool sized to game threads.
   - [ ] Runner path resolution, a test import fix, and the metrics/runner module.
+- [ ] Check whether experiment #1's v0.1 checkpoints load under v0.2.0 (moved from Phase 1).
+      The HF release says it's untested; update its model card with the answer either way.
 - [ ] Re-pin draft-zero to the v0.2.0-based engine. Start from a fresh clone of
       `danieljbrooks/MageZero`. The existing `~/Desktop/Code/mz-engine` checkout is a git
       worktree of the archived repo (see its `README_ARCHIVE.md`), so it shouldn't be used for
