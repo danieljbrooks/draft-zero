@@ -28,7 +28,6 @@ import re
 import shutil
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -52,6 +51,24 @@ def cgroup_ram_gb() -> float:
     """The container's real memory limit. Never psutil's total: the same pod reported 1,007 GB
     of host RAM against a 116 GB limit, and a heap sized from that gets the JVM OOM-killed."""
     return mem_limit_gb() or psutil.virtual_memory().total / 2**30
+
+
+def cgroup_cpu_seconds() -> float | None:
+    """CPU time used by this container so far (cgroup v2 or v1). Never psutil.cpu_percent: in a
+    container it reads the host's /proc/stat, so on a shared 256-core host it counts other
+    tenants' load, and scaled to the quota it says nothing about ours."""
+    try:
+        for line in open("/sys/fs/cgroup/cpu.stat"):
+            if line.startswith("usage_usec "):
+                return int(line.split()[1]) / 1e6
+    except OSError:
+        pass
+    for f in ("/sys/fs/cgroup/cpuacct/cpuacct.usage", "/sys/fs/cgroup/cpu,cpuacct/cpuacct.usage"):
+        try:
+            return int(Path(f).read_text()) / 1e9
+        except OSError:
+            continue
+    return None
 
 
 def xmage_copy(src: Path, dst: Path) -> Path:
@@ -141,15 +158,7 @@ def main() -> int:
 
     servers, ports = [], []
     procs, logs = [], []
-    cpu_samples: list[float] = []
-    stop = threading.Event()
-
-    def sample_cpu():
-        psutil.cpu_percent(None)
-        while not stop.wait(10):
-            cpu_samples.append(psutil.cpu_percent(None))
-
-    t0 = time.time()
+    t0, cpu0 = time.time(), cgroup_cpu_seconds()
     try:
         if a.mode == "network":
             n_servers = 1 if a.shared_server else a.jvms
@@ -174,12 +183,11 @@ def main() -> int:
             procs.append(subprocess.Popen(cmd, cwd=wd, stdout=open(log, "w"), stderr=subprocess.STDOUT))
             if j < a.jvms - 1:
                 time.sleep(5)   # stagger starts too, so card-DB bootstraps don't all hit the disk at once
-        threading.Thread(target=sample_cpu, daemon=True).start()
         deadline = t0 + a.minutes * 60
         while time.time() < deadline and any(p.poll() is None for p in procs):
             time.sleep(5)
     finally:
-        stop.set()
+        cpu1, t1 = cgroup_cpu_seconds(), time.time()      # before teardown, which is not the workload
         for p in procs:
             if p.poll() is None:
                 p.terminate()
@@ -191,6 +199,7 @@ def main() -> int:
         for s in servers:
             stop_server(s)
     wall = time.time() - t0
+    cpu_used = cpu1 - cpu0 if cpu0 is not None and cpu1 is not None else None
 
     sims = searches = timeouts = completed = games = 0
     search_seconds = 0.0
@@ -224,7 +233,8 @@ def main() -> int:
         "searches": searches, "search_timeouts": timeouts, "searches_completed": completed,
         "timeout_rate": round(timeouts / (timeouts + completed), 4) if (timeouts + completed) else None,
         "games_finished": games, "games_per_hour": round(games * 3600 / wall, 1) if wall else None,
-        "cpu_percent_mean": round(sum(cpu_samples) / len(cpu_samples), 1) if cpu_samples else None,
+        "cores_busy": round(cpu_used / (t1 - t0), 2) if cpu_used is not None else None,
+        "quota_percent": round(100 * cpu_used / (t1 - t0) / cores, 1) if cpu_used is not None else None,
         "jvms_dead": sum(1 for j in per_jvm if j.get("died") or not j.get("searches")),
         "per_jvm": per_jvm,
     }
