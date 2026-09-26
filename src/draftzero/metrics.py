@@ -55,11 +55,17 @@ def load_oracle() -> dict:
 
 HARMFUL_RE = re.compile(r"deals? [^.]*damage to (?:target|any target)|destroy target|exile target (?:creature|nonland|artifact|enchantment)"
                         r"|target creature gets -|gets -\d|tap target|return target (?:creature|nonland permanent) to its owner's hand"
-                        r"|gain control of target|enchanted creature (?:loses|can't|gets -|is a)", re.I)
+                        r"|gain control of target|enchanted creature (?:loses|can't|gets -|is a)"
+                        r"|counter target spell|target creature's owner puts it|put target (?:creature|nonland permanent) on"
+                        r"|target creature can't (?:block|attack)", re.I)
 BENEFICIAL_RE = re.compile(r"target creature (?:you control )?gets \+|\+1/\+1 counter on target|gains? (?:hexproof|indestructible|flying)"
-                           r"|target creature gains", re.I)
+                           r"|target creature gains|enchanted creature (?:gets \+|has )", re.I)
 RESTRICTED_RE = re.compile(r"target (?:creature|permanent|nonland permanent)s? (?:you control|an opponent controls|you don't control)"
                            r"|target opponent|target player", re.I)
+# a required target; "targets" (a condition) and "up to one target" (optional, secondary) don't count
+TARGET_WORD_RE = re.compile(r"(?<!up to one )\btarget\b", re.I)
+# an Aura targets the creature it enchants when it's cast, though its text never says "target"
+AURA_RE = re.compile(r"^enchant creature\b", re.I | re.M)
 
 
 # prompts that reuse the "choose target" log line but are not spell/ability targeting
@@ -67,13 +73,30 @@ NON_TARGET_PROMPT_RE = re.compile(r"choose cards? to discard|discard to hand siz
                                   r"|sacrifice|choose a card to|put .* on the bottom|scry|surveil", re.I)
 # effects whose own cost makes you pick your own permanent (the pick is a cost, not a target)
 SELF_COST_RE = re.compile(r"as an additional cost[^.]*sacrifice", re.I)
+# a second choice logged under the same source (Refute's discard, Uncharted Voyage's surveil):
+# picking your own card there isn't a bad target, so the prompt can't be classified
+SECOND_CHOICE_RE = re.compile(r"discard|surveil|scry|search your library|sacrifice|reveal|look at", re.I)
+
+
+def targets_anything(text: str) -> bool:
+    """False when the text has no target at all, so a "choose target" prompt for it is some
+    other choice (a card to discard, a land to fetch, a mode). Such prompts aren't targeting."""
+    return bool(text) and bool(TARGET_WORD_RE.search(text) or AURA_RE.search(text)
+                               or re.search(r"\btargets?\b", text, re.I))
+
+
+def rules_restricted(text: str) -> bool:
+    """The text itself limits whose permanent can be targeted, so XMage can't allow a bad one."""
+    return bool(RESTRICTED_RE.search(text or ""))
 
 
 def classify_effect(text: str) -> Optional[str]:
     """'harmful' / 'beneficial' / None for single-target effects the rules don't already restrict."""
-    if not text or text.lower().count("target") != 1 or RESTRICTED_RE.search(text):
+    text = re.sub(r"\([^)]*\)", "", text or "")      # reminder text: "(It's an artifact with ...)"
+    if not text or RESTRICTED_RE.search(text) or SELF_COST_RE.search(text) or SECOND_CHOICE_RE.search(text):
         return None
-    if SELF_COST_RE.search(text):
+    n = len(TARGET_WORD_RE.findall(text)) or (1 if AURA_RE.search(text) else 0)
+    if n != 1:
         return None
     if HARMFUL_RE.search(text):
         return "harmful"

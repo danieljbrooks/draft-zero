@@ -26,7 +26,7 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from draftzero.metrics import LINE_RE, NON_TARGET_PROMPT_RE, classify_effect
+from draftzero.metrics import LINE_RE, NON_TARGET_PROMPT_RE, classify_effect, rules_restricted, targets_anything
 
 SUMMARY_TAG = "GAME_SUMMARY "
 SIM_RE = re.compile(r"^Player: (Player[AB]) simulated ")
@@ -81,9 +81,16 @@ def audit(logs: list[Path], deck_root: Path, oracle: dict) -> tuple[list[dict], 
                     if tg["src"].startswith("Cast "):
                         card = tg["src"][5:]
                         who = owner(card) or who                     # the caster owns the spell
-                        effect = classify_effect((oracle.get(card) or {}).get("oracle_text", ""))
+                        text = (oracle.get(card) or {}).get("oracle_text", "")
                     else:
-                        effect = classify_effect(tg["src"])
+                        text = tg["src"]
+                    if text and not targets_anything(text):
+                        tally["not_a_target"] += 1                   # a discard, a fetch, a mode...
+                        continue
+                    if rules_restricted(text):
+                        tally["restricted_by_rules"] += 1            # XMage enforces the side
+                        continue
+                    effect = classify_effect(text)
                     tgt_owner = owner(tg["target"])
                     if effect is None:
                         tally["unclassified_effect"] += 1
@@ -116,8 +123,10 @@ def main() -> None:
         with open(a.out, "w") as f:
             f.writelines(json.dumps(r) + "\n" for r in rows)
     rate = f"{t['bad'] / t['classified']:.1%}" if t["classified"] else "n/a"
-    print(f"targets {t['targets']}: classified {t['classified']}, bad {t['bad']} ({rate} of classified), "
-          f"effect unclassifiable {t['unclassified_effect']}, owner unknown {t['unknown_owner']}")
+    print(f"prompts {t['targets']}: not a target {t['not_a_target']}, restricted by rules "
+          f"{t['restricted_by_rules']}, classified {t['classified']}, "
+          f"bad {t['bad']} ({rate} of classified), effect unclassifiable {t['unclassified_effect']}, "
+          f"owner unknown {t['unknown_owner']}")
     for r in rows[:10]:
         print(f"  [{r['actor']} {r['actor_deck']}] {r['effect']} '{r['source'][:60]}' -> {r['target']} ({r['target_owner']})")
 
