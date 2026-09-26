@@ -31,7 +31,7 @@ What's most useful for us:
 
 This one is about our own metric, prompted by his reliability checks.
 
-**Method.** I sampled real 17lands FDN Premier Draft games down to [exp #1](fdn-generalist-report.md)'s
+**Method.** I sampled real 17lands FDN Premier Draft games down to [exp #1](003-fdn-generalist-report.md)'s
 sizes, 60 samples per size. For each sample, I correlated the commons' GIH win rates against the
 full 791k-game data, counting commons with ≥30 games in hand. That shows what human-quality play
 would score at each size:

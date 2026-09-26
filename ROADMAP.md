@@ -10,7 +10,7 @@ truth for status. Chat history isn't.
 ## Where things stand
 
 Experiment #1 (run `2026-09-22_02-46-01`) is finished. See the
-[report](docs/fdn-generalist-report.md).
+[report](docs/003-fdn-generalist-report.md).
 
 - 2,507 games over 34 generations on one RunPod L40S, about $28 of pod time.
 - The gen-33 checkpoint beat raw search **110/197 (55.8%, CI 49–63%)** but only tied gen 10

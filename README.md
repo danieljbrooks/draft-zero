@@ -13,7 +13,7 @@ its RL framework, XMage bridge, trainer and evaluator — and adds the format-le
 
 | # | What | Result | Code | Artifacts |
 |---|---|---|---|---|
-| 1 | One agent for all of FDN: 2,507 games, 34 generations, one L40S, ~$28 | Beats raw search 110/197 (55.8%); plateaued by gen 10 | tag [`exp1-fdn-generalist`](https://github.com/danieljbrooks/draft-zero/tree/exp1-fdn-generalist) | [report](docs/fdn-generalist-report.md) · [Hugging Face](https://huggingface.co/danbrooks/draftzero-fdn-exp1) |
+| 1 | One agent for all of FDN: 2,507 games, 34 generations, one L40S, ~$28 | Beats raw search 110/197 (55.8%); plateaued by gen 10 | tag [`exp1-fdn-generalist`](https://github.com/danieljbrooks/draft-zero/tree/exp1-fdn-generalist) | [report](docs/003-fdn-generalist-report.md) · [Hugging Face](https://huggingface.co/danbrooks/draftzero-fdn-exp1) |
 
 What comes next, and why: **[ROADMAP.md](ROADMAP.md)**.
 
@@ -48,7 +48,7 @@ Dependencies point one way only. Nothing in MageZero knows DraftZero exists.
 | `assets/` | small versioned inputs: deck metadata, action vocab, GIH reference |
 | `assets/sample/` | 80 decks and pools, so a fresh clone runs without the full pool |
 | `configs/` | run configs (`fdn_l40s.yml` produced experiment #1) and the curriculum |
-| `docs/` | experiment reports and the [RUNBOOK](docs/RUNBOOK.md) |
+| `docs/` | design notes, the [RUNBOOK](docs/002-RUNBOOK.md), experiment reports and reviews, numbered in the order they were written (`001-`, `002-`, …); a new doc takes the next number |
 | `data/` | **generated, gitignored**: decks, pools, 17lands downloads, runs, checkpoints |
 
 `assets/` versus `data/` is the important line. Assets are small and reviewable and you
@@ -114,7 +114,7 @@ bash deploy/launch.sh configs/fdn_l40s.yml        # experiment #1's config
 `configs/sample.yml` is verified to load and to resolve every deck. A full game run from a
 fresh clone still needs MageZero installed and the XMage build linked.
 
-**[docs/RUNBOOK.md](docs/RUNBOOK.md)** is the operating guide for the long run: provisioning,
+**[docs/002-RUNBOOK.md](docs/002-RUNBOOK.md)** is the operating guide for the long run: provisioning,
 what to verify in the first 24 hours, how to tell whether it is actually learning, and how to
 resume after a crash.
 

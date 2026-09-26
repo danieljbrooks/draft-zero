@@ -13,7 +13,7 @@
 # Scaling to 40.8 cores at 0.85 efficiency -- threads block on inference roughly 40% of the
 # time, so extra cores do not return linearly -- predicts ~86 games/hr. The single-threaded
 # inference worker may bottleneck well before that; watch res_cpu against env_gph.
-# THIS IS AN EXTRAPOLATION. Generation 1 confirms or refutes it; see docs/RUNBOOK.md.
+# THIS IS AN EXTRAPOLATION. Generation 1 confirms or refutes it; see docs/002-RUNBOOK.md.
 #
 # Scope. This is the proving run: enough generations to see whether strength trends up,
 # cheap enough to leave most of the budget for the real one. When the curve looks right,
