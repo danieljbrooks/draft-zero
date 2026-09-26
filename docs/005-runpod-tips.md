@@ -34,6 +34,10 @@ from the [report](003-fdn-generalist-report.md) §4.2 and the [RUNBOOK](002-RUNB
   31.1 cores / 116 GB. Network volumes also exist only on Secure Cloud.
 - **Container disk:** requesting 80 GB may shrink the pool of eligible hosts. 40 GB was
   enough for the pilot.
+- **Check what you actually got, right after creating it.** `dz workers rank` shows a GPU type's
+  cheapest offer, but the pod you get can be smaller. On 2026-09-26 a Secure RTX A5000 came
+  with 9 vCPU / 50 GB. Query `vcpuCount` and `memoryInGb` (GraphQL, above) at once, and
+  remove a pod that's too small before setting anything up: minutes cost cents.
 
 ## Creating the pod
 
@@ -80,11 +84,11 @@ timeout means your network is filtering. Check port 80 too, to be sure portquiz 
 **Workaround: RunPod's SSH proxy on port 22.**
 
 ```bash
-# the proxy username is <podId>-<podHostId>; podHostId comes from GraphQL
+# the proxy username is the machine's podHostId, which already reads <podId>-<suffix>
 curl -s -X POST "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"query":"query { pod(input:{podId:\"<podId>\"}) { machine { podHostId } } }"}'
-ssh -tt -i ~/.ssh/id_ed25519 <podId>-<podHostId>@ssh.runpod.io
+  -d '{"query":"query { pod(input:{podId:\"<podId>\"}) { vcpuCount memoryInGb machine { podHostId } } }"}'
+ssh -tt -i ~/.ssh/id_ed25519 <podHostId>@ssh.runpod.io
 ```
 
 The proxy gives you a PTY shell only:
@@ -111,6 +115,9 @@ The proxy gives you a PTY shell only:
   ```
 
   It removes the pod after 3 hours even if your session dies. Pull the results before it fires.
+- **A trailing `&` backgrounds the whole `&&` chain.** `cd x && git clone ... && nohup y &`
+  runs the clone in the background too, so the next line runs before the clone finishes.
+  Background only the last command, or wrap the whole step in one `nohup bash -c '...' &`.
 - **Don't wait on setup with `pgrep -f <script>`** from a command line that mentions the
   script's name. `pgrep` matches the waiter itself and waits forever. Chain the steps
   sequentially instead (`bash setup.sh && bash run.sh`).
