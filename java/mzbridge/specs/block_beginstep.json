@@ -1,0 +1,54 @@
+{
+ "version": 1,
+ "comment": "NEGATIVE TEST: enter directly at DECLARE_BLOCKERS with BEGIN_STEP (block decision happens before any priority call)",
+ "turn": 8,
+ "activePlayer": "B",
+ "phase": "COMBAT",
+ "step": "DECLARE_BLOCKERS",
+ "enterMode": "BEGIN_STEP",
+ "players": {
+  "A": {
+   "name": "PlayerA",
+   "life": 13,
+   "decklist": ["Arbiter of Woe", "Burglar Rat", "Eaten Alive", "Fake Your Own Death", "Fleeting Flight", "Gutless Plunderer", "Hero's Downfall", "Infestation Sage", "Make Your Move", "Mischievous Pup", "Pilfer", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Prideful Parent", "Sanguine Syphoner", "Scrawling Crawler", "Seeker's Folly", "Felidar Savior", "Soul-Shackled Zombie", "Squad Rallier", "Stab", "Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Pacifism", "Vampire Gourmand", "Vampire Soulcaller", "Vanguard Seraph"],
+   "decklistSource": "exact",
+   "landsPlayed": 0,
+   "hand": ["Squad Rallier"],
+   "graveyard": ["Fake Your Own Death", "Eaten Alive"],
+   "battlefield": [
+    {"name": "Plains", "count": 4, "tapped": true},
+    {"name": "Swamp", "count": 2, "tapped": true},
+    {"name": "Felidar Savior"},
+    {"name": "Vanguard Seraph"},
+    {"name": "Burglar Rat"}
+   ]
+  },
+  "B": {
+   "name": "PlayerB",
+   "life": 9,
+   "decklist": ["Abrade", "Bite Down", "Burst Lightning", "Bushwhack", "Cackling Prowler", "Cackling Prowler", "Courageous Goblin", "Courageous Goblin", "Courageous Goblin", "Eager Trufflesnout", "Eager Trufflesnout", "Felling Blow", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Gnarlid Colony", "Heartfire Immolator", "Kellan, Planar Trailblazer", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Needletooth Pack", "Needletooth Pack", "Nessian Hornbeetle", "Searslicer Goblin", "Slumbering Cerberus", "Snakeskin Veil", "Sower of Chaos", "Strongbox Raider"],
+   "decklistSource": "exact",
+   "landsPlayed": 1,
+   "hand": ["Forest", "Gnarlid Colony"],
+   "graveyard": ["Abrade"],
+   "battlefield": [
+    {"name": "Forest", "count": 4, "tapped": true},
+    {"name": "Mountain", "count": 3, "tapped": true},
+    {
+     "name": "Cackling Prowler",
+     "id": "prowler",
+     "counters": {"P1P1": 1}
+    },
+    {"name": "Needletooth Pack", "id": "pack"},
+    {"tokenClass": "BeastToken", "id": "beast"}
+   ]
+  }
+ },
+ "attackers": [
+  {"attacker": "B:prowler", "defender": "player:A"},
+  {"attacker": "B:pack", "defender": "player:A"},
+  {"attacker": "B:beast", "defender": "player:A"}
+ ],
+ "provenance": {"source": "synthetic", "ref": "research PoC scenario3b_block_beginstep", "tier": "T0"},
+ "labels": {"decisionPlayer": "A"}
+}

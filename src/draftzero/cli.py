@@ -5,6 +5,8 @@
     dz dashboard runs/<id>        render the format-knowledge page
     dz workers rank               in-stock RunPod GPUs ranked by vCPU per dollar
     dz provenance                 what code is in play here
+    dz gameplay <tool> ...        human gameplay data (docs/008): 17lands, arena, bridge, pairs,
+                                  belief, fingerprints, ids, replay, reconstruct, labels
 """
 import argparse
 import json
@@ -12,7 +14,27 @@ import sys
 from pathlib import Path
 
 
+# `dz gameplay <tool> ...` hands the rest of the command line to that module's own main(argv)
+GAMEPLAY_TOOLS = {
+    "17lands": "seventeenlands", "arena": "arena", "bridge": "bridge", "pairs": "pairs",
+    "belief": "belief", "fingerprints": "fingerprints", "ids": "ids", "replay": "replay",
+    "reconstruct": "reconstruct", "labels": "labels",
+}
+
+
+def gameplay(argv: list[str]) -> int:
+    if not argv or argv[0] not in GAMEPLAY_TOOLS:
+        print("usage: dz gameplay {" + ",".join(GAMEPLAY_TOOLS) + "} [args...]", file=sys.stderr)
+        return 2
+    import importlib
+    module = importlib.import_module(f"draftzero.gameplay.{GAMEPLAY_TOOLS[argv[0]]}")
+    return module.main(argv[1:]) or 0
+
+
 def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "gameplay":
+        return gameplay(argv[1:])
     ap = argparse.ArgumentParser(prog="dz", description="DraftZero")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -34,6 +56,7 @@ def main(argv=None) -> int:
     p_dash.add_argument("--reference")
 
     sub.add_parser("status", help="local run status")
+    sub.add_parser("gameplay", help="human gameplay data tools (dz gameplay <tool> --help)")
 
     a = ap.parse_args(argv)
 

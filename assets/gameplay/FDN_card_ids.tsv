@@ -1,0 +1,1168 @@
+# every card grpId seen in the FDN replay files, from 17lands cards.csv (CC BY 4.0)
+id	expansion	name	rarity	types	mana_value	is_booster
+6993	MIR	Forest	basic	Basic Land - Forest	0	True
+7065	MIR	Island	basic	Basic Land - Island	0	True
+7153	MIR	Mountain	basic	Basic Land - Mountain	0	True
+7193	MIR	Plains	basic	Basic Land - Plains	0	True
+7347	MIR	Swamp	basic	Basic Land - Swamp	0	True
+11809	USG	Swamp	basic	Basic Land - Swamp	0	True
+11815	USG	Mountain	basic	Basic Land - Mountain	0	True
+11863	USG	Plains	basic	Basic Land - Plains	0	True
+12053	USG	Island	basic	Basic Land - Island	0	True
+12429	USG	Forest	basic	Basic Land - Forest	0	True
+34716	ZEN	Swamp	basic	Basic Land - Swamp	0	True
+34720	ZEN	Swamp	basic	Basic Land - Swamp	0	True
+34722	ZEN	Island	basic	Basic Land - Island	0	True
+34724	ZEN	Plains	basic	Basic Land - Plains	0	True
+34728	ZEN	Island	basic	Basic Land - Island	0	True
+34736	ZEN	Forest	basic	Basic Land - Forest	0	True
+34742	ZEN	Mountain	basic	Basic Land - Mountain	0	True
+34744	ZEN	Forest	basic	Basic Land - Forest	0	True
+34746	ZEN	Mountain	basic	Basic Land - Mountain	0	True
+34754	ZEN	Plains	basic	Basic Land - Plains	0	True
+36786	ROE	Plains	basic	Basic Land - Plains	0	True
+36788	ROE	Mountain	basic	Basic Land - Mountain	0	True
+36802	ROE	Forest	basic	Basic Land - Forest	0	True
+36812	ROE	Swamp	basic	Basic Land - Swamp	0	True
+36818	ROE	Island	basic	Basic Land - Island	0	True
+51789	RTR	Plains	basic	Basic Land - Plains	0	True
+51799	RTR	Island	basic	Basic Land - Island	0	True
+51809	RTR	Swamp	basic	Basic Land - Swamp	0	True
+51819	RTR	Mountain	basic	Basic Land - Mountain	0	True
+51829	RTR	Forest	basic	Basic Land - Forest	0	True
+58437	KTK	Plains	basic	Basic Land - Plains	0	True
+58439	KTK	Plains	basic	Basic Land - Plains	0	True
+58441	KTK	Island	basic	Basic Land - Island	0	True
+58443	KTK	Island	basic	Basic Land - Island	0	True
+58445	KTK	Swamp	basic	Basic Land - Swamp	0	True
+58447	KTK	Swamp	basic	Basic Land - Swamp	0	True
+58449	KTK	Mountain	basic	Basic Land - Mountain	0	True
+58451	KTK	Mountain	basic	Basic Land - Mountain	0	True
+58453	KTK	Forest	basic	Basic Land - Forest	0	True
+58455	KTK	Forest	basic	Basic Land - Forest	0	True
+62115	BFZ	Plains	basic	Basic Land - Plains	0	True
+62125	BFZ	Island	basic	Basic Land - Island	0	True
+62135	BFZ	Swamp	basic	Basic Land - Swamp	0	True
+62145	BFZ	Mountain	basic	Basic Land - Mountain	0	True
+62155	BFZ	Forest	basic	Basic Land - Forest	0	True
+65363	AKH	Plains	basic	Basic Land - Plains	0	True
+65369	AKH	Island	basic	Basic Land - Island	0	True
+65379	AKH	Swamp	basic	Basic Land - Swamp	0	True
+65385	AKH	Mountain	basic	Basic Land - Mountain	0	True
+65393	AKH	Forest	basic	Basic Land - Forest	0	True
+66499	XLN	Plains	basic	Basic Land - Plains	0	True
+66501	XLN	Plains	basic	Basic Land - Plains	0	True
+66503	XLN	Plains	basic	Basic Land - Plains	0	True
+66505	XLN	Plains	basic	Basic Land - Plains	0	True
+66507	XLN	Island	basic	Basic Land - Island	0	True
+66509	XLN	Island	basic	Basic Land - Island	0	True
+66511	XLN	Island	basic	Basic Land - Island	0	True
+66513	XLN	Island	basic	Basic Land - Island	0	True
+66515	XLN	Swamp	basic	Basic Land - Swamp	0	True
+66517	XLN	Swamp	basic	Basic Land - Swamp	0	True
+66519	XLN	Swamp	basic	Basic Land - Swamp	0	True
+66521	XLN	Swamp	basic	Basic Land - Swamp	0	True
+66523	XLN	Mountain	basic	Basic Land - Mountain	0	True
+66525	XLN	Mountain	basic	Basic Land - Mountain	0	True
+66527	XLN	Mountain	basic	Basic Land - Mountain	0	True
+66529	XLN	Mountain	basic	Basic Land - Mountain	0	True
+66531	XLN	Forest	basic	Basic Land - Forest	0	True
+66533	XLN	Forest	basic	Basic Land - Forest	0	True
+66535	XLN	Forest	basic	Basic Land - Forest	0	True
+66537	XLN	Forest	basic	Basic Land - Forest	0	True
+67015	RIX	Plains	basic	Basic Land - Plains	0	True
+67017	RIX	Island	basic	Basic Land - Island	0	True
+67019	RIX	Swamp	basic	Basic Land - Swamp	0	True
+67021	RIX	Mountain	basic	Basic Land - Mountain	0	True
+67023	RIX	Forest	basic	Basic Land - Forest	0	True
+67604	DOM	Plains	basic	Basic Land - Plains	0	True
+67606	DOM	Plains	basic	Basic Land - Plains	0	True
+67608	DOM	Plains	basic	Basic Land - Plains	0	True
+67610	DOM	Plains	basic	Basic Land - Plains	0	True
+67612	DOM	Island	basic	Basic Land - Island	0	True
+67614	DOM	Island	basic	Basic Land - Island	0	True
+67616	DOM	Island	basic	Basic Land - Island	0	True
+67618	DOM	Island	basic	Basic Land - Island	0	True
+67620	DOM	Swamp	basic	Basic Land - Swamp	0	True
+67622	DOM	Swamp	basic	Basic Land - Swamp	0	True
+67624	DOM	Swamp	basic	Basic Land - Swamp	0	True
+67626	DOM	Swamp	basic	Basic Land - Swamp	0	True
+67628	DOM	Mountain	basic	Basic Land - Mountain	0	True
+67630	DOM	Mountain	basic	Basic Land - Mountain	0	True
+67632	DOM	Mountain	basic	Basic Land - Mountain	0	True
+67634	DOM	Mountain	basic	Basic Land - Mountain	0	True
+67636	DOM	Forest	basic	Basic Land - Forest	0	True
+67638	DOM	Forest	basic	Basic Land - Forest	0	True
+67640	DOM	Forest	basic	Basic Land - Forest	0	True
+67642	DOM	Forest	basic	Basic Land - Forest	0	True
+68204	M19	Plains	basic	Basic Land - Plains	0	True
+68206	M19	Plains	basic	Basic Land - Plains	0	True
+68208	M19	Plains	basic	Basic Land - Plains	0	True
+68210	M19	Plains	basic	Basic Land - Plains	0	True
+68212	M19	Island	basic	Basic Land - Island	0	True
+68214	M19	Island	basic	Basic Land - Island	0	True
+68216	M19	Island	basic	Basic Land - Island	0	True
+68218	M19	Island	basic	Basic Land - Island	0	True
+68220	M19	Swamp	basic	Basic Land - Swamp	0	True
+68222	M19	Swamp	basic	Basic Land - Swamp	0	True
+68224	M19	Swamp	basic	Basic Land - Swamp	0	True
+68226	M19	Swamp	basic	Basic Land - Swamp	0	True
+68228	M19	Mountain	basic	Basic Land - Mountain	0	True
+68230	M19	Mountain	basic	Basic Land - Mountain	0	True
+68232	M19	Mountain	basic	Basic Land - Mountain	0	True
+68234	M19	Mountain	basic	Basic Land - Mountain	0	True
+68236	M19	Forest	basic	Basic Land - Forest	0	True
+68238	M19	Forest	basic	Basic Land - Forest	0	True
+68240	M19	Forest	basic	Basic Land - Forest	0	True
+68242	M19	Forest	basic	Basic Land - Forest	0	True
+68741	GRN	Plains	basic	Basic Land - Plains	0	False
+68742	GRN	Island	basic	Basic Land - Island	0	False
+68743	GRN	Swamp	basic	Basic Land - Swamp	0	False
+68744	GRN	Mountain	basic	Basic Land - Mountain	0	False
+68745	GRN	Forest	basic	Basic Land - Forest	0	False
+69408	RNA	Plains	basic	Basic Land - Plains	0	False
+69409	RNA	Island	basic	Basic Land - Island	0	False
+69410	RNA	Swamp	basic	Basic Land - Swamp	0	False
+69411	RNA	Mountain	basic	Basic Land - Mountain	0	False
+69412	RNA	Forest	basic	Basic Land - Forest	0	False
+69701	WAR	Plains	basic	Basic Land - Plains	0	True
+69702	WAR	Plains	basic	Basic Land - Plains	0	True
+69703	WAR	Plains	basic	Basic Land - Plains	0	True
+69704	WAR	Island	basic	Basic Land - Island	0	True
+69705	WAR	Island	basic	Basic Land - Island	0	True
+69706	WAR	Island	basic	Basic Land - Island	0	True
+69707	WAR	Swamp	basic	Basic Land - Swamp	0	True
+69708	WAR	Swamp	basic	Basic Land - Swamp	0	True
+69709	WAR	Swamp	basic	Basic Land - Swamp	0	True
+69710	WAR	Mountain	basic	Basic Land - Mountain	0	True
+69711	WAR	Mountain	basic	Basic Land - Mountain	0	True
+69712	WAR	Mountain	basic	Basic Land - Mountain	0	True
+69713	WAR	Forest	basic	Basic Land - Forest	0	True
+69714	WAR	Forest	basic	Basic Land - Forest	0	True
+69715	WAR	Forest	basic	Basic Land - Forest	0	True
+70046	M20	Plains	basic	Basic Land - Plains	0	True
+70047	M20	Plains	basic	Basic Land - Plains	0	True
+70048	M20	Plains	basic	Basic Land - Plains	0	True
+70049	M20	Plains	basic	Basic Land - Plains	0	True
+70050	M20	Island	basic	Basic Land - Island	0	True
+70051	M20	Island	basic	Basic Land - Island	0	True
+70052	M20	Island	basic	Basic Land - Island	0	True
+70053	M20	Island	basic	Basic Land - Island	0	True
+70054	M20	Swamp	basic	Basic Land - Swamp	0	True
+70055	M20	Swamp	basic	Basic Land - Swamp	0	True
+70056	M20	Swamp	basic	Basic Land - Swamp	0	True
+70057	M20	Swamp	basic	Basic Land - Swamp	0	True
+70058	M20	Mountain	basic	Basic Land - Mountain	0	True
+70059	M20	Mountain	basic	Basic Land - Mountain	0	True
+70060	M20	Mountain	basic	Basic Land - Mountain	0	True
+70061	M20	Mountain	basic	Basic Land - Mountain	0	True
+70062	M20	Forest	basic	Basic Land - Forest	0	True
+70063	M20	Forest	basic	Basic Land - Forest	0	True
+70064	M20	Forest	basic	Basic Land - Forest	0	True
+70065	M20	Forest	basic	Basic Land - Forest	0	True
+70397	ELD	Plains	basic	Basic Land - Plains	0	True
+70398	ELD	Plains	basic	Basic Land - Plains	0	True
+70399	ELD	Plains	basic	Basic Land - Plains	0	True
+70400	ELD	Plains	basic	Basic Land - Plains	0	True
+70401	ELD	Island	basic	Basic Land - Island	0	True
+70402	ELD	Island	basic	Basic Land - Island	0	True
+70403	ELD	Island	basic	Basic Land - Island	0	True
+70404	ELD	Island	basic	Basic Land - Island	0	True
+70405	ELD	Swamp	basic	Basic Land - Swamp	0	True
+70406	ELD	Swamp	basic	Basic Land - Swamp	0	True
+70407	ELD	Swamp	basic	Basic Land - Swamp	0	True
+70408	ELD	Swamp	basic	Basic Land - Swamp	0	True
+70409	ELD	Mountain	basic	Basic Land - Mountain	0	True
+70410	ELD	Mountain	basic	Basic Land - Mountain	0	True
+70411	ELD	Mountain	basic	Basic Land - Mountain	0	True
+70412	ELD	Mountain	basic	Basic Land - Mountain	0	True
+70413	ELD	Forest	basic	Basic Land - Forest	0	True
+70414	ELD	Forest	basic	Basic Land - Forest	0	True
+70415	ELD	Forest	basic	Basic Land - Forest	0	True
+70416	ELD	Forest	basic	Basic Land - Forest	0	True
+70501	ANA	Plains	basic	Basic Land - Plains	0	False
+70502	ANA	Island	basic	Basic Land - Island	0	False
+70503	ANA	Swamp	basic	Basic Land - Swamp	0	False
+70504	ANA	Mountain	basic	Basic Land - Mountain	0	False
+70505	ANA	Forest	basic	Basic Land - Forest	0	False
+70506	ANA	Plains	basic	Basic Land - Plains	0	False
+70507	ANA	Island	basic	Basic Land - Island	0	False
+70508	ANA	Swamp	basic	Basic Land - Swamp	0	False
+70509	ANA	Mountain	basic	Basic Land - Mountain	0	False
+70510	ANA	Forest	basic	Basic Land - Forest	0	False
+70761	THB	Plains	basic	Basic Land - Plains	0	True
+70762	THB	Island	basic	Basic Land - Island	0	True
+70763	THB	Swamp	basic	Basic Land - Swamp	0	True
+70764	THB	Mountain	basic	Basic Land - Mountain	0	True
+70765	THB	Forest	basic	Basic Land - Forest	0	True
+70774	THB	Plains	basic	Basic Land - Plains	0	False
+70775	THB	Plains	basic	Basic Land - Plains	0	False
+70776	THB	Island	basic	Basic Land - Island	0	False
+70777	THB	Island	basic	Basic Land - Island	0	False
+70778	THB	Swamp	basic	Basic Land - Swamp	0	False
+70779	THB	Swamp	basic	Basic Land - Swamp	0	False
+70780	THB	Mountain	basic	Basic Land - Mountain	0	False
+70781	THB	Mountain	basic	Basic Land - Mountain	0	False
+70782	THB	Forest	basic	Basic Land - Forest	0	False
+70783	THB	Forest	basic	Basic Land - Forest	0	False
+72080	M21	Plains	basic	Basic Land - Plains	0	True
+72081	M21	Plains	basic	Basic Land - Plains	0	True
+72082	M21	Plains	basic	Basic Land - Plains	0	True
+72083	M21	Island	basic	Basic Land - Island	0	True
+72084	M21	Island	basic	Basic Land - Island	0	True
+72085	M21	Island	basic	Basic Land - Island	0	True
+72086	M21	Swamp	basic	Basic Land - Swamp	0	True
+72087	M21	Swamp	basic	Basic Land - Swamp	0	True
+72088	M21	Swamp	basic	Basic Land - Swamp	0	True
+72089	M21	Mountain	basic	Basic Land - Mountain	0	True
+72090	M21	Mountain	basic	Basic Land - Mountain	0	True
+72091	M21	Mountain	basic	Basic Land - Mountain	0	True
+72092	M21	Forest	basic	Basic Land - Forest	0	True
+72093	M21	Forest	basic	Basic Land - Forest	0	True
+72094	M21	Forest	basic	Basic Land - Forest	0	True
+72558	JMP	Plains	basic	Basic Land - Plains	0	True
+72559	JMP	Plains	basic	Basic Land - Plains	0	True
+72560	JMP	Plains	basic	Basic Land - Plains	0	True
+72561	JMP	Plains	basic	Basic Land - Plains	0	True
+72562	JMP	Plains	basic	Basic Land - Plains	0	True
+72563	JMP	Plains	basic	Basic Land - Plains	0	True
+72564	JMP	Plains	basic	Basic Land - Plains	0	True
+72565	JMP	Plains	basic	Basic Land - Plains	0	True
+72566	JMP	Island	basic	Basic Land - Island	0	True
+72567	JMP	Island	basic	Basic Land - Island	0	True
+72568	JMP	Island	basic	Basic Land - Island	0	True
+72569	JMP	Island	basic	Basic Land - Island	0	True
+72570	JMP	Island	basic	Basic Land - Island	0	True
+72571	JMP	Island	basic	Basic Land - Island	0	True
+72572	JMP	Island	basic	Basic Land - Island	0	True
+72573	JMP	Island	basic	Basic Land - Island	0	True
+72574	JMP	Swamp	basic	Basic Land - Swamp	0	True
+72575	JMP	Swamp	basic	Basic Land - Swamp	0	True
+72576	JMP	Swamp	basic	Basic Land - Swamp	0	True
+72577	JMP	Swamp	basic	Basic Land - Swamp	0	True
+72578	JMP	Swamp	basic	Basic Land - Swamp	0	True
+72579	JMP	Swamp	basic	Basic Land - Swamp	0	True
+72580	JMP	Swamp	basic	Basic Land - Swamp	0	True
+72581	JMP	Swamp	basic	Basic Land - Swamp	0	True
+72582	JMP	Mountain	basic	Basic Land - Mountain	0	True
+72583	JMP	Mountain	basic	Basic Land - Mountain	0	True
+72584	JMP	Mountain	basic	Basic Land - Mountain	0	True
+72585	JMP	Mountain	basic	Basic Land - Mountain	0	True
+72586	JMP	Mountain	basic	Basic Land - Mountain	0	True
+72587	JMP	Mountain	basic	Basic Land - Mountain	0	True
+72588	JMP	Mountain	basic	Basic Land - Mountain	0	True
+72589	JMP	Mountain	basic	Basic Land - Mountain	0	True
+72590	JMP	Forest	basic	Basic Land - Forest	0	True
+72591	JMP	Forest	basic	Basic Land - Forest	0	True
+72592	JMP	Forest	basic	Basic Land - Forest	0	True
+72593	JMP	Forest	basic	Basic Land - Forest	0	True
+72594	JMP	Forest	basic	Basic Land - Forest	0	True
+72595	JMP	Forest	basic	Basic Land - Forest	0	True
+72596	JMP	Forest	basic	Basic Land - Forest	0	True
+72597	JMP	Forest	basic	Basic Land - Forest	0	True
+73121	IKO	Plains	basic	Basic Land - Plains	0	True
+73122	IKO	Plains	basic	Basic Land - Plains	0	True
+73123	IKO	Plains	basic	Basic Land - Plains	0	True
+73124	IKO	Island	basic	Basic Land - Island	0	True
+73125	IKO	Island	basic	Basic Land - Island	0	True
+73126	IKO	Island	basic	Basic Land - Island	0	True
+73127	IKO	Swamp	basic	Basic Land - Swamp	0	True
+73128	IKO	Swamp	basic	Basic Land - Swamp	0	True
+73129	IKO	Swamp	basic	Basic Land - Swamp	0	True
+73130	IKO	Mountain	basic	Basic Land - Mountain	0	True
+73131	IKO	Mountain	basic	Basic Land - Mountain	0	True
+73132	IKO	Mountain	basic	Basic Land - Mountain	0	True
+73133	IKO	Forest	basic	Basic Land - Forest	0	True
+73134	IKO	Forest	basic	Basic Land - Forest	0	True
+73135	IKO	Forest	basic	Basic Land - Forest	0	True
+73136	UND	Plains	basic	Basic Land - Plains	0	False
+73137	UND	Island	basic	Basic Land - Island	0	False
+73138	UND	Swamp	basic	Basic Land - Swamp	0	False
+73139	UND	Mountain	basic	Basic Land - Mountain	0	False
+73140	UND	Forest	basic	Basic Land - Forest	0	False
+73141	UND	Plains	basic	Basic Land - Plains	0	False
+73142	UND	Island	basic	Basic Land - Island	0	False
+73143	UND	Swamp	basic	Basic Land - Swamp	0	False
+73144	UND	Mountain	basic	Basic Land - Mountain	0	False
+73145	UND	Forest	basic	Basic Land - Forest	0	False
+73484	ZNR	Plains	basic	Basic Land - Plains	0	True
+73485	ZNR	Plains	basic	Basic Land - Plains	0	True
+73486	ZNR	Plains	basic	Basic Land - Plains	0	True
+73487	ZNR	Island	basic	Basic Land - Island	0	True
+73488	ZNR	Island	basic	Basic Land - Island	0	True
+73489	ZNR	Island	basic	Basic Land - Island	0	True
+73490	ZNR	Swamp	basic	Basic Land - Swamp	0	True
+73491	ZNR	Swamp	basic	Basic Land - Swamp	0	True
+73492	ZNR	Swamp	basic	Basic Land - Swamp	0	True
+73493	ZNR	Mountain	basic	Basic Land - Mountain	0	True
+73494	ZNR	Mountain	basic	Basic Land - Mountain	0	True
+73495	ZNR	Mountain	basic	Basic Land - Mountain	0	True
+73496	ZNR	Forest	basic	Basic Land - Forest	0	True
+73497	ZNR	Forest	basic	Basic Land - Forest	0	True
+73498	ZNR	Forest	basic	Basic Land - Forest	0	True
+73511	ZNR	Plains	basic	Basic Land - Plains	0	True
+73512	ZNR	Island	basic	Basic Land - Island	0	True
+73513	ZNR	Swamp	basic	Basic Land - Swamp	0	True
+73514	ZNR	Mountain	basic	Basic Land - Mountain	0	True
+73515	ZNR	Forest	basic	Basic Land - Forest	0	True
+73644	SLD	Plains	basic	Basic Land - Plains	0	False
+73645	SLD	Island	basic	Basic Land - Island	0	False
+73646	SLD	Swamp	basic	Basic Land - Swamp	0	False
+73647	SLD	Mountain	basic	Basic Land - Mountain	0	False
+73648	SLD	Forest	basic	Basic Land - Forest	0	False
+74116	AKR	Forest	basic	Basic Land - Forest	0	True
+74117	AKR	Forest	basic	Basic Land - Forest	0	True
+74118	AKR	Forest	basic	Basic Land - Forest	0	True
+74119	AKR	Forest	basic	Basic Land - Forest	0	True
+74120	AKR	Forest	basic	Basic Land - Forest	0	True
+74121	AKR	Forest	basic	Basic Land - Forest	0	True
+74122	AKR	Forest	basic	Basic Land - Forest	0	True
+74127	AKR	Island	basic	Basic Land - Island	0	True
+74128	AKR	Island	basic	Basic Land - Island	0	True
+74129	AKR	Island	basic	Basic Land - Island	0	True
+74130	AKR	Island	basic	Basic Land - Island	0	True
+74131	AKR	Island	basic	Basic Land - Island	0	True
+74132	AKR	Island	basic	Basic Land - Island	0	True
+74133	AKR	Island	basic	Basic Land - Island	0	True
+74134	AKR	Mountain	basic	Basic Land - Mountain	0	True
+74135	AKR	Mountain	basic	Basic Land - Mountain	0	True
+74136	AKR	Mountain	basic	Basic Land - Mountain	0	True
+74137	AKR	Mountain	basic	Basic Land - Mountain	0	True
+74138	AKR	Mountain	basic	Basic Land - Mountain	0	True
+74139	AKR	Mountain	basic	Basic Land - Mountain	0	True
+74140	AKR	Mountain	basic	Basic Land - Mountain	0	True
+74141	AKR	Plains	basic	Basic Land - Plains	0	True
+74142	AKR	Plains	basic	Basic Land - Plains	0	True
+74143	AKR	Plains	basic	Basic Land - Plains	0	True
+74144	AKR	Plains	basic	Basic Land - Plains	0	True
+74145	AKR	Plains	basic	Basic Land - Plains	0	True
+74146	AKR	Plains	basic	Basic Land - Plains	0	True
+74147	AKR	Plains	basic	Basic Land - Plains	0	True
+74154	AKR	Swamp	basic	Basic Land - Swamp	0	True
+74155	AKR	Swamp	basic	Basic Land - Swamp	0	True
+74156	AKR	Swamp	basic	Basic Land - Swamp	0	True
+74157	AKR	Swamp	basic	Basic Land - Swamp	0	True
+74158	AKR	Swamp	basic	Basic Land - Swamp	0	True
+74159	AKR	Swamp	basic	Basic Land - Swamp	0	True
+74160	AKR	Swamp	basic	Basic Land - Swamp	0	True
+74641	M21	Plains	basic	Basic Land - Plains	0	False
+74642	M21	Island	basic	Basic Land - Island	0	False
+74643	M21	Swamp	basic	Basic Land - Swamp	0	False
+74644	M21	Mountain	basic	Basic Land - Mountain	0	False
+74645	M21	Forest	basic	Basic Land - Forest	0	False
+75021	UST	Plains	basic	Basic Land - Plains	0	True
+75022	UST	Island	basic	Basic Land - Island	0	True
+75023	UST	Swamp	basic	Basic Land - Swamp	0	True
+75024	UST	Mountain	basic	Basic Land - Mountain	0	True
+75025	UST	Forest	basic	Basic Land - Forest	0	True
+75337	KHM	Plains	basic	Basic Land - Plains	0	False
+75338	KHM	Island	basic	Basic Land - Island	0	False
+75339	KHM	Swamp	basic	Basic Land - Swamp	0	False
+75340	KHM	Mountain	basic	Basic Land - Mountain	0	False
+75341	KHM	Forest	basic	Basic Land - Forest	0	False
+75553	ANB	Forest	basic	Basic Land - Forest	0	False
+75554	ANB	Island	basic	Basic Land - Island	0	False
+75555	ANB	Mountain	basic	Basic Land - Mountain	0	False
+75556	ANB	Plains	basic	Basic Land - Plains	0	False
+75557	ANB	Swamp	basic	Basic Land - Swamp	0	False
+75861	KLR	Forest	basic	Basic Land - Forest	0	True
+75862	KLR	Forest	basic	Basic Land - Forest	0	True
+75863	KLR	Forest	basic	Basic Land - Forest	0	True
+75866	KLR	Island	basic	Basic Land - Island	0	True
+75867	KLR	Island	basic	Basic Land - Island	0	True
+75868	KLR	Island	basic	Basic Land - Island	0	True
+75869	KLR	Mountain	basic	Basic Land - Mountain	0	True
+75870	KLR	Mountain	basic	Basic Land - Mountain	0	True
+75871	KLR	Mountain	basic	Basic Land - Mountain	0	True
+75872	KLR	Plains	basic	Basic Land - Plains	0	True
+75873	KLR	Plains	basic	Basic Land - Plains	0	True
+75874	KLR	Plains	basic	Basic Land - Plains	0	True
+75877	KLR	Swamp	basic	Basic Land - Swamp	0	True
+75878	KLR	Swamp	basic	Basic Land - Swamp	0	True
+75879	KLR	Swamp	basic	Basic Land - Swamp	0	True
+75890	ANA	Plains	basic	Basic Land - Plains	0	False
+75891	ANA	Island	basic	Basic Land - Island	0	False
+75892	ANA	Swamp	basic	Basic Land - Swamp	0	False
+75893	ANA	Mountain	basic	Basic Land - Mountain	0	False
+75894	ANA	Forest	basic	Basic Land - Forest	0	False
+75895	ANA	Plains	basic	Basic Land - Plains	0	False
+75896	ANA	Island	basic	Basic Land - Island	0	False
+75897	ANA	Island	basic	Basic Land - Island	0	False
+75898	ANA	Swamp	basic	Basic Land - Swamp	0	False
+75899	ANA	Mountain	basic	Basic Land - Mountain	0	False
+75900	ANA	Mountain	basic	Basic Land - Mountain	0	False
+75901	ANA	Forest	basic	Basic Land - Forest	0	False
+75902	ANA	Plains	basic	Basic Land - Plains	0	False
+75903	ANA	Forest	basic	Basic Land - Forest	0	False
+75904	ANA	Swamp	basic	Basic Land - Swamp	0	False
+76382	SLD	Plains	basic	Basic Land - Plains	0	False
+76383	SLD	Plains	basic	Basic Land - Plains	0	False
+76384	SLD	Island	basic	Basic Land - Island	0	False
+76385	SLD	Island	basic	Basic Land - Island	0	False
+76386	SLD	Swamp	basic	Basic Land - Swamp	0	False
+76387	SLD	Swamp	basic	Basic Land - Swamp	0	False
+76388	SLD	Mountain	basic	Basic Land - Mountain	0	False
+76389	SLD	Mountain	basic	Basic Land - Mountain	0	False
+76390	SLD	Forest	basic	Basic Land - Forest	0	False
+76391	SLD	Forest	basic	Basic Land - Forest	0	False
+76684	STX	Plains	basic	Basic Land - Plains	0	True
+76685	STX	Plains	basic	Basic Land - Plains	0	True
+76686	STX	Island	basic	Basic Land - Island	0	True
+76687	STX	Island	basic	Basic Land - Island	0	True
+76688	STX	Swamp	basic	Basic Land - Swamp	0	True
+76689	STX	Swamp	basic	Basic Land - Swamp	0	True
+76690	STX	Mountain	basic	Basic Land - Mountain	0	True
+76691	STX	Mountain	basic	Basic Land - Mountain	0	True
+76692	STX	Forest	basic	Basic Land - Forest	0	True
+76693	STX	Forest	basic	Basic Land - Forest	0	True
+76841	ANA	Plains	basic	Basic Land - Plains	0	False
+76842	ANA	Plains	basic	Basic Land - Plains	0	False
+76843	ANA	Swamp	basic	Basic Land - Swamp	0	False
+76844	ANA	Forest	basic	Basic Land - Forest	0	False
+76845	ANA	Island	basic	Basic Land - Island	0	False
+76846	ANA	Mountain	basic	Basic Land - Mountain	0	False
+76847	ANA	Mountain	basic	Basic Land - Mountain	0	False
+76848	ANA	Mountain	basic	Basic Land - Mountain	0	False
+76849	ANA	Island	basic	Basic Land - Island	0	False
+76850	ANA	Island	basic	Basic Land - Island	0	False
+76851	ANA	Forest	basic	Basic Land - Forest	0	False
+76852	ANA	Swamp	basic	Basic Land - Swamp	0	False
+76853	ANA	Plains	basic	Basic Land - Plains	0	False
+76854	ANA	Swamp	basic	Basic Land - Swamp	0	False
+76855	ANA	Forest	basic	Basic Land - Forest	0	False
+77460	AFR	Plains	basic	Basic Land - Plains	0	True
+77461	AFR	Plains	basic	Basic Land - Plains	0	True
+77462	AFR	Plains	basic	Basic Land - Plains	0	True
+77463	AFR	Plains	basic	Basic Land - Plains	0	True
+77464	AFR	Island	basic	Basic Land - Island	0	True
+77465	AFR	Island	basic	Basic Land - Island	0	True
+77466	AFR	Island	basic	Basic Land - Island	0	True
+77467	AFR	Island	basic	Basic Land - Island	0	True
+77468	AFR	Swamp	basic	Basic Land - Swamp	0	True
+77469	AFR	Swamp	basic	Basic Land - Swamp	0	True
+77470	AFR	Swamp	basic	Basic Land - Swamp	0	True
+77471	AFR	Swamp	basic	Basic Land - Swamp	0	True
+77472	AFR	Mountain	basic	Basic Land - Mountain	0	True
+77473	AFR	Mountain	basic	Basic Land - Mountain	0	True
+77474	AFR	Mountain	basic	Basic Land - Mountain	0	True
+77475	AFR	Mountain	basic	Basic Land - Mountain	0	True
+77476	AFR	Forest	basic	Basic Land - Forest	0	True
+77477	AFR	Forest	basic	Basic Land - Forest	0	True
+77478	AFR	Forest	basic	Basic Land - Forest	0	True
+77479	AFR	Forest	basic	Basic Land - Forest	0	True
+78638	MID	Plains	basic	Basic Land - Plains	0	False
+78639	MID	Island	basic	Basic Land - Island	0	False
+78640	MID	Swamp	basic	Basic Land - Swamp	0	False
+78641	MID	Mountain	basic	Basic Land - Mountain	0	False
+78642	MID	Forest	basic	Basic Land - Forest	0	False
+78643	MID	Plains	basic	Basic Land - Plains	0	True
+78644	MID	Plains	basic	Basic Land - Plains	0	True
+78645	MID	Island	basic	Basic Land - Island	0	True
+78646	MID	Island	basic	Basic Land - Island	0	True
+78647	MID	Swamp	basic	Basic Land - Swamp	0	True
+78648	MID	Swamp	basic	Basic Land - Swamp	0	True
+78649	MID	Mountain	basic	Basic Land - Mountain	0	True
+78650	MID	Mountain	basic	Basic Land - Mountain	0	True
+78651	MID	Forest	basic	Basic Land - Forest	0	True
+78652	MID	Forest	basic	Basic Land - Forest	0	True
+79092	VOW	Plains	basic	Basic Land - Plains	0	True
+79093	VOW	Island	basic	Basic Land - Island	0	True
+79094	VOW	Swamp	basic	Basic Land - Swamp	0	True
+79095	VOW	Mountain	basic	Basic Land - Mountain	0	True
+79096	VOW	Forest	basic	Basic Land - Forest	0	True
+79115	VOW	Plains	basic	Basic Land - Plains	0	True
+79116	VOW	Plains	basic	Basic Land - Plains	0	True
+79117	VOW	Island	basic	Basic Land - Island	0	True
+79118	VOW	Island	basic	Basic Land - Island	0	True
+79119	VOW	Swamp	basic	Basic Land - Swamp	0	True
+79120	VOW	Swamp	basic	Basic Land - Swamp	0	True
+79121	VOW	Mountain	basic	Basic Land - Mountain	0	True
+79122	VOW	Mountain	basic	Basic Land - Mountain	0	True
+79123	VOW	Forest	basic	Basic Land - Forest	0	True
+79124	VOW	Forest	basic	Basic Land - Forest	0	True
+79723	NEO	Plains	basic	Basic Land - Plains	0	True
+79724	NEO	Plains	basic	Basic Land - Plains	0	True
+79725	NEO	Island	basic	Basic Land - Island	0	True
+79726	NEO	Island	basic	Basic Land - Island	0	True
+79727	NEO	Swamp	basic	Basic Land - Swamp	0	True
+79728	NEO	Swamp	basic	Basic Land - Swamp	0	True
+79729	NEO	Mountain	basic	Basic Land - Mountain	0	True
+79730	NEO	Mountain	basic	Basic Land - Mountain	0	True
+79731	NEO	Forest	basic	Basic Land - Forest	0	True
+79732	NEO	Forest	basic	Basic Land - Forest	0	True
+79733	NEO	Plains	basic	Basic Land - Plains	0	True
+79734	NEO	Plains	basic	Basic Land - Plains	0	True
+79735	NEO	Island	basic	Basic Land - Island	0	True
+79736	NEO	Island	basic	Basic Land - Island	0	True
+79737	NEO	Swamp	basic	Basic Land - Swamp	0	True
+79738	NEO	Swamp	basic	Basic Land - Swamp	0	True
+79739	NEO	Mountain	basic	Basic Land - Mountain	0	True
+79740	NEO	Mountain	basic	Basic Land - Mountain	0	True
+79741	NEO	Forest	basic	Basic Land - Forest	0	True
+79742	NEO	Forest	basic	Basic Land - Forest	0	True
+79901	SLD	Plains	basic	Basic Land - Plains	0	False
+79902	SLD	Island	basic	Basic Land - Island	0	False
+79903	SLD	Swamp	basic	Basic Land - Swamp	0	False
+79904	SLD	Mountain	basic	Basic Land - Mountain	0	False
+79905	SLD	Forest	basic	Basic Land - Forest	0	False
+80413	SNC	Plains	basic	Basic Land - Plains	0	True
+80414	SNC	Plains	basic	Basic Land - Plains	0	True
+80415	SNC	Island	basic	Basic Land - Island	0	True
+80416	SNC	Island	basic	Basic Land - Island	0	True
+80417	SNC	Swamp	basic	Basic Land - Swamp	0	True
+80418	SNC	Swamp	basic	Basic Land - Swamp	0	True
+80419	SNC	Mountain	basic	Basic Land - Mountain	0	True
+80420	SNC	Mountain	basic	Basic Land - Mountain	0	True
+80421	SNC	Forest	basic	Basic Land - Forest	0	True
+80422	SNC	Forest	basic	Basic Land - Forest	0	True
+80423	SNC	Plains	basic	Basic Land - Plains	0	True
+80424	SNC	Plains	basic	Basic Land - Plains	0	True
+80425	SNC	Island	basic	Basic Land - Island	0	True
+80426	SNC	Island	basic	Basic Land - Island	0	True
+80427	SNC	Swamp	basic	Basic Land - Swamp	0	True
+80428	SNC	Swamp	basic	Basic Land - Swamp	0	True
+80429	SNC	Mountain	basic	Basic Land - Mountain	0	True
+80430	SNC	Mountain	basic	Basic Land - Mountain	0	True
+80431	SNC	Forest	basic	Basic Land - Forest	0	True
+80432	SNC	Forest	basic	Basic Land - Forest	0	True
+81179	UNF	Plains	basic	Basic Land - Plains	0	True
+81180	UNF	Island	basic	Basic Land - Island	0	True
+81181	UNF	Swamp	basic	Basic Land - Swamp	0	True
+81182	UNF	Mountain	basic	Basic Land - Mountain	0	True
+81183	UNF	Forest	basic	Basic Land - Forest	0	True
+81895	SLD	Plains	basic	Basic Land - Plains	0	False
+81896	SLD	Island	basic	Basic Land - Island	0	False
+81897	SLD	Swamp	basic	Basic Land - Swamp	0	False
+81898	SLD	Mountain	basic	Basic Land - Mountain	0	False
+81899	SLD	Forest	basic	Basic Land - Forest	0	False
+82314	DMU	Plains	basic	Basic Land - Plains	0	True
+82315	DMU	Plains	basic	Basic Land - Plains	0	True
+82316	DMU	Plains	basic	Basic Land - Plains	0	True
+82317	DMU	Island	basic	Basic Land - Island	0	True
+82318	DMU	Island	basic	Basic Land - Island	0	True
+82319	DMU	Island	basic	Basic Land - Island	0	True
+82320	DMU	Swamp	basic	Basic Land - Swamp	0	True
+82321	DMU	Swamp	basic	Basic Land - Swamp	0	True
+82322	DMU	Swamp	basic	Basic Land - Swamp	0	True
+82323	DMU	Mountain	basic	Basic Land - Mountain	0	True
+82324	DMU	Mountain	basic	Basic Land - Mountain	0	True
+82325	DMU	Mountain	basic	Basic Land - Mountain	0	True
+82326	DMU	Forest	basic	Basic Land - Forest	0	True
+82327	DMU	Forest	basic	Basic Land - Forest	0	True
+82328	DMU	Forest	basic	Basic Land - Forest	0	True
+82390	DMU	Plains	basic	Basic Land - Plains	0	True
+82391	DMU	Island	basic	Basic Land - Island	0	True
+82392	DMU	Swamp	basic	Basic Land - Swamp	0	True
+82393	DMU	Mountain	basic	Basic Land - Mountain	0	True
+82394	DMU	Forest	basic	Basic Land - Forest	0	True
+82460	HBG	Plains	basic	Basic Land - Plains	0	True
+82461	HBG	Plains	basic	Basic Land - Plains	0	True
+82462	HBG	Plains	basic	Basic Land - Plains	0	True
+82463	HBG	Plains	basic	Basic Land - Plains	0	True
+82464	HBG	Island	basic	Basic Land - Island	0	True
+82465	HBG	Island	basic	Basic Land - Island	0	True
+82466	HBG	Island	basic	Basic Land - Island	0	True
+82467	HBG	Island	basic	Basic Land - Island	0	True
+82468	HBG	Swamp	basic	Basic Land - Swamp	0	True
+82469	HBG	Swamp	basic	Basic Land - Swamp	0	True
+82470	HBG	Swamp	basic	Basic Land - Swamp	0	True
+82471	HBG	Swamp	basic	Basic Land - Swamp	0	True
+82472	HBG	Mountain	basic	Basic Land - Mountain	0	True
+82473	HBG	Mountain	basic	Basic Land - Mountain	0	True
+82474	HBG	Mountain	basic	Basic Land - Mountain	0	True
+82475	HBG	Mountain	basic	Basic Land - Mountain	0	True
+82476	HBG	Forest	basic	Basic Land - Forest	0	True
+82477	HBG	Forest	basic	Basic Land - Forest	0	True
+82478	HBG	Forest	basic	Basic Land - Forest	0	True
+82479	HBG	Forest	basic	Basic Land - Forest	0	True
+82760	BRO	Plains	basic	Basic Land - Plains	0	True
+82761	BRO	Plains	basic	Basic Land - Plains	0	True
+82762	BRO	Island	basic	Basic Land - Island	0	True
+82763	BRO	Island	basic	Basic Land - Island	0	True
+82764	BRO	Swamp	basic	Basic Land - Swamp	0	True
+82765	BRO	Swamp	basic	Basic Land - Swamp	0	True
+82766	BRO	Mountain	basic	Basic Land - Mountain	0	True
+82767	BRO	Mountain	basic	Basic Land - Mountain	0	True
+82768	BRO	Forest	basic	Basic Land - Forest	0	True
+82769	BRO	Forest	basic	Basic Land - Forest	0	True
+82770	BRO	Plains	basic	Basic Land - Plains	0	True
+82771	BRO	Plains	basic	Basic Land - Plains	0	True
+82772	BRO	Island	basic	Basic Land - Island	0	True
+82773	BRO	Island	basic	Basic Land - Island	0	True
+82774	BRO	Swamp	basic	Basic Land - Swamp	0	True
+82775	BRO	Swamp	basic	Basic Land - Swamp	0	True
+82776	BRO	Mountain	basic	Basic Land - Mountain	0	True
+82777	BRO	Mountain	basic	Basic Land - Mountain	0	True
+82778	BRO	Forest	basic	Basic Land - Forest	0	True
+82779	BRO	Forest	basic	Basic Land - Forest	0	True
+83677	UNF	Plains	basic	Basic Land - Plains	0	True
+83678	UNF	Island	basic	Basic Land - Island	0	True
+83679	UNF	Swamp	basic	Basic Land - Swamp	0	True
+83680	UNF	Mountain	basic	Basic Land - Mountain	0	True
+83681	UNF	Forest	basic	Basic Land - Forest	0	True
+83967	ONE	Plains	basic	Basic Land - Plains	0	True
+83968	ONE	Island	basic	Basic Land - Island	0	True
+83969	ONE	Swamp	basic	Basic Land - Swamp	0	True
+83970	ONE	Mountain	basic	Basic Land - Mountain	0	True
+83971	ONE	Forest	basic	Basic Land - Forest	0	True
+83972	ONE	Plains	basic	Basic Land - Plains	0	True
+83973	ONE	Island	basic	Basic Land - Island	0	True
+83974	ONE	Swamp	basic	Basic Land - Swamp	0	True
+83975	ONE	Mountain	basic	Basic Land - Mountain	0	True
+83976	ONE	Forest	basic	Basic Land - Forest	0	True
+83977	ONE	Plains	basic	Basic Land - Plains	0	False
+83978	ONE	Island	basic	Basic Land - Island	0	False
+83979	ONE	Swamp	basic	Basic Land - Swamp	0	False
+83980	ONE	Mountain	basic	Basic Land - Mountain	0	False
+83981	ONE	Forest	basic	Basic Land - Forest	0	False
+84584	MOM	Plains	basic	Basic Land - Plains	0	True
+84585	MOM	Plains	basic	Basic Land - Plains	0	True
+84586	MOM	Island	basic	Basic Land - Island	0	True
+84587	MOM	Island	basic	Basic Land - Island	0	True
+84588	MOM	Swamp	basic	Basic Land - Swamp	0	True
+84589	MOM	Swamp	basic	Basic Land - Swamp	0	True
+84590	MOM	Mountain	basic	Basic Land - Mountain	0	True
+84591	MOM	Mountain	basic	Basic Land - Mountain	0	True
+84592	MOM	Forest	basic	Basic Land - Forest	0	True
+84593	MOM	Forest	basic	Basic Land - Forest	0	True
+84594	MOM	Plains	basic	Basic Land - Plains	0	True
+84595	MOM	Island	basic	Basic Land - Island	0	True
+84596	MOM	Swamp	basic	Basic Land - Swamp	0	True
+84597	MOM	Mountain	basic	Basic Land - Mountain	0	True
+84598	MOM	Forest	basic	Basic Land - Forest	0	True
+85584	SLD	Plains	basic	Basic Land - Plains	0	False
+85585	SLD	Island	basic	Basic Land - Island	0	False
+85586	SLD	Swamp	basic	Basic Land - Swamp	0	False
+85587	SLD	Mountain	basic	Basic Land - Mountain	0	False
+85588	SLD	Forest	basic	Basic Land - Forest	0	False
+86339	SIR	Plains	basic	Basic Land - Plains	0	True
+86340	SIR	Plains	basic	Basic Land - Plains	0	True
+86341	SIR	Plains	basic	Basic Land - Plains	0	True
+86342	SIR	Island	basic	Basic Land - Island	0	True
+86343	SIR	Island	basic	Basic Land - Island	0	True
+86344	SIR	Island	basic	Basic Land - Island	0	True
+86345	SIR	Swamp	basic	Basic Land - Swamp	0	True
+86346	SIR	Swamp	basic	Basic Land - Swamp	0	True
+86347	SIR	Swamp	basic	Basic Land - Swamp	0	True
+86348	SIR	Mountain	basic	Basic Land - Mountain	0	True
+86349	SIR	Mountain	basic	Basic Land - Mountain	0	True
+86350	SIR	Mountain	basic	Basic Land - Mountain	0	True
+86351	SIR	Forest	basic	Basic Land - Forest	0	True
+86352	SIR	Forest	basic	Basic Land - Forest	0	True
+86353	SIR	Forest	basic	Basic Land - Forest	0	True
+87010	WOE	Plains	basic	Basic Land - Plains	0	True
+87011	WOE	Plains	basic	Basic Land - Plains	0	True
+87012	WOE	Island	basic	Basic Land - Island	0	True
+87013	WOE	Island	basic	Basic Land - Island	0	True
+87014	WOE	Swamp	basic	Basic Land - Swamp	0	True
+87015	WOE	Swamp	basic	Basic Land - Swamp	0	True
+87016	WOE	Mountain	basic	Basic Land - Mountain	0	True
+87017	WOE	Mountain	basic	Basic Land - Mountain	0	True
+87018	WOE	Forest	basic	Basic Land - Forest	0	True
+87019	WOE	Forest	basic	Basic Land - Forest	0	True
+87020	WOE	Plains	basic	Basic Land - Plains	0	True
+87021	WOE	Island	basic	Basic Land - Island	0	True
+87022	WOE	Swamp	basic	Basic Land - Swamp	0	True
+87023	WOE	Mountain	basic	Basic Land - Mountain	0	True
+87024	WOE	Forest	basic	Basic Land - Forest	0	True
+87453	LCI	Plains	basic	Basic Land - Plains	0	True
+87454	LCI	Plains	basic	Basic Land - Plains	0	True
+87455	LCI	Island	basic	Basic Land - Island	0	True
+87456	LCI	Island	basic	Basic Land - Island	0	True
+87457	LCI	Swamp	basic	Basic Land - Swamp	0	True
+87458	LCI	Swamp	basic	Basic Land - Swamp	0	True
+87459	LCI	Mountain	basic	Basic Land - Mountain	0	True
+87460	LCI	Mountain	basic	Basic Land - Mountain	0	True
+87461	LCI	Forest	basic	Basic Land - Forest	0	True
+87462	LCI	Forest	basic	Basic Land - Forest	0	True
+87577	LTR	Plains	basic	Basic Land - Plains	0	True
+87578	LTR	Plains	basic	Basic Land - Plains	0	True
+87579	LTR	Island	basic	Basic Land - Island	0	True
+87580	LTR	Island	basic	Basic Land - Island	0	True
+87581	LTR	Swamp	basic	Basic Land - Swamp	0	True
+87582	LTR	Swamp	basic	Basic Land - Swamp	0	True
+87583	LTR	Mountain	basic	Basic Land - Mountain	0	True
+87584	LTR	Mountain	basic	Basic Land - Mountain	0	True
+87585	LTR	Forest	basic	Basic Land - Forest	0	True
+87586	LTR	Forest	basic	Basic Land - Forest	0	True
+87587	LTR	Plains	basic	Basic Land - Plains	0	True
+87588	LTR	Plains	basic	Basic Land - Plains	0	True
+87589	LTR	Island	basic	Basic Land - Island	0	True
+87590	LTR	Island	basic	Basic Land - Island	0	True
+87591	LTR	Swamp	basic	Basic Land - Swamp	0	True
+87592	LTR	Swamp	basic	Basic Land - Swamp	0	True
+87593	LTR	Mountain	basic	Basic Land - Mountain	0	True
+87594	LTR	Mountain	basic	Basic Land - Mountain	0	True
+87595	LTR	Forest	basic	Basic Land - Forest	0	True
+87596	LTR	Forest	basic	Basic Land - Forest	0	True
+87648	SLD	Swamp	rare	Basic Land - Swamp	0	False
+87649	SLD	Island	rare	Basic Land - Island	0	False
+87650	SLD	Island	rare	Basic Land - Island	0	False
+87651	SLD	Mountain	rare	Basic Land - Mountain	0	False
+87652	SLD	Forest	rare	Basic Land - Forest	0	False
+87653	SLD	Mountain	rare	Basic Land - Mountain	0	False
+87654	SLD	Plains	rare	Basic Land - Plains	0	False
+87655	SLD	Plains	rare	Basic Land - Plains	0	False
+87656	SLD	Island	rare	Basic Land - Island	0	False
+87657	SLD	Plains	rare	Basic Land - Plains	0	False
+87658	SLD	Swamp	rare	Basic Land - Swamp	0	False
+87659	SLD	Forest	rare	Basic Land - Forest	0	False
+87660	SLD	Plains	rare	Basic Land - Plains	0	False
+87661	SLD	Island	rare	Basic Land - Island	0	False
+87662	SLD	Swamp	rare	Basic Land - Swamp	0	False
+87663	SLD	Mountain	rare	Basic Land - Mountain	0	False
+87664	SLD	Forest	rare	Basic Land - Forest	0	False
+89204	MKM	Plains	basic	Basic Land - Plains	0	True
+89205	MKM	Plains	basic	Basic Land - Plains	0	True
+89206	MKM	Island	basic	Basic Land - Island	0	True
+89207	MKM	Island	basic	Basic Land - Island	0	True
+89208	MKM	Swamp	basic	Basic Land - Swamp	0	True
+89209	MKM	Swamp	basic	Basic Land - Swamp	0	True
+89210	MKM	Mountain	basic	Basic Land - Mountain	0	True
+89211	MKM	Mountain	basic	Basic Land - Mountain	0	True
+89212	MKM	Forest	basic	Basic Land - Forest	0	True
+89213	MKM	Forest	basic	Basic Land - Forest	0	True
+89214	MKM	Plains	basic	Basic Land - Plains	0	True
+89215	MKM	Island	basic	Basic Land - Island	0	True
+89216	MKM	Swamp	basic	Basic Land - Swamp	0	True
+89217	MKM	Mountain	basic	Basic Land - Mountain	0	True
+89218	MKM	Forest	basic	Basic Land - Forest	0	True
+90187	SLD	Plains	rare	Basic Land - Plains	0	False
+90188	SLD	Island	rare	Basic Land - Island	0	False
+90189	SLD	Swamp	rare	Basic Land - Swamp	0	False
+90190	SLD	Mountain	rare	Basic Land - Mountain	0	False
+90191	SLD	Forest	rare	Basic Land - Forest	0	False
+90193	SLD	Plains	rare	Basic Land - Plains	0	False
+90194	SLD	Island	rare	Basic Land - Island	0	False
+90195	SLD	Swamp	rare	Basic Land - Swamp	0	False
+90196	SLD	Mountain	rare	Basic Land - Mountain	0	False
+90197	SLD	Forest	rare	Basic Land - Forest	0	False
+90234	REX	Plains	basic	Basic Land - Plains	0	False
+90235	REX	Plains	basic	Basic Land - Plains	0	False
+90236	REX	Island	basic	Basic Land - Island	0	False
+90237	REX	Island	basic	Basic Land - Island	0	False
+90238	REX	Swamp	basic	Basic Land - Swamp	0	False
+90239	REX	Swamp	basic	Basic Land - Swamp	0	False
+90240	REX	Mountain	basic	Basic Land - Mountain	0	False
+90241	REX	Mountain	basic	Basic Land - Mountain	0	False
+90242	REX	Forest	basic	Basic Land - Forest	0	False
+90243	REX	Forest	basic	Basic Land - Forest	0	False
+90618	OTJ	Plains	basic	Basic Land - Plains	0	False
+90619	OTJ	Island	basic	Basic Land - Island	0	False
+90620	OTJ	Swamp	basic	Basic Land - Swamp	0	False
+90621	OTJ	Mountain	basic	Basic Land - Mountain	0	False
+90622	OTJ	Forest	basic	Basic Land - Forest	0	False
+90623	OTJ	Plains	basic	Basic Land - Plains	0	True
+90624	OTJ	Plains	basic	Basic Land - Plains	0	True
+90625	OTJ	Island	basic	Basic Land - Island	0	True
+90626	OTJ	Island	basic	Basic Land - Island	0	True
+90627	OTJ	Swamp	basic	Basic Land - Swamp	0	True
+90628	OTJ	Swamp	basic	Basic Land - Swamp	0	True
+90629	OTJ	Mountain	basic	Basic Land - Mountain	0	True
+90630	OTJ	Mountain	basic	Basic Land - Mountain	0	True
+90631	OTJ	Forest	basic	Basic Land - Forest	0	True
+90632	OTJ	Forest	basic	Basic Land - Forest	0	True
+90783	MH3	Plains	basic	Basic Land - Plains	0	True
+90784	MH3	Island	basic	Basic Land - Island	0	True
+90785	MH3	Swamp	basic	Basic Land - Swamp	0	True
+90786	MH3	Mountain	basic	Basic Land - Mountain	0	True
+90787	MH3	Forest	basic	Basic Land - Forest	0	True
+90789	MH3	Plains	basic	Basic Land - Plains	0	True
+90790	MH3	Plains	basic	Basic Land - Plains	0	True
+90791	MH3	Island	basic	Basic Land - Island	0	True
+90792	MH3	Island	basic	Basic Land - Island	0	True
+90793	MH3	Swamp	basic	Basic Land - Swamp	0	True
+90794	MH3	Swamp	basic	Basic Land - Swamp	0	True
+90795	MH3	Mountain	basic	Basic Land - Mountain	0	True
+90796	MH3	Mountain	basic	Basic Land - Mountain	0	True
+90797	MH3	Forest	basic	Basic Land - Forest	0	True
+90798	MH3	Forest	basic	Basic Land - Forest	0	True
+91291	PIP	Plains	basic	Basic Land - Plains	0	True
+91292	PIP	Plains	basic	Basic Land - Plains	0	True
+91293	PIP	Island	basic	Basic Land - Island	0	True
+91294	PIP	Island	basic	Basic Land - Island	0	True
+91295	PIP	Swamp	basic	Basic Land - Swamp	0	True
+91296	PIP	Swamp	basic	Basic Land - Swamp	0	True
+91297	PIP	Mountain	basic	Basic Land - Mountain	0	True
+91298	PIP	Mountain	basic	Basic Land - Mountain	0	True
+91299	PIP	Forest	basic	Basic Land - Forest	0	True
+91300	PIP	Forest	basic	Basic Land - Forest	0	True
+91301	ACR	Plains	basic	Basic Land - Plains	0	True
+91302	ACR	Plains	basic	Basic Land - Plains	0	True
+91303	ACR	Island	basic	Basic Land - Island	0	True
+91304	ACR	Island	basic	Basic Land - Island	0	True
+91305	ACR	Swamp	basic	Basic Land - Swamp	0	True
+91306	ACR	Swamp	basic	Basic Land - Swamp	0	True
+91307	ACR	Mountain	basic	Basic Land - Mountain	0	True
+91308	ACR	Mountain	basic	Basic Land - Mountain	0	True
+91309	ACR	Forest	basic	Basic Land - Forest	0	True
+91310	ACR	Forest	basic	Basic Land - Forest	0	True
+91811	BLB	Plains	basic	Basic Land - Plains	0	True
+91812	BLB	Plains	basic	Basic Land - Plains	0	True
+91813	BLB	Plains	basic	Basic Land - Plains	0	True
+91814	BLB	Plains	basic	Basic Land - Plains	0	True
+91815	BLB	Island	basic	Basic Land - Island	0	True
+91816	BLB	Island	basic	Basic Land - Island	0	True
+91817	BLB	Island	basic	Basic Land - Island	0	True
+91818	BLB	Island	basic	Basic Land - Island	0	True
+91819	BLB	Swamp	basic	Basic Land - Swamp	0	True
+91820	BLB	Swamp	basic	Basic Land - Swamp	0	True
+91821	BLB	Swamp	basic	Basic Land - Swamp	0	True
+91822	BLB	Swamp	basic	Basic Land - Swamp	0	True
+91823	BLB	Mountain	basic	Basic Land - Mountain	0	True
+91824	BLB	Mountain	basic	Basic Land - Mountain	0	True
+91825	BLB	Mountain	basic	Basic Land - Mountain	0	True
+91826	BLB	Mountain	basic	Basic Land - Mountain	0	True
+91827	BLB	Forest	basic	Basic Land - Forest	0	True
+91828	BLB	Forest	basic	Basic Land - Forest	0	True
+91829	BLB	Forest	basic	Basic Land - Forest	0	True
+91830	BLB	Forest	basic	Basic Land - Forest	0	True
+91831	BLB	Plains	basic	Basic Land - Plains	0	True
+91832	BLB	Plains	basic	Basic Land - Plains	0	False
+91833	BLB	Island	basic	Basic Land - Island	0	True
+91834	BLB	Island	basic	Basic Land - Island	0	False
+91835	BLB	Swamp	basic	Basic Land - Swamp	0	True
+91836	BLB	Swamp	basic	Basic Land - Swamp	0	False
+91837	BLB	Mountain	basic	Basic Land - Mountain	0	True
+91838	BLB	Mountain	basic	Basic Land - Mountain	0	False
+91839	BLB	Forest	basic	Basic Land - Forest	0	True
+91840	BLB	Forest	basic	Basic Land - Forest	0	False
+92372	DSK	Plains	basic	Basic Land - Plains	0	True
+92373	DSK	Plains	basic	Basic Land - Plains	0	True
+92374	DSK	Island	basic	Basic Land - Island	0	True
+92375	DSK	Island	basic	Basic Land - Island	0	True
+92376	DSK	Swamp	basic	Basic Land - Swamp	0	True
+92377	DSK	Swamp	basic	Basic Land - Swamp	0	True
+92378	DSK	Mountain	basic	Basic Land - Mountain	0	True
+92379	DSK	Mountain	basic	Basic Land - Mountain	0	True
+92380	DSK	Forest	basic	Basic Land - Forest	0	True
+92381	DSK	Forest	basic	Basic Land - Forest	0	True
+92382	DSK	Plains	basic	Basic Land - Plains	0	True
+92383	DSK	Island	basic	Basic Land - Island	0	True
+92384	DSK	Swamp	basic	Basic Land - Swamp	0	True
+92385	DSK	Mountain	basic	Basic Land - Mountain	0	True
+92386	DSK	Forest	basic	Basic Land - Forest	0	True
+93714	FDN	Sire of Seven Deaths	mythic	Creature - Eldrazi	7	True
+93715	FDN	Arahbo, the First Fang	rare	Legendary Creature - Cat Avatar	3	True
+93716	FDN	Armasaur Guide	common	Creature - Dinosaur	5	True
+93717	FDN	Cat Collector	uncommon	Creature - Human Citizen	3	True
+93718	FDN	Celestial Armor	rare	Artifact - Equipment	3	True
+93719	FDN	Claws Out	uncommon	Instant	5	True
+93720	FDN	Crystal Barricade	rare	Artifact Creature - Wall	2	True
+93721	FDN	Dauntless Veteran	uncommon	Creature - Human Soldier	3	True
+93722	FDN	Dazzling Angel	common	Creature - Angel	3	True
+93723	FDN	Divine Resilience	uncommon	Instant	1	True
+93724	FDN	Exemplar of Light	rare	Creature - Angel	4	True
+93725	FDN	Felidar Savior	common	Creature - Cat Beast	4	True
+93726	FDN	Fleeting Flight	common	Instant	1	True
+93727	FDN	Guarded Heir	uncommon	Creature - Human Noble	6	True
+93728	FDN	Hare Apparent	common	Creature - Rabbit Noble	2	True
+93729	FDN	Helpful Hunter	common	Creature - Cat	2	True
+93730	FDN	Herald of Eternal Dawn	mythic	Creature - Angel	7	True
+93731	FDN	Inspiring Paladin	common	Creature - Human Knight	3	True
+93732	FDN	Joust Through	uncommon	Instant	1	True
+93733	FDN	Luminous Rebuke	common	Instant	5	True
+93734	FDN	Prideful Parent	common	Creature - Cat	3	True
+93735	FDN	Raise the Past	rare	Sorcery	4	True
+93736	FDN	Skyknight Squire	rare	Creature - Cat Scout	2	True
+93737	FDN	Squad Rallier	common	Creature - Human Scout	4	True
+93738	FDN	Sun-Blessed Healer	uncommon	Creature - Human Cleric	2	True
+93739	FDN	Twinblade Blessing	uncommon	Enchantment - Aura	3	True
+93740	FDN	Valkyrie's Call	mythic	Enchantment	5	True
+93741	FDN	Vanguard Seraph	common	Creature - Angel Warrior	4	True
+93742	FDN	Arcane Epiphany	uncommon	Instant	5	True
+93743	FDN	Archmage of Runes	rare	Creature - Giant Wizard	5	True
+93744	FDN	Bigfin Bouncer	common	Creature - Shark Pirate	4	True
+93745	FDN	Cephalid Inkmage	uncommon	Creature - Octopus Wizard	3	True
+93746	FDN	Clinquant Skymage	uncommon	Creature - Bird Wizard	4	True
+93747	FDN	Curator of Destinies	rare	Creature - Sphinx	6	True
+93748	FDN	Drake Hatcher	rare	Creature - Human Wizard	2	True
+93749	FDN	Elementalist Adept	common	Creature - Human Wizard	2	True
+93750	FDN	Erudite Wizard	common	Creature - Human Wizard	3	True
+93751	FDN	Faebloom Trick	uncommon	Instant	3	True
+93752	FDN	Grappling Kraken	uncommon	Creature - Kraken	6	True
+93753	FDN	High Fae Trickster	rare	Creature - Faerie Wizard	4	True
+93754	FDN	Homunculus Horde	rare	Creature - Homunculus	4	True
+93755	FDN	Icewind Elemental	common	Creature - Elemental	5	True
+93756	FDN	Inspiration from Beyond	uncommon	Sorcery	3	True
+93757	FDN	Kaito, Cunning Infiltrator	mythic	Legendary Planeswalker - Kaito	3	True
+93758	FDN	Kiora, the Rising Tide	rare	Legendary Creature - Merfolk Noble	3	True
+93759	FDN	Lunar Insight	rare	Sorcery	3	True
+93760	FDN	Mischievous Mystic	uncommon	Creature - Human Wizard	2	True
+93761	FDN	Refute	common	Instant	3	True
+93762	FDN	Rune-Sealed Wall	uncommon	Artifact Creature - Wall	3	True
+93763	FDN	Skyship Buccaneer	uncommon	Creature - Human Pirate	5	True
+93764	FDN	Sphinx of Forgotten Lore	mythic	Creature - Sphinx	4	True
+93765	FDN	Strix Lookout	common	Creature - Bird	2	True
+93766	FDN	Uncharted Voyage	common	Instant	4	True
+93767	FDN	Abyssal Harvester	rare	Creature - Demon Warlock	3	True
+93768	FDN	Arbiter of Woe	uncommon	Creature - Demon	6	True
+93769	FDN	Billowing Shriekmass	uncommon	Creature - Spirit	4	True
+93770	FDN	Blasphemous Edict	rare	Sorcery	5	True
+93771	FDN	Bloodthirsty Conqueror	mythic	Creature - Vampire Knight	5	True
+93772	FDN	Crypt Feaster	common	Creature - Zombie	4	True
+93773	FDN	Gutless Plunderer	common	Creature - Skeleton Pirate	3	True
+93774	FDN	High-Society Hunter	rare	Creature - Vampire Noble	5	True
+93775	FDN	Hungry Ghoul	common	Creature - Zombie	2	True
+93776	FDN	Infernal Vessel	uncommon	Creature - Human Cleric	3	True
+93777	FDN	Infestation Sage	common	Creature - Elf Warlock	1	True
+93778	FDN	Midnight Snack	uncommon	Enchantment	3	True
+93779	FDN	Nine-Lives Familiar	rare	Creature - Cat	3	True
+93780	FDN	Revenge of the Rats	uncommon	Sorcery	4	True
+93781	FDN	Sanguine Syphoner	common	Creature - Vampire Warlock	2	True
+93782	FDN	Seeker's Folly	uncommon	Sorcery	3	True
+93783	FDN	Soul-Shackled Zombie	common	Creature - Zombie	4	True
+93784	FDN	Stab	common	Instant	1	True
+93785	FDN	Tinybones, Bauble Burglar	rare	Legendary Creature - Skeleton Rogue	2	True
+93786	FDN	Tragic Banshee	uncommon	Creature - Spirit	5	True
+93787	FDN	Vampire Gourmand	uncommon	Creature - Vampire	2	True
+93788	FDN	Vampire Soulcaller	common	Creature - Vampire Warlock	5	True
+93789	FDN	Vengeful Bloodwitch	uncommon	Creature - Vampire Warlock	2	True
+93790	FDN	Zul Ashur, Lich Lord	rare	Legendary Creature - Zombie Warlock	2	True
+93791	FDN	Battlesong Berserker	uncommon	Creature - Human Berserker	4	True
+93792	FDN	Boltwave	uncommon	Sorcery	1	True
+93793	FDN	Bulk Up	uncommon	Instant	2	True
+93794	FDN	Chandra, Flameshaper	mythic	Legendary Planeswalker - Chandra	7	True
+93795	FDN	Courageous Goblin	common	Creature - Goblin	2	True
+93796	FDN	Crackling Cyclops	common	Creature - Cyclops Wizard	3	True
+93797	FDN	Dragon Trainer	uncommon	Creature - Human	5	True
+93798	FDN	Electroduplicate	rare	Sorcery	3	True
+93799	FDN	Fiery Annihilation	uncommon	Instant	3	True
+93800	FDN	Goblin Boarders	common	Creature - Goblin Pirate	3	True
+93801	FDN	Goblin Negotiation	uncommon	Sorcery	2	True
+93802	FDN	Gorehorn Raider	common	Creature - Minotaur Pirate	5	True
+93803	FDN	Incinerating Blast	common	Sorcery	5	True
+93804	FDN	Kellan, Planar Trailblazer	rare	Legendary Creature - Human Faerie Scout	1	True
+93805	FDN	Rite of the Dragoncaller	mythic	Enchantment	6	True
+93806	FDN	Searslicer Goblin	rare	Creature - Goblin Warrior	2	True
+93807	FDN	Slumbering Cerberus	uncommon	Creature - Dog	2	True
+93808	FDN	Sower of Chaos	common	Creature - Devil	4	True
+93809	FDN	Strongbox Raider	uncommon	Creature - Orc Pirate	4	True
+93810	FDN	Twinflame Tyrant	mythic	Creature - Dragon	5	True
+93811	FDN	Ambush Wolf	common	Creature - Wolf	3	True
+93812	FDN	Apothecary Stomper	common	Creature - Elephant	6	True
+93813	FDN	Beast-Kin Ranger	common	Creature - Elf Ranger	3	True
+93814	FDN	Cackling Prowler	common	Creature - Hyena Rogue	4	True
+93815	FDN	Eager Trufflesnout	uncommon	Creature - Boar	3	True
+93816	FDN	Elfsworn Giant	common	Creature - Giant	5	True
+93817	FDN	Elvish Regrower	uncommon	Creature - Elf Druid	4	True
+93818	FDN	Felling Blow	uncommon	Sorcery	3	True
+93819	FDN	Loot, Exuberant Explorer	rare	Legendary Creature - Beast Noble	3	True
+93820	FDN	Mossborn Hydra	rare	Creature - Elemental Hydra	3	True
+93821	FDN	Needletooth Pack	uncommon	Creature - Dinosaur	5	True
+93822	FDN	Preposterous Proportions	rare	Sorcery	7	True
+93823	FDN	Quakestrider Ceratops	uncommon	Creature - Dinosaur	6	True
+93824	FDN	Quilled Greatwurm	mythic	Creature - Wurm	6	True
+93825	FDN	Spinner of Souls	rare	Creature - Spider Spirit	3	True
+93826	FDN	Sylvan Scavenging	rare	Enchantment	3	True
+93827	FDN	Treetop Snarespinner	common	Creature - Spider	4	True
+93828	FDN	Alesha, Who Laughs at Fate	rare	Legendary Creature - Human Warrior	3	True
+93829	FDN	Anthem of Champions	rare	Enchantment	2	True
+93830	FDN	Ashroot Animist	rare	Creature - Lizard Druid	4	True
+93831	FDN	Dreadwing Scavenger	uncommon	Creature - Nightmare Bird	3	True
+93832	FDN	Elenda, Saint of Dusk	rare	Legendary Creature - Vampire Knight	4	True
+93833	FDN	Fiendish Panda	uncommon	Creature - Bear Demon	4	True
+93834	FDN	Koma, World-Eater	rare	Legendary Creature - Serpent	7	True
+93835	FDN	Kykar, Zephyr Awakener	rare	Legendary Creature - Bird Wizard	4	True
+93836	FDN	Niv-Mizzet, Visionary	mythic	Legendary Creature - Dragon Wizard	6	True
+93837	FDN	Perforating Artist	uncommon	Creature - Devil	3	True
+93838	FDN	Wardens of the Cycle	uncommon	Creature - Elf Warlock	4	True
+93839	FDN	Zimone, Paradox Sculptor	mythic	Legendary Creature - Human Wizard	4	True
+93840	FDN	Banner of Kinship	rare	Artifact	5	True
+93841	FDN	Fishing Pole	uncommon	Artifact - Equipment	1	True
+93842	FDN	Leyline Axe	rare	Artifact - Equipment	4	True
+93843	FDN	Quick-Draw Katana	common	Artifact - Equipment	2	True
+93844	FDN	Ravenous Amulet	uncommon	Artifact	2	True
+93845	FDN	Scrawling Crawler	rare	Artifact Creature - Phyrexian Construct	3	True
+93846	FDN	Soulstone Sanctuary	rare	Land	0	True
+93847	FDN	Ajani, Caller of the Pride	mythic	Legendary Planeswalker - Ajani	3	True
+93848	FDN	Ajani's Pridemate	uncommon	Creature - Cat Soldier	2	True
+93849	FDN	Angel of Finality	uncommon	Creature - Angel	4	True
+93850	FDN	Authority of the Consuls	rare	Enchantment	1	True
+93851	FDN	Banishing Light	common	Enchantment	3	True
+93852	FDN	Cathar Commando	common	Creature - Human Soldier	2	True
+93853	FDN	Day of Judgment	rare	Sorcery	4	True
+93854	FDN	Giada, Font of Hope	rare	Legendary Creature - Angel	2	True
+93855	FDN	Healer's Hawk	common	Creature - Bird	1	True
+93856	FDN	Make Your Move	common	Instant	3	True
+93857	FDN	Mischievous Pup	uncommon	Creature - Dog	3	True
+93858	FDN	Resolute Reinforcements	uncommon	Creature - Human Soldier	2	True
+93859	FDN	Savannah Lions	uncommon	Creature - Cat	1	True
+93860	FDN	Serra Angel	uncommon	Creature - Angel	5	True
+93861	FDN	Stroke of Midnight	uncommon	Instant	3	True
+93862	FDN	Youthful Valkyrie	uncommon	Creature - Angel	2	True
+93863	FDN	Aegis Turtle	common	Creature - Turtle	1	True
+93864	FDN	Aetherize	uncommon	Instant	4	True
+93865	FDN	Brineborn Cutthroat	uncommon	Creature - Merfolk Pirate	2	True
+93866	FDN	Essence Scatter	uncommon	Instant	2	True
+93867	FDN	Extravagant Replication	rare	Enchantment	6	True
+93868	FDN	Fleeting Distraction	common	Instant	1	True
+93869	FDN	Imprisoned in the Moon	uncommon	Enchantment - Aura	3	True
+93870	FDN	Lightshell Duo	common	Creature - Rat Otter	4	True
+93871	FDN	Micromancer	uncommon	Creature - Human Wizard	4	True
+93872	FDN	Mocking Sprite	common	Creature - Faerie Rogue	3	True
+93873	FDN	An Offer You Can't Refuse	uncommon	Instant	1	True
+93874	FDN	Omniscience	mythic	Enchantment	10	True
+93875	FDN	Run Away Together	common	Instant	2	True
+93876	FDN	Self-Reflection	uncommon	Sorcery	6	True
+93877	FDN	Spectral Sailor	uncommon	Creature - Spirit Pirate	1	True
+93878	FDN	Think Twice	common	Instant	2	True
+93879	FDN	Time Stop	rare	Instant	6	True
+93880	FDN	Tolarian Terror	common	Creature - Serpent	7	True
+93881	FDN	Witness Protection	common	Enchantment - Aura	1	True
+93882	FDN	Bake into a Pie	common	Instant	4	True
+93883	FDN	Burglar Rat	common	Creature - Rat	2	True
+93884	FDN	Diregraf Ghoul	uncommon	Creature - Zombie	1	True
+93885	FDN	Eaten Alive	common	Sorcery	1	True
+93886	FDN	Exsanguinate	uncommon	Sorcery	2	True
+93887	FDN	Fake Your Own Death	common	Instant	2	True
+93888	FDN	Hero's Downfall	uncommon	Instant	3	True
+93889	FDN	Liliana, Dreadhorde General	mythic	Legendary Planeswalker - Liliana	6	True
+93890	FDN	Macabre Waltz	common	Sorcery	2	True
+93891	FDN	Marauding Blight-Priest	common	Creature - Vampire Cleric	3	True
+93892	FDN	Painful Quandary	rare	Enchantment	5	True
+93893	FDN	Phyrexian Arena	rare	Enchantment	3	True
+93894	FDN	Pilfer	common	Sorcery	2	True
+93895	FDN	Reassembling Skeleton	uncommon	Creature - Skeleton Warrior	2	True
+93896	FDN	Rise of the Dark Realms	mythic	Sorcery	9	True
+93897	FDN	Rune-Scarred Demon	rare	Creature - Demon	7	True
+93898	FDN	Stromkirk Bloodthief	uncommon	Creature - Vampire Rogue	3	True
+93899	FDN	Vampire Nighthawk	uncommon	Creature - Vampire Shaman	3	True
+93900	FDN	Zombify	uncommon	Sorcery	4	True
+93901	FDN	Abrade	uncommon	Instant	2	True
+93902	FDN	Axgard Cavalry	common	Creature - Dwarf Berserker	2	True
+93903	FDN	Brass's Bounty	rare	Sorcery	7	True
+93904	FDN	Brazen Scourge	uncommon	Creature - Gremlin	3	True
+93905	FDN	Burst Lightning	common	Instant	1	True
+93906	FDN	Drakuseth, Maw of Flames	rare	Legendary Creature - Dragon	7	True
+93907	FDN	Etali, Primal Storm	rare	Legendary Creature - Elder Dinosaur	6	True
+93908	FDN	Fanatical Firebrand	common	Creature - Goblin Pirate	1	True
+93909	FDN	Firebrand Archer	common	Creature - Human Archer	2	True
+93910	FDN	Firespitter Whelp	uncommon	Creature - Dragon	3	True
+93911	FDN	Flamewake Phoenix	rare	Creature - Phoenix	3	True
+93912	FDN	Frenzied Goblin	uncommon	Creature - Goblin Berserker	1	True
+93913	FDN	Goblin Surprise	common	Instant	3	True
+93914	FDN	Heartfire Immolator	uncommon	Creature - Human Wizard	2	True
+93915	FDN	Hidetsugu's Second Rite	uncommon	Instant	4	True
+93916	FDN	Involuntary Employment	common	Sorcery	4	True
+93917	FDN	Krenko, Mob Boss	rare	Legendary Creature - Goblin Warrior	4	True
+93918	FDN	Seismic Rupture	uncommon	Sorcery	3	True
+93919	FDN	Shivan Dragon	uncommon	Creature - Dragon	6	True
+93920	FDN	Slagstorm	rare	Sorcery	3	True
+93921	FDN	Spitfire Lagac	common	Creature - Lizard	4	True
+93922	FDN	Sure Strike	common	Instant	2	True
+93923	FDN	Thrill of Possibility	common	Instant	2	True
+93924	FDN	Affectionate Indrik	uncommon	Creature - Beast	6	True
+93925	FDN	Bite Down	common	Instant	2	True
+93926	FDN	Blanchwood Armor	uncommon	Enchantment - Aura	3	True
+93927	FDN	Broken Wings	common	Instant	3	True
+93928	FDN	Bushwhack	common	Sorcery	1	True
+93929	FDN	Doubling Season	mythic	Enchantment	5	True
+93930	FDN	Dwynen, Gilt-Leaf Daen	uncommon	Legendary Creature - Elf Warrior	4	True
+93931	FDN	Dwynen's Elite	common	Creature - Elf Warrior	2	True
+93932	FDN	Elvish Archdruid	rare	Creature - Elf Druid	3	True
+93933	FDN	Garruk's Uprising	uncommon	Enchantment	3	True
+93934	FDN	Genesis Wave	rare	Sorcery	3	True
+93935	FDN	Ghalta, Primal Hunger	rare	Legendary Creature - Elder Dinosaur	12	True
+93936	FDN	Giant Growth	common	Instant	1	True
+93937	FDN	Gnarlid Colony	common	Creature - Beast	2	True
+93938	FDN	Grow from the Ashes	common	Sorcery	3	True
+93939	FDN	Inspiring Call	uncommon	Instant	3	True
+93940	FDN	Llanowar Elves	common	Creature - Elf Druid	1	True
+93941	FDN	Mild-Mannered Librarian	uncommon	Creature - Human	1	True
+93942	FDN	Nessian Hornbeetle	uncommon	Creature - Insect	2	True
+93943	FDN	Overrun	uncommon	Sorcery	5	True
+93944	FDN	Reclamation Sage	uncommon	Creature - Elf Shaman	3	True
+93945	FDN	Scavenging Ooze	rare	Creature - Ooze	2	True
+93946	FDN	Snakeskin Veil	uncommon	Instant	1	True
+93947	FDN	Vivien Reid	mythic	Legendary Planeswalker - Vivien	5	True
+93948	FDN	Wary Thespian	common	Creature - Cat Druid	2	True
+93949	FDN	Wildwood Scourge	uncommon	Creature - Hydra	1	True
+93950	FDN	Balmor, Battlemage Captain	uncommon	Legendary Creature - Bird Wizard	2	True
+93951	FDN	Consuming Aberration	rare	Creature - Horror	5	True
+93952	FDN	Empyrean Eagle	uncommon	Creature - Bird Spirit	3	True
+93953	FDN	Good-Fortune Unicorn	uncommon	Creature - Unicorn	3	True
+93954	FDN	Heroic Reinforcements	uncommon	Sorcery	4	True
+93955	FDN	Lathril, Blade of the Elves	rare	Legendary Creature - Elf Noble	4	True
+93956	FDN	Muldrotha, the Gravetide	mythic	Legendary Creature - Elemental Avatar	6	True
+93957	FDN	Progenitus	mythic	Legendary Creature - Hydra Avatar	10	True
+93958	FDN	Ruby, Daring Tracker	uncommon	Legendary Creature - Human Scout	2	True
+93959	FDN	Swiftblade Vindicator	rare	Creature - Human Soldier	2	True
+93960	FDN	Tatyova, Benthic Druid	uncommon	Legendary Creature - Merfolk Druid	5	True
+93961	FDN	Thousand-Year Storm	rare	Enchantment	6	True
+93962	FDN	Adventuring Gear	uncommon	Artifact - Equipment	1	True
+93963	FDN	Burnished Hart	uncommon	Artifact Creature - Elk	3	True
+93964	FDN	Campus Guide	common	Artifact Creature - Golem	2	True
+93965	FDN	Gleaming Barrier	common	Artifact Creature - Wall	2	True
+93966	FDN	Goldvein Pick	common	Artifact - Equipment	2	True
+93967	FDN	Heraldic Banner	uncommon	Artifact	3	True
+93968	FDN	Juggernaut	uncommon	Artifact Creature - Juggernaut	4	True
+93969	FDN	Meteor Golem	uncommon	Artifact Creature - Golem	7	True
+93970	FDN	Solemn Simulacrum	rare	Artifact Creature - Golem	4	True
+93971	FDN	Swiftfoot Boots	uncommon	Artifact - Equipment	2	True
+93972	FDN	Bloodfell Caves	common	Land	0	True
+93973	FDN	Blossoming Sands	common	Land	0	True
+93974	FDN	Dismal Backwater	common	Land	0	True
+93975	FDN	Evolving Wilds	common	Land	0	True
+93976	FDN	Jungle Hollow	common	Land	0	True
+93977	FDN	Rogue's Passage	uncommon	Land	0	True
+93978	FDN	Rugged Highlands	common	Land	0	True
+93979	FDN	Scoured Barrens	common	Land	0	True
+93980	FDN	Secluded Courtyard	uncommon	Land	0	True
+93981	FDN	Swiftwater Cliffs	common	Land	0	True
+93982	FDN	Thornwood Falls	common	Land	0	True
+93983	FDN	Tranquil Cove	common	Land	0	True
+93984	FDN	Wind-Scarred Crag	common	Land	0	True
+93985	SPG	Condemn	uncommon	Instant	1	True
+93986	SPG	Sphinx's Tutelage	uncommon	Enchantment	3	True
+93987	SPG	Grim Tutor	mythic	Sorcery	3	True
+93988	SPG	Goblin Bushwhacker	common	Creature - Goblin Warrior	1	True
+93989	SPG	Embercleave	mythic	Legendary Artifact - Equipment	6	True
+93990	SPG	Paradise Druid	uncommon	Creature - Elf Druid	2	True
+93991	SPG	Bloom Tender	rare	Creature - Elf Druid	2	True
+93992	SPG	Akroma's Memorial	mythic	Legendary Artifact	7	True
+94156	TFDN	Cat	token	Creature - Cat	0	False
+94157	TFDN	Cat	token	Creature - Cat	0	False
+94158	TFDN	Human	token	Creature - Human	0	False
+94159	TFDN	Knight	token	Creature - Knight	0	False
+94160	TFDN	Rabbit	token	Creature - Rabbit	0	False
+94161	TFDN	Soldier	token	Creature - Soldier	0	False
+94162	TFDN	Spirit	token	Creature - Spirit	0	False
+94163	TFDN	Drake	token	Creature - Drake	0	False
+94164	TFDN	Faerie	token	Creature - Faerie	0	False
+94165	TFDN	Fish	token	Creature - Fish	0	False
+94166	TFDN	Koma's Coil	token	Creature - Serpent	0	False
+94167	TFDN	Ninja	token	Creature - Ninja	0	False
+94168	TFDN	Scion of the Deep	token	Legendary Creature - Octopus	0	False
+94169	TFDN	Rat	token	Creature - Rat	0	False
+94170	TFDN	Zombie	token	Creature - Zombie	0	False
+94171	TFDN	Dragon	token	Creature - Dragon	0	False
+94172	TFDN	Dragon	token	Creature - Dragon	0	False
+94173	TFDN	Goblin	token	Creature - Goblin	0	False
+94174	TFDN	Elf Warrior	token	Creature - Elf Warrior	0	False
+94175	TFDN	Raccoon	token	Creature - Raccoon	0	False
+94176	TFDN	Insect	token	Creature - Insect	0	False
+94177	TFDN	Food	token	Artifact - Food	0	False
+94178	TFDN	Treasure	token	Artifact - Treasure	0	False
+95168	J25	Plains	basic	Basic Land - Plains	0	False
+95170	J25	Island	basic	Basic Land - Island	0	False
+95174	J25	Swamp	basic	Basic Land - Swamp	0	False
+95175	J25	Mountain	basic	Basic Land - Mountain	0	False
+95180	J25	Forest	basic	Basic Land - Forest	0	False
+95182	FDN	Plains	basic	Basic Land - Plains	0	True
+95184	FDN	Island	basic	Basic Land - Island	0	True
+95186	FDN	Swamp	basic	Basic Land - Swamp	0	True
+95188	FDN	Mountain	basic	Basic Land - Mountain	0	True
+95190	FDN	Forest	basic	Basic Land - Forest	0	True
+95191	FDN	Plains	basic	Basic Land - Plains	0	True
+95192	FDN	Plains	basic	Basic Land - Plains	0	True
+95193	FDN	Island	basic	Basic Land - Island	0	True
+95194	FDN	Island	basic	Basic Land - Island	0	True
+95195	FDN	Swamp	basic	Basic Land - Swamp	0	True
+95196	FDN	Swamp	basic	Basic Land - Swamp	0	True
+95197	FDN	Mountain	basic	Basic Land - Mountain	0	True
+95198	FDN	Mountain	basic	Basic Land - Mountain	0	True
+95199	FDN	Forest	basic	Basic Land - Forest	0	True
+95200	FDN	Forest	basic	Basic Land - Forest	0	True
+95282	SPG	Temporal Manipulation	mythic	Sorcery	5	True
+95283	SPG	Fiend Artisan	mythic	Creature - Nightmare	2	True

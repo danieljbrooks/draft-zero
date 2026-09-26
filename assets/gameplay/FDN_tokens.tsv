@@ -1,0 +1,39 @@
+# FDN token grpId -> XMage token class (mage.game.permanent.token.*); P/T and colour of that class. Map tokens by id, never by name.
+grpId	name	power	toughness	colors	token_class	xmage_name	games	note
+91328	Zombie	2	2	B	ZombieToken	Zombie Token	0	
+91329	Rhino	4	4	G	RhinoToken	Rhino Token	0	
+91331	Clue				ClueArtifactToken	Clue Token	0	
+94156	Cat	1	1	W	CatToken3	Cat Token	176818	
+94157	Cat	2	2	W	CatToken	Cat Token	346	
+94158	Human	1	1	W	HumanToken	Human Token	23208	
+94159	Knight	3	3	W	Knight33Token	Knight Token	39311	
+94160	Rabbit	1	1	W	RabbitToken	Rabbit Token	9793	
+94161	Soldier	1	1	W	SoldierToken	Soldier Token	77676	
+94162	Spirit	1	1	W	SpiritWhiteToken	Spirit Token	11661	
+94163	Drake	2	2	U	DrakeToken	Drake Token	6997	
+94164	Faerie	1	1	U	FaerieToken	Faerie Token	114863	
+94165	Fish	1	1	U	FishNoAbilityToken	Fish Token	2138	
+94166	Koma's Coil	3	3	U	KomasCoilToken	Koma's Coil	5550	
+94167	Ninja	2	1	U	NinjaToken2	Ninja Token	7450	
+94168	Scion of the Deep	8	8	U	ScionOfTheDeepToken	Scion of the Deep	11433	
+94169	Rat	1	1	B	RatToken	Rat Token	11158	
+94170	Zombie	2	2	B	ZombieToken	Zombie Token	9590	
+94171	Dragon	4	4	R	DragonToken	Dragon Token	43333	
+94172	Dragon	5	5	R	DragonToken2	Dragon Token	3460	
+94173	Goblin	1	1	R	GoblinToken	Goblin Token	87340	
+94174	Elf Warrior	1	1	G	ElfWarriorToken	Elf Warrior Token	71750	
+94175	Raccoon	3	3	G	RaccoonToken	Raccoon Token	20271	
+94176	Insect	1	1	BG	InsectBlackGreenFlyingToken	Insect Token	107526	
+94177	Food				FoodToken	Food Token	198689	
+94178	Treasure				TreasureToken	Treasure Token	150377	
+94179	Copy						0	Arena copy placeholder: token copies carry the copied card's id
+94180	Cat Beast	2	2	W	CatBeastToken	Cat Beast Token	0	
+94181	Cat	1	1	W	CatToken2	Cat Token	0	
+94182	Dog	1	1	W	WhiteDogToken	Dog Token	0	
+94183	Rat	1	1	B	RatCantBlockToken	Rat Token	0	
+94184	Phyrexian Goblin	1	1	R	PhyrexianGoblinToken	Phyrexian Goblin Token	0	
+94185	Beast	3	3	G	BeastToken	Beast Token	0	
+94186	Beast	4	4	G	BeastToken2	Beast Token	0	
+96295	Golem	3	3		GolemToken	Golem Token	0	
+97273	Eldrazi Scion	1	1		EldraziScionToken	Eldrazi Scion Token	0	
+102835	Bird Illusion	1	1	U	BirdIllusionToken	Bird Illusion Token	0	
