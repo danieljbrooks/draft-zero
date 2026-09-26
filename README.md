@@ -22,13 +22,17 @@ What comes next, and why: **[ROADMAP.md](ROADMAP.md)**.
 ```
 mage (XMage fork, Java)      pinned release artifact — rules engine, deck pools,
   ▲                          GAME_SUMMARY lines, action vocab
-  │
-MageZero (Python)            pinned dependency — model, trainer, server, runner, report
-  ▲
-DraftZero                    this repo — pools, generalist loop, format stats, workers
+  │                          (danieljbrooks/mage v0.2-generalist, built into Will's v0.2 bundle)
+MageZero (Python)            pinned dependency — model, trainer, inference server
+  ▲                          (Will's v0.2 plus three opt-in commits: danieljbrooks/MageZero draftzero)
+DraftZero                    this repo — pools, generalist loop, parallel JVMs, metrics and
+                             dashboards, format stats, workers (draftzero/engine.py runs
+                             MageZero's scripts unmodified)
 ```
 
-Dependencies point one way only. Nothing in MageZero knows DraftZero exists.
+Dependencies point one way only. Nothing in MageZero knows DraftZero exists. Experiment #1
+ran on an older MageZero fork (`mz-engine`, `bcc76de`) and the v0.1 XMage build
+(`danieljbrooks/mage` `exp1-fdn-generalist`); its checkpoints don't load under v0.2.
 
 ## Layout
 
@@ -145,9 +149,9 @@ stock, networks that block SSH, image and CUDA pairing, self-destruct, and billi
 
 Self-play is **CPU-bound** XMage/MCTS up to about 24 cores per GPU. The GPU only serves
 small batched inference: 2% utilization during heuristic play, 11–14% during network
-self-play. Past ~24 cores, MageZero's single-worker inference server (~200 requests/s)
-becomes the cap, and more cores or GPUs stop helping until inference scales out
-(report §4.1). Pick a machine by vCPU, not VRAM:
+self-play. Run several JVMs of 4 game threads (`jvm.jvms`), about one per 4 cores: in the
+exp #2 pilot 7 × 4 beat 1 × 28 by 3.3× offline ([docs/006](docs/006-exp2-pilot.md)). With the
+network on, the shared inference server becomes the cap. Pick a machine by vCPU, not VRAM:
 
 ```bash
 dz workers rank --min-vcpu 8    # in-stock RunPod GPUs by vCPU per dollar
@@ -166,14 +170,11 @@ Each run writes three pages into `runs/<id>/`:
 | Page | Rendered by | Shows |
 |---|---|---|
 | `index.html` | DraftZero | landing page linking the other two |
-| `dashboard.html` | MageZero | win rates, losses, throughput, CPU/GPU/RAM |
+| `dashboard.html` | DraftZero (`report.py`, from exp #1's MageZero fork) | win rates, losses, throughput, CPU/GPU/RAM |
 | `format.html` | DraftZero | card GIH WR vs 17lands, Spearman ρ, deck colour records |
 
-The split follows the dependency direction: MageZero renders generic training health and
-has no idea what a draft format is, so DraftZero renders the format view itself rather
-than patching a template it does not own. `format.html` is standalone — no build step, no
-CDN, and no use of MageZero's internal chart helpers, which would break silently the next
-time that template changes.
+`dashboard.html` is generic training health; `format.html` is the draft-format view. Both are
+standalone: no build step and no CDN.
 
 Both refresh automatically after every chunk of games. To rebuild by hand:
 

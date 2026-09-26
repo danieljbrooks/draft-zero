@@ -114,7 +114,8 @@ conclusions are posted on Discord.
       and it's reachable without a token.
 - [x] ~~Check whether v0.1 checkpoints load under MageZero v0.2.0~~: moved to Phase 2, where
       it's easiest to test. The release says it's untested.
-- [ ] Post conclusions and the exp #2 direction on the MageZero Discord (promised in the thread).
+- [x] Post conclusions and the exp #2 direction on the MageZero Discord (promised in the thread).
+      Dan posted them, 2026-09-26.
 - [ ] HF model card: replace "whether the checkpoints load under v0.2.0 is untested" with
       "v0.1-only". Will's v0.2 release notes say v0.1 models and data are no longer compatible.
 - [x] Delete the `perf/feature-reset` branch (it was correct but measured no end-to-end gain).
@@ -166,7 +167,12 @@ the release notes say. For the vocab change:
 
 - [x] ~~Check whether exp #1's checkpoints load under v0.2~~: answered by the release notes.
       They're incompatible.
-- [ ] **Python: pin Will's v0.2 directly.**
+- [x] **Python: pin Will's v0.2** (2026-09-26, branch `v02-migration`). draft-zero pins
+      `danieljbrooks/MageZero` `draftzero`: Will's `main` (`11a5974`) plus three opt-in commits,
+      namely the policy width (#7), a CPU fallback for train/test, and `MZ_SERVER_THREADS`.
+      `draftzero/engine.py` runs his server/train/test scripts unmodified and does the rest.
+      A 3-generation laptop smoke test passes end to end (`configs/smoke_v02.yml`).
+      The original plan:
   - Move the fork-only modules (`metrics`, `report`, `resources`, `refresh_dashboard`) into
     draft-zero.
   - Check every MageZero call against v0.2. The names all exist upstream, but the fork rewrote
@@ -177,7 +183,9 @@ the release notes say. For the vocab change:
     fixes. Drop the two server-tuning commits.
   - `danieljbrooks/MageZero` `mz-engine` stays as exp #1's pinned engine. No new work there.
 - [ ] **Action vocab in our forks, PR-shaped** (#7, D6).
-  - Python: `danieljbrooks/MageZero`, branch `action-vocab`, off Will's v0.2 `main`.
+  - Python: `danieljbrooks/MageZero`, branch `action-vocab`, off Will's v0.2 `main`. **Width
+    done (2026-09-26):** `MZ_ACTION_VOCAB` sets the head width, and a width mismatch is refused
+    with a clear error. Still open: storing the vocab in the checkpoint, and the checks below.
   - Java: `danieljbrooks/mage`, branch `action-vocab`, off v0.2's Java (`cb7e9c6f`). Exp #1's
     vocab commit already rebases onto it (the `v0.2-generalist` branch below).
   - A configurable width (default 128), plus an optional exact vocab stored in the checkpoint and
@@ -185,9 +193,9 @@ the release notes say. For the vocab change:
   - **Done when:** with no vocab, seeded games match upstream exactly; a vocab agent plays a
     128-slot agent in the same game; and the vocab survives `mz export` / `mz import`.
   - No PRs to Will until he answers #7.
-- [ ] **Move `VocabDump` into draft-zero** `tools/`. Its only copy is in the archive's MageZero
-      experiments branch, inside the verified bundle. Then rebuild the FDN vocab from the v0.2
-      bundle's jars: the vocab keys are ability text, which may have changed.
+- [x] **Move `VocabDump` into draft-zero** (2026-09-26): `tools/vocab/`, with
+      `build_vocab.sh`. Rebuilt from the v0.2 bundle's jars, the FDN vocab is byte-identical to
+      exp #1's `FDN_SPG.tsv`: no ability text changed.
 - [x] **XMage fork on GitHub** (2026-09-26): [`danieljbrooks/mage`](https://github.com/danieljbrooks/mage),
       public, a fork of `WillWroble/mage`. It is for testing initially: we use Will's standard
       releases wherever possible, and its `DRAFTZERO.md` says so.
@@ -196,10 +204,11 @@ the release notes say. For the vocab change:
   - `v0.2-generalist` is the same changes on v0.2.0, plus `build-generalist-bundle.sh`.
   - The built v0.2 bundle is in the private HF repo `danbrooks/draftzero-checkpoints`, as
     `xmage/generalist-xmage-v0.2-48e49184.tar.gz`, next to the pilot's v0.1 bundle.
-  - [ ] Still to do: the HF model card's "not published yet" line should link
-    `exp1-fdn-generalist`.
-- [ ] **Run several JVMs in parallel** (Will's issue #1). `loop.py` calls MageZero's `launch_jvm`
-      one chunk at a time; make it run several concurrently, with 4 threads each and ZGC.
+  - [x] The HF model card links `exp1-fdn-generalist` (2026-09-26).
+- [x] **Run several JVMs in parallel** (Will's issue #1), 2026-09-26: `jvm.jvms` JVMs at once,
+      sharing one inference server per checkpoint, each server's HTTP pool sized to the game
+      threads that query it (v0.2's fixed pool of 6 would cap every batch at 6). The eval runs
+      on every JVM slot too. The original notes:
   - **Design question: inference servers.** Every exp #2 game is networked on both sides.
     MageZero's runner uses two fixed ports (`PRIMARY_PORT`, `OPPONENT_PORT`), and its own
     parallel path refuses networked opponents ("online mcts opponents need a server port each;
@@ -246,7 +255,9 @@ estimate as a pessimistic ceiling.** The JVM-layout pilot below replaces it with
 
 Each pilot costs a few dollars. **Every pilot gets an external hard time limit.**
 
-- [ ] **v0.2 smoke test.** Does the pipeline run end to end?
+- [ ] **v0.2 smoke test.** Does the pipeline run end to end? On a laptop, yes (2026-09-26:
+      3 generations including a frozen gen-0 opponent and evals). The pod pilot
+      (`deploy/pilot_v02.sh`) checks it at scale.
 - [x] **JVM layout × search budget** (2026-09-26, on v0.1, budget 300 only; see
       [docs/006](docs/006-exp2-pilot.md)). 7 JVMs × 4 threads beat 1 × 28 by 3.3× offline, and by 1.9× with
       one shared inference server. Re-measure on v0.2 before sizing exp #2.
@@ -368,6 +379,11 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 ## Decision log
 
 Add dated entries, newest first.
+
+- **2026-09-26** — Moved to Will's v0.2 engine (branch `v02-migration`). The v0.2 server's
+  HTTP pool is fixed at 6 threads, which caps a shared server's batch at 6. That's a problem
+  with several JVMs, so our MageZero branch makes it opt-in configurable. Exp #1's
+  conclusions are posted on Discord, and Will has given feedback on the pilot numbers.
 
 - **2026-09-26** — B1 resolved: Will pushed the v0.2 Java source (`WillWroble/mage` `cb7e9c6f`).
   - It is the release's source: built unmodified with javac, all 46 classes in the release's
