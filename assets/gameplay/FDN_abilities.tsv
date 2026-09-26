@@ -20,11 +20,11 @@ id	category	sources	method	confidence	in_abilities_csv	keys	vocab_idx	self_p1p1	
 1003	mana	Swamp	cooccurrence	basic_land	1			0	0	0			161307	
 175773	triggered	Prideful Parent	arena_db	high	1			0	0	0			154907	
 175834	triggered	Vengeful Bloodwitch	cooccurrence	high	0			0	0	0			149061	
-175832	triggered	Vampire Gourmand	arena_db	high	1			0	0	0			148630	
+175832	triggered	Vampire Gourmand	arena_db	high	1			0	0	0		attack_trigger	148630	
 175817	activated	Hungry Ghoul	cooccurrence	high	0	[["Hungry Ghoul", "{1}, Sacrifice another creature: Put a +1/+1 counter on {this}."]]	569	1	0	0			141857	
 175819	triggered	Infestation Sage	arena_db	high	1			0	0	0			141317	
 175908	triggered	Scrawling Crawler	arena_db	high	1			0	0	0			135263	
-175826	triggered	Sanguine Syphoner	arena_db	high	1			0	0	0			135099	
+175826	triggered	Sanguine Syphoner	arena_db	high	1			0	0	0		attack_trigger	135099	
 8760	activated	Strix Lookout	arena_db	high	1	[["Strix Lookout", "{1}{U}, {T}: Draw a card, then discard a card."]]	581	0	0	0			125294	
 1002	mana	Island	cooccurrence	basic_land	1			0	0	0			122499	
 175756	triggered	Cat Collector	arena_db	high	1			0	0	0			110971	
@@ -71,7 +71,7 @@ id	category	sources	method	confidence	in_abilities_csv	keys	vocab_idx	self_p1p1	
 149424	triggered	Fake Your Own Death	arena_db	high	1			0	0	0			62531	reflexive/delayed/emblem trigger inside another XMage ability
 99866	triggered	Resolute Reinforcements	arena_db	high	1			0	0	0			60527	
 145283	triggered	Stromkirk Bloodthief	arena_db	high	1			0	0	1		counter_on	60339	
-175843	triggered	Courageous Goblin	arena_db	high	1			0	0	0			58744	
+175843	triggered	Courageous Goblin	arena_db	high	1			0	0	0		attack_trigger	58744	
 175816	triggered	High-Society Hunter	arena_db	high	1			0	0	0			57777	
 90052	triggered	Angel of Finality	arena_db	high	1			0	0	0			57539	
 175767	triggered	Hare Apparent	arena_db	high	1			0	0	0			56554	
@@ -85,7 +85,7 @@ id	category	sources	method	confidence	in_abilities_csv	keys	vocab_idx	self_p1p1	
 175907	triggered	Scrawling Crawler	arena_db	high	1			0	0	0			50924	
 102318	triggered	Dwynen's Elite	arena_db	high	1			0	0	0			50128	
 175869	triggered	Elvish Regrower	arena_db	high	1			0	0	0			48834	
-96640	triggered	Frenzied Goblin	arena_db	high	1			0	0	0			47954	
+96640	triggered	Frenzied Goblin	arena_db	high	1			0	0	0		attack_trigger	47954	
 175823	triggered	Nine-Lives Familiar	arena_db	high	1			0	0	0		counter_on	46984	
 175809	triggered	Billowing Shriekmass	cooccurrence	high	0			0	0	0			45581	
 175766	triggered	Guarded Heir	arena_db	high	1			0	0	0			44712	
@@ -123,7 +123,7 @@ id	category	sources	method	confidence	in_abilities_csv	keys	vocab_idx	self_p1p1	
 15166	activated	Axgard Cavalry	arena_db	high	1	[["Axgard Cavalry", "{T}: Target creature gains haste until end of turn."]]	640	0	0	0			32028	
 175794	triggered	Kaito, Cunning Infiltrator	arena_db	high	1			0	0	0		counter_on	31937	
 175763	triggered	Exemplar of Light	arena_db	high	1			0	0	0		counter_on	31669	
-168943	triggered	Ruby, Daring Tracker	arena_db	high	1			0	0	0			31448	
+168943	triggered	Ruby, Daring Tracker	arena_db	high	1			0	0	0		attack_trigger	31448	
 175878	triggered	Spinner of Souls	arena_db	high	1			0	0	0			30637	
 169458	triggered	Mischievous Pup	arena_db	high	1			0	0	0			29775	
 175757	triggered	Celestial Armor	arena_db	high	1			0	0	0			29713	
@@ -145,7 +145,7 @@ id	category	sources	method	confidence	in_abilities_csv	keys	vocab_idx	self_p1p1	
 175889	triggered	Fiendish Panda	arena_db	high	1			0	0	0			22441	
 175807	activated	Abyssal Harvester	arena_db	high	1	[["Abyssal Harvester", "{T}: Exile target creature card from a graveyard that was put there this turn. Create a token that's a copy of it, except it's a Nightmare in addition to its other types. Then exile all other Nightmare tokens you control."]]	637	0	0	0			21749	
 175853	triggered	Kellan, Planar Trailblazer	arena_db	high	1			0	0	0			20494	reflexive/delayed/emblem trigger inside another XMage ability
-175815	triggered	High-Society Hunter	arena_db	high	1			0	0	0		counter_on	20460	
+175815	triggered	High-Society Hunter	arena_db	high	1			0	0	0		counter_on,attack_trigger	20460	
 175854	activated	Kellan, Planar Trailblazer	arena_db	high	1	[["Kellan, Planar Trailblazer", "{1}{R}: If {this} is a Scout, it becomes a Human Faerie Detective and gains \"Whenever {this} deals combat damage to a player, exile the top card of your library. You may play that card this turn.\""]]	580	0	0	0			20453	
 88164	triggered	Solemn Simulacrum	arena_db	high	1			0	0	0			20451	
 133256	activated	Liliana, Dreadhorde General	arena_db	high	1	[["Liliana, Dreadhorde General", "+1: Create a 2/2 black Zombie creature token."]]	7	0	0	0	+1		20444	
@@ -166,10 +166,10 @@ id	category	sources	method	confidence	in_abilities_csv	keys	vocab_idx	self_p1p1	
 175855	activated	Kellan, Planar Trailblazer	arena_db	high	1	[["Kellan, Planar Trailblazer", "{2}{R}: If {this} is a Detective, it becomes a 3/2 Human Faerie Rogue and gains double strike."]]	592	0	0	0			14761	
 100860	activated	Burnished Hart	arena_db	high	1	[["Burnished Hart", "{3}, Sacrifice {this}: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle."]]	596	0	0	0			14428	
 116851	triggered	Gleaming Barrier	arena_db	high	1			0	0	0			14387	
-175800	triggered	Kiora, the Rising Tide	arena_db	high	1			0	0	0			14007	
-175804	triggered	Sphinx of Forgotten Lore	arena_db	high	1			0	0	0			13853	
+175800	triggered	Kiora, the Rising Tide	arena_db	high	1			0	0	0		attack_trigger	14007	
+175804	triggered	Sphinx of Forgotten Lore	arena_db	high	1			0	0	0		attack_trigger	13853	
 180340	triggered	Etali, Primal Storm	cooccurrence	high	0			0	0	0			13040	
-175884	triggered	Ashroot Animist	arena_db	high	1			0	0	0			12793	
+175884	triggered	Ashroot Animist	arena_db	high	1			0	0	0		attack_trigger	12793	
 1097	activated	Shivan Dragon	arena_db	high	1	[["Shivan Dragon", "{R}: {this} gets +1/+0 until end of turn."]]	619	0	0	0			12067	
 175859	activated	Sower of Chaos	arena_db	high	1	[["Sower of Chaos", "{2}{R}: Target creature can't block this turn."]]	593	0	0	0			11180	
 175796	activated	Kaito, Cunning Infiltrator	arena_db	high	1	[["Kaito, Cunning Infiltrator", "-2: Create a 2/1 blue Ninja creature token."]]	13	0	0	0	-2		9478	
@@ -191,10 +191,10 @@ id	category	sources	method	confidence	in_abilities_csv	keys	vocab_idx	self_p1p1	
 175839	activated	Chandra, Flameshaper	arena_db	high	1	[["Chandra, Flameshaper", "+2: Add {R}{R}{R}. Exile the top three cards of your library. Choose one of them. You may play that card this turn."]]	12	0	0	0	+2		5703	
 1577	triggered	Zul Ashur, Lich Lord	arena_db	high	1			0	0	0			5321	
 1223	mana	Elvish Archdruid	arena_db	high	1			0	0	0			5020	
-181303	triggered	Drakuseth, Maw of Flames	arena_db	high	1			0	0	0			4865	
+181303	triggered	Drakuseth, Maw of Flames	arena_db	high	1			0	0	0		attack_trigger	4865	
 175840	triggered	Electroduplicate	cooccurrence	weak	0			0	0	0			4684	reflexive/delayed/emblem trigger inside another XMage ability
 175751	triggered	Sire of Seven Deaths	arena_db	high	1			0	0	0			4149	
-175813	triggered	Crypt Feaster	arena_db	high	1			0	0	0			3890	
+175813	triggered	Crypt Feaster	arena_db	high	1			0	0	0		attack_trigger	3890	
 175841	activated	Chandra, Flameshaper	arena_db	high	1	[["Chandra, Flameshaper", "+1: Create a token that's a copy of target creature you control, except it has haste and \"At the beginning of the end step, sacrifice this token.\""]]	8	0	0	0	+1		3404	
 1211	mana	Bloodfell Caves; Rakdos Guildgate; Temple of Malice	arena_db	multi	1			0	0	0			3337	
 1167	mana	Dimir Guildgate; Dismal Backwater; Temple of Deceit	arena_db	multi	1			0	0	0			3333	

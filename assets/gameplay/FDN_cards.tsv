@@ -65,7 +65,7 @@ Bone Miser	SPG	87	{4}{B}	4	4			token_maker,draw				none
 Boros Charm	FDN	721	{R}{W}				DoubleStrike,Indestructible	noncombat_damage,modal,spell_targets				none	
 Boros Guildgate	FDN	684						mana_ability_nonland,etb_tapped		WR		none	
 Brass's Bounty	FDN	190	{6}{R}					token_maker,mana_ability_nonland				none	
-Brazen Borrower	SPG	30	{1}{U}{U}	3	1		Flying,Flash	flash,bounce_to_hand,cast_from_other_zone,spell_targets				none	
+Brazen Borrower	SPG	30	{1}{U}{U}	3	1		Flying,Flash	flash,bounce_to_hand,cast_from_other_zone,spell_targets,blocks_only_flyers				none	
 Brazen Scourge	FDN	191	{1}{R}{R}	3	3		Haste					none	
 Breeches, Brazen Plunderer	SPG	6	{3}{R}	3	3		Menace					none	
 Bridge from Below	SPG	3	{B}{B}{B}					token_maker,exile,dies_trigger				none	
@@ -399,7 +399,7 @@ Ordeal of Nylea	FDN	641	{1}{G}					counters,p1p1_counters,aura,search_library,sp
 Orzhov Guildgate	FDN	692						mana_ability_nonland,etb_tapped		WB		none	
 Overrun	FDN	230	{2}{G}{G}{G}				Trample	pump_until_eot				none	
 Ovika, Enigma Goliath	FDN	663	{5}{U}{R}	6	6		Flying,Haste,Ward	token_maker				none	
-Pacifism	FDN	501	{1}{W}					aura,spell_targets			aura:hostile:creature	none	
+Pacifism	FDN	501	{1}{W}					aura,spell_targets,host_cant_attack_block			aura:hostile:creature	none	
 Painful Quandary	FDN	179	{3}{B}{B}									none	
 Paradise Druid	SPG	80	{1}{G}	2	1			mana_ability_nonland				none	
 Paradox Haze	SPG	123	{2}{U}					aura,spell_targets			aura:friendly:player	none	
@@ -590,10 +590,10 @@ Untamed Hunger	FDN	529	{2}{B}				Menace	aura,spell_targets			aura:friendly:creat
 Valkyrie's Call	FDN	27	{3}{W}{W}				Flying	counters,p1p1_counters,dies_trigger				none	
 Valorous Stance	FDN	583	{1}{W}				Indestructible	modal,spell_targets				none	
 Vampire Gourmand	FDN	74	{1}{B}	2	2			draw,sacrifice				none	
-Vampire Interloper	FDN	530	{1}{B}	2	1		Flying					none	
+Vampire Interloper	FDN	530	{1}{B}	2	1		Flying	cant_block				none	
 Vampire Neonate	FDN	531	{B}	0	3			lifegain,noncombat_damage				none	
 Vampire Nighthawk	FDN	186	{1}{B}{B}	2	3		Flying,Deathtouch,Lifelink	lifegain				none	
-Vampire Soulcaller	FDN	75	{4}{B}	3	2		Flying	gy_to_hand,etb_trigger				none	
+Vampire Soulcaller	FDN	75	{4}{B}	3	2		Flying	gy_to_hand,etb_trigger,cant_block				none	
 Vampire Spawn	FDN	532	{2}{B}	2	3			etb_trigger,lifegain,noncombat_damage				none	
 Vampiric Rites	FDN	615	{B}					draw,sacrifice,lifegain				none	
 Vanguard Seraph	FDN	28	{3}{W}	3	3		Flying	scry_surveil				none	

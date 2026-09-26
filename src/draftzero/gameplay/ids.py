@@ -235,7 +235,7 @@ class AbilityRef:
     counter_other: bool = False    # puts counters on something other than its source
     loyalty: int | None = None     # planeswalker loyalty cost (+1, -2, ...)
     note: str = ""
-    text_flags: frozenset = frozenset()   # from the 17lands text: "counter_on", "mill_surveil"
+    text_flags: frozenset = frozenset()   # from the 17lands text: "counter_on", "mill_surveil", "attack_trigger"
     self_double: bool = False      # doubles the +1/+1 counters on its source (Mossborn Hydra's landfall)
 
     @property
@@ -471,6 +471,8 @@ def _text_flags(text: str | None) -> list[str]:
         out.append("counter_on")
     if "surveil" in t or "mill" in t:
         out.append("mill_surveil")
+    if re.search(r"\bwhen(ever)?\b[^.]*\battacks\b", t):
+        out.append("attack_trigger")          # fires as attackers are declared (a block spec skips it)
     return out
 
 
@@ -616,6 +618,12 @@ FEATURE_PATTERNS = {
     'turn_start_trigger': r'BeginningOfUpkeepTriggeredAbility|BeginningOfDrawTriggeredAbility',
     'upkeep_draw': r'BeginningOfUpkeepTriggeredAbility\(\s*new DrawCard',
     'opp_draw_trigger': r'DrawCardOpponentTriggeredAbility',
+    # who can block, for the block labels (the engine asks only these): Vampire Soulcaller can't
+    # block, Brazen Borrower blocks only flyers, a Pacifism host can neither attack nor block
+    # (Witness Protection and Eaten by Piranhas hosts can: they are plain 1/1s)
+    'cant_block': r'new CantBlockAbility\(',
+    'blocks_only_flyers': r'CanBlockOnlyFlyingAbility',
+    'host_cant_attack_block': r'CantAttackBlockAttachedEffect',
 }
 COMBAT_KW = ['Flying', 'Reach', 'Deathtouch', 'FirstStrike', 'DoubleStrike', 'Trample', 'Vigilance',
              'Lifelink', 'Menace', 'Indestructible', 'Defender', 'Haste', 'Flash', 'Ward']

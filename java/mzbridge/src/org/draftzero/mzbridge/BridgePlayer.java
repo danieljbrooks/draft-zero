@@ -1,10 +1,13 @@
 package org.draftzero.mzbridge;
 
 import mage.MageObject;
+import mage.ObjectColor;
 import mage.abilities.Ability;
 import mage.abilities.ActivatedAbility;
+import mage.cards.Card;
 import mage.cards.Cards;
 import mage.choices.Choice;
+import mage.choices.ChoiceColor;
 import mage.constants.Outcome;
 import mage.constants.PhaseStep;
 import mage.constants.RangeOfInfluence;
@@ -64,6 +67,13 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
      * cost its controller 2 life during injection (39 of 105 Arena specs).
      */
     public boolean setup = true;
+    /**
+     * Set by StateInjector while it injects (after init()): every named choice and target an
+     * entering permanent asks for, with the answer given. The spec has no field for them (Heraldic
+     * Banner's color, Adaptive Automaton's creature type), so each becomes a build warning instead
+     * of a silent guess. Null otherwise (init() and the game itself are not reported).
+     */
+    public transient List<String> setupNotes;
     public transient Decision decision;
     public transient Listener listener;
     public transient RuntimeException failure;
@@ -171,7 +181,10 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
     @Override
     public boolean chooseUse(Outcome outcome, String message, String secondMessage, String trueText, String falseText,
                              Ability source, Game game) {
-        if (setup) return false; // opening-hand actions during init(): see the field
+        // opening-hand actions during init(), "as this enters" questions during the injection. Not
+        // reported: the spec's own state wins (a shock land's tapped flag), and a "no" that leaves a
+        // doomed permanent (Phantasmal Image not copying: a 0/0) is caught by StateInjector.doomed
+        if (setup) return false;
         if (stopped(game)) return false;
         if (!deciding(game)) {
             // puppets never attack; other "may" questions get XMage's default answer
@@ -216,7 +229,12 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
                 getPlayerHistory().targetSequence.add(STOP_CHOOSING); // puppets never block
                 return false;
             }
-            return heuristicTarget(outcome, target, source, game, fromCards, controller, possible, canStop);
+            boolean out = heuristicTarget(outcome, target, source, game, fromCards, controller, possible, canStop);
+            if (setup && possible.size() + (canStop ? 1 : 0) > 1) {
+                noteSetup(game, source, target.getMessage(game), target.getTargets().stream()
+                        .map(id -> targetLabel(game, id)).collect(Collectors.joining(", ", "[", "]")));
+            }
+            return out;
         }
         int n = possible.size() + (canStop ? 1 : 0);
         if (n == 1) {
@@ -277,6 +295,52 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
 
     @Override
     public boolean choose(Outcome outcome, Choice choice, Game game) {
+        if (!setup) return chooseInGame(outcome, choice, game);
+        // an "as this enters" choice of an injected permanent. A color is the chooser's main
+        // color for a benefit (Heraldic Banner), its opponent's for a drawback, rather than the
+        // alphabetical first; either way it is a guess, reported as a build warning
+        boolean out;
+        if (choice instanceof ChoiceColor && choice.getChoices().size() > 1) {
+            choice.setChoice(mainColor(game, outcome.isGood() ? playerId : game.getOpponent(playerId).getId(), choice.getChoices()));
+            out = true;
+        } else {
+            out = chooseInGame(outcome, choice, game);
+        }
+        if (Math.max(choice.getChoices().size(), choice.getKeyChoices().size()) > 1) {
+            noteSetup(game, null, choice.getMessage(), choice.isKeyChoice() ? choice.getChoiceKey() : choice.getChoice());
+        }
+        return out;
+    }
+
+    /** The color with the most cards of that color the player owns (its decklist), ties in WUBRG order. */
+    static String mainColor(Game game, UUID owner, Set<String> options) {
+        Map<String, Integer> n = new LinkedHashMap<>();
+        for (String c : List.of("White", "Blue", "Black", "Red", "Green")) if (options.contains(c)) n.put(c, 0);
+        for (Card c : game.getCards()) {
+            if (!c.isOwnedBy(owner)) continue;
+            ObjectColor col = c.getColor(game);
+            if (col.isWhite()) n.computeIfPresent("White", (k, v) -> v + 1);
+            if (col.isBlue()) n.computeIfPresent("Blue", (k, v) -> v + 1);
+            if (col.isBlack()) n.computeIfPresent("Black", (k, v) -> v + 1);
+            if (col.isRed()) n.computeIfPresent("Red", (k, v) -> v + 1);
+            if (col.isGreen()) n.computeIfPresent("Green", (k, v) -> v + 1);
+        }
+        String best = null;
+        for (Map.Entry<String, Integer> e : n.entrySet()) if (best == null || e.getValue() > n.get(best)) best = e.getKey();
+        return best != null ? best : new TreeSet<>(options).first();
+    }
+
+    /** Record a question answered during the injection (see setupNotes). */
+    private void noteSetup(Game game, Ability source, String question, String answer) {
+        if (setupNotes == null) return;
+        MageObject o = source == null || source.getSourceId() == null ? null : game.getObject(source.getSourceId());
+        String who = o != null ? o.getName() : game.getPermanentsEntering().values().stream()
+                .map(MageObject::getName).collect(Collectors.joining("/"));
+        setupNotes.add(seat + ": " + (who.isEmpty() ? "a permanent" : who) + " asked \"" + question
+                + "\" as it was injected; answered " + answer + " (the spec cannot say what was chosen)");
+    }
+
+    private boolean chooseInGame(Outcome outcome, Choice choice, Game game) {
         if (stopped(game)) return chooseFallback(outcome, choice, game);
         // MCTSPlayer.choose answers these without consuming a scripted choice, so record nothing
         if (choice.getChoices().size() == 1) return chooseHelper(outcome, choice, game);

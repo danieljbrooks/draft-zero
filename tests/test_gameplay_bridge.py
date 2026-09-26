@@ -1,11 +1,15 @@
 """Tests for the Java XMage bridge (java/mzbridge) and its Python client.
 
 The worker tests need java and the XMage build (xmage/lib, xmage/db) and skip cleanly without
-them. They start two workers once (BridgePool(2): the machine rule is at most two JVMs) and
-keep every search small, so the file runs in well under a minute.
+them. They run one worker (BridgePool(1): the shared machine allows one bridge JVM per engineer)
+and keep every search small, so the file runs in well under a minute. Determinism across JVMs is
+checked by restarting that worker: a fresh JVM with no history against one that served every
+earlier test.
 """
 import copy
 import json
+import threading
+import time
 
 import pytest
 
@@ -36,9 +40,15 @@ def perm(dump: dict, seat: str, name: str) -> dict:
 def pool(tmp_path_factory):
     # a private runtime root: two test sessions on this shared machine must not collide on the
     # worker names (run.sh refuses a name that is already running)
-    p = bridge.BridgePool(2, prefix="pytest", heap="2g", runtime_root=tmp_path_factory.mktemp("mzbridge"))
+    p = bridge.BridgePool(1, prefix="pytest", heap="2g", runtime_root=tmp_path_factory.mktemp("mzbridge"))
     yield p
     p.close()
+
+
+def restart(w: bridge.Bridge) -> None:
+    """The same worker on a fresh JVM (empty history, first-use class loading), one JVM at a time."""
+    w.close()
+    w.start()
 
 
 @pytest.fixture(scope="module")
@@ -48,7 +58,7 @@ def worker(pool):
 
 @pytest.fixture(scope="module")
 def builds(pool):
-    """Every golden spec built once (seed 1), in parallel over the pool, with the decision state."""
+    """Every golden spec built once (seed 1) through the pool, with the decision state."""
     names = list(golden_specs())
     results = pool.map("build", [spec(n) for n in names], seed=1, dumpDecisionState=True,
                        options_for=lambda s: {"decisionPlayer": decider(s)})
@@ -260,11 +270,13 @@ def test_coach_is_deterministic_offline(worker):
 
 
 @needs_worker
-def test_coach_is_identical_across_workers(pool):
+def test_coach_is_identical_across_workers(worker):
     """Same spec and seed on two JVMs with different histories: the same question and statistics."""
     s = spec("attack")
     opts = dict(seed=5, decisionPlayer="B", determinizations=2, budget=60, humanAction="attack")
-    a, b = (w.request("coach", s, **opts) for w in pool.workers)
+    a = worker.request("coach", s, **opts)                     # a JVM that served the tests above
+    restart(worker)
+    b = worker.request("coach", s, **opts)                     # a fresh one
     assert a["decision"]["text"] == b["decision"]["text"] and a["consistent"]
     assert [d["children"] for d in a["determinizations"]] == [d["children"] for d in b["determinizations"]]
     assert a["human"]["found"] and a["human"]["label"] == "yes"   # yes/no aliases of a CHOOSE_USE answer
@@ -382,11 +394,32 @@ def test_decision_player_default_and_turn_start_options(worker):
 
 
 @needs_worker
+def test_restart_ignores_the_old_workers_late_end_of_output(worker, monkeypatch):
+    """The stdout pump looked its queue up when the output ENDED. A worker restarted before its old
+    pump saw EOF (a loaded machine) got the old worker's end-of-output sentinel in its new queue:
+    start() read it as 'the worker exited' and blocked for ever in proc.wait() on the live new JVM
+    (a full test run hung 10 minutes in test_coach_is_identical_across_workers). Each pump now
+    writes to the queue it was started with; here the old pump's EOF comes 1.5 s late on purpose."""
+    def late_eof(proc, lines):
+        for line in proc.stdout:
+            lines.put(line)
+        time.sleep(1.5)                                        # past the restart below
+        lines.put(None)
+    monkeypatch.setattr(bridge.Bridge, "_pump_stdout", staticmethod(late_eof))
+    restart(worker)                                            # this worker's pump is a late one...
+    done = {}
+    t = threading.Thread(target=lambda: done.update(r=(restart(worker), worker.ping())[1]), daemon=True)
+    t.start()                                                  # ...and it ends while the next one starts
+    t.join(60)
+    assert done.get("r", {}).get("ok"), "restart hung or failed"
+
+
+@needs_worker
 def test_pool_restarts_a_dead_worker(pool):
-    w = pool.workers[1]
+    w = pool.workers[0]
     w.proc.kill()
     w.proc.wait()
-    rs = [pool.request("ping") for _ in range(3)]              # one of these lands on the dead worker
+    rs = [pool.request("ping") for _ in range(3)]              # the first lands on the dead worker
     assert all(r["ok"] for r in rs) and w.proc.poll() is None
 
 
@@ -624,6 +657,7 @@ def test_substitute_missing_cards(worker):
     assert r["substitutions"] == {missing: "Plains", "Moonshadow": "Plains"}
     w = "\n".join(r["warnings"])
     assert f"'{missing}' -> 'Plains' (not in the XMage card database)" in w and "dropped B's" in w
+    assert "dropped the counters {P1P1=1} of A:moon" in w                 # none of it silent
     assert r["dump"]["stack"] == [] and r["dump"]["players"]["A"]["hand"].count("Plains") == 2
     assert {o["label"] for o in r["decision"]["legal"]} == {"Cast Fleeting Flight", "Pass"}
     # an explicit map (applied even to known cards), and tokens XMage cannot resolve
@@ -692,17 +726,19 @@ def test_card_ids_do_not_depend_on_the_rest_of_the_decklist(worker):
 
 
 @needs_worker
-def test_pregame_spec_is_deterministic(pool):
+def test_pregame_spec_is_deterministic(worker):
     """The Arena ChooseStartingPlayerReq spec (turn 1 upkeep, empty hands) has no decision for A
     before the safety stop: A skips its first draw, B's turn 2 gives A nothing to do. Its one-off
     PRIORITY decision in the arena review came from a jar before the turn-1 draw fix (A drew an
-    8th card: here, the first card). Same answer on both workers and on repeats."""
+    8th card: here, the first card). Same answer on repeats, in a used JVM and in a fresh one."""
     s = spec("main_phase")
     s.update(turn=1, phase="BEGINNING", step="UPKEEP", enterMode="BEGIN_STEP", startingPlayer="A")
     for seat in "AB":
         s["players"][seat].update(hand=[], graveyard=[], exile=[], battlefield=[], libraryTop=[], handUnknown=0,
                                   life=20)
-    out = [w.request("build", s, seed=1, decisionPlayer="A") for w in pool.workers for _ in range(2)]
+    out = [worker.request("build", s, seed=1, decisionPlayer="A") for _ in range(2)]
+    restart(worker)
+    out += [worker.request("build", s, seed=1, decisionPlayer="A") for _ in range(2)]
     assert all(o["decision"] is None for o in out)
     assert len({o["noDecision"] for o in out}) == 1 and "end of turn 2" in out[0]["noDecision"]
 
@@ -724,3 +760,77 @@ def test_injection_answers_no_to_enter_questions(worker):
     assert r["decision"]["where"]["stack"] == 0
     assert {x: r["decisionState"]["players"][x]["life"] for x in "AB"} == {"A": 13, "B": 9}
     assert perm(r["dump"], "B", "Stomping Ground")["tapped"] is False           # the spec's state wins
+
+
+# ------------------------------------------------------------------------------ review fixes (phase 2)
+
+@needs_worker
+def test_control_changed_static_abilities_follow_the_controller(worker):
+    """A card's static abilities are registered with its OWNER as controller when the deck is
+    loaded; XMage re-points them when a permanent enters (ZonesHandler), the injector did not. A
+    Crusader of Odric (P/T = creatures you control) stolen by A counted B's creatures: 4/4
+    instead of 3/3 with A controlling Felidar Savior, Vanguard Seraph and the Crusader."""
+    s = with_cards(spec("main_phase"), "B", ["Crusader of Odric"], ["Forest"])
+    s["players"]["A"]["battlefield"].append({"name": "Crusader of Odric", "owner": "B", "id": "cru"})
+    r = worker.request("build", s, seed=1, decisionPlayer="A", dumpDecisionState=True)
+    assert diff_dump(s, r["dump"]) == [] and r["warnings"] == []
+    for state in (r["dump"], r["decisionState"]):
+        crusader = perm(state, "A", "Crusader of Odric")
+        assert crusader["owner"] == "B" and (crusader["x"]["power"], crusader["x"]["toughness"]) == (3, 3)
+    mine = with_cards(spec("main_phase"), "A", ["Crusader of Odric"], ["Plains"])  # the same card, A's own
+    mine["players"]["A"]["battlefield"].append({"name": "Crusader of Odric"})
+    crusader = perm(worker.request("build", mine, seed=1, advance=False)["dump"], "A", "Crusader of Odric")
+    assert (crusader["x"]["power"], crusader["x"]["toughness"]) == (3, 3)
+
+
+@needs_worker
+def test_many_tokens_in_one_entry_get_distinct_ids(worker):
+    """Token ids came from streams salted 1000*seat + 31*entry + copy, so the 32nd token of an
+    entry shared the next entry's first token's stream: one UUID for two permanents, and the
+    build failed ('42 permanents on the battlefield, spec has 43')."""
+    s = spec("main_phase")
+    bf = s["players"]["B"]["battlefield"]
+    bf[-1] = {"tokenClass": "GoblinToken", "count": 33}
+    bf.append({"tokenClass": "BeastToken", "id": "beast"})
+    r = worker.request("build", s, seed=1, advance=False)
+    uuids = [p["x"]["uuid"] for p in r["dump"]["players"]["B"]["battlefield"]]
+    assert len(uuids) == len(set(uuids)) == 43 and diff_dump(s, r["dump"]) == []
+    assert worker.request("build", s, seed=1, advance=False)["dump"] == r["dump"]      # still reproducible
+
+
+@needs_worker
+def test_injection_choices_are_reported(worker):
+    """'As this enters, choose ...' has no field in the spec. The injector used to answer with the
+    alphabetical first option, silently: every Heraldic Banner named Black (26 of 990 real 17lands
+    states have a Banner). A color is now the chooser's main color (B's deck is mostly green), and
+    every such choice is a build warning."""
+    s = with_cards(spec("main_phase"), "B", ["Heraldic Banner"], ["Mountain"])
+    s["players"]["B"]["battlefield"].append({"name": "Heraldic Banner"})
+    r = worker.request("build", s, seed=1, decisionPlayer="A", dumpDecisionState=True)
+    assert diff_dump(s, r["dump"]) == []
+    assert r["warnings"] == ['B: Heraldic Banner asked "Choose color" as it was injected; answered Green '
+                             '(the spec cannot say what was chosen)']
+    prowler = perm(r["dump"], "B", "Cackling Prowler")                  # green: 4/3 + counter + Banner
+    assert (prowler["x"]["power"], prowler["x"]["toughness"]) == (6, 4)
+    assert perm(r["dump"], "B", "Courageous Goblin")["x"]["power"] == 2    # red: no bonus
+
+
+@needs_worker
+def test_doomed_permanents_are_reported(worker):
+    """A spec can list permanents the state-based actions remove as soon as the game resumes (an
+    Aura with no host, lethal damage, a 0/0, a second legend of one name): they read back exactly,
+    but the decision is taken without them. Each is a build warning."""
+    s = with_cards(spec("main_phase"), "B", ["Wildwood Scourge", "Kellan, Planar Trailblazer"], ["Forest", "Forest"])
+    s["players"]["B"]["battlefield"] += [{"name": "Wildwood Scourge"}, {"name": "Kellan, Planar Trailblazer"},
+                                         {"name": "Kellan, Planar Trailblazer"}]
+    next(p for p in s["players"]["B"]["battlefield"] if p.get("id") == "goblin")["damage"] = 2
+    next(p for p in s["players"]["A"]["battlefield"] if p.get("name") == "Pacifism").pop("attachTo")
+    r = worker.request("build", s, seed=1, decisionPlayer="A", dumpDecisionState=True)
+    assert diff_dump(s, r["dump"]) == []
+    doomed = sorted(w.split(":")[1].strip() for w in r["warnings"] if "state-based actions" in w)
+    assert doomed == sorted(["Pacifism is an Aura attached to nothing", "Courageous Goblin has lethal damage (2 on toughness 2)",
+                             "Wildwood Scourge has toughness 0",
+                             "Kellan, Planar Trailblazer is a second legendary permanent of that name (legend rule)"])
+    ds = r["decisionState"]["players"]
+    assert "Pacifism" in ds["A"]["graveyard"] and {"Courageous Goblin", "Wildwood Scourge"} <= set(ds["B"]["graveyard"])
+    assert worker.request("build", spec("main_phase"), seed=1, advance=False)["warnings"] == []

@@ -5,8 +5,8 @@
     dz dashboard runs/<id>        render the format-knowledge page
     dz workers rank               in-stock RunPod GPUs ranked by vCPU per dollar
     dz provenance                 what code is in play here
-    dz gameplay <tool> ...        human gameplay data (docs/008): 17lands, arena, bridge, pairs,
-                                  belief, fingerprints, ids, replay, reconstruct, labels
+    dz gameplay <tool> ...        human gameplay data (docs/008): 17lands, arena, bridge, coach,
+                                  turnreplay, pairs, belief, fingerprints, ids, replay, reconstruct, labels
 """
 import argparse
 import json
@@ -18,7 +18,7 @@ from pathlib import Path
 GAMEPLAY_TOOLS = {
     "17lands": "seventeenlands", "arena": "arena", "bridge": "bridge", "pairs": "pairs",
     "belief": "belief", "fingerprints": "fingerprints", "ids": "ids", "replay": "replay",
-    "reconstruct": "reconstruct", "labels": "labels",
+    "reconstruct": "reconstruct", "labels": "labels", "coach": "coach", "turnreplay": "turnreplay",
 }
 
 

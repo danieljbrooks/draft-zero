@@ -11,10 +11,13 @@ order, phase, targets or mana payment, so every list here has set semantics (sor
   activations[]        activated non-mana abilities only (the MCTS priority actions under autoTap):
                        {"id", "key", "idx", "source", "source_unique", "vocab_exact"}
   attacks              {"A:<alias>": bool} over the attack-eligible creatures at the start of the
-                       turn ("new:<name>" for a creature that entered this turn and attacked)
+                       turn ("new:<name>" for a creature that entered this turn and attacked); not
+                       eligible: Defender, a Pacifism or Starlight Snare host
   blocks               [[blocker, attacker or None, exact]] for every potential blocker in the next
                        opponent turn; `block_pairing` is unique | ambiguous | inconsistent |
-                       too_many | no_attack | none (research pairing by printed P/T and deaths)
+                       too_many | no_attack | none (research pairing by printed P/T and deaths).
+                       exact is False for a guessed pairing, and for "did not block" when the
+                       creature left the battlefield outside combat that turn (maybe before blocks)
   offturn_instants[]   instants cast on the following opponent turn (auxiliary target)
   offturn_flash[]      flash permanents inferred on that turn (hand -> battlefield, no cast record)
   mulligan, bottomed   user turn 1 only: {"kept_after": k, "hands": [[names], ...]}, bottomed names
@@ -22,10 +25,12 @@ order, phase, targets or mana payment, so every list here has set semantics (sor
 `after_turn_label(game, n)` is the opponent-turn part alone (blocks, block_pairing, offturn_*),
 plus `attacked` (the opponent's attackers by name): the labels of
 `reconstruct.state_after_user_turn(game, n)`, whose declare_attackers entry is where the blocks are
-decided. A potential blocker is a creature of the user's at the end of its turn that did not tap
-there (attacking without vigilance, a {T} cost, a Starlight Snare), is not a land it animated, and
-was not taken by the opponent for its turn; flash blockers that entered during the opponent's turn
-are keyed from the later state.
+decided. A potential blocker is a creature of the user's at the end of its turn that is still
+untapped in that spec (it did not attack without vigilance or pay a {T} cost there, no Starlight
+Snare, a Slumbering Cerberus that untapped), is not a land it animated, can block (not Vampire
+Soulcaller or a Pacifism host; Brazen Borrower only against flyers) and was not taken by the
+opponent for its turn; flash blockers that entered during the opponent's turn are keyed from the
+later state (they are not in the declare_attackers spec, which is flagged offturn_timing_unknown).
 
 Aliases ("A:GleamingBarrier_4") are the permanent ids of the StateSpec that
 `reconstruct.state_at_user_turn(game, n)` (or `state_after_user_turn`) builds, so a bridge can
@@ -43,7 +48,7 @@ import sys
 from collections import Counter
 
 from draftzero.gameplay.ids import Ids
-from draftzero.gameplay.reconstruct import Inst, _tapped_by_abilities, alias, analyze
+from draftzero.gameplay.reconstruct import Inst, _user_tapped_after, alias, analyze
 from draftzero.gameplay.replay import Game, TurnRecord
 
 
@@ -217,8 +222,7 @@ def turn_label(g: Game, n: int, ids: Ids | None = None) -> dict:
     lab["activations"] = _activations(u, "user", board, ids)
     # --- attacks -----------------------------------------------------------------------------------
     b_start = start.bf["oppo"] if start else []
-    pacified = {i.host for i in b_start if i.host is not None
-                and ids.info(i.name).attach.startswith(("aura:hostile", "aura:freeze"))}
+    pacified = _pacified(b_start, ids)
     eligible, notes = [], []
     left_early = Counter(u.L("user_creatures_killed_non_combat"))
     attacked_grps = Counter(u.L("creatures_attacked"))
@@ -269,23 +273,31 @@ def _offturn(g: Game, u: TurnRecord, q: TurnRecord | None, ana, ids: Ids) -> dic
     lab["offturn_instants"], lab["offturn_flash"], lab["offturn_activations"] = [], [], []
     if q is not None and q.side == "oppo":
         end_u = ana.states[u.seq]
-        tapped = _tapped_after(u, end_u.bf["user"], ids)
-        tapped |= _tapped_by_abilities(u, "user", end_u.bf["user"], ids, tapped)[0]   # paid {T}: can't block
-        tapped |= {i.host for i in end_u.bf["oppo"] if i.host is not None
-                   and ids.info(i.name).attach.startswith("aura:freeze")}       # stays tapped: can't block
+        # still tapped from the user's turn (attacked, paid {T}, a freezing Aura): can't block; the
+        # same set `state_after_user_turn` taps, so the potential blockers are its untapped creatures
+        tapped = _user_tapped_after(g, u, end_u.bf["user"], end_u.bf["oppo"], ids)
+        att = q.L("creatures_attacked")
+        # Brazen Borrower blocks only flyers (a token attacker may fly: keep it then)
+        flyers = any(ids.is_token(c) or "Flying" in ids.info_id(c).keywords for c in att)
+        cant = _pacified(end_u.bf["oppo"], ids)
         # a land the user animated on its turn (Soulstone Sanctuary) is a land again: it blocks only if
         # animated again, an off-turn activation
-        pot = [i for i in end_u.bf["user"] if i.kind == "crea" and i.iid not in tapped and not ids.is_land(i.grp)]
+        pot = [i for i in end_u.bf["user"] if i.kind == "crea" and i.iid not in tapped and not ids.is_land(i.grp)
+               and i.iid not in cant and not _cant_block(i, flyers, ids)]
         # a creature the opponent took for its turn (a Threaten effect) does not block for the user
         for c in [c for z, sign, cat, c in ana.checks[q.seq].cats if z == "user_crea" and sign == "-"
                   and cat == "control_change"]:
             gone = next((i for i in pot if i.grp == c), None)
             if gone is not None:
                 pot.remove(gone)
-        att = q.L("creatures_attacked")
+        # creatures that left the battlefield during that turn outside combat (removal, bounce, a
+        # Moon): gone before or after blocks is not recorded, so "did not block" is not certain
+        left = Counter(q.L("user_creatures_killed_non_combat"))
+        left.update(c for z, sign, cat, c in ana.checks[q.seq].cats if z == "user_crea" and sign == "-"
+                    and cat not in ("timing_shift", "control_change"))
         if att:
             lab["block_pairing"], lab["blocks"] = _blocks(q, pot, end_u.bf["oppo"] + ana.states[q.seq].bf["oppo"],
-                                                          ana.states[q.seq].bf["user"], ids)
+                                                          ana.states[q.seq].bf["user"], ids, left)
         else:
             lab["block_pairing"] = "no_attack"
         hand_q = Counter({ids.name(c): k for c, k in Counter(u.L("eot_user_cards_in_hand")).items()})
@@ -318,17 +330,25 @@ def _eot_bf(t: TurnRecord, w: str) -> list[int]:
     return t.L(f"eot_{w}_lands_in_play") + t.L(f"eot_{w}_creatures_in_play") + t.L(f"eot_{w}_non_creatures_in_play")
 
 
-def _tapped_after(u: TurnRecord, insts: list[Inst], ids: Ids) -> set[int]:
-    """The user's attackers (no vigilance) stay tapped through the opponent's next turn."""
-    out = set()
-    for grp, k in Counter(u.L("creatures_attacked")).items():
-        cand = sorted([i for i in insts if i.grp == grp], key=lambda i: (i.entered, i.iid))
-        if cand and "Vigilance" not in ids.info(cand[0].name).keywords:
-            out.update(i.iid for i in cand[:k])
-    return out
+def _pacified(auras: list[Inst], ids: Ids) -> set[int]:
+    """Hosts of the Auras among `auras` whose creature can neither attack nor block (Pacifism) or
+    stays tapped (Starlight Snare). Witness Protection and Eaten by Piranhas leave a plain 1/1 that
+    can do both, and Imprisoned in the Moon makes a land (no longer in the creature list)."""
+    return {i.host for i in auras if i.host is not None
+            and ("host_cant_attack_block" in ids.info(i.name).features or ids.info(i.name).attach.startswith("aura:freeze"))}
 
 
-def _blocks(q: TurnRecord, potential: list[Inst], b_insts: list[Inst], a_after: list[Inst], ids: Ids):
+def _cant_block(i: Inst, flyers: bool, ids: Ids) -> bool:
+    """A creature that can't block (Vampire Soulcaller, the Rat token that can't block), or blocks
+    only flyers (Brazen Borrower) when no attacker flies: the engine does not ask about it."""
+    if i.token:
+        return "CantBlock" in (i.token_class or "")
+    f = ids.info(i.name).features
+    return "cant_block" in f or ("blocks_only_flyers" in f and not flyers)
+
+
+def _blocks(q: TurnRecord, potential: list[Inst], b_insts: list[Inst], a_after: list[Inst], ids: Ids,
+            left: Counter | None = None):
     blocked = q.L("creatures_blocked")
     blockers = q.L("creatures_blocking")
     status, good = block_assignments(ids, blocked, blockers, q.L("oppo_creatures_killed_combat"),
@@ -365,7 +385,8 @@ def _blocks(q: TurnRecord, potential: list[Inst], b_insts: list[Inst], a_after: 
             rows.append([key, att_key[0] if att_key else None, False])
     for i in potential:
         if i.iid not in seen_b:
-            rows.append([f"A:{alias(i)}", None, True])
+            # "did not block" is certain unless it left the battlefield outside combat that turn
+            rows.append([f"A:{alias(i)}", None, not (left or {}).get(i.grp)])
     return status, sorted(rows, key=lambda r: r[0])
 
 

@@ -112,6 +112,7 @@ final class Substitutions {
                 String s = sub.apply(perm.name);
                 if (s.equals(perm.name)) continue;
                 where.computeIfAbsent(perm.name, k -> new TreeMap<>()).merge("battlefield", perm.count, Integer::sum);
+                String what = seat + ":" + (perm.id == null ? perm.name : perm.id);
                 perm.name = s;
                 perm.set = null;
                 perm.number = null;
@@ -120,10 +121,14 @@ final class Substitutions {
                     for (int k = 1; perm.count > 1 && k <= perm.count; k++) gone.add(seat + ":" + perm.id + "#" + k);
                 }
                 if (perm.attachTo != null) {
-                    r.warnings.add("substitute: dropped the attachment of " + seat + ":" + (perm.id == null ? s : perm.id) + " -> " + perm.attachTo);
+                    r.warnings.add("substitute: dropped the attachment of " + what + " -> " + perm.attachTo);
                     perm.attachTo = null;
                 }
-                perm.counters = new LinkedHashMap<>(); // counters of the original card mean nothing on the substitute
+                if (perm.counters.values().stream().anyMatch(v -> v != null && v > 0)) {
+                    // counters of the original card mean nothing on the substitute
+                    r.warnings.add("substitute: dropped the counters " + perm.counters + " of " + what);
+                }
+                perm.counters = new LinkedHashMap<>();
             }
         }
         for (String seat : Spec.SEATS) {

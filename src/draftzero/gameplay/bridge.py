@@ -212,8 +212,11 @@ class Bridge:
         if self.log_file:
             (self.runtime_root / self.name).mkdir(parents=True, exist_ok=True)
             log = open(self.runtime_root / self.name / "worker.log", "a")
-        threading.Thread(target=self._pump_stdout, daemon=True).start()
-        threading.Thread(target=self._pump_stderr, args=(log,), daemon=True).start()
+        # each pump is bound to ITS process and queue: an old worker's pump that sees EOF after a
+        # restart must not drop its end-of-output sentinel into the new worker's queue (start()
+        # then read it as "the worker exited" and blocked for ever in proc.wait())
+        threading.Thread(target=self._pump_stdout, args=(self.proc, self._lines), daemon=True).start()
+        threading.Thread(target=self._pump_stderr, args=(self.proc, log), daemon=True).start()
         self._finalizer = weakref.finalize(self, _kill, self.proc)
         first = self._next_line(timeout=120.0, what="the worker's ready line")
         if not first.get("ok"):
@@ -322,13 +325,14 @@ class Bridge:
 
     # -- plumbing ----------------------------------------------------------------------------------
 
-    def _pump_stdout(self) -> None:
-        for line in self.proc.stdout:
-            self._lines.put(line)
-        self._lines.put(None)
+    @staticmethod
+    def _pump_stdout(proc: subprocess.Popen, lines: queue.Queue) -> None:
+        for line in proc.stdout:
+            lines.put(line)
+        lines.put(None)
 
-    def _pump_stderr(self, log) -> None:
-        for line in self.proc.stderr:
+    def _pump_stderr(self, proc: subprocess.Popen, log) -> None:
+        for line in proc.stderr:
             self._stderr.append(line.rstrip("\n"))
             if log:
                 log.write(line)
@@ -343,7 +347,15 @@ class Bridge:
             raise BridgeError(f"timed out after {timeout:.0f} s waiting for {what} from '{self.name}'\n"
                               f"{self.stderr_tail()}") from None
         if line is None:
-            code = self.proc.wait() if self.proc else None
+            # this worker's output ended: it exited or is exiting. Never wait for ever: a JVM that
+            # closed its stdout but lives on is killed
+            code = None
+            if self.proc is not None:
+                try:
+                    code = self.proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    self.proc.kill()
+                    code = self.proc.wait()
             raise BridgeError(f"mzbridge worker '{self.name}' exited (code {code}) while waiting for {what}\n"
                               f"{self.stderr_tail()}")
         try:

@@ -29,6 +29,12 @@ src/org/draftzero/mzbridge/
   Decision.java         a decision: type, text, legal options, root children
   DeterministicIds.java reproducible UUIDs inside a request
   Reflect.java          the few engine fields without setters
+  TurnReplay.java       replay_turn op: one recorded turn replayed with both seats scripted, compared with its end snapshot
+  TurnScript.java       replay_turn's script (A's lands/spells/abilities/attacks, B's blocks and plays), policies, snapshot
+  ReplayRun.java        one replay attempt: windows, mana reservation, attacks/blocks, modes, recorded decisions
+  ReplayPlayer.java     BridgePlayer that follows a ReplayRun (both seats)
+  TargetResolver.java   targets from the snapshot ("fate": what died, left, was needed), else a heuristic, flagged
+  ReplayWatcher.java    deaths during the replayed turn, the hand as its cleanup began
 build.sh, run.sh, log4j.properties
 specs/*.json            golden scenarios (the 7 research scenarios in StateSpec v1)
 ```
@@ -77,8 +83,9 @@ smaller than `xmage/db` (damaged) or older than it (xmage rebuilt). The Python `
 the jar when any source file is newer than it. A request that outlives the client's timeout
 (default 900 s) kills its worker, since a hung engine would keep a core busy and its late answer
 would queue ahead of the next request; `BridgePool` starts a fresh worker on the next request.
-The tests run their two workers under a pytest temporary directory, so concurrent test sessions
-on a shared machine do not collide on worker names.
+The tests run one worker (the shared machine allows one bridge JVM per engineer) under a pytest
+temporary directory, so concurrent test sessions do not collide on worker names; cross-JVM
+determinism is checked by restarting that worker.
 
 ## Protocol
 
@@ -101,6 +108,21 @@ does not have fails with one error listing all of them, unless `options.substitu
 (below). Built states that do not read back as the spec fail verification: zones, tapped, sick,
 damage, counters, attachments, controller and owner, library top and size, stack, and triggers
 left pending by the injection. With `options.lenient` both become `warnings` instead.
+
+Two kinds of state build and read back exactly, yet are not what the game will play from, and
+come back as `warnings`:
+
+- **Choices made as a permanent entered**, which the spec has no field for: Heraldic Banner's
+  color, Adaptive Automaton's or Secluded Courtyard's creature type, a target chosen on entry.
+  Each is answered as XMage's AI would, except a color, which is the chooser's main color (the
+  color of most cards it owns) for a benefit and its opponent's for a drawback, and reported:
+  `B: Heraldic Banner asked "Choose color" as it was injected; answered Green (the spec cannot say
+  what was chosen)`. Yes/no questions ("pay 2 life?" of a shock land) are answered no and not
+  reported: the spec's own state wins.
+- **Permanents the state-based actions remove on resume**: a creature with toughness 0 or
+  lethal damage, a planeswalker without loyalty, an Aura attached to nothing, a second legend of
+  one name: `A: Pacifism is an Aura attached to nothing: the state-based actions remove it when
+  the game resumes`.
 
 ### The decision
 
@@ -186,9 +208,11 @@ does not have, such as the 2026 cube cards of an Arena log against XMage 1.4.58:
 
 A name is replaced in every zone and in the decklist, so the accounting still holds. What a
 stand-in cannot do is dropped, each with a warning: a substituted spell on the stack when the
-stand-in is a land (that copy stays in the library), the counters of a substituted permanent,
-and attachments, attacks, blocks and stack targets involving a substituted permanent (a stack
-item keeps its targets up to the first lost one, so none slides into the wrong slot).
+stand-in is a land (that copy stays in the library), the counters of a substituted card (a token
+stand-in keeps them), and attachments, attacks, blocks and stack targets involving a substituted
+permanent (a stack item keeps its targets up to the first lost one, so none slides into the
+wrong slot). An Aura left without its host is then put into the graveyard when the game resumes
+(a state-based-action warning says so).
 `warnings` lists every substitution with the zones it touched, e.g. `substitute: 'Sear' ->
 'Plains' (not in the XMage card database): {decklist=1, stack=1}`, and `substitutions` maps
 original to stand-in. The result is an approximation of the logged state, never a silent one.
@@ -416,10 +440,10 @@ gives a PRIORITY decision in turn 1's main phase with the one card A wrongly dre
 | G4 | MCTS anchor is the empty `init()` copy | `pause()` + `setLastPriority` after injection (and after resampling); checked to be at the injected step; re-anchored at MageZero's combat checkpoints on the way to the decision |
 | G5 | paused copies resume via `resumeBeginStep` | BEGIN_STEP entered as the previous step's `POST` (above) |
 | G6 | stop options are not checked inside the resumed phase | the decider pauses the game; `stopOnTurn = turn + 1` is only a safety net |
-| G7 | tokens, ATTACH, casts fire events | event-free variants (tokens too, see below); "as this enters" questions declined; pending triggers cleared (checked) and queued simultaneous events dropped; watchers reset |
+| G7 | tokens, ATTACH, casts fire events | event-free variants (tokens too, see below); "as this enters" yes/no questions declined, named choices reported as warnings; pending triggers cleared (checked) and queued simultaneous events dropped; watchers reset |
 | G8 | RNG | see Determinism |
 | G9 | sickness, damage, passed have no setters | reflection (`Reflect`), read back by `verify()` |
-| G10 | owner = controller | `Perm.owner`: the card comes from the owner's library and enters under the controller (above) |
+| G10 | owner = controller | `Perm.owner`: the card comes from the owner's library and enters under the controller, with its static abilities re-pointed at the controller (above) |
 | G11 | decks >= 40, match wired | validated; `actionEncoder` preset so `printAllActionsFromDeck` is skipped |
 | G12 | JDK 26 final-field warning | flag added by `run.sh` when the JDK knows it |
 | G13 | `GameState` does not serialize | specs are the interchange format; rebuilds take a few ms |
@@ -462,6 +486,15 @@ New gotchas found while building the bridge:
   a token doubler made a spec token "made 2 permanents" (1 of 1,002 real states). Tokens now
   enter like cards (a PermanentToken added directly, no events), and the hygiene step also
   empties the simultaneous-event list.
+- **Static abilities of a control-changed permanent kept its owner as controller.** A card's
+  static abilities are registered with its owner as controller when the deck is loaded; XMage
+  re-points them when a permanent enters (`ZonesHandler`: `ContinuousEffects.setController`).
+  The injector did not, so a Crusader of Odric that A had taken counted B's creatures (4/4
+  instead of 3/3), and a stolen anthem would have pumped its owner's team. Found in the review.
+- **Token ids collided in large token counts.** Token streams were salted
+  `1000*seat + 31*entry + copy`, so the 32nd token of an entry drew the next entry's first
+  token's ids: one UUID, two permanents, a failed build. Each (seat, entry, copy) now has its own
+  mixed stream. Found in the review.
 - **Card ids were one sequential stream over both decklists.** Changing one card of A's
   library (a belief sample) renumbered every B card, and with it the order of attack and block
   questions. Each decklist card now draws its ids from a stream seeded by (idSeed, seat, name,
@@ -560,15 +593,145 @@ B's turn and the bridge moved on. XMage offers no land play to a non-active play
 (`test_no_land_play_in_the_opponents_turn`). The 3 stack NPEs were those substituted Plains on the
 stack; a land on the stack is now a clear SpecException, and `substitute` drops such items.
 
+Found and fixed in the review of this phase (same day; independent sample: every 800th game
+from row 11, one random user turn each, plus row 560303 turn 9: 990 states, 990 `main1` + 990
+`eot_rollover` + 469 `declare_attackers` block specs, each built with its `labels.bridge`):
+
+| | jar before this phase (20c8924) | committed fixes (5e03155) | after the review |
+|---|---|---|---|
+| specs that build | 2,445 / 2,449 (2 token doublers, 2 control changes) | 2,449 / 2,449 | 2,449 / 2,449 |
+| exact round trip | 2,432 / 2,445 | 2,439 / 2,449 (Giada counters) | 2,439 / 2,449 (same) |
+| main1 decisions with injected-token triggers on the stack | 14 / 987 (row 560303: 6) | 0 / 988 | 0 / 988 |
+| END_TURN rollover reaching the main1 spec | 939 / 981 (28 misses unflagged) | 962 / 982 (8 unflagged: Clinquant Skymage, Giada) | 962 / 982 (same) |
+| builds whose queued events were dropped (all TAPPED_BATCH, Authority of the Consuls) | | 16 / 2,449 | 16 / 2,449 |
+| warnings about a choice made on entry (Heraldic Banner 68, Secluded Courtyard 3) | none (silent guesses) | none (silent guesses) | 71 in 2,449 builds |
+| warnings about permanents the state-based actions remove on resume | none | none | 0 in 2,449 builds |
+
+- Control-changed static abilities (above) and the token-id collision (above) are fixed, each
+  with a regression test that fails when the fix is reverted.
+- The Python client could hang for ever on a restart. A worker's stdout pump looked its queue up
+  when the output ended, so a worker restarted (`BridgePool` after a timeout or a crash, or
+  `close()` + `start()`) before its old pump saw EOF got the old end-of-output sentinel: `start()`
+  read "the worker exited" and blocked in `proc.wait()` on the live new JVM. It hung a full test
+  run for 10 minutes on the loaded machine. Each pump now writes to the queue it was started
+  with, and an end of output waits at most 10 s for the process before killing it.
+- `substitute` dropped the counters of a substituted card without a warning; it warns now.
+- Heraldic Banner's color used to be the alphabetical first option (Black) whatever the deck:
+  now the owner's main color, with a warning. 26 of the 990 `main1` states have a Banner.
+- On the Arena log: unchanged 105 / 105 builds with substitution, 0 choice or state-based-action
+  warnings.
+- Checked in the review, no change needed: Java's and Python's `validate()` gave the same verdict
+  on 658 mutated real specs (17 kinds of mutation, `owner` included); builds, decisions,
+  decision-point dumps and offline coach statistics were identical on two fresh JVMs serving 77
+  real requests (30 of them coach) in opposite orders; `coach` over `belief.determinize` samples
+  (options.specs, K=4) asked one question in 20 / 20 priority, 25 / 25 attack and 25 / 25 block
+  decisions; game 2 decisions 6-7 of the Arena log decide in B's turn when Sear is replaced by an
+  instant (Stab) instead of a Plains.
+
+## replay_turn: one recorded turn through the engine
+
+`python -m draftzero.gameplay.turnreplay --row 4 --turn 3` (driver: `src/draftzero/gameplay/turnreplay.py`).
+The request is a turn-start spec (17lands: `eot_rollover` of user turn n with the turn's later draws
+on A's library, `future_draws=True`) plus `options.script` and `options.expected`:
+
+```
+script    {seat: "A", turn: <global turn>, lands[{key, name}], casts[{key, name, family}],
+           activations[{key, name: source}], attacks{"A:<alias>": bool, "new:<name>": true},
+           attackGuess[names], blocks[[[blocker, attacker|null], ...], ...] (alternatives),
+           blockPairing, opp[{kind, key, name, mv?, window?}], unscripted (A's recorded actions
+           the request could not script, e.g. an ability with no XMage key)}
+expected  {life{A, B}, hand{A[names], unknownA}, battlefield{A[names], B[names]} (tokens without
+           " Token"), deaths{A|B: {combat[], noncombat[]}} (reported, not compared)}
+options   seed, idSeed, maxAttempts (12), policies[] (explicit attempts), encode, perfectInfo,
+          lenient, substitute
+```
+
+Both seats are `ReplayPlayer` puppets. A takes each scripted item at the first priority where it
+is due (its window) and legal (XMage's `getPlayable`), so an item not legal yet (the card is still
+to be drawn or bounced back, the mana is missing) carries over; it declares exactly the recorded
+attackers (MageZero's UUID order, one CHOOSE_USE per available creature). B blocks per the chosen
+pairing and casts its plays in a window read off the card: counterspells when the spell the
+snapshot says did not resolve is on the stack, flash blockers after attackers, tricks after
+blockers, removal after attackers, the rest in the end step. Auto-tap is steered: producers of the
+colours later items need, Treasure-style producers and creatures about to attack are hidden from a
+payment while the rest can pay. Targets, modes and colours come from the snapshot where it decides
+them (`TargetResolver`), else a documented heuristic, flagged (`guessed_target`, `guessed_mode`, ...).
+A harmful effect that could hit either seat prefers the other seat's doomed permanent: the
+chooser's own doomed ones rank below every candidate of the other seat (they usually left by the
+other seat's hand or in combat). Where labels could not tell which copy of a card attacked
+(`attackGuess`), the recorded number of copies attacks, the planned one first. A recorded "Cast X"
+with no castable copy is replayed as X's flashback from the graveyard when there is one
+(`cast_as_flashback`: flashback granted by another card, or a copy flashed back after being cast
+from hand the same turn, which 17lands logs as casts).
+
+Attempts differ only in what 17lands does not record: spell order (mana value up / down),
+main 1 vs main 2, A's instants in combat, B's windows, the land drop last, the block pairing,
+and (added after an attempt that guessed them) the mode, "may" answers, target tie order,
+Treasure use and a planeswalker defender. The first attempt that reproduces the turn wins;
+otherwise the closest one is reported. Reproduced means: the end state matches (life, A's hand as
+cleanup began, both battlefields by name per controller) **and** the replay did what was recorded:
+every recorded play of A's happened (no `undone:A`, no `unscripted:A`), every recorded attacker
+that is a spec permanent was declared and no creature recorded as not attacking was
+(`attack:A:unrealised` / `attack:A:extra`, by count for `attackGuess` copies), and every recorded
+block between two spec permanents was declared (`block:B:unrealised`), read from the engine's own
+ATTACKER_DECLARED / BLOCKER_DECLARED events. An end state reached without them is a coincidence
+whose decisions would teach the wrong play (a Stab on the user's own creature that the opponent
+killed, a blocker removed before combat instead of during it). Attackers and blockers that entered
+during the turn (`new:` refs) are only flagged (`attack_new_unrealised`, `block_new_unrealised`):
+17lands lists a turn's attackers twice in about 3% of attacking turns (exactly doubled lists;
+0.4% with 4 or more entries), which labels turns into `new:` attackers nothing can realise. B's
+undone plays (`undone:B`: its hand is hidden) and deaths that differ from the record
+(`deaths:A|B`; attributed to the owner, as 17lands does) are reported, not compared.
+
+Every attempt rebuilds the spec with the same seeds, so the op is deterministic: same decisions,
+features and diff across calls and JVMs (tested; in the review, 150 real turns with 795 encoded
+decisions came back identical from two fresh JVMs serving them in opposite orders).
+
+Response: `reproduced` (the verdict; the envelope's `ok` only says the request ran), `attempt`,
+`attempts`, `policy`, `diff` {life, hand, battlefield, undone, divergence, deathsInfo}, `diffKeys`, `items`
+(done / due / at), `targets`, `flags`, `notes`, `end`, `attemptLog`, `warnings`, `timing_ms`, and
+`decisions`: every decision of A's reached in its main phases, combat and target choices,
+`{type, text, where, legal[{label, idx}], chosen, label_kind, evidence, set?, features?}` with
+label_kind `exact` (recorded: attacks, a Pass once nothing is left to do, a target the snapshot
+settles), `imputed_order` (a recorded play whose moment is the policy's; `set` lists the recorded
+plays legal there; a "no" for a creature labels left out of the attack plan; the attacking copy
+of an `attackGuess` card) or `guessed_target` (targets, modes, "may" answers from the heuristic).
+A target question whose options all carry one label (two copies of a card) is not recorded.
+
+Measured 2026-09-26 after the review (one JVM; 2,400 FDN user turns, 600 per tier, spread over
+the whole file): seed 7 reproduced 84.1% of the stratified sample (T0 98.0%, T1 81.5%, T2 76.5%,
+T3 80.5%), 88.4% at the file's natural tier mix, 91% of the reproduced turns on the first attempt;
+seed 1 (the build's sample) 84.8% (T0 98.2%, T1 84.0%, T2 78.5%, T3 78.7%; natural mix 89.0%).
+Worker time per turn median 14 ms, p90 85-91 ms, max 841 ms (reproduced turns median 13 ms, p90
+27 ms); 25.5 turns/s end to end with one JVM (Python request building included); 4.8 decision
+records per reproduced turn. `python -m draftzero.gameplay.turnreplay measure --turns 2400
+--seed 7 --workers 1`. The stricter verdict turned 17 of the 4,029 turns the build had reproduced
+on these two samples into failures (undone recorded plays, unrealised recorded attacks and
+blocks), and the target, flashback and attacking-copy fixes reproduced 43 others; before the
+review, seed 1 measured 84.4% and seed 7 83.5%. Top failure keys (seed 7, 381 failures): life:B
+89 (73 of them in specs flagged counters_inexact; B mostly takes 1-2 less damage than recorded:
+counters the spec does not know), undone:A 60, bf:A:missing 49, bf:B:missing
+47, bf:B:extra 27, bf:A:extra 23, hand:A:extra 22, life:A 22, hand:A:missing 17,
+block:B:unrealised 12, attack:A:unrealised 8, game_over 5.
+
+Not modelled: what 17lands leaves out and the spec cannot carry (counters on the user's creatures,
+cards milled or surveiled, graveyard contents for cost reductions), B's plays with no record
+(flash creatures are inferred), which copy of a card was the target, triggers that need an
+ordering, choices inside effects other than targets/modes/colours (they take XMage's defaults).
+
 ## Limitations
 
-- **One decision per request.** Later decisions of the same turn (the second attack question,
-  the target of the spell just chosen, a replayed human turn) need the `replay_turn` op of WP2
-  with a scripted decider, which is not built yet.
+- **One decision per request** for `build`, `encode` and `coach`. The later decisions of a
+  recorded human turn come from `replay_turn` (above), which records every decision of A's on
+  the way; coaching a decision past the first of a state is not built yet.
 - **Not reproducible yet**: per-turn watcher history (spells cast or life gained this turn),
   until-end-of-turn effects, linked exile (Banishing Light), face-down creatures, loyalty
   activations used, transformed faces, and activated or triggered abilities on the stack (the
   stack holds spells only).
+- **Choices made on entry and spell modes are guesses.** The spec has no field for a choice a
+  permanent made as it entered (a color, a creature type; reported as warnings) or for the mode
+  of a modal spell on the stack (`Card.cast` takes the first mode: Abrade on the stack deals 3
+  damage to its target creature, never "destroy target artifact").
 - **Control changes are permanent.** An `owner` permanent's original controller is its
   controller, which is right for reanimation. A creature taken with an Aura (Mind Control) stays
   with the taker if the Aura leaves, and one taken until end of turn (Threaten) stays past the

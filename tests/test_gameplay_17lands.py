@@ -253,6 +253,9 @@ def test_opponent_deck_and_hand_from_a_pair(games, ids):
     assert (B.decklistSource, B.handUnknown, len(B.hand)) == ("exact", 0, 5)
     assert not s.is_partial() and s.validate() == []
     assert "opp_decklist_placeholder" not in s.provenance.flags
+    # a known hand that does not add up to the row's count is flagged and graded (was ungraded)
+    s = rc.state_at_user_turn(games[0], 5, opp_hand=["Island"], ids=ids)
+    assert "opp_hand_count_mismatch" in s.provenance.flags and rc.spec_tier({}, {"opp_hand_count_mismatch"}) == "T1"
 
 
 def test_golden_opponent_tapped_state(games, ids):
@@ -572,7 +575,10 @@ def test_imprisoned_in_the_moon_without_a_creature_turning_into_a_land(extra, id
     host = next(p for p in bf(s, "A") if f"A:{p.id}" == moon.attachTo)
     assert host.name == "Mountain" and "attach_heuristic" in s.provenance.flags
     b = rc.state_after_user_turn(g, 8, "declare_attackers", ids=ids, labels=True)
-    assert b.labels["blocks"] == [["A:WildwoodScourge_26", None, True]] and len(b.attackers) == 3
+    # the opponent's Meteor Golem destroyed the Scourge that turn, before or after combat: that it
+    # "did not block" is not certain (it may have been dead by then)
+    assert b.labels["blocks"] == [["A:WildwoodScourge_26", None, False]] and len(b.attackers) == 3
+    assert "offturn_timing_unknown" in b.provenance.flags
 
 
 def all_specs(games, ids, entry):
@@ -656,6 +662,52 @@ def test_labels_flashback_block_mulligan(games, ids):
     assert amb["block_pairing"] == "ambiguous" and any(not b[2] for b in amb["blocks"])
 
 
+def test_who_can_attack_and_block(games, ids):
+    """Eligibility follows what the engine allows. Row 4, user turns 6-7: its Drake Hatcher under the
+    opponent's Witness Protection (a plain 1/1, which can attack) attacked; it used to be excluded as
+    under a "hostile" Aura and its attack keyed "new:Drake Hatcher", a name no spec permanent has.
+    A Pacifism host, Vampire Soulcaller and the Rat token that can't block are no potential
+    blockers (the engine never asks about them); Brazen Borrower is one only against flyers."""
+    for n in (6, 7):
+        att = lb.turn_label(games[4], n, ids)["attacks"]
+        assert att["A:DrakeHatcher_13"] is True and not any(k.startswith("new:") for k in att), att
+    assert "host_cant_attack_block" in ids.info("Pacifism").features
+    assert "host_cant_attack_block" not in ids.info("Witness Protection").features
+
+    def inst(iid, name, host=None, token_class=None):
+        return rc.Inst(iid, 0, name, "user", 0, token=token_class is not None, token_class=token_class, host=host)
+    assert lb._pacified([inst(1, "Pacifism", 7), inst(2, "Witness Protection", 8), inst(3, "Starlight Snare", 9)],
+                        ids) == {7, 9}
+    assert lb._cant_block(inst(4, "Vampire Soulcaller"), True, ids)
+    assert lb._cant_block(inst(5, "Rat", token_class="RatCantBlockToken"), False, ids)
+    assert lb._cant_block(inst(6, "Brazen Borrower"), False, ids) and not lb._cant_block(inst(6, "Brazen Borrower"), True, ids)
+    assert not lb._cant_block(inst(7, "Gleaming Barrier"), False, ids)       # defender: it blocks
+
+
+def test_block_spec_flags_what_it_cannot_show(games, extra, ids):
+    """The declare-attackers spec is the state before the user's own plays of that turn and after
+    none of the declaration's triggers: both are flagged, not silently dropped."""
+    # row 64435, user turn 2: the user flashed in Resolute Reinforcements (and got its Soldier)
+    # during the opponent's turn and blocked with both; neither is in the state (was unflagged)
+    s = rc.state_after_user_turn(extra[64435], 2, "declare_attackers", ids=ids, labels=True)
+    assert "offturn_timing_unknown" in s.provenance.flags and s.labels["offturn_flash"]
+    aliases = {f"A:{p.id}" for p in bf(s, "A") if p.id}
+    assert [b for b, a, _ in s.labels["blocks"] if a] and all(b not in aliases for b, a, _ in s.labels["blocks"] if a)
+    # a "whenever ... attacks" trigger (Frenzied Goblin's: a creature can't block) resolved before
+    # blocks; the PRIORITY_HELD entry skips it. Row 1, user turn 4 with that trigger added:
+    g = games[1]
+    q = g.next_slot(4)
+    assert "attack_trigger" in ids.ability(96640).text_flags          # committed table: no download needed
+    assert "attack_triggers_skipped" not in rc.state_after_user_turn(g, 4, "declare_attackers", ids=ids).provenance.flags
+    turns = [replay.TurnRecord(t.side, t.n, t.seq, t.global_turn,
+                               {**t.f, "oppo_abilities": t.L("oppo_abilities") + [96640]} if t is q else t.f,
+                               t.played, t.terminal) for t in g.turns]
+    g2 = replay.Game(g.row_index, g.meta, g.deck, g.sideboard, g.candidate_hands, g.opening_hand, g.bottomed,
+                     g.bottomed_exact, turns)
+    s = rc.state_after_user_turn(g2, 4, "declare_attackers", ids=ids)
+    assert "attack_triggers_skipped" in s.provenance.flags and rc.spec_tier({}, {"attack_triggers_skipped"}) == "T1"
+
+
 def test_block_pairing_trivial_cases(ids):
     assert lb.block_assignments(ids, [], [93727], [], [])[0] == "none"
     assert lb.block_assignments(ids, [93727], [93727, 93672], [], []) == ("unique", [(0, 0)])
@@ -721,13 +773,21 @@ def test_specs_build_and_roll_over_in_xmage(games, extra, ids, tmp_path):
                 assert d is None or (d["player"], d["where"]["turn"]) == ("A", q.global_turn), (g.row_index, t)
                 if q.L("creatures_attacked"):
                     b = rc.state_after_user_turn(g, t, "declare_attackers", ids=ids, labels=True)
-                    r = br.build(b, seed=1, **b.labels["bridge"])
+                    r = br.build(b, seed=1, dumpDecisionState=True, **b.labels["bridge"])
                     if bridge.diff_dump(b, r["dump"]):
                         differ_b.add((g.row_index, t))      # Giada's counters (row 198), as above
                     d, blocks = r.get("decision"), blocks + 1
                     if d is not None and d["type"] == "CHOOSE_TARGET":
                         assert (d["player"], d["where"]["turn"], d["where"]["step"]) == ("A", q.global_turn, "DECLARE_BLOCKERS")
                         block_questions += 1
+                        # the labels' potential blockers are the creatures the engine lets block;
+                        # a blocker flashed in during that turn is not in the state (flagged)
+                        can = {f"A:{p['id']}" for p in r["decisionState"]["players"]["A"]["battlefield"]
+                               if p.get("id") and (p.get("x") or {}).get("canBlock")}
+                        pot = {k for k, _, _ in b.labels["blocks"] if k.startswith("A:")}
+                        here = {f"A:{p.id}" for p in b.players["A"].battlefield if p.id}
+                        assert can == pot & here, (g.row_index, t, can, pot)
+                        assert pot <= here or "offturn_timing_unknown" in b.provenance.flags, (g.row_index, t)
                     else:                                   # no block question: no potential blocker either
                         assert not any(k.startswith("A:") for k, _, _ in b.labels["blocks"]), (g.row_index, t)
     assert n >= 60 and differ <= ENGINE_KNOWN_DIFFS, sorted(differ - ENGINE_KNOWN_DIFFS)

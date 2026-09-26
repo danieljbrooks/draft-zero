@@ -62,7 +62,10 @@ spec-level notes), and tier = the statespec grade (T0 best):
       control change, an attack that may have gone at a planeswalker (attack_defender_assumed)
   T1  tapped lands, {T}-ability sources or counters/loyalty inferred, a graveyard uncertain (the
       user's: surveil/mill/unknown destinations; the opponent's: unseen milled cards), an opponent
-      card whose zone is unknown (opp_dest_unknown), the order inside the opponent's turn assumed
+      card whose zone is unknown (opp_dest_unknown), the order inside the opponent's turn assumed,
+      attack triggers a block entry skips (attack_triggers_skipped), a known opponent hand that does
+      not add up (opp_hand_count_mismatch: e.g. it played a card before combat that neither its hand
+      nor its draws held)
   T0  none of the above
 The research's cumulative ladder (its "T0..T3" = share of states determined up to a rung, a
 different and opposite-ordered scale) is `re_ladder(flags)`; `seventeenlands stats` reports both.
@@ -564,7 +567,7 @@ class SlotState:
     # user's hand is known, so its unrecorded departures went to exile or the library: exile sink)
     # lost_hand: the part of lost["oppo"] that left in a slot where the opponent's hand count rose
     # without a recorded reason, i.e. most likely bounced to its hand (in the partner row's hand for
-    # 94% of such cards, against 11% of the rest: 1,500 mirrored pairs)
+    # 84% of such cards, against 6% of the rest: see opp_location_unknown)
 
 
 @dataclass
@@ -1189,8 +1192,9 @@ def opp_location_unknown(g: Game, n: int, ids: Ids | None = None, after: bool = 
     from (after=True: the end of user turn n). They are in no zone of the spec, so its library holds
     them (a placeholder deck includes them as revealed cards) and a belief may put them in the hand.
     split=True returns (likely in hand, the rest): the first are the ones that left while the
-    opponent's hand count rose with no recorded reason (a bounce); measured on 1,500 mirrored pairs,
-    94% of those were in its hand (283/301), against 11% of the rest (55/507)."""
+    opponent's hand count rose with no recorded reason (a bounce). Measured on 800 mirrored pairs
+    (both halves, every decision state; a card counts once per state): 84% of those were in its
+    real hand (148/177), against 6% of the rest (16/273), which are mostly exiled."""
     ids = ids or Ids.load(g.meta.get("expansion") or "FDN")
     t = g.user_slot(n) if after else g.prev_slot(n)
     if t is None:
@@ -1451,6 +1455,25 @@ def _frozen(insts: list[Inst], ids: Ids) -> set[int]:
     return {i.host for i in insts if i.host is not None and ids.info(i.name).attach.startswith("aura:freeze")}
 
 
+def _user_tapped_after(g: Game, u: TurnRecord, a_insts: list[Inst], b_insts: list[Inst], ids: Ids) -> set[int]:
+    """iids of the user's permanents still tapped after its turn u, through the opponent's next
+    turn (the user untaps only in its own untap step): u's attackers without vigilance and sources
+    of its {T} abilities, a "doesn't untap" creature still tapped from before (Slumbering Cerberus;
+    its Morbid trigger untaps it at an end step after a creature died), and hosts of a freezing
+    Aura. `state_after_user_turn` and the labels' potential blockers share it, so a label's blocker
+    set is the spec's untapped creatures."""
+    p = g.prev_slot(u.n)                               # the opponent's turn before u
+    p = p if p is not None and p.side == "oppo" and p.played else None
+    pu = g.turns[p.seq - 1] if p is not None and p.seq > 0 else None    # the user's turn before that
+    tap = _tapped_attackers(u, "user", a_insts, ids)
+    tap |= _tapped_by_abilities(u, "user", a_insts, ids, tap)[0]
+    before = _tapped_attackers(pu, "user", a_insts, ids) | _tapped_by_abilities(pu, "user", a_insts, ids, set())[0]
+    tap |= _stays_tapped(a_insts, before, (pu, p), ids)
+    tap = (tap - {i.iid for i in a_insts if "doesnt_untap" in ids.info(i.name).features}) \
+        | _stays_tapped(a_insts, tap, (u,), ids)
+    return tap | _frozen(a_insts + b_insts, ids)
+
+
 def _turn_start_triggers(a_insts: list[Inst], b_insts: list[Inst], ids: Ids) -> bool:
     """A turn-start trigger of the active player's (A here; swap for B's turn) or a draw trigger
     of the other player's, which a spec entered after the draw step does not play."""
@@ -1469,7 +1492,8 @@ def exact_spec(g: Game, partner: Game, n: int, entry: str = "eot_rollover", ids:
     n (`state_at_user_turn`, entries ENTRIES); after=True: the state after it
     (`state_after_user_turn`, entries AFTER_ENTRIES), where B's draws are known too. The flag
     pair_view_mismatch (T3) marks rows that disagree about the board at the snapshot.
-    Build the belief model for such rows without `holdout_drafts(g, partner)`."""
+    A belief model that determinizes this row's non-exact specs (e.g. to evaluate it against this
+    truth) must leave out `holdout_drafts(g, partner)`: its deck pool holds the partner's real deck."""
     if after:
         return state_after_user_turn(g, n, entry, ids=ids, labels=labels, partner=partner)
     return state_at_user_turn(g, n, entry, ids=ids, labels=labels, future_draws=future_draws, partner=partner)
@@ -1492,10 +1516,13 @@ def state_after_user_turn(g: Game, n: int, entry: str = "eot_rollover", opp_deck
           labels["bridge"] opens A's window at DECLARE_BLOCKERS. 17lands has no order inside a
           turn, so the state before combat is assumed: B's land drop was played and its hasty
           attackers cast before combat, everything else it did that turn after it (flag
-          opp_turn_timing_assumed); the user has not acted yet in that turn (its off-turn casts are
-          its decisions; flag offturn_timing_unknown when it made some); B's upkeep triggers are not
-          played (turn_start_triggers_skipped); a planeswalker of A's could have been attacked
-          instead of A (attack_defender_assumed). Raises ValueError when the opponent did not attack.
+          opp_turn_timing_assumed); the user has not acted yet in that turn (its off-turn casts and
+          flash permanents are its decisions; flag offturn_timing_unknown when it made some or lost
+          a creature outside combat); B's upkeep triggers are not played
+          (turn_start_triggers_skipped), nor the "whenever ... attacks" triggers of the declaration
+          (attack_triggers_skipped: evasion, "can't block", pumps and drains they gave are missing);
+          a planeswalker of A's could have been attacked instead of A (attack_defender_assumed).
+          Raises ValueError when the opponent did not attack.
 
     The opponent's decklist and hand work as in `state_at_user_turn` (opp_hand: its hand at the end
     of user turn n); with `partner`, B's draws of its turn are known too: libraryTop at
@@ -1542,13 +1569,7 @@ def state_after_user_turn(g: Game, n: int, entry: str = "eot_rollover", opp_deck
     if any("doesnt_untap" in ids.info(i.name).features for i in a_insts + b_insts):
         notes.add("doesnt_untap_inferred")
     # --- A: what it tapped on its own turn stays tapped until its next untap step ----------------
-    a_tap = _tapped_attackers(u, "user", a_insts, ids)
-    a_tap |= _tapped_by_abilities(u, "user", a_insts, ids, a_tap)[0]
-    pu = g.turns[p.seq - 1] if p is not None and p.seq > 0 else None
-    before = _tapped_attackers(pu, "user", a_insts, ids) | _tapped_by_abilities(pu, "user", a_insts, ids, set())[0]
-    a_tap |= _stays_tapped(a_insts, before, (pu, p), ids)           # a "doesn't untap" creature still tapped
-    a_tap = (a_tap - {i.iid for i in a_insts if "doesnt_untap" in ids.info(i.name).features}) \
-        | _stays_tapped(a_insts, a_tap, (u,), ids)
+    a_tap = _user_tapped_after(g, u, a_insts, b_insts, ids)
     a_lands, _ = choose_tapped_lands([i.name for i in a_insts if i.kind == "lands" and not i.token],
                                      int(u.num("user_mana_spent")), _casts_by(u, "user", ids), ids,
                                      entered_tapped=_entered_tapped_lands(u, "user", ana.checks, ids))
@@ -1644,9 +1665,19 @@ def state_after_user_turn(g: Game, n: int, entry: str = "eot_rollover", opp_deck
         cast_q = q.L("creatures_cast") + q.L("non_creatures_cast") + q.L("oppo_instants_sorceries_cast")
         if len(cast_q) > len(hasty) or [a for a in q.L("oppo_abilities") if ids.ability(a).is_action]:
             notes.add("opp_turn_timing_assumed")
-        if q.L("user_creatures_killed_non_combat") or q.L("user_instants_sorceries_cast") \
-                or q.L("user_abilities") and any(ids.ability(a).is_action for a in q.L("user_abilities")):
+        # the user acted during that turn (its instants, activations, flash permanents: a flashed-in
+        # blocker is not in this state) or lost a creature outside combat (before or after blocks?)
+        flashed = [c for z, sign, cat, c in ana.checks[q.seq].cats if sign == "+" and z in ("user_crea", "user_nonc")
+                   and cat in ("from_hand_without_cast_record", "flash_creature_on_opp_turn_uncast")]
+        if q.L("user_creatures_killed_non_combat") or q.L("user_instants_sorceries_cast") or flashed \
+                or any(ids.ability(a).is_action for a in q.L("user_abilities")):
             notes.add("offturn_timing_unknown")
+        # "whenever ... attacks" triggers fired as the attackers were declared (Vampire Gourmand: it
+        # can't be blocked; Frenzied Goblin: a creature can't block; Courageous Goblin: menace). The
+        # PRIORITY_HELD entry skips them and a spec's stack cannot hold them
+        if any(ids.ability(a).category == "triggered" and "attack_trigger" in ids.ability(a).text_flags
+               for a in q.L("oppo_abilities") + q.L("user_abilities")):
+            notes.add("attack_triggers_skipped")
         if any("Planeswalker" in ids.types(i.grp) for i in a_insts):
             notes.add("attack_defender_assumed")
         if _turn_start_triggers(b_insts, a_insts, ids):
@@ -1762,7 +1793,8 @@ _T2 = {"attach_heuristic", "attach_no_host", "exile_link_present", "token_copy_p
 _T1 = {"opp_mana_gt_lands", "opp_tapped_lands_ambiguous", "counters_inexact", "loyalty_estimated",
        "gy_uncertain_user", "opp_gy_incomplete", "zone_overflow_trimmed", "opp_tap_ability_source_guess",
        "doesnt_untap_inferred", "main1_turn_start_triggers_skipped", "opp_dest_unknown",
-       "turn_start_triggers_skipped", "opp_turn_timing_assumed", "offturn_timing_unknown", "attacker_was_tapped"}
+       "turn_start_triggers_skipped", "opp_turn_timing_assumed", "offturn_timing_unknown", "attacker_was_tapped",
+       "attack_triggers_skipped", "opp_hand_count_mismatch"}
 
 
 def spec_tier(re_fl: dict, notes: set) -> str:

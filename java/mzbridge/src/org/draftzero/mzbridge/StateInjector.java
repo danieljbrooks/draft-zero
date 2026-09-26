@@ -5,6 +5,7 @@ import mage.abilities.Ability;
 import mage.abilities.common.SimpleStaticAbility;
 import mage.abilities.effects.ContinuousEffect;
 import mage.abilities.effects.common.InfoEffect;
+import mage.abilities.keyword.IndestructibleAbility;
 import mage.cards.Card;
 import mage.cards.MeldCard;
 import mage.cards.decks.Deck;
@@ -16,6 +17,7 @@ import mage.cards.repository.TokenType;
 import mage.constants.MultiplayerAttackOption;
 import mage.constants.PhaseStep;
 import mage.constants.RangeOfInfluence;
+import mage.constants.SubType;
 import mage.constants.TurnPhase;
 import mage.constants.Zone;
 import mage.counters.CounterType;
@@ -239,6 +241,8 @@ public final class StateInjector {
             throw new IllegalStateException("init() put permanents onto the battlefield: "
                     + game.getBattlefield().getAllPermanents().stream().map(Permanent::getName).toList());
         }
+        // from here on, the choices entering permanents ask for are reported (BridgePlayer.setupNotes)
+        for (BridgePlayer p : out.players.values()) p.setupNotes = new ArrayList<>();
 
         // ---- 3. zones ----
         Ability fake = new SimpleStaticAbility(Zone.OUTSIDE, new InfoEffect("mzbridge state injection"));
@@ -320,13 +324,13 @@ public final class StateInjector {
             game.getState().getTurnMods().add(new TurnMod(starting.getId()).withSkipStep(PhaseStep.DRAW));
         }
         game.getState().clearTriggeredAbilities();      // G7: triggers fired by injection (attach, cast, counters)
-        // ...and events queued for the next GameState.handleSimultaneousEvent, which runs only on
-        // resume and would trigger then (how injected tokens used to fire their ETB triggers). No
-        // injection step is known to queue any now; this is the safety net, and it cannot drop a
-        // real event: the game has not resumed yet. The warning finds a step that does
-        // Measured before this line and BridgePlayer.setup covered the injection: 12 of 2,004 real
-        // 17lands specs (Authority of the Consuls tapping entering creatures: TAPPED_BATCH) and 39
-        // of 105 Arena specs (a shock land's "pay 2 life?" answered yes: LOST_LIFE_BATCH) left events
+        // ...and the events queued for the next GameState.handleSimultaneousEvent, which runs only
+        // on resume and would fire triggers then (how injected tokens used to fire their ETB
+        // triggers). The game has not resumed yet, so every queued event comes from the injection.
+        // Still queued with tokens entering event-free: TAPPED_BATCH, when an "enters tapped"
+        // replacement taps an injected permanent (Authority of the Consuls: 16 of 2,449 real 17lands
+        // builds); before BridgePlayer.setup covered the injection, a shock land's "pay 2 life?"
+        // answered yes also queued LOST_LIFE_BATCH (39 of 105 Arena specs)
         ((List<?>) Reflect.get(GameState.class, game.getState(), "simultaneousEvents")).clear();
         game.getState().resetWatchers();                // "this turn" watchers start empty (a known limitation)
         game.applyEffects();
@@ -337,14 +341,51 @@ public final class StateInjector {
         game.setLocalRandom(new Random(mix(seed, 2)));  // C4: in-game shuffles use this RNG, and copies carry it
 
         // questions asked while injecting ("pay 2 life or enter tapped?" of a shock land) are
-        // answered "no" (BridgePlayer.setup): injection must not pay costs or change life totals
-        for (BridgePlayer p : out.players.values()) p.setup = false;
+        // answered "no" (BridgePlayer.setup): injection must not pay costs or change life totals.
+        // Named choices and targets (Heraldic Banner's color) become warnings: the spec cannot say
+        for (BridgePlayer p : out.players.values()) {
+            p.setup = false;
+            out.warnings.addAll(p.setupNotes);
+            p.setupNotes = null;
+        }
         List<String> problems = verify(out, made);
         if (!problems.isEmpty()) {
             if (!lenient) throw new SpecException("built state does not match the spec", problems);
             out.warnings.addAll(problems);
         }
+        out.warnings.addAll(doomed(out));
         return out;
+    }
+
+    /**
+     * Permanents that the state-based actions (rule 704) remove as soon as the game resumes. Such a
+     * spec validates and reads back exactly, yet the decision is taken without them: a warning,
+     * since the spec is not wrong about what it lists (e.g. an Aura whose host 17lands does not
+     * name, or a Phantasmal Image injected without the creature it copied: a 0/0).
+     */
+    static List<String> doomed(Built out) {
+        Game game = out.game;
+        List<String> bad = new ArrayList<>();
+        Map<String, Integer> legends = new HashMap<>();
+        for (Permanent pm : game.getBattlefield().getAllActivePermanents()) {
+            String what = out.seatOf(pm.getControllerId()) + ": " + pm.getName();
+            if (pm.isCreature(game)) {
+                int t = pm.getToughness().getValue();
+                if (t <= 0) {
+                    bad.add(what + " has toughness " + t);
+                } else if (pm.getDamage() >= t && !pm.hasAbility(IndestructibleAbility.getInstance(), game)) {
+                    bad.add(what + " has lethal damage (" + pm.getDamage() + " on toughness " + t + ")");
+                }
+            }
+            if (pm.isPlaneswalker(game) && pm.getCounters(game).getCount(CounterType.LOYALTY) == 0) bad.add(what + " has no loyalty");
+            if (pm.hasSubtype(SubType.AURA, game) && pm.getAttachedTo() == null) bad.add(what + " is an Aura attached to nothing");
+            if (pm.isLegendary(game) && legends.merge(pm.getControllerId() + "|" + pm.getName(), 1, Integer::sum) == 2) {
+                bad.add(what + " is a second legendary permanent of that name (legend rule)");
+            }
+        }
+        List<String> warn = new ArrayList<>();
+        for (String b : bad) warn.add(b + ": the state-based actions remove it when the game resumes");
+        return warn;
     }
 
     /**
@@ -550,8 +591,10 @@ public final class StateInjector {
                 if (perm.isToken()) {
                     // A token's UUID decides its place in attack/block order. The fork draws it from
                     // game.getLocalRandom() (PermanentToken), which is seeded per determinization, so
-                    // tie it to the spec entry instead: the same in every determinization.
-                    long salt = 1000L * (seat.equals("A") ? 1 : 2) + 31L * made.size() + i;
+                    // tie it to the spec entry instead: the same in every determinization. One mixed
+                    // stream per (seat, entry, copy): the former 1000*seat + 31*entry + copy gave copy
+                    // 32 of an entry the stream of the next entry's first token (one UUID, two permanents)
+                    long salt = mix(mix(seat.equals("A") ? 1 : 2, made.size()), i);
                     DeterministicIds.reset(mix(out.idSeed, salt));
                     game.setLocalRandom(new Random(mix(out.idSeed, salt + 1)));
                     pm = putToken(game, p, perm, fakeTemplate);
@@ -644,6 +687,11 @@ public final class StateInjector {
         permCard.setZone(Zone.BATTLEFIELD, game);
         PermanentCard permanent = permCard instanceof MeldCard ? new PermanentMeld(permCard, controller.getId(), game)
                 : new PermanentCard(permCard, controller.getId(), game);
+        // as ZonesHandler does for every permanent that enters: the card's static abilities were
+        // registered (GameState.addCard) with its OWNER as controller, so without this a
+        // control-changed Crusader of Odric counted its owner's creatures and a stolen anthem
+        // pumped the owner's team
+        game.getContinuousEffects().setController(permanent.getId(), controller.getId());
         game.getPermanentsEntering().put(permanent.getId(), permanent);
         permCard.applyEnterWithCounters(permanent, source, game);
         permanent.entersBattlefield(source, game, Zone.OUTSIDE, false);

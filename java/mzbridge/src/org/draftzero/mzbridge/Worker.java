@@ -103,12 +103,15 @@ public final class Worker {
                         // with options.specs (pre-determinized specs) the request spec is optional
                         resp = Coach.run(req.has("spec") && !req.get("spec").isJsonNull() ? spec(req) : null, opt);
                         break;
+                    case "replay_turn":
+                        resp = TurnReplay.run(spec(req), opt); // one recorded turn, both seats scripted (README)
+                        break;
                     case "quit":
                         resp = new JsonObject();
                         quit = true;
                         break;
                     default:
-                        throw new IllegalArgumentException("unknown op '" + op + "' (ping, build, encode, coach, quit)");
+                        throw new IllegalArgumentException("unknown op '" + op + "' (ping, build, encode, coach, replay_turn, quit)");
                 }
                 resp.addProperty("ok", true);
             } catch (Throwable e) {
