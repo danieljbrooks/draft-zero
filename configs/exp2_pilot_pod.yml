@@ -1,0 +1,35 @@
+# Experiment #2 pilot on a RunPod pod (RTX 3090, 32 vCPU, 117 GB). Same settings as
+# exp2_pilot.yml, sized for the pod: one game thread per core-ish, one JVM. Parallel JVMs
+# aren't in draft-zero's loop yet; tools/throughput_bench.py measures them separately.
+#
+# Launch with DZ_STALL_MINUTES=90: at budget 300 a network game can take ~40 minutes, and the
+# watchdog's default 45-minute "no new game" limit would declare a healthy run stalled.
+model: FDN_exp2_pilot
+version: 1
+curriculum: configs/curriculum_exp2.yml
+generations: 2              # gen 0 (heuristic search) + gen 1 (network self-play)
+target_games: null
+resource_interval_s: 30
+
+bootstrap_games: 16         # gen 0: one game per thread, so the generation is one wave
+games_per_gen: 16           # gen 1
+chunk_games: 16             # >= jvm.threads
+mix: {self: 0.2, past: 0.7, gen0: 0.1}   # exp #2's mix (exp #1: 70 / 20 / 10)
+replay_states: 150000       # kept from exp #1
+
+eval:
+  baselines: [offline]
+  every_n_gens: 99          # no strength eval: too few games to mean anything
+  pairs: 1
+  fixed_decks: true
+  window_gens: 2
+stats:
+  window_gens: 2
+  min_card_games: 1
+
+jvm:
+  heap: 48g                 # exp #1's value
+  threads: 16
+  search_budget: 300        # exp #1: 96
+  timeout_ms: 60000         # exp #1: 12000
+  max_minutes: 50           # exp #1: 25

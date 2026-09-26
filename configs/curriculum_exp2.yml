@@ -1,0 +1,20 @@
+# Curriculum for experiment #2 (and its pilot). Decided 2026-09-25, see docs/exp2-pilot.md:
+# - λ (td_discount) fixed at 0.95 for the whole run. Exp #1 decayed it to 0.70 by gen 3, which
+#   let the game result reach only ~2 decisions back; Will recommends fixed and high for
+#   multi-deck self-play.
+# - All policy priors off, including the yes/no prior exp #1 enabled from gen 2. Will's advice
+#   for a format-wide action space.
+defaults:
+  td_discount: 0.95
+  prior_temperature: 1.5     # unused while every prior is off
+  priors:
+    binary: false
+    priority: false
+    target: false
+    opponent: false
+prior_schedule:
+  binary: null
+  priority: null
+  target: null
+  opponent: null
+schedule: []

@@ -20,3 +20,8 @@ __pycache__/
 .venv/
 .pytest_cache/
 .DS_Store
+
+# Benchmark and pilot outputs (logs, per-JVM XMage copies): large, regenerable
+bench/
+bench_local/
+data/scryfall/
