@@ -24,3 +24,4 @@ __pycache__/
 # Benchmark and pilot outputs (logs, per-JVM XMage copies): large, regenerable
 bench/
 bench_local/
+data/scryfall/
