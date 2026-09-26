@@ -162,12 +162,14 @@ VOCAB_RE = re.compile(r"^feature vocab: (\d+) kept ids.*?(\d+) rows from checkpo
 ACC_RE = re.compile(r"^Test (\w+)_accuracy=([\d.]+)")
 
 
-def _run_logged(cmd: list[str], log_path: Path, header: str) -> list[str]:
-    """Run a MageZero script, appending its output to log_path; return this run's lines."""
+def _run_logged(cmd: list[str], log_path: Path, header: str, batch: Optional[int] = None) -> list[str]:
+    """Run a MageZero script, appending its output to log_path; return this run's lines.
+    `batch`: states per training/test batch (MZ_TRAIN_BATCH; MageZero's default is 512)."""
+    env = {**os.environ, **({"MZ_TRAIN_BATCH": str(batch)} if batch else {})}
     with open(log_path, "a") as f:
         f.write(f"\n=== {header} {datetime.now().isoformat()} ===\n")
         f.flush()
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
         f.write(proc.stdout)
     if proc.returncode != 0:
         raise subprocess.CalledProcessError(proc.returncode, cmd, proc.stdout[-4000:])
@@ -207,7 +209,7 @@ def parse_test_output(lines: list[str], deck: str, version: int, gen: int) -> Op
 
 
 def run_train(deck: str, version: int, epochs: int, use_checkpoint: bool, run_dir: Path, gen: int,
-              steps: Optional[int] = None) -> None:
+              steps: Optional[int] = None, batch: Optional[int] = None) -> None:
     """Train, log per-epoch losses to metrics.jsonl, and keep this generation's checkpoint as
     gen<N>.pt.gz (the league and the evals play against those)."""
     cmd = [PYTHON, "-u", str(MZ_SRC / "train.py"), "--deck", deck, "--version", str(version),
@@ -216,17 +218,17 @@ def run_train(deck: str, version: int, epochs: int, use_checkpoint: bool, run_di
         cmd += ["--steps", str(steps)]
     if use_checkpoint:
         cmd.append("--checkpoint")
-    lines = _run_logged(cmd, run_dir / "train.log", f"GEN {gen} TRAIN {deck}")
+    lines = _run_logged(cmd, run_dir / "train.log", f"GEN {gen} TRAIN {deck}", batch)
     for row in parse_train_output(lines, deck, version, gen):
         metrics.append_jsonl(run_dir / "metrics.jsonl", row)
     models = Path("models") / deck / f"ver{version}"
     shutil.copyfile(models / "model.pt.gz", models / f"gen{gen}.pt.gz")
 
 
-def run_test(deck: str, version: int, run_dir: Path, gen: int) -> None:
+def run_test(deck: str, version: int, run_dir: Path, gen: int, batch: Optional[int] = None) -> None:
     """The previous generation's model on this generation's new games (before training on them)."""
     lines = _run_logged([PYTHON, "-u", str(MZ_SRC / "test.py"), "--deck", deck, "--version", str(version)],
-                        run_dir / "test.log", f"GEN {gen} TEST {deck}")
+                        run_dir / "test.log", f"GEN {gen} TEST {deck}", batch)
     row = parse_test_output(lines, deck, version, gen)
     if row:
         metrics.append_jsonl(run_dir / "metrics.jsonl", row)

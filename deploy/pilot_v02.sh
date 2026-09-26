@@ -11,6 +11,19 @@ export MZ_ACTION_VOCAB="$(pwd)/assets/vocab/FDN_SPG.tsv"
 # eval pair per JVM. configs/exp2_v02_pilot_pod.yml is the 31-core version of the same.
 mkdir -p logs
 CFG=logs/pilot_v02.yml
+MODE=--fresh
+if [ "${RESUME:-}" = 1 ] && [ -f "$CFG" ]; then
+  # continue the newest run at its interrupted stage, with the layout it was sized with
+  MODE=--resume
+  python - <<'PY'
+import yaml
+fresh = yaml.safe_load(open("configs/exp2_v02_pilot_pod.yml"))
+cfg = yaml.safe_load(open("logs/pilot_v02.yml"))
+cfg["train_batch"] = fresh.get("train_batch")      # settings added since it was sized
+yaml.safe_dump(cfg, open("logs/pilot_v02.yml", "w"), sort_keys=False)
+PY
+  read K HEAP <<< "$(python -c "import yaml; j=yaml.safe_load(open('$CFG'))['jvm']; print(j['jvms'], j['heap'])")"
+else
 read K HEAP <<< "$(python - <<'PY'
 import yaml
 from draftzero.resources import cpu_quota, mem_limit_gb
@@ -28,10 +41,11 @@ yaml.safe_dump(cfg, open("logs/pilot_v02.yml", "w"), sort_keys=False)
 print(k, f"{heap}g")
 PY
 )"
+fi
 [ -n "$K" ] || { echo "!! sizing failed"; exit 1; }
 echo "== layout: $K JVMs x 4 threads, heap $HEAP, $((K * 8)) games per generation"
 
-DZ_STALL_MINUTES=90 bash deploy/launch.sh "$CFG" --fresh || { echo "!! launch failed"; exit 1; }
+DZ_STALL_MINUTES=90 bash deploy/launch.sh "$CFG" "$MODE" || { echo "!! launch failed"; exit 1; }
 RUN="$(ls -1dt runs/*/ | head -1)"; RUN="${RUN%/}"
 echo "== $(date -u +%H:%M) waiting for $RUN"
 while true; do

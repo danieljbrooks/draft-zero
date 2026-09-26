@@ -75,6 +75,9 @@ DEFAULTS = {
     "jvm": {"heap": "8g", "threads": 3, "jvms": 1, "gc": "zgc",
             "search_budget": 200, "timeout_ms": 8000, "max_minutes": 30},
     "train_steps": None,          # cap on optimizer steps per epoch (MageZero's default: 15000)
+    # states per training batch (MageZero's default: 512). A format-wide state is ~1,700
+    # features, and 512 of them ran a 32 GB GPU out of memory in the v0.2 pilot.
+    "train_batch": None,
 }
 
 
@@ -402,7 +405,7 @@ def train_generation(run: Run, gen: int) -> dict:
                                                      **metrics.dataset_stats([str(p) for p in new_files])})
     if run.has_checkpoint():
         run.update(stage="eval_prev")
-        run_test(run.model, run.version, run.dir, gen)
+        run_test(run.model, run.version, run.dir, gen, batch=run.cfg.get("train_batch"))
     training.mkdir(parents=True, exist_ok=True)
     for f in new_files:
         shutil.move(str(f), str(training / f.name))
@@ -419,7 +422,8 @@ def train_generation(run: Run, gen: int) -> dict:
     run.update(stage="train")
     use_ckpt = run.has_checkpoint()
     run_train(run.model, run.version, run.cfg["epochs"] if use_ckpt else run.cfg["epochs_bootstrap"],
-              use_checkpoint=use_ckpt, run_dir=run.dir, gen=gen, steps=run.cfg.get("train_steps"))
+              use_checkpoint=use_ckpt, run_dir=run.dir, gen=gen, steps=run.cfg.get("train_steps"),
+              batch=run.cfg.get("train_batch"))
     return {"train_seconds": time.time() - t0, "replay_states": kept}
 
 

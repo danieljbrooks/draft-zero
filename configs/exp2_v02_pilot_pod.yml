@@ -20,6 +20,7 @@ games_per_gen: 56
 chunk_games: 8              # per JVM job: 2 games per thread, so 7 jobs fill the 7 JVMs
 mix: {self: 0.2, past: 0.7, gen0: 0.1}   # exp #2's mix; at gen 2 "past" falls back to gen 0
 replay_states: 150000
+train_batch: 128            # 512 (MageZero's default) ran a 32 GB GPU out of memory
 
 eval:
   baselines: [offline]
