@@ -171,7 +171,7 @@ Same pod and settings as experiment 3, with the network on and one server.
 
 ## Cost
 
-$1.24 for both pods: the balance went from $60.56 to $59.32. Pod A was removed at 00:59 UTC and Pod B at 01:35 UTC, both after their results were saved locally.
+$1.27 for both pods: the balance went from $60.56 to $59.29. Pod A was removed at 00:59 UTC and Pod B at 01:35 UTC, both after their results were saved locally.
 
 ## Reproducing
 
