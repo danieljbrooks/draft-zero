@@ -188,10 +188,16 @@ the release notes say. For the vocab change:
 - [ ] **Move `VocabDump` into draft-zero** `tools/`. Its only copy is in the archive's MageZero
       experiments branch, inside the verified bundle. Then rebuild the FDN vocab from the v0.2
       bundle's jars: the vocab keys are ability text, which may have changed.
-- [ ] **XMage fork on GitHub:** `danieljbrooks/mage`, public, a fork of `WillWroble/mage`. It
-      gets a branch with exp #1's commit (`5a32441c` on `2f35d9f7`) and a built release, and the
-      HF model card's "not published yet" line becomes a link. This makes exp #1's checkpoints
-      playable.
+- [x] **XMage fork on GitHub** (2026-09-26): [`danieljbrooks/mage`](https://github.com/danieljbrooks/mage),
+      public, a fork of `WillWroble/mage`. It is for testing initially: we use Will's standard
+      releases wherever possible, and its `DRAFTZERO.md` says so.
+  - `exp1-fdn-generalist` is exp #1's exact engine (`5a32441c` on `2f35d9f7`). That makes exp
+    #1's checkpoints playable, and ends the patch in the archive being the only copy.
+  - `v0.2-generalist` is the same changes on v0.2.0, plus `build-generalist-bundle.sh`.
+  - The built v0.2 bundle is in the private HF repo `danbrooks/draftzero-checkpoints`, as
+    `xmage/generalist-xmage-v0.2-48e49184.tar.gz`, next to the pilot's v0.1 bundle.
+  - [ ] Still to do: the HF model card's "not published yet" line should link
+    `exp1-fdn-generalist`.
 - [ ] **Run several JVMs in parallel** (Will's issue #1). `loop.py` calls MageZero's `launch_jvm`
       one chunk at a time; make it run several concurrently, with 4 threads each and ZGC.
   - **Design question: inference servers.** Every exp #2 game is networked on both sides.
@@ -241,7 +247,10 @@ estimate as a pessimistic ceiling.** The JVM-layout pilot below replaces it with
 Each pilot costs a few dollars. **Every pilot gets an external hard time limit.**
 
 - [ ] **v0.2 smoke test.** Does the pipeline run end to end?
-- [ ] **JVM layout × search budget** on the pod type you'd actually rent. Run exp #1's layout
+- [x] **JVM layout × search budget** (2026-09-26, on v0.1, budget 300 only; see
+      [docs/006](docs/006-exp2-pilot.md)). 7 JVMs × 4 threads beat 1 × 28 by 3.3× offline, and by 1.9× with
+      one shared inference server. Re-measure on v0.2 before sizing exp #2.
+      The original plan was: **JVM layout × search budget** on the pod type you'd actually rent. Run exp #1's layout
       (1 JVM × 18 threads) against N JVMs × 4 threads, with heap per JVM as RAM allows, at budget
       300 and, if affordable, 1,000.
   - Measure games/hr, sims/s, cost per game, and the inference server's request rate, to see
