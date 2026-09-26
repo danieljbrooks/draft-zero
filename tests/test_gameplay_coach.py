@@ -9,6 +9,8 @@ does (mean and sd of Q over the determinizations, mean visit share, rank by mean
 import copy
 import json
 import statistics
+import threading
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -489,6 +491,46 @@ def test_belief_model_falls_back_outside_its_card_pool():
     v = co.coach_decision(_partial_spec(), FakeBridge(None, priority(["Pass", "Play Plains"], 5)), model=model,
                           belief=False, human="Pass")
     assert v.determinization["method"] == "bridge_resample" and v.determinization["fallback"] == "belief model disabled"
+
+
+def test_the_opponent_model_cache_is_thread_safe(monkeypatch):
+    """Regression: coach_17lands in worker threads shares the opponent_model cache, and filling and
+    evicting it from several threads raised "dictionary changed size during iteration". A slow
+    iteration (the cache as a dict that sleeps between keys) makes the race near certain."""
+    class SlowDict(dict):
+        def __iter__(self):
+            for k in dict.__iter__(self):
+                time.sleep(0.0002)
+                yield k
+
+    class Pool:
+        def without_drafts(self, drafts):
+            return self
+
+    class Model:
+        def __init__(self, pool, meta, alpha=1.0, retention=None):
+            self.pool, self.meta, self.alpha, self.retention = pool, meta, alpha, retention
+
+        @classmethod
+        def load(cls, retention=True):
+            return cls(Pool(), {})
+    monkeypatch.setattr(bl, "OpponentModel", Model)
+    monkeypatch.setattr(co, "_MODELS", SlowDict())
+    errors = []
+
+    def run(i):
+        try:
+            for j in range(12):
+                assert co.opponent_model([f"draft{i}-{j}"]).pool is co.opponent_model().pool
+        except Exception as e:                                   # collected for the assert below
+            errors.append(repr(e))
+    threads = [threading.Thread(target=run, args=(i,)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert 0 < sum(1 for k in co._MODELS if k) <= 17                  # evicted down to a few recent holdouts
 
 
 def test_hindsight_uses_the_true_hand_only_when_the_spec_has_it():

@@ -417,9 +417,10 @@ def test_records_from_game_summaries(tmp_path):
 # --- 17lands fixture and sample ----------------------------------------------------------------------------
 
 def test_fixture_attack_eligibility_matches_labels(ids):
-    """The fast eligibility agrees with labels.turn_label (full reconstruction) except where
-    labels excludes every creature under a "hostile" aura (row 4: the Drake Hatcher under Witness
-    Protection attacked anyway)."""
+    """The fast eligibility agrees with labels.turn_label (full reconstruction) on every fixture
+    turn. Labels used to exclude every creature under a "hostile" Aura, and disagreed on row 4's
+    Drake Hatcher under Witness Protection (a plain 1/1 that attacked); they now exclude only
+    Pacifism-like and freezing Auras' hosts."""
     agree = total = 0
     for g in replay.iter_games(FIXTURE):
         for r in fp.records_from_game(g, ids):
@@ -428,7 +429,7 @@ def test_fixture_attack_eligibility_matches_labels(ids):
             att = {k: v for k, v in lb.turn_label(g, r["turn"], ids)["attacks"].items() if k.startswith("A:")}
             total += 1
             agree += (len(att), sum(att.values())) == (r["attack_eligible"], r["attackers"])
-    assert total == 71 and agree >= 69
+    assert total == 71 and agree == 71
 
 
 def test_fixture_fingerprint(ids):

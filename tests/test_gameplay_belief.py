@@ -75,9 +75,10 @@ def test_sampler_invariants(synth, name, colors):
         assert len(deck) >= 40 and len(hand) == 6
         forced = seen | zones
         assert not forced - D, "a seen or zone card is missing from the deck"
-        # the hand comes out of the deck minus everything already accounted for
-        assert not (Counter(hand) + forced) - D, "a card is used more times than the deck has"
-        assert sum(D.values()) - sum(forced.values()) - len(hand) >= 1, "no library left"
+        # the hand comes out of the deck minus the known zones: a seen card in no zone (the second
+        # Ucrea5, Uspell1: bounced, say) may be in it
+        assert not (Counter(hand) + zones) - D, "a card is used more times than the deck has"
+        assert sum(D.values()) - sum(zones.values()) - len(hand) >= 1, "no library left"
         if name == "deck":
             assert len(deck) == 40                 # real 40-card decks, swaps keep the size
 
@@ -125,6 +126,39 @@ def test_marginals_are_distributions(synth):
     # the deck model puts the seen copies out of the hidden part: fewer Wcrea3 than the prior
     m = synth["deck"]
     assert m.marginal("WU", seen, seen)[m.index["Wcrea3"]] < m.marginal("WU", Counter({"Plains": 2}), None)[m.index["Wcrea3"]]
+
+
+@pytest.mark.parametrize("name", ["deck", "freq", "uniform"])
+def test_cards_in_no_known_zone_can_be_in_the_hand(synth, name):
+    """A card the opponent showed that is in no known zone (it left the battlefield for an
+    unrecorded zone) is somewhere hidden: the hand is drawn from the deck minus the known zones.
+    One reconstruct marks as 'likely in hand' (it left as the hand count rose) is in the hand with
+    probability P_LIKELY_IN_HAND; the marginal says the same."""
+    m = synth[name]
+    zones = Counter({"Plains": 2, "Island": 2, "Wcrea3": 1})
+    seen = zones + Counter({"Ucrea5": 1})                    # Ucrea5 was bounced
+    likely = (Counter({"Ucrea5": 1}), Counter())
+    held = Counter()
+    for seed in range(300):
+        for how, lost in (("plain", None), ("likely", likely), ("rest", (Counter(), Counter({"Ucrea5": 1})))):
+            deck, hand = m.sample("WU", seen, 5, zones, seed, lost=lost)
+            D = Counter(deck)
+            assert not (seen | zones) - D and not (Counter(hand) + zones) - D and len(hand) == 5
+            held[how] += "Ucrea5" in hand
+    assert held["plain"] > 0 and held["rest"] > 0                 # no longer ruled out
+    assert 0.8 <= held["likely"] / 300 <= 0.97 and held["likely"] > 2 * held["plain"]
+    i = m.index["Ucrea5"]
+    p_likely = m.marginal("WU", seen, zones, lost=likely, hand_count=5)
+    p_plain = m.marginal("WU", seen, zones)
+    assert abs(p_likely.sum() - 1) < 1e-6 and abs(p_plain.sum() - 1) < 1e-6
+    assert p_likely[i] >= bl.P_LIKELY_IN_HAND / 5 > p_plain[i] > 0
+    # hand_count 1 and three likely copies: they cannot all be in it
+    three = (Counter({"Ucrea5": 1, "Ucrea6": 1, "Ucrea7": 1}), Counter())
+    s3 = seen + three[0]
+    for seed in range(20):
+        _, hand = m.sample("WU", s3, 1, zones, seed, lost=three)
+        assert len(hand) == 1
+    assert abs(m.marginal("WU", s3, zones, lost=three, hand_count=1).sum() - 1) < 1e-6
 
 
 def test_seed_determinism(synth):
@@ -203,6 +237,46 @@ def test_determinize_exact_list_without_room(synth):
         assert not Counter(deck) - Counter(sb.decklist), "a card of the real list was dropped"
         assert sb.decklistSource == "belief" and "B.decklist" in s.provenance.sampled
         assert "B_decklist_padded" in s.provenance.flags
+
+
+def test_zone_cards_follow_the_owner(synth):
+    """A permanent is listed under its controller; its card is its owner's (Perm.owner). A card of
+    B's that A controls is not in B's library, so it must never be drawn into B's hand; a card of
+    A's that B stole is not B's; B's spells on the stack are out of its library too."""
+    from draftzero.gameplay.statespec import Perm, PlayerState, StackItem, StateSpec
+    deck = sorted(_deck("W", "U", 0).elements())
+    assert Counter(deck)["Ucrea5"] == 1                          # B's only copy
+    A = PlayerState(name="A", decklist=sorted(_deck("W", "B", 1).elements()),
+                    battlefield=[Perm(name="Ucrea5", id="stolen", owner="B"), Perm(name="Plains", id="p")])
+    B = PlayerState(name="B", decklist=deck, decklistSource="exact", handUnknown=7,
+                    battlefield=[Perm(name="Bcrea3", id="took", owner="A"), Perm(name="Island", id="i")])
+    spec = StateSpec(turn=8, activePlayer="A", startingPlayer="A", players={"A": A, "B": B},
+                     stack=[StackItem("B", "Ucrea6")], enterMode="PRIORITY_HELD", priorityPlayer="A")
+    assert spec.validate() == []
+    assert bl.zone_cards(spec, "B") == Counter({"Ucrea5": 1, "Island": 1, "Ucrea6": 1})
+    assert bl.zone_cards(spec, "A") == Counter({"Bcrea3": 1, "Plains": 1})
+    for s in bl.determinize(spec, synth["deck"], 40, seed=2):              # the exact-list branch
+        assert "Ucrea5" not in s.players["B"].hand and s.validate() == []
+    B.decklistSource = "placeholder"
+    # the belief branch; reconstruct's seen cards count A's Bcrea3 too (it was seen on B's side)
+    for s in bl.determinize(spec, synth["deck"], 10, seed=2, opp_colors="WU", seen=Counter({"Bcrea3": 1})):
+        assert s.validate() == [] and "Bcrea3" not in s.players["B"].decklist     # A's card, not B's
+
+
+def test_determinize_puts_likely_cards_in_the_hand(synth):
+    from draftzero.gameplay.statespec import PlayerState, StateSpec
+    deck = sorted(_deck("W", "U", 0).elements())
+    B = PlayerState(name="B", decklist=deck, decklistSource="exact", graveyard=["Wcrea4"], handUnknown=4)
+    spec = StateSpec(turn=8, activePlayer="A", startingPlayer="A",
+                     players={"A": PlayerState(name="A", decklist=list(deck)), "B": B})
+    lost = (Counter({"Ucrea5": 1}), Counter())
+    for exact in (True, False):
+        B.decklistSource = "exact" if exact else "placeholder"
+        outs = bl.determinize(spec, synth["deck"], 300, seed=5, opp_colors="WU", seen=Counter({"Ucrea5": 1}),
+                              lost=lost)
+        share = sum("Ucrea5" in s.players["B"].hand for s in outs) / len(outs)
+        assert 0.75 <= share <= 0.95, (exact, share)                   # P_LIKELY_IN_HAND = 0.84
+        assert all(s.validate() == [] and len(s.players["B"].hand) == 4 for s in outs)
 
 
 # --- determinization on real reconstructed specs ------------------------------------------------

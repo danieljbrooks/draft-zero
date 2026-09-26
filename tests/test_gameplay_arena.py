@@ -532,16 +532,99 @@ def test_attack_decision_drops_a_preselected_attacker(tmp_path):
     assert (s.step, s.attackers) == ("BEGIN_COMBAT", []) and "preselected_attackers_dropped" in s.provenance.flags
 
 
-def test_control_changed_permanent_is_listed_under_its_owner(tmp_path):
-    """StateSpec has no controller field: a stolen creature stays with its owner (decklist accounting),
-    flagged T2, and its attack is left out rather than given to the wrong player."""
-    stolen = card(250, SERAPH, 28, owner=2, controller=1, attackState="AttackState_Attacking",
-                  attackInfo={"targetId": 2})
-    p = parse(tmp_path, [connect(), combat([stolen]), aar(5)])
-    s = p.specs()[0]
-    assert [b.id for b in s.players["B"].battlefield] == ["250"] and s.attackers == []
-    assert {"control_changed", "combat_by_control_changed_omitted"} <= set(s.provenance.flags)
-    assert s.provenance.tier == "T2" and s.validate() == []
+def unaccounted(s: StateSpec) -> list[str]:
+    return [f for f in s.provenance.flags if f.startswith(("A.cards_unaccounted", "A.card_not_in_decklist"))]
+
+
+def to_battlefield(iid, src_zone, category="Return"):
+    return {"id": 70, "type": ["AnnotationType_ZoneTransfer"], "affectedIds": [iid],
+            "details": [{"key": "zone_src", "valueInt32": [src_zone]}, {"key": "zone_dest", "valueInt32": [28]},
+                        {"key": "category", "valueString": [category]}]}
+
+
+def test_reanimated_creature_is_listed_under_its_controller(tmp_path):
+    """A creature card of B's that A returned to the battlefield under A's control is A's permanent
+    with owner B: it attacks for A, its card comes out of B's decklist (not A's), the labels name it
+    by the spec's alias, and since it has been A's since it entered nothing about it is missing."""
+    back = card(251, SERAPH, 28, owner=2, controller=1)
+    attacking = dict(back, attackState="AttackState_Attacking", attackInfo={"targetId": 2})
+    p = parse(tmp_path, [connect(), game_state(1, objects=[card(250, SERAPH, 37, owner=2)]), aar(5, 1)],
+              [game_state(2, objects=[back], full=False, annotations=[to_battlefield(251, 37)]), aar(6, 2)],
+              [game_state(3, objects=[back], full=False, phase="Phase_Combat", step="Step_DeclareAttack"),
+               attack_req(7, 251)],
+              {"type": "ClientMessageType_SubmitAttackersReq", "respId": 7, "gameStateId": 3},
+              [game_state(4, objects=[attacking], full=False, phase="Phase_Combat", step="Step_DeclareAttack"),
+               aar(8, 4)])
+    before, s, atk, after = p.specs()
+    for x in (s, atk, after):
+        assert [(b.id, b.name, b.owner) for b in x.players["A"].battlefield] == [("251", "Vanguard Seraph", "B")]
+        assert x.players["B"].battlefield == [] and "Vanguard Seraph" in x.players["B"].decklist
+        assert "owner_differs:1" in x.provenance.flags and "control_changed" not in x.provenance.flags
+        assert x.provenance.tier == "T0" and x.validate() == [] and bridge_rule_errors(x) == []
+        assert unaccounted(x) == unaccounted(before)          # A's library is not one card short
+    assert [(a.attacker, a.defender) for a in after.attackers] == [("A:251", "player:B")]
+    assert [o["attacker"] for o in atk.labels["options"]] == ["A:251"] and "A:251" in atk.aliases()
+
+
+def test_control_taken_by_an_effect_is_flagged(tmp_path):
+    """A creature that changed controller while on the battlefield (Threaten, Mind Control) is listed
+    under its controller too, attacks included, but the effect may end, and the bridge makes control
+    permanent: T2. An Animate Dead-style Aura of the controller explains a creature whose entry the
+    log does not show (a log that starts mid-game); B's creature stolen from A is A's card."""
+    seraph = card(250, SERAPH, 28, owner=2)
+    stolen = dict(seraph, controllerSeatId=1, attackState="AttackState_Attacking", attackInfo={"targetId": 2})
+    p = parse(tmp_path, [connect(), game_state(1, objects=[seraph]), aar(5, 1)],
+              [game_state(2, objects=[stolen], full=False, phase="Phase_Combat", step="Step_DeclareAttack"),
+               aar(6, 2)])
+    s = p.specs()[1]
+    assert [(b.id, b.owner) for b in s.players["A"].battlefield] == [("250", "B")]
+    assert [(a.attacker, a.defender) for a in s.attackers] == [("A:250", "player:B")]
+    assert s.provenance.tier == "T2" and "control_changed" in s.provenance.flags and s.validate() == []
+    # the same creature under an Animate Dead of A's, first seen in a Full state
+    dead = arena.CardNames({**names().cards, 99001: arena.CardInfo(99001, "Animate Dead", "EMA")},
+                           ABILITIES, vocab={})
+    aura = card(300, 99001, 28)
+    hold = {"id": 91, "type": ["AnnotationType_Attachment"], "affectorId": 300, "affectedIds": [250]}
+    for objs, tier in (([dict(seraph, controllerSeatId=1), aura], "T0"), ([dict(seraph, controllerSeatId=1)], "T2")):
+        log = write_log(tmp_path / "Player.log", [connect(DECK[:-1] + [99001]),
+                                                  game_state(objects=objs, persistentAnnotations=[hold]), aar(5)])
+        s = arena.parse_logs([log], dead).specs()[0]
+        assert s.provenance.tier == tier and s.validate() == [], objs
+        assert ("owner_differs:1" in s.provenance.flags) == (tier == "T0")
+    assert perm(s, "A", "250").owner == "B"
+    # B took A's Lions: listed under B with owner A; still A's card for A's library count
+    lions = card(150, LIONS, 28)
+    p = parse(tmp_path, [connect(), game_state(1, objects=[lions]), aar(5, 1)],
+              [game_state(2, objects=[dict(lions, controllerSeatId=2)], full=False), aar(6, 2)])
+    mine, taken = p.specs()
+    assert [(b.id, b.owner) for b in taken.players["B"].battlefield] == [("150", "A")]
+    assert taken.players["A"].battlefield == [] and "Savannah Lions" not in taken.players["B"].decklist
+    assert unaccounted(taken) == unaccounted(mine) and taken.validate() == []
+    # a stolen token keeps no owner (StateSpec tokens have none)
+    cat = dict(card(260, 94156, 28, owner=2, controller=1), type="GameObjectType_Token")
+    s = parse(tmp_path, [connect(), game_state(objects=[cat]), aar(5)]).specs()[0]
+    assert [(b.id, b.token, b.owner) for b in s.players["A"].battlefield] == [("260", "Cat", None)]
+    assert {"token_owner_dropped", "control_changed"} <= set(s.provenance.flags) and s.validate() == []
+
+
+def test_permanent_back_under_its_owner_is_flagged(tmp_path):
+    """B's creature that A reanimated (it entered under A) and that B controls again (an effect that
+    ends, such as until end of turn) is listed under B with no owner, as it looks. But the bridge
+    would make B its permanent controller, so control never goes back to A: T2."""
+    back = card(251, SERAPH, 28, owner=2, controller=1)
+    p = parse(tmp_path, [connect(), game_state(1, objects=[card(250, SERAPH, 37, owner=2)]), aar(5, 1)],
+              [game_state(2, objects=[back], full=False, annotations=[to_battlefield(251, 37)]), aar(6, 2)],
+              [game_state(3, objects=[dict(back, controllerSeatId=2)], full=False), aar(7, 3)])
+    _, under_a, taken = p.specs()
+    assert under_a.provenance.tier == "T0" and "control_changed" not in under_a.provenance.flags
+    assert [(b.id, b.owner) for b in taken.players["B"].battlefield] == [("251", None)]
+    assert "control_changed" in taken.provenance.flags and taken.provenance.tier == "T2" and taken.validate() == []
+    # a creature B cast, still B's: nothing changed hands
+    own = card(252, SERAPH, 28, owner=2)
+    s = parse(tmp_path, [connect(), game_state(1, objects=[card(250, SERAPH, 27, owner=2)]), aar(5, 1)],
+              [game_state(2, objects=[own], full=False, annotations=[to_battlefield(252, 27, "Resolve")]),
+               aar(6, 2)]).specs()[1]
+    assert "control_changed" not in s.provenance.flags and s.provenance.tier == "T0"
 
 
 def test_stack_targets_keep_their_slots(tmp_path):
@@ -694,6 +777,27 @@ def test_specs_reach_the_same_decision_in_xmage(xmage, tmp_path):
     s = parse(tmp_path, [connect(deck), combat(objs), aar(5)]).specs()[0]
     d = xmage.build(s, seed=1, **s.labels["bridge"])["decision"]
     assert (d["type"], d["where"]["step"], d["where"]["stack"]) == ("PRIORITY", "DECLARE_ATTACKERS", 0)
+
+
+@pytest.mark.skipif(bool(BRIDGE_PROBLEMS), reason="mzbridge unavailable: " + "; ".join(BRIDGE_PROBLEMS))
+def test_reanimated_creature_attacks_for_its_controller_in_xmage(xmage, tmp_path):
+    """B's creature that A returned under A's control: XMage builds it as A's, owned by B, with no
+    control warning, and asks A whether it attacks (the question Arena asked)."""
+    back = card(251, SERAPH, 28, owner=2, controller=1)
+    p = parse(tmp_path, [connect(), game_state(1, objects=[card(250, SERAPH, 37, owner=2)]), aar(5, 1)],
+              [game_state(2, objects=[back], full=False, annotations=[to_battlefield(251, 37)]), aar(6, 2)],
+              [game_state(3, objects=[back], full=False, phase="Phase_Combat", step="Step_DeclareAttack"),
+               attack_req(7, 251)],
+              {"type": "ClientMessageType_SubmitAttackersReq", "respId": 7, "gameStateId": 3})
+    atk = p.specs()[2]
+    assert atk.labels["decision_type"] == "DeclareAttackersReq" and atk.provenance.tier == "T0"
+    r = xmage.build(atk, seed=1, **atk.labels["bridge"])
+    d = r["decision"]
+    assert (d["player"], d["type"], d["where"]["step"]) == ("A", "CHOOSE_USE", "DECLARE_ATTACKERS")
+    assert d["text"] == "attack with: Vanguard Seraph?"
+    assert not [w for w in r["warnings"] if re.search(r"control|owned by", w)], r["warnings"]
+    assert [(x["name"], x.get("owner")) for x in r["dump"]["players"]["A"]["battlefield"]] == [("Vanguard Seraph", "B")]
+    assert r["dump"]["players"]["B"]["battlefield"] == []
 
 
 # --- mapping tables and helpers ------------------------------------------------------------------

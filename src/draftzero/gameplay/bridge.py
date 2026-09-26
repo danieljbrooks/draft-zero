@@ -47,6 +47,7 @@ decision as the label of a given human action: the bridge moves on past trivial 
 from __future__ import annotations
 
 import argparse
+import fcntl
 import itertools
 import json
 import os
@@ -54,6 +55,7 @@ import queue
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import weakref
@@ -124,16 +126,43 @@ def jar_is_stale() -> bool:
 
 
 def build_jar(force: bool = False, xmage_dir: Path | None = None) -> Path:
-    """Compile java/mzbridge (about 2 s). No-op when the jar is up to date unless force."""
+    """Compile java/mzbridge (about 2 s). No-op when the jar is up to date unless force.
+
+    Safe when several threads or processes call it at once (every Bridge(auto_build=True) does when
+    a source is newer than the jar). An exclusive fcntl lock on build/.build.lock serialises the
+    builds, and a caller that waited for it checks the jar again before building. build.sh runs
+    from a private copy in a temporary directory under build/, on a snapshot of the sources, so its
+    `rm -rf build/classes` touches only that copy (a copy left by a killed build is removed by the
+    next lock holder). The finished jar is moved into place atomically
+    (a running worker keeps the file it opened) and dated to the snapshot, so a source edited
+    during the build still counts as newer than the jar."""
     with _build_lock:
         if not force and not jar_is_stale():
             return JAR
-        env = dict(os.environ)
-        if xmage_dir:
-            env["MZ_XMAGE_DIR"] = str(xmage_dir)
-        r = subprocess.run(["sh", str(BUILD_SH)], capture_output=True, text=True, env=env)
-        if r.returncode != 0 or not JAR.exists():
-            raise BridgeUnavailable(f"java/mzbridge/build.sh failed (exit {r.returncode}):\n{r.stderr[-3000:]}")
+        JAR.parent.mkdir(parents=True, exist_ok=True)
+        with open(JAR.parent / ".build.lock", "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)             # released when the file is closed
+            if not force and not jar_is_stale():
+                return JAR                                # built by another process while this one waited
+            env = dict(os.environ)
+            # the private copy's build.sh cannot find the repository's xmage/ from where it runs
+            env["MZ_XMAGE_DIR"] = str(xmage_dir or os.environ.get("MZ_XMAGE_DIR") or XMAGE_DIR)
+            # only the lock holder builds, so any build-* directory left now is from a killed build
+            for old in JAR.parent.glob("build-*"):
+                shutil.rmtree(old, ignore_errors=True)
+            tmp = Path(tempfile.mkdtemp(prefix="build-", dir=JAR.parent))
+            try:
+                snapshot = time.time()
+                shutil.copytree(BRIDGE_DIR / "src", tmp / "src")
+                shutil.copy2(BUILD_SH, tmp / "build.sh")
+                r = subprocess.run(["sh", str(tmp / "build.sh")], capture_output=True, text=True, env=env)
+                built = tmp / "build" / "mzbridge.jar"
+                if r.returncode != 0 or not built.exists():
+                    raise BridgeUnavailable(f"java/mzbridge/build.sh failed (exit {r.returncode}):\n{r.stderr[-3000:]}")
+                os.utime(built, (snapshot, snapshot))
+                os.replace(built, JAR)
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
         return JAR
 
 

@@ -110,6 +110,7 @@ import os
 import re
 import statistics
 import sys
+import threading
 import time
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -416,6 +417,10 @@ def grade(options: list[OptionStat], per_det: list[dict[str, float]], members: l
 # ------------------------------------------------------------------------------------------------
 
 _MODELS: dict = {}
+# coach runs may share the cache across worker threads (the coaching-validity experiment ran
+# coach_17lands in threads): it is read, filled and evicted under this lock (an unlocked eviction
+# raised "dictionary changed size during iteration"), and a model is built once, under the lock
+_MODELS_LOCK = threading.RLock()
 
 
 def opponent_model(exclude_drafts: Iterable[str] = ()):
@@ -423,31 +428,33 @@ def opponent_model(exclude_drafts: Iterable[str] = ()):
     (`reconstruct.holdout_drafts`: a mirrored pair's pool holds the opponent's real deck). The
     retention table is the cached full one: it is aggregate in-hand rates per (card kind, mana
     value, turn) over ~6,000 games, so two held-out drafts cannot move it, and re-learning it per row
-    would cost ~40 s."""
+    would cost ~40 s. Thread-safe."""
     from draftzero.gameplay import belief as bl
-    base = _MODELS.get(())
-    if base is None:
-        base = _MODELS[()] = bl.OpponentModel.load(retention=True)
     key = tuple(sorted(set(exclude_drafts or ())))
-    if not key:
-        return base
-    m = _MODELS.get(key)
-    if m is None:
-        held = [k for k in _MODELS if isinstance(k, tuple) and k]
-        if len(held) > 16:                                      # keep a few recent holdouts only
-            for k in held[:8]:
-                del _MODELS[k]
-        m = _MODELS[key] = bl.OpponentModel(base.pool.without_drafts(key), base.meta, alpha=base.alpha,
-                                            retention=base.retention)
-    return m
+    with _MODELS_LOCK:
+        base = _MODELS.get(())
+        if base is None:
+            base = _MODELS[()] = bl.OpponentModel.load(retention=True)
+        if not key:
+            return base
+        m = _MODELS.get(key)
+        if m is None:
+            held = [k for k in _MODELS if isinstance(k, tuple) and k]
+            if len(held) > 16:                                  # keep a few recent holdouts only
+                for k in held[:8]:
+                    del _MODELS[k]
+            m = _MODELS[key] = bl.OpponentModel(base.pool.without_drafts(key), base.meta, alpha=base.alpha,
+                                                retention=base.retention)
+        return m
 
 
 def _pool_cards() -> set[str]:
     """The card names of the belief model's deck pool (cached; builds the pool cache once)."""
-    if "cards" not in _MODELS:
-        from draftzero.gameplay.belief import DeckPool
-        _MODELS["cards"] = set(DeckPool.load().cards)
-    return _MODELS["cards"]
+    with _MODELS_LOCK:
+        if "cards" not in _MODELS:
+            from draftzero.gameplay.belief import DeckPool
+            _MODELS["cards"] = set(DeckPool.load().cards)
+        return _MODELS["cards"]
 
 
 def held_out(model, exclude_drafts: Iterable[str]):

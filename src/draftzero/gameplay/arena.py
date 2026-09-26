@@ -40,9 +40,17 @@ An attack decision is entered one step early (BEGIN_COMBAT, PRIORITY_FRESH) so X
 declare-attackers step asks for it; a block decision at DECLARE_ATTACKERS, PRIORITY_HELD, with the
 attacks in place (the MCTS anchor fix in xmage_state.md). Other requests (targets, searches, X,
 ...) arrive mid-action; their specs are the state at that moment, flagged "mid_action", and
-`labels.part_of` points to the priority decision whose Cast/Activate led to them. StateSpec has no
-controller field, so a permanent is listed under its owner; one controlled by the other player is
-flagged "control_changed" (T2) and left out of combat.
+`labels.part_of` points to the priority decision whose Cast/Activate led to them.
+
+A permanent is listed under its controller, and a card owned by the other seat carries Perm.owner
+(a reanimated or stolen creature; the bridge takes it from the owner's deck), attacks and blocks
+included. The bridge makes the controller its original controller, so control never reverts: that
+is the real game when the permanent has been under this controller since it entered the
+battlefield (seen in the log) or was returned by an Animate Dead-style Aura (flag
+"owner_differs:<n>", no tier change). Any other change of control came from an effect that can end
+(until end of turn, while an Aura stays), which the spec cannot say: flag "control_changed" (T2),
+also for a permanent back under its owner after entering under the other player. A token keeps no
+owner (flag "token_owner_dropped").
 
 Privacy: the log holds the account id (in every header line), screen names, user ids, match ids
 and transaction ids. None of them is kept: games are numbered, players are A/B, times are seconds
@@ -782,6 +790,9 @@ class GameState:
         self.gap_open = False
         self.n_full = self.n_diff = self.n_skipped = 0
         self.annotations: list[dict] = []        # transient annotations of the last message
+        # instanceId -> controllerSeatId of a permanent whose move onto the battlefield was seen
+        # (a ZoneTransfer into it, with the object in the same message): who it entered under
+        self.entry_controller: dict[int, int] = {}
 
     def apply(self, gsm: dict) -> bool:
         gsid = gsm.get("gameStateId")
@@ -827,6 +838,7 @@ class GameState:
         for i in gsm.get("diffDeletedPersistentAnnotationIds", []):
             self.pann.pop(i, None)
         self.annotations = gsm.get("annotations", [])
+        sent = None
         for a in self.annotations:
             types = a.get("type", [])
             if "AnnotationType_ObjectIdChanged" in types:
@@ -837,6 +849,13 @@ class GameState:
                 d = details(a)
                 for old, new in zip(d.get("OldIds", []), d.get("NewIds", [])):
                     self.parent[new] = old
+            elif "AnnotationType_ZoneTransfer" in types:
+                dest = first(details(a).get("zone_dest"))
+                if self.zone_type(dest) == "Battlefield":
+                    sent = sent if sent is not None else {o["instanceId"]: o for o in gsm.get("gameObjects", [])}
+                    for i in a.get("affectedIds", []):
+                        if i in sent and sent[i].get("zoneId") == dest:
+                            self.entry_controller[i] = sent[i].get("controllerSeatId")
         if gsid is not None:
             self.gsid = gsid
         return True
@@ -938,6 +957,9 @@ MZ_DECISION = {
     "PayCostsReq": None, "AssignDamageReq": None, "DistributionReq": None, "ChooseStartingPlayerReq": None,
 }
 TIER_NAMES = ("T0", "T1", "T2", "T3")
+# Auras that return a creature card from a graveyard and stay on it (XMage AnimateDeadTriggeredAbility):
+# the bridge rebuilds their link to the creature they returned (java/mzbridge ReanimatedAura)
+REANIMATING_AURAS = frozenset({"Animate Dead", "Dance of the Dead", "Necromancy"})
 
 
 @dataclass
@@ -1410,8 +1432,9 @@ class Parser:
             return "hidden"
         zt = st.zone_type(o.get("zoneId")) or "?"
         seat = g.seat_letter(o.get("ownerSeatId"))
-        if zt == "Battlefield":
-            return f"{(placement or {}).get(iid, seat)}:{iid}"
+        if zt == "Battlefield":        # listed under its controller in the spec
+            ctrl = g.seat_letter(o.get("controllerSeatId")) or seat
+            return f"{(placement or {}).get(iid, ctrl)}:{iid}"
         if short(o.get("type")) == "Ability":
             return f"stack:ability of {self.names.name(o.get('objectSourceGrpId'))}"
         return f"{seat}.{zt.lower()}:{self.obj_name(o)}"
@@ -1706,10 +1729,12 @@ class Parser:
         if hidden_exile:
             flags.append(f"hidden_exile:{hidden_exile}")
 
-        # battlefield: a permanent is listed under its owner (XMage injects with owner = controller)
+        # battlefield: a permanent is listed under its controller, with Perm.owner when the other
+        # seat owns it (see control_explained)
         placement: dict[int, str] = {}
         perms: dict[int, Perm] = {}
-        tokens_unmapped = 0
+        tokens_unmapped = taken_back = 0
+        other_owner: list[int] = []
         for z in st.zones_of("Battlefield"):
             for i in reversed(z.get("objectInstanceIds", [])):
                 o = st.objects.get(i)
@@ -1717,10 +1742,9 @@ class Parser:
                     lower(3, "missing_public_object")
                     continue
                 owner, ctrl = S(o.get("ownerSeatId")), S(o.get("controllerSeatId"))
-                if owner not in ps:
+                seat = ctrl if ctrl in ps else owner
+                if seat not in ps:
                     continue
-                if ctrl != owner:
-                    lower(2, "control_changed")
                 perm = Perm(id=str(i), tapped=bool(o.get("isTapped")),
                             sick=bool(o.get("hasSummoningSickness")) or i in entered,
                             damage=int(o.get("damage") or 0), faceDown=bool(o.get("isFacedown")))
@@ -1750,16 +1774,32 @@ class Parser:
                 if "loyalty" in o and "LOYALTY" not in cs:
                     cs["LOYALTY"] = (o.get("loyalty") or {}).get("value", 0)
                 perm.counters = cs
-                placement[i] = owner
+                if owner != seat and owner in ps:
+                    other_owner.append(i)
+                    if perm.name:
+                        perm.owner = owner
+                    elif "token_owner_dropped" not in flags:
+                        flags.append("token_owner_dropped")    # StateSpec tokens have no owner
+                elif st.entry_controller.get(i, o.get("controllerSeatId")) != o.get("controllerSeatId"):
+                    # its owner controls it, but it entered under the other player (a reanimated
+                    # creature its owner took back until end of turn): an effect that can end
+                    taken_back += 1
+                placement[i] = seat
                 perms[i] = perm
-                ps[owner].battlefield.append(perm)
+                ps[seat].battlefield.append(perm)
         if tokens_unmapped:
             flags.append(f"tokens_by_name:{tokens_unmapped}")
-        for i, host in st.attachments().items():
+        attached = st.attachments()
+        for i, host in attached.items():
             if i in perms and host in placement:
                 perms[i].attachTo = f"{placement[host]}:{host}"
             elif i in perms:
                 lower(2, "attachment_unresolved")
+        explained = sum(self.control_explained(g, i, attached) for i in other_owner)
+        if explained:
+            flags.append(f"owner_differs:{explained}")
+        if explained < len(other_owner) or taken_back:
+            lower(2, "control_changed")
         if any(c for s, c in counters.items() if s in st.players):
             lower(1, "player_counters_dropped")
 
@@ -1806,11 +1846,6 @@ class Parser:
         for i in placement:
             o = st.objects[i]
             alias = f"{placement[i]}:{i}"
-            in_combat = (o.get("attackState") in ("AttackState_Declared", "AttackState_Attacking")
-                         or o.get("blockState") in ("BlockState_Declared", "BlockState_Blocking"))
-            if in_combat and placement[i] != S(o.get("controllerSeatId")):
-                lower(2, "combat_by_control_changed_omitted")
-                continue
             if o.get("attackState") in ("AttackState_Declared", "AttackState_Attacking"):
                 tgt = (o.get("attackInfo") or {}).get("targetId")
                 if tgt in st.players:
@@ -1849,14 +1884,13 @@ class Parser:
         ps["A"].decklistSource = "exact"
         if not g.deck:
             lower(1, "A.deck_unknown")
-            ps["A"].decklist = self.placeholder_deck(g, ps["A"], stack, "A", loc)
+            ps["A"].decklist = self.placeholder_deck(g, ps["A"], stack, "A", loc, owned_on_battlefield(ps, "A"))
             ps["A"].decklistSource = "placeholder"
-        ps["B"].decklist = self.placeholder_deck(g, ps["B"], stack, "B", opp)
+        ps["B"].decklist = self.placeholder_deck(g, ps["B"], stack, "B", opp, owned_on_battlefield(ps, "B"))
         ps["B"].decklistSource = "placeholder"
         pool = collections.Counter(ps["A"].decklist)
         used = collections.Counter(ps["A"].hand + ps["A"].graveyard + ps["A"].exile + ps["A"].libraryTop
-                                   + [b.name for b in ps["A"].battlefield
-                                      if b.name and not b.tokenClass and not b.token]
+                                   + owned_on_battlefield(ps, "A")
                                    + [x.card for x in stack if x.controller == "A"])   # as the bridge counts
         if any(n > pool[c] for c, n in used.items()):
             flags.append("A.card_not_in_decklist")
@@ -1948,6 +1982,22 @@ class Parser:
             spec.labels["stack_abilities"] = stack_abilities
         return spec
 
+    def control_explained(self, g: Game, iid: int, attached: dict[int, int]) -> bool:
+        """Whether the spec's account of a permanent controlled by the seat that does not own it is
+        complete. The bridge builds such a permanent from its owner's deck under the controller, as
+        its original controller, so control never reverts. That is the real game when the
+        permanent has been under this controller since it entered the battlefield (a reanimation,
+        "put onto the battlefield under your control": the entry was seen in the log), or when an
+        Animate Dead-style Aura of the controller's returned it (the bridge rebuilds the Aura's
+        link). Any other change of control came from an effect that can end (until end of turn,
+        while an Aura stays attached), which the spec cannot say."""
+        st = g.state
+        ctrl = st.objects[iid].get("controllerSeatId")
+        if st.entry_controller.get(iid) == ctrl:
+            return True
+        return any(host == iid and (a := st.objects.get(aura)) is not None and a.get("controllerSeatId") == ctrl
+                   and self.obj_name(a) in REANIMATING_AURAS for aura, host in attached.items())
+
     def stack_top_controller(self, g: Game) -> str | None:
         for z in g.state.zones_of("Stack"):
             ids = z.get("objectInstanceIds", [])
@@ -1955,9 +2005,11 @@ class Parser:
                 return g.seat_letter(g.state.objects.get(ids[0], {}).get("controllerSeatId"))
         return None
 
-    def placeholder_deck(self, g: Game, p: PlayerState, stack: list[StackItem], s: str, seat) -> list[str]:
+    def placeholder_deck(self, g: Game, p: PlayerState, stack: list[StackItem], s: str, seat,
+                         bf_owned: list[str]) -> list[str]:
         """Every card this player has shown (one copy per physical card seen), at least the cards
-        now in their zones, filled to the deck size with basics of the colours they have shown."""
+        now in their zones (bf_owned: its cards on either battlefield), filled to the deck size with
+        basics of the colours they have shown."""
         st = g.state
         seen: collections.Counter = collections.Counter()
         colors = collections.Counter()
@@ -1967,8 +2019,7 @@ class Parser:
             for c, n in proxies.items():
                 seen[c] = max(seen[c], n)
             colors = g.opp_colors
-        used = collections.Counter(p.hand + p.graveyard + p.exile + p.libraryTop
-                                   + [b.name for b in p.battlefield if b.name and not b.token and not b.tokenClass]
+        used = collections.Counter(p.hand + p.graveyard + p.exile + p.libraryTop + bf_owned
                                    + [x.card for x in stack if x.controller == s])
         for c, n in used.items():
             seen[c] = max(seen[c], n)
@@ -2011,6 +2062,13 @@ def _request_source(m: dict) -> int | None:
     if "payCostsReq" in m:
         return first((m["payCostsReq"] or {}).get("manaCost", []), {}).get("objectId")
     return None
+
+
+def owned_on_battlefield(ps: dict[str, PlayerState], seat: str) -> list[str]:
+    """The cards (not tokens) `seat` owns on either battlefield: each is listed under its controller,
+    with Perm.owner when that is the other seat (as StateSpec.validate and the bridge count them)."""
+    return [b.name for s, p in ps.items() for b in p.battlefield
+            if b.name and not b.token and not b.tokenClass and (b.owner or s) == seat for _ in range(b.count)]
 
 
 def basics_for(colors: collections.Counter, n: int) -> list[str]:

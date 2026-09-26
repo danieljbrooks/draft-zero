@@ -6,8 +6,9 @@ README), plus rows 64435 and 89383 in fdn_premier_rows_extra.csv.gz. Rows 0 and 
 research phase inspected by hand. They need only committed files. Mirrored pairs are tested on a
 synthetic partner row built from a fixture row (no pair is committed) and, when the data is there,
 on real pairs from data/gameplay/pairs_FDN_PremierDraft.jsonl. The regression test streams a seeded
-5,000-game sample of the real file and skips without it; the engine test builds fixture specs in
-XMage through java/mzbridge and skips without Java or the XMage build.
+5,000-game sample of the real file and the doubled-list test reads five of its rows; both skip
+without it. The engine test builds fixture specs in XMage through java/mzbridge and skips without
+Java or the XMage build.
 """
 from collections import Counter
 from pathlib import Path
@@ -712,6 +713,143 @@ def test_block_pairing_trivial_cases(ids):
     assert lb.block_assignments(ids, [], [93727], [], [])[0] == "none"
     assert lb.block_assignments(ids, [93727], [93727, 93672], [], []) == ("unique", [(0, 0)])
     assert lb.block_assignments(ids, [93727, 93672], [93727], [], [])[0] == "inconsistent"
+
+
+HAWK, PANDA, VESSEL, SAGE, LIONS, SERRA, HUNTER, BARRIER = 93855, 93833, 93776, 93777, 93859, 93860, 93729, 93965
+SNARESPINNER, FEASTER, SQUIRE, COURAGEOUS_GOBLIN = 93827, 93772, 93736, 93795
+INSECT, FAERIE, CAT = 94176, 94164, 94156          # token ids: a flying Insect and Faerie, a 1/1 Cat
+
+
+def test_block_pairing_respects_evasion(ids):
+    """A pairing must be legal: a flyer (Healer's Hawk, a Faerie or Insect token) is blocked by
+    Flying or Reach only, and a Menace attacker (Crypt Feaster) by two or more. Conditional evasion
+    (Skyknight Squire flies with three counters, Courageous Goblin's menace) is unknown, as is a
+    token of an unlisted class: they restrict nothing."""
+    assert lb._can_block(ids, SNARESPINNER, HAWK) and lb._can_block(ids, SERRA, FAERIE)
+    assert not lb._can_block(ids, HUNTER, HAWK) and not lb._can_block(ids, CAT, INSECT)
+    assert lb._can_block(ids, HUNTER, SQUIRE) and lb._evasion(ids, COURAGEOUS_GOBLIN) is None
+    # ambiguous by P/T alone (Helpful Hunter trading with either attacker), unique by evasion
+    assert lb.block_assignments(ids, [HAWK, LIONS], [SERRA, HUNTER], [HAWK, LIONS], [HUNTER]) == ("unique", [(0, 1)])
+    assert lb.block_assignments(ids, [FEASTER, LIONS], [HUNTER, BARRIER, SERRA], [LIONS], []) == ("unique", [(0, 0, 1)])
+    assert lb.block_assignments(ids, [COURAGEOUS_GOBLIN, LIONS], [HUNTER, SERRA], [LIONS], [])[0] == "unique"
+    # 17lands row 458570, user turn 6 (the opponent's blocks): the old "consistent" pairings had
+    # Infernal Vessel blocking Healer's Hawk, which XMage refused. No legal one explains the deaths
+    # by printed P/T, so it is inconsistent with the one legal guess: the Insect token on the Hawk
+    st, good = lb.block_assignments(ids, [HAWK, PANDA], [VESSEL, INSECT, SAGE], [HAWK], [VESSEL])
+    assert (st, good) == ("inconsistent", [(1, 0, 1)])
+    # nothing legal (a trick gave a blocker flying or reach): no guess
+    assert lb.block_assignments(ids, [HAWK, PANDA], [LIONS, HUNTER], [], []) == ("inconsistent", [])
+
+
+def test_block_pairing_allows_a_granted_flyer(ids):
+    """A defender with a flying grant (Fleeting Flight cast that turn, Celestial Armor, Angelic
+    Destiny, an anthem) may block a flyer with a printed ground creature: the evasion rule is lifted
+    for its blockers (not for Ajani's sorcery-speed -3 or a Vehicle's own Flying). 17lands row
+    238760, the opponent's turn 11: two Soldier tokens, one under Fleeting Flight, blocked
+    Courageous Goblin and Flamewake Phoenix (the rule alone left no legal pairing)."""
+    GOBLIN, PHOENIX, SOLDIER = COURAGEOUS_GOBLIN, 93911, 94161
+    assert lb.flying_granted(ids, ["Plains", "Fleeting Flight"]) and lb.flying_granted(ids, {"Celestial Armor"})
+    assert lb.flying_granted(ids, ["Angelic Destiny"]) and lb.flying_granted(ids, ["Dropkick Bomber"])
+    assert not lb.flying_granted(ids, ["Ajani, Caller of the Pride", "Skysovereign, Consul Flagship", "Healer's Hawk",
+                                       "Sure Strike", "Kitesail Corsair"])
+    args = (ids, [GOBLIN, PHOENIX], [SOLDIER, SOLDIER], [GOBLIN, PHOENIX], [])
+    assert lb.block_assignments(*args) == ("inconsistent", [])
+    assert lb.block_assignments(*args, blockers_may_fly=True) == ("unique", [(0, 1)])
+    assert not lb._can_block(ids, HUNTER, HAWK) and lb._can_block(ids, HUNTER, HAWK, blockers_may_fly=True)
+
+
+def _with(g, slot, **fields):
+    """Game g with some lists of one slot replaced (the same row, a 17lands quirk added)."""
+    turns = [replay.TurnRecord(t.side, t.n, t.seq, t.global_turn, {**t.f, **fields} if t is slot else t.f,
+                               t.played, t.terminal) for t in g.turns]
+    return replay.Game(g.row_index, g.meta, g.deck, g.sideboard, g.candidate_hands, g.opening_hand, g.bottomed,
+                       g.bottomed_exact, turns)
+
+
+def test_a_list_recorded_twice_is_counted_once(games, ids):
+    """17lands lists a turn's attackers (and often its blocks, activations) twice over in ~3% of
+    attacking turns. A doubled list is halved when the board cannot explain the second copy, and
+    labels say so; one the board explains (two copies that both attacked) is kept."""
+    def doubled(g, slot, *fields):
+        return _with(g, slot, **{f: slot.L(f) * 2 for f in fields})
+    # row 4, user turn 6: Drake Hatcher and two Faerie tokens attacked; one Hatcher on the battlefield
+    g = games[4]
+    lab = lb.turn_label(g, 6, ids)
+    dbl = lb.turn_label(doubled(g, g.user_slot(6), "creatures_attacked"), 6, ids)
+    assert dbl["deduped"] == ["creatures_attacked"] and dbl["attacks"] == lab["attacks"]
+    assert not any(k.startswith("new:") for k in dbl["attacks"]) and "twice over" in dbl["attack_notes"][0]
+    # row 8, user turn 9: a Brazen Scourge attacked with a second one cast that turn (haste);
+    # [Scourge, Scourge] alone is two copies the board explains, not a double
+    g = games[8]
+    u = g.user_slot(9)
+    two = [c for c in u.L("creatures_attacked") if ids.name(c) == "Brazen Scourge"]
+    lab = lb.turn_label(_with(g, u, creatures_attacked=two), 9, ids)
+    assert lab["deduped"] == [] and {k: v for k, v in lab["attacks"].items() if "Scourge" in k} == {
+        "A:BrazenScourge_21": True, "new:Brazen Scourge": True}
+    # the opponent's turn after row 1's user turn 8: Cat and Brazen Scourge attacked, Firebrand
+    # Archer blocked the Cat; all three lists doubled (the Cat token is no evidence on its own)
+    g = games[1]
+    q = g.next_slot(8)
+    lab = lb.turn_label(g, 8, ids)
+    dbl = lb.turn_label(doubled(g, q, "creatures_attacked", "creatures_blocked", "creatures_blocking"), 8, ids)
+    assert dbl["offturn_deduped"] == ["creatures_attacked", "creatures_blocked", "creatures_blocking"]
+    assert (dbl["blocks"], dbl["block_pairing"]) == (lab["blocks"], lab["block_pairing"]) == (
+        [["A:ClinquantSkymage_21", None, True], ["A:FirebrandArcher_22", "B:Cat_18", True]], "unique")
+    assert lb.after_turn_label(doubled(g, q, "creatures_attacked"), 8, ids)["attacked"] == ["Brazen Scourge", "Cat"]
+    # activations: row 0, user turn 3, Kaito's -2 twice (a loyalty ability, one Kaito); row 198,
+    # user turn 3, Equip {1} twice with 3 mana spent on Goldvein Pick (2) and one Equip
+    g = games[0]
+    dbl = lb.turn_label(doubled(g, g.user_slot(3), "user_abilities"), 3, ids)
+    assert dbl["deduped"] == ["user_abilities"] and dbl["activations"] == lb.turn_label(g, 3, ids)["activations"]
+    g = games[198]
+    u = g.user_slot(3)
+    once = lb.turn_label(g, 3, ids)["activations"]
+    assert u.num("user_mana_spent") == 3 and [a["key"][:9] for a in once] == ["Equip {1}"]
+    dbl = lb.turn_label(doubled(g, u, "user_abilities"), 3, ids)
+    assert dbl["deduped"] == ["user_abilities"] and len(dbl["activations"]) == 1
+    paid = lb.turn_label(_with(g, u, user_abilities=u.L("user_abilities") * 2, user_mana_spent=4.0), 3, ids)
+    assert paid["deduped"] == [] and len(paid["activations"]) == 2          # 4 mana pays for both Equips
+
+
+@pytest.mark.skipif(not REPLAY.exists(), reason="17lands FDN replay file not downloaded")
+def test_doubled_lists_and_evasion_on_real_rows(ids):
+    """The turns the replay review found, and two the cleanup review found (reads the file up to
+    row 458570, ~4 s)."""
+    from draftzero.gameplay.turnreplay import opponent_blocks
+    g = replay.read_games([80, 600, 116964, 123680, 238760, 449959, 458570], REPLAY)
+    # [Skyknight Squire, Cat Collector] x2 with one of each: the second copy was "new:" attackers
+    lab = lb.turn_label(g[116964], 5, ids)
+    assert lab["deduped"] == ["creatures_attacked"]
+    assert lab["attacks"] == {"A:SkyknightSquire_8": True, "A:CatCollector_14": True}
+    # Sower of Chaos' {2}{R} twice, with 5 mana spent on Firebrand Archer (2) and one activation
+    lab = lb.turn_label(g[449959], 6, ids)
+    assert lab["deduped"] == ["user_abilities"] and [a["id"] for a in lab["activations"]] == [175859]
+    # [Inspiring Paladin] x2 with two Paladins on the battlefield: both attacked (one blocked and
+    # killed, one unblocked), not a double
+    lab = lb.turn_label(g[80], 5, ids)
+    assert lab["deduped"] == [] and lab["attacks"] == {"A:InspiringPaladin_7": True, "A:InspiringPaladin_11": True}
+    # the opponent's turn after user turn 5: its combat recorded twice over (one Vampire Gourmand
+    # blocked one Strongbox Raider); it was an "inconsistent" pairing with a "new:" blocker
+    lab = lb.turn_label(g[600], 5, ids)
+    assert lab["offturn_deduped"] == ["creatures_attacked", "creatures_blocked", "creatures_blocking"]
+    assert (lab["block_pairing"], lab["blocks"]) == ("unique", [["A:VampireGourmand_13", "B:StrongboxRaider_11", True]])
+    # user turn 6: the replay's pairing had Infernal Vessel blocking Healer's Hawk (flying), which
+    # XMage refused; its one alternative is now the legal guess, the Insect token on the Hawk
+    alts, status, _ = opponent_blocks(g[458570], 6, ids, lb.turn_label(g[458570], 6, ids)["attacks"])
+    assert status == "inconsistent" and alts == [[["B:InfernalVessel_8", "A:FiendishPanda_16"],
+                                                  ["B:Insect_21", "A:HealersHawk_3"],
+                                                  ["B:InfestationSage_22", "A:FiendishPanda_16"]]]
+    # the opponent's turn after user turn 16: Scavenging Ooze's {G} twice, 6 mana spent on Claws Out
+    # (mana value 5, {1} less with the user's Cat, Helpful Hunter) and two activations: not a double
+    lab = lb.turn_label(g[123680], 16, ids)
+    assert g[123680].next_slot(16).num("user_mana_spent") == 6
+    assert lab["offturn_deduped"] == [] and [a["id"] for a in lab["offturn_activations"]] == [90106, 90106]
+    # row 238760, the opponent's turn after user turn 10: the user cast Fleeting Flight, and its Soldier tokens
+    # blocked Courageous Goblin and Flamewake Phoenix; without the grant no pairing was legal
+    lab = lb.turn_label(g[238760], 10, ids)
+    assert "Fleeting Flight" in [ids.name(c) for c in g[238760].next_slot(10).L("user_instants_sorceries_cast")]
+    assert (lab["block_pairing"], [r for r in lab["blocks"] if r[1]]) == (
+        "unique", [["A:Soldier_22", "B:CourageousGoblin_14", True], ["A:Soldier_23", "B:FlamewakePhoenix_25", True]])
 
 
 # --- through the engine ----------------------------------------------------------------------------

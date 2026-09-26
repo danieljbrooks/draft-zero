@@ -15,9 +15,10 @@ Models (all share `sample(...) -> (deck, hand)` and `marginal(...)`):
                     where f_g(c) is the mean number of copies of c in decks of D's colour group
                     (a smoothed "the opponent swapped a card in" term, so decks missing a seen
                     card stay possible but lose weight). A sampled deck is forced to contain every
-                    seen / zone card, replacing its least-likely cards (lowest group frequency) of
-                    the same broad type (land / creature / other) and nearest mana value; the
-                    hidden hand is then drawn from the deck minus those cards.
+                    seen / zone / lost card, replacing its least-likely cards (lowest group
+                    frequency) of the same broad type (land / creature / other) and nearest mana
+                    value; the hidden hand is then drawn from the deck minus the cards the spec
+                    places in known zones.
   FrequencyModel    baseline: the colour-conditioned card frequencies (the same prior, no seen-card
                     likelihood); the deck is the forced cards plus a fill drawn by frequency
   UniformPoolModel  baseline: every card of the revealed colours equally likely
@@ -27,6 +28,17 @@ Hand draw: uniform over the deck's hidden cards by default. With a `HandRetentio
 still in hand after the owner's t turns (learned from 17lands users' own hands, where the hand is
 known: at the end of turn 5 about 5% of the hidden lands but 25% of the hidden 5-drops are in hand).
 It is optional because it changes the hand's land/spell mix: see the evaluation.
+
+Cards in no known zone: an opponent card that was seen but is in none of the spec's zones (it left
+the battlefield for an unrecorded zone: bounced, tucked or exiled unseen) is somewhere hidden, so it
+can be drawn into the hand like any hidden card. reconstruct.opp_location_unknown(g, n, split=True)
+separates those most likely back in the hand (they left as the opponent's hand count rose with no
+recorded reason: 84% were in the real hand on 800 mirrored pairs) from the rest (6% there, mostly
+exiled). Passed as `lost=`, each 'likely in hand' copy is in the hand with probability
+P_LIKELY_IN_HAND; the rest are drawn like any hidden card. Held out, K=16, user turns 3/5/7: on 300
+pairs recall@K of the deck model went from 0.132 to 0.134 (log-lik per card -4.309 to -4.299); on
+the 151 views of 1,500 pairs that have such cards, from 0.079 to 0.212 (-4.60 to -4.06), and the
+likely copies (90 of 93 in the real hand there) went from 4% to 84% of the sampled hands.
 
 Colours: pass the 17lands `opp_colors` (the colours the opponent revealed over the whole game:
 always a subset of its deck colours, equal to them in 82% of mirrored games) or None to infer them
@@ -53,7 +65,8 @@ Usage:
   from draftzero.gameplay.belief import OpponentModel, determinize, game_evidence
   model = OpponentModel.load()                     # builds data/gameplay/deckpool_FDN_PremierDraft.npz once
   spec, seen, colors = game_evidence(game, 5)      # a 17lands user turn
-  specs = determinize(spec, model, k=8, seed=1, opp_colors=colors, seen=seen)
+  lost = reconstruct.opp_location_unknown(game, 5, split=True)
+  specs = determinize(spec, model, k=8, seed=1, opp_colors=colors, seen=seen, lost=lost)
 
 Leakage on 17lands rows: the full pool holds every 17lands user's deck, so for one half of a
 mirrored pair it holds the opponent's REAL deck (at user turn 7 about 10% of the posterior mass lands
@@ -75,7 +88,7 @@ import sys
 import time
 import zlib
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
@@ -91,6 +104,9 @@ P_SPLASH_SEEN = 0.46      # the same for a splash colour
 ALPHA = 1.0               # smoothing of the deck likelihood: best of 0.1..10 on the evaluation's dev set
 F_FLOOR = 1e-3            # smallest per-group card frequency: a card no deck of the group played
 LL_FLOOR = 1e-3           # the log-likelihood metric mixes every marginal with this much uniform mass
+# P(a 'likely in hand' card is in the opponent's hand): reconstruct.opp_location_unknown's first
+# group, measured on 800 mirrored pairs (every decision state of both halves): 148/177
+P_LIKELY_IN_HAND = 0.84
 KIND_LAND, KIND_CREATURE, KIND_OTHER = 0, 1, 2
 _BIT = {c: 1 << i for i, c in enumerate(COLORS)}
 
@@ -116,6 +132,16 @@ def as_counter(cards) -> Counter:
     if cards is None:
         return Counter()
     return Counter(cards) if not isinstance(cards, Counter) else cards
+
+
+def split_lost(lost) -> tuple[Counter, Counter]:
+    """`lost` as (likely in hand, the rest): the pair reconstruct.opp_location_unknown(g, n,
+    split=True) returns, or one multiset (all of it 'the rest'), or None."""
+    if lost is None:
+        return Counter(), Counter()
+    if isinstance(lost, tuple):
+        return as_counter(lost[0]), as_counter(lost[1])
+    return Counter(), as_counter(lost)
 
 
 # =============================================================================================
@@ -456,20 +482,37 @@ class _Base:
         return d, replaced
 
     @staticmethod
-    def fit_room(d: np.ndarray, forced: np.ndarray, hand_count: int, filler: int) -> np.ndarray:
-        """At least one library card must remain after the hand is drawn (an empty library loses
-        the game at the next draw): pad with `filler` (a basic) when the zones over-count."""
-        short = hand_count + 1 - int((d - forced).clip(0).sum())
+    def fit_room(d: np.ndarray, known: np.ndarray, hand_count: int, filler: int) -> np.ndarray:
+        """At least one library card must remain after the hand is drawn from d - known (an empty
+        library loses the game at the next draw): pad with `filler` (a basic) when the zones
+        over-count."""
+        short = hand_count + 1 - int((d - known).clip(0).sum())
         if short > 0:
             d = d.copy()
             d[filler] += short
         return d
 
-    def draw_hand(self, d: np.ndarray, forced: np.ndarray, hand_count: int, rng, turn: int | None = None) -> np.ndarray:
-        """hand_count cards from the deck's hidden part (d - forced): uniform, or weighted by the
-        retention odds (Efraimidis-Spirakis weighted sampling without replacement)."""
-        rest = np.repeat(np.arange(self.C), np.maximum(d - forced, 0))
+    def draw_hand(self, d: np.ndarray, known: np.ndarray, hand_count: int, rng, turn: int | None = None,
+                  likely: np.ndarray | None = None) -> np.ndarray:
+        """hand_count cards from the deck's hidden part, d - known (known: the cards the spec places
+        in a known zone). Each `likely` copy (a card that most likely went back to the hand) is in
+        the hand with probability P_LIKELY_IN_HAND; the rest of the hand comes from the other hidden
+        cards: uniform, or weighted by the retention odds (Efraimidis-Spirakis weighted sampling
+        without replacement)."""
+        hidden = np.maximum(d - known, 0)
         h = np.zeros(self.C, np.int16)
+        if hand_count <= 0 or not hidden.any():
+            return h
+        if likely is not None and likely.any():
+            lk = np.minimum(np.maximum(likely, 0), hidden)
+            copies = np.repeat(np.arange(self.C), lk)
+            take = copies[rng.random(len(copies)) < P_LIKELY_IN_HAND]
+            if len(take) > hand_count:
+                take = rng.choice(take, size=hand_count, replace=False)
+            np.add.at(h, take, 1)
+            hand_count -= len(take)
+            hidden = hidden - lk                 # a likely copy left out is in the library (or exile)
+        rest = np.repeat(np.arange(self.C), hidden)
         if hand_count <= 0 or not len(rest):
             return h
         k = min(hand_count, len(rest))
@@ -492,40 +535,74 @@ class _Base:
     # --- public API ---------------------------------------------------------------------------
 
     def sample(self, opp_colors: str | None, seen_cards, hand_count: int, known_zone_cards=None,
-               rng=None, turn: int | None = None) -> tuple[list[str], list[str]]:
+               rng=None, turn: int | None = None, lost=None) -> tuple[list[str], list[str]]:
         """(decklist, hidden hand) for one determinization. seen_cards: every opponent card revealed
         so far (a multiset, max simultaneous copies); known_zone_cards: the cards now in the
-        opponent's known zones (battlefield cards, graveyard, exile, known hand, library top).
-        The deck contains both; the hand (hand_count cards) comes from the rest of the deck.
+        opponent's known zones (battlefield cards it owns, graveyard, exile, known hand, library
+        top, its spells on the stack); lost: its cards that left the battlefield for an unrecorded
+        zone, as reconstruct.opp_location_unknown(g, n, split=True) gives them (likely in hand, the
+        rest). The deck contains all of them; the hand (hand_count cards) is drawn from the deck
+        minus the known zones, so a seen card that is in no known zone (bounced, tucked, exiled
+        unseen) can be in it, and a 'likely in hand' card is, with probability P_LIKELY_IN_HAND.
         turn: the opponent's completed turns (used only with a retention table)."""
         rng = rng if isinstance(rng, np.random.Generator) else np.random.default_rng(rng)
-        d, forced, extra = self._sample_deck(opp_colors, as_counter(seen_cards), as_counter(known_zone_cards),
-                                             hand_count, rng)
-        h = self.draw_hand(d, forced, hand_count, rng, turn)
+        d, h, _, extra = self._draw(opp_colors, as_counter(seen_cards), as_counter(known_zone_cards),
+                                    hand_count, rng, turn, lost)
         return self.names(d, extra), self.names(h)
 
-    def sample_vec(self, opp_colors, seen: Counter, zones: Counter, hand_count: int, rng, turn: int | None = None):
+    def sample_vec(self, opp_colors, seen: Counter, zones: Counter, hand_count: int, rng, turn: int | None = None,
+                   lost=None):
         """sample() as count vectors: (deck, hand, forced)."""
-        d, forced, _ = self._sample_deck(opp_colors, seen, zones, hand_count, rng)
-        return d, self.draw_hand(d, forced, hand_count, rng, turn), forced
+        d, h, forced, _ = self._draw(opp_colors, seen, zones, hand_count, rng, turn, lost)
+        return d, h, forced
 
-    def forced(self, seen: Counter, zones: Counter) -> tuple[np.ndarray, np.ndarray, Counter]:
-        """(seen vector, forced vector = per-card max of seen and zones, names outside the pool)."""
+    def _draw(self, opp_colors, seen: Counter, zones: Counter, hand_count: int, rng, turn, lost):
+        sv, forced, extra = self.forced(seen, zones, lost)
+        zv, _ = self.vec(zones)
+        d = self._sample_deck(opp_colors, sv, forced, zv, extra, hand_count, rng)
+        return d, self.draw_hand(d, zv, hand_count, rng, turn, self.vec(split_lost(lost)[0])[0]), forced, extra
+
+    def forced(self, seen: Counter, zones: Counter, lost=None) -> tuple[np.ndarray, np.ndarray, Counter]:
+        """(seen vector, forced vector, names outside the pool). Forced: the copies a sampled deck
+        must hold, the per-card max of the seen cards and of the cards the spec places (zones) plus
+        the lost ones, which are in no zone of the spec (split_lost)."""
+        likely, rest = split_lost(lost)
         sv, se = self.vec(seen)
-        zv, ze = self.vec(zones)
-        return sv, np.maximum(sv, zv), se | ze
+        pv, pe = self.vec(zones + likely + rest)
+        return sv, np.maximum(sv, pv), se | pe
 
-    def _sample_deck(self, opp_colors, seen: Counter, zones: Counter, hand_count: int, rng):
+    def _sample_deck(self, opp_colors, sv: np.ndarray, forced: np.ndarray, zv: np.ndarray, extra: Counter,
+                     hand_count: int, rng) -> np.ndarray:
+        """A deck count vector holding the forced copies, with room for the hand in d - zv."""
         raise NotImplementedError
 
-    def marginal(self, opp_colors: str | None, seen_cards, known_zone_cards=None, turn: int | None = None) -> np.ndarray:
-        """P(one hidden hand card is card i) over the pool's cards (the first draw of the hand)."""
+    def marginal(self, opp_colors: str | None, seen_cards, known_zone_cards=None, turn: int | None = None,
+                 lost=None, hand_count: int | None = None) -> np.ndarray:
+        """P(one hidden hand card is card i) over the pool's cards (the first draw of the hand),
+        drawn as sample() draws it; with hand_count, the 'likely in hand' copies of `lost` enter
+        with their own probability (the mean share of the hand that is card i)."""
         raise NotImplementedError
+
+    def _known_and_likely(self, zones: Counter, lost, hand_count: int | None) -> tuple[np.ndarray, np.ndarray]:
+        """(zone vector, likely vector) for a marginal; likely is empty without a hand count."""
+        zv, _ = self.vec(zones)
+        lk = self.vec(split_lost(lost)[0])[0] if hand_count else np.zeros(self.C, np.int16)
+        return zv, lk
 
     def _weighted(self, x: np.ndarray, turn: int | None) -> np.ndarray:
         o = self.hand_odds(turn)
         x = x if o is None else x * o
         return x / max(x.sum(), 1e-12)
+
+    @staticmethod
+    def _mix_likely(p: np.ndarray, lk: np.ndarray, hand_count: int | None) -> np.ndarray:
+        """The one-card marginal of a hand of hand_count cards whose `lk` copies are each in it with
+        probability P_LIKELY_IN_HAND (scaled down when they would overfill it), the rest drawn by p."""
+        if not hand_count or not lk.any():
+            return p
+        e = P_LIKELY_IN_HAND * lk.astype(np.float64)
+        e *= min(1.0, hand_count / e.sum())
+        return (e + (hand_count - e.sum()) * p) / hand_count
 
 
 class OpponentModel(_Base):
@@ -573,19 +650,21 @@ class OpponentModel(_Base):
         self._post_key, self._post, self._cdf = key, (idx, w), np.cumsum(w)
         return idx, w
 
-    def _sample_deck(self, opp_colors, seen: Counter, zones: Counter, hand_count: int, rng):
-        sv, forced, extra = self.forced(seen, zones)
+    def _sample_deck(self, opp_colors, sv, forced, zv, extra, hand_count: int, rng) -> np.ndarray:
         idx, _ = self.posterior(opp_colors, sv)
         j = int(idx[min(int(np.searchsorted(self._cdf, rng.random() * self._cdf[-1], side="right")), len(idx) - 1)])
         d, self.last_replaced = self.force_include(self.pool.counts[j], forced, self.group_freq[self.gbits[j]])
-        d = self.fit_room(d, forced, hand_count, self.filler(int(self.gbits[j])))
-        return d, forced, extra
+        return self.fit_room(d, zv, hand_count, self.filler(int(self.gbits[j])))
 
-    def marginal(self, opp_colors, seen_cards, known_zone_cards=None, turn: int | None = None,
-                 tail: float = 1e-4) -> np.ndarray:
-        # Over the most likely candidate decks holding all but `tail` of the posterior mass. The
-        # swap-ins of force_include are not modelled: a deck's hidden cards are D - min(D, forced).
-        sv, forced, _ = self.forced(as_counter(seen_cards), as_counter(known_zone_cards))
+    def marginal(self, opp_colors, seen_cards, known_zone_cards=None, turn: int | None = None, lost=None,
+                 hand_count: int | None = None, tail: float = 1e-4) -> np.ndarray:
+        # Over the most likely candidate decks holding all but `tail` of the posterior mass. A deck's
+        # hidden cards are max(D, forced) - zones: force_include's swap-ins are counted, the cards
+        # they replace are not taken out. The likely copies are left out here and mixed in by
+        # _mix_likely with their own probability.
+        zones = as_counter(known_zone_cards)
+        sv, forced, _ = self.forced(as_counter(seen_cards), zones, lost)
+        zv, lk = self._known_and_likely(zones, lost, hand_count)
         idx, w = self.posterior(opp_colors, sv)
         order = np.argsort(-w)
         n = int(np.searchsorted(np.cumsum(w[order]), 1 - tail)) + 1
@@ -593,18 +672,20 @@ class OpponentModel(_Base):
         o = self.hand_odds(turn)
         o = np.ones(self.C, np.float32) if o is None else o.astype(np.float32)
         cols = np.nonzero(forced > 0)[0]
-        mn = np.minimum(self.pool.counts[np.ix_(top, cols)], forced[cols]).astype(np.float32)
+        dc = self.pool.counts[np.ix_(top, cols)].astype(np.float32)
+        # the forced columns' hidden copies minus the deck's own (forced >= zones + likely, so >= 0)
+        adj = np.maximum(dc, forced[cols]) - (zv[cols] + lk[cols]) - dc
         mass = np.zeros(len(top), np.float64)             # each deck's (weighted) hidden size
         for s in range(0, len(top), 8192):
             mass[s:s + 8192] = self.pool.counts[top[s:s + 8192]].astype(np.float32) @ o
-        mass -= mn @ o[cols]
+        mass += adj @ o[cols]
         coef = (wt / np.maximum(mass, 1e-6)).astype(np.float32)
         p = np.zeros(self.C, np.float64)
         for s in range(0, len(top), 8192):
             p += coef[s:s + 8192] @ self.pool.counts[top[s:s + 8192]].astype(np.float32)
-        p[cols] -= coef @ mn
+        p[cols] += coef @ adj
         p = np.maximum(p, 0) * o
-        return p / max(p.sum(), 1e-12)
+        return self._mix_likely(p / max(p.sum(), 1e-12), lk, hand_count)
 
 
 class FrequencyModel(_Base):
@@ -612,16 +693,22 @@ class FrequencyModel(_Base):
     in proportion to each card's expected copies beyond the forced ones."""
     name = "freq"
 
-    def _sample_deck(self, opp_colors, seen: Counter, zones: Counter, hand_count: int, rng):
-        sv, forced, extra = self.forced(seen, zones)
+    def _sample_deck(self, opp_colors, sv, forced, zv, extra, hand_count: int, rng) -> np.ndarray:
         x = np.maximum(self.color_freq(opp_colors, sv) - forced, 0)
         n = max(40 - int(forced.sum()) - sum(extra.values()), hand_count + 1)
         self.last_replaced = 0
-        return forced.astype(np.int16) + _weighted_fill(x, n, rng), forced, extra
+        return forced.astype(np.int16) + _weighted_fill(x, n, rng)
 
-    def marginal(self, opp_colors, seen_cards, known_zone_cards=None, turn: int | None = None) -> np.ndarray:
-        sv, forced, _ = self.forced(as_counter(seen_cards), as_counter(known_zone_cards))
-        return self._weighted(np.maximum(self.color_freq(opp_colors, sv) - forced, 0), turn)
+    def marginal(self, opp_colors, seen_cards, known_zone_cards=None, turn: int | None = None, lost=None,
+                 hand_count: int | None = None) -> np.ndarray:
+        # hidden: the forced copies outside the known zones (and the likely ones) plus the fill
+        zones = as_counter(known_zone_cards)
+        sv, forced, extra = self.forced(as_counter(seen_cards), zones, lost)
+        zv, lk = self._known_and_likely(zones, lost, hand_count)
+        x = np.maximum(self.color_freq(opp_colors, sv) - forced, 0)
+        n = max(40 - int(forced.sum()) - sum(extra.values()), (hand_count or 0) + 1)
+        fill = x * (n / x.sum()) if x.sum() > 0 else x
+        return self._mix_likely(self._weighted(np.maximum(forced - zv - lk, 0) + fill, turn), lk, hand_count)
 
 
 class UniformPoolModel(_Base):
@@ -634,18 +721,23 @@ class UniformPoolModel(_Base):
             return np.ones(self.C, bool)
         return (self.meta.colors & ~np.uint8(S)) == 0
 
-    def _sample_deck(self, opp_colors, seen: Counter, zones: Counter, hand_count: int, rng):
-        sv, forced, extra = self.forced(seen, zones)
+    def _sample_deck(self, opp_colors, sv, forced, zv, extra, hand_count: int, rng) -> np.ndarray:
         m = np.nonzero(self.pool_mask(opp_colors, sv))[0]
         n = max(40 - int(forced.sum()) - sum(extra.values()), hand_count + 1)
         d = forced.astype(np.int16).copy()
         np.add.at(d, rng.choice(m, size=n, replace=True), 1)
         self.last_replaced = 0
-        return d, forced, extra
+        return d
 
-    def marginal(self, opp_colors, seen_cards, known_zone_cards=None, turn: int | None = None) -> np.ndarray:
-        sv, _, _ = self.forced(as_counter(seen_cards), as_counter(known_zone_cards))
-        return self._weighted(self.pool_mask(opp_colors, sv).astype(np.float64), turn)
+    def marginal(self, opp_colors, seen_cards, known_zone_cards=None, turn: int | None = None, lost=None,
+                 hand_count: int | None = None) -> np.ndarray:
+        zones = as_counter(known_zone_cards)
+        sv, forced, extra = self.forced(as_counter(seen_cards), zones, lost)
+        zv, lk = self._known_and_likely(zones, lost, hand_count)
+        mask = self.pool_mask(opp_colors, sv).astype(np.float64)
+        n = max(40 - int(forced.sum()) - sum(extra.values()), (hand_count or 0) + 1)
+        fill = mask * (n / max(mask.sum(), 1.0))
+        return self._mix_likely(self._weighted(np.maximum(forced - zv - lk, 0) + fill, turn), lk, hand_count)
 
 
 def _weighted_fill(x: np.ndarray, n: int, rng) -> np.ndarray:
@@ -672,13 +764,18 @@ def _weighted_fill(x: np.ndarray, n: int, rng) -> np.ndarray:
 # =============================================================================================
 
 def zone_cards(spec: StateSpec, seat: str = "B") -> Counter:
-    """The named cards in a seat's known zones: battlefield cards (not tokens), graveyard, exile,
-    known hand and known library top."""
+    """The named cards of a seat's deck that the spec places in a known zone, counted as
+    StateSpec.validate and the bridge take them out of its decklist: its graveyard, exile, known
+    hand and known library top, the cards (not tokens) it owns on either battlefield (a permanent
+    is listed under its controller, with Perm.owner when the other seat owns it: a stolen or
+    reanimated card) and its spells on the stack."""
     p = spec.players[seat]
     c = Counter(p.hand + p.graveyard + p.exile + p.libraryTop)
-    for perm in p.battlefield:
-        if perm.name and not (perm.token or perm.tokenClass):
-            c[perm.name] += perm.count
+    for s, q in spec.players.items():
+        for perm in q.battlefield:
+            if perm.name and not (perm.token or perm.tokenClass) and (perm.owner or s) == seat:
+                c[perm.name] += perm.count
+    c.update(x.card for x in spec.stack if x.controller == seat and x.card)
     return c
 
 
@@ -695,16 +792,27 @@ def turns_done(spec: StateSpec, seat: str) -> int:
 
 
 def determinize(spec: StateSpec, model: _Base, k: int, seed: int = 0, opp_colors: str | None = None,
-                seen=None) -> list[StateSpec]:
+                seen=None, lost=None) -> list[StateSpec]:
     """k copies of `spec` with the opponent's (B's) hidden cards sampled: B.decklist from the model
     (decklistSource "belief"; an "exact" decklist is kept) and B.hand = known + sampled cards
-    (handUnknown 0). `seen` is the multiset of B's cards revealed so far (default: its zone cards);
-    determinization i uses the RNG seeded by (seed, i), so the first j of k are the same for any k.
+    (handUnknown 0). `seen` is the multiset of B's cards revealed so far (default: its zone cards;
+    A's cards that B controls, Perm.owner "A", are taken out of it).
+    The hidden hand is drawn from the deck minus the cards the spec places (zone_cards), so a seen
+    card in no zone of the spec can be in it. `lost`: B's cards that left the battlefield for an
+    unrecorded zone, reconstruct.opp_location_unknown(g, n, split=True) = (likely in hand, the
+    rest), at the snapshot the spec starts from (after=True for state_after_user_turn); a likely
+    one is in the hand with probability P_LIKELY_IN_HAND (84% measured, against 6% of the rest).
+    Determinization i uses the RNG seeded by (seed, i), so the first j of k are the same for any k.
     A is untouched."""
     B = spec.players["B"]
     zones = zone_cards(spec, "B")
-    seen = as_counter(seen) | zones
+    # the seen multiset (reconstruct's revealed cards) counts every card seen on B's side, A's cards
+    # that B controls included (listed under B with Perm.owner "A"): those are not B's
+    theirs = Counter(p.name for p in B.battlefield if p.owner not in (None, "B") and p.name
+                     and not (p.token or p.tokenClass) for _ in range(p.count))
+    seen = (as_counter(seen) - theirs) | zones
     turn = turns_done(spec, "B")
+    likely = model.vec(split_lost(lost)[0])[0]
     out = []
     for i in range(k):
         rng = np.random.default_rng([seed, i])
@@ -728,9 +836,9 @@ def determinize(spec: StateSpec, model: _Base, k: int, seed: int = 0, opp_colors
                 sb.decklistSource = "belief"
                 sampled.insert(0, "B.decklist")
                 s.provenance.flags.append("B_decklist_padded")
-            hand = model.names(model.draw_hand(dv, known, B.handUnknown, rng, turn))
+            hand = model.names(model.draw_hand(dv, known, B.handUnknown, rng, turn, likely))
         else:
-            deck, hand = model.sample(opp_colors, seen, B.handUnknown, zones, rng, turn)
+            deck, hand = model.sample(opp_colors, seen, B.handUnknown, zones, rng, turn, lost)
             sb.decklistSource = "belief"
             sampled.insert(0, "B.decklist")
         sb.decklist = deck
@@ -772,12 +880,15 @@ class View:
     hand_count: int
     true_hand: Counter
     true_deck: Counter
+    # reconstruct.opp_location_unknown(split=True) at the snapshot: (likely in hand, the rest)
+    lost: tuple = field(default_factory=lambda: (Counter(), Counter()))
 
 
 def pair_views(g: replay.Game, other: replay.Game, turns, ids: Ids) -> list[View]:
     """Views of game g (user = g's user) at the given user turns, the truth read from `other`, the
     same game recorded by the opponent. The true hand is the other row's own end-of-turn hand of
     the half-turn whose snapshot starts user turn n."""
+    from draftzero.gameplay import reconstruct as rc
     out = []
     for n in turns:
         if n not in g.decision_turns():
@@ -791,7 +902,7 @@ def pair_views(g: replay.Game, other: replay.Game, turns, ids: Ids) -> list[View
         spec, seen, colors = game_evidence(g, n, ids)
         truth = Counter(ids.name(c) for c in t.L("eot_user_cards_in_hand") if c != -1 and ids.cards17.get(c))
         out.append(View(n, p.n, spec, colors, seen, zone_cards(spec, "B"), spec.players["B"].handUnknown,
-                        truth, Counter(other.deck)))
+                        truth, Counter(other.deck), rc.opp_location_unknown(g, n, ids, split=True)))
     return out
 
 
@@ -817,7 +928,8 @@ class _Acc:
                 "ll_per_card": r("ll", "true"), "ll_per_nonland_card": r("ll_nl", "true_nl"),
                 "hand_lands_sampled": r("lands_s", "samples"), "hand_lands_true": r("lands_t", "views"),
                 "deck_overlap": r("deck_hit", "deck_n"), "deck_overlap_nonland": r("deck_hit_nl", "deck_n_nl"),
-                "swaps_per_deck": r("swapped", "samples")}
+                "swaps_per_deck": r("swapped", "samples"),
+                "lost_in_true_hand": s["true_lost"], "recall_lost@K": r("hit_lost", "true_lostK")}
 
 
 def run_model(model: _Base, views: list[View], K: int, seed: int, colors: str = "row",
@@ -834,18 +946,22 @@ def run_model(model: _Base, views: list[View], K: int, seed: int, colors: str = 
         tv, _ = model.vec(v.true_hand)
         dv, _ = model.vec(v.true_deck)
         rng = np.random.default_rng([seed, vi])
-        _, forced, _ = model.forced(v.seen, v.zones)
-        hits = hits_nl = swapped = lands = 0
+        _, forced, _ = model.forced(v.seen, v.zones, v.lost)
+        zv, _ = model.vec(v.zones)
+        lk, _ = model.vec(v.lost[0])
+        lost_t = np.minimum(tv, model.vec(v.lost[0] + v.lost[1])[0])   # true hand cards that were lost
+        hits = hits_nl = hits_lost = swapped = lands = 0
         best = np.zeros(model.C, np.int16)
         dh = dhn = dn = dnn = 0
-        od = model.fit_room(np.maximum(dv, forced), forced, v.hand_count, model.filler(0))
+        od = model.fit_room(np.maximum(dv, forced), zv, v.hand_count, model.filler(0))
         for _ in range(K):
             if oracle:
-                d, h = od, model.draw_hand(od, forced, v.hand_count, rng, v.opp_turns)
+                d, h = od, model.draw_hand(od, zv, v.hand_count, rng, v.opp_turns, lk)
             else:
-                d, h, _ = model.sample_vec(oc, v.seen, v.zones, v.hand_count, rng, v.opp_turns)
+                d, h, _ = model.sample_vec(oc, v.seen, v.zones, v.hand_count, rng, v.opp_turns, v.lost)
                 swapped += model.last_replaced
             hits += int(np.minimum(h, tv).sum())
+            hits_lost += int(np.minimum(h, lost_t).sum())
             hits_nl += int(np.minimum(h, tv)[nl].sum())
             lands += int(h[~nl].sum())
             best = np.maximum(best, h)
@@ -854,16 +970,18 @@ def run_model(model: _Base, views: list[View], K: int, seed: int, colors: str = 
             a, b = _overlap(d, dv, nl)
             dhn, dnn = dhn + a, dnn + b
         if oracle:
-            p = model._weighted(np.maximum(od - forced, 0).astype(np.float64), v.opp_turns)
+            p = model._mix_likely(model._weighted(np.maximum(od - zv - lk, 0).astype(np.float64), v.opp_turns),
+                                  lk, v.hand_count)
         else:
-            p = model.marginal(oc, v.seen, v.zones, v.opp_turns)
+            p = model.marginal(oc, v.seen, v.zones, v.opp_turns, v.lost, v.hand_count)
         lp = np.log((1 - LL_FLOOR) * p + LL_FLOOR * floor) * tv
         for key in (v.turn, "all"):
             acc.setdefault(key, _Acc()).add(
                 views=1, true=int(tv.sum()), true_nl=int(tv[nl].sum()), trueK=int(tv.sum()) * K,
                 true_nlK=int(tv[nl].sum()) * K, hit=hits, hit_nl=hits_nl, cov=int(np.minimum(best, tv).sum()),
                 ll=float(lp.sum()), ll_nl=float(lp[nl].sum()), lands_s=lands, lands_t=int(tv[~nl].sum()),
-                deck_hit=dh, deck_n=dn, deck_hit_nl=dhn, deck_n_nl=dnn, samples=K, swapped=swapped)
+                deck_hit=dh, deck_n=dn, deck_hit_nl=dhn, deck_n_nl=dnn, samples=K, swapped=swapped,
+                true_lost=int(lost_t.sum()), true_lostK=int(lost_t.sum()) * K, hit_lost=hits_lost)
     return {str(k): a.result() for k, a in acc.items()}
 
 
@@ -878,7 +996,7 @@ def tune_alpha(model: OpponentModel, views: list[View], grid=(0.1, 0.3, 1.0, 3.0
             if not v.true_hand:
                 continue
             tv, _ = model.vec(v.true_hand)
-            p = (1 - LL_FLOOR) * model.marginal(v.colors, v.seen, v.zones) + LL_FLOOR * floor
+            p = (1 - LL_FLOOR) * model.marginal(v.colors, v.seen, v.zones, None, v.lost, v.hand_count) + LL_FLOOR * floor
             idx = np.nonzero(tv)[0]
             ll += float((np.log(p[idx]) * tv[idx]).sum())
             n += int(tv.sum())
@@ -933,7 +1051,7 @@ def evaluate(n_pairs: int = 2500, n_dev: int = 300, turns=(3, 5, 7), K: int = 16
         deck.alpha, scores = alpha, {}
     bad = 0
     for i, v in enumerate(V):                   # every view's spec must determinize into a valid full spec
-        s = determinize(v.spec, deck, 1, seed + i, v.colors, v.seen)[0]
+        s = determinize(v.spec, deck, 1, seed + i, v.colors, v.seen, v.lost)[0]
         bad += bool(s.validate()) or s.is_partial()
     log(f"determinize: {bad} of {len(V)} specs invalid or partial")
     freq, unif = FrequencyModel(pool, meta), UniformPoolModel(pool, meta)

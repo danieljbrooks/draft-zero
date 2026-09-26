@@ -135,6 +135,77 @@ def test_spec_dict_accepts_statespec_dict_and_path():
     assert bridge.spec_dict(StateSpec.from_dict(as_path))["players"]["A"]["hand"] == as_path["players"]["A"]["hand"]
 
 
+# build.sh's shape: it builds into $HERE/build after `rm -rf build/classes`. This one logs where
+# it ran, pauses, and fails if its classes vanished meanwhile (another build's rm -rf)
+FAKE_BUILD_SH = """#!/bin/sh
+set -e
+HERE=$(cd "$(dirname "$0")" && pwd)
+OUT=$HERE/build
+echo "start $HERE" >> "$FAKE_BUILD_LOG"
+rm -rf "$OUT/classes"
+mkdir -p "$OUT/classes"
+cp "$HERE"/src/*.java "$OUT/classes/"
+sleep 0.3
+test -f "$OUT/classes/Worker.java"
+echo jar > "$OUT/mzbridge.jar.tmp"
+mv "$OUT/mzbridge.jar.tmp" "$OUT/mzbridge.jar"
+echo "end $HERE" >> "$FAKE_BUILD_LOG"
+"""
+
+
+def test_concurrent_jar_builds_are_serialised(tmp_path, monkeypatch):
+    """Every Bridge(auto_build=True) rebuilds a jar older than the sources, and build.sh starts with
+    `rm -rf build/classes`: two processes building at once must neither interleave nor share a
+    build directory. The jar is dated to the source snapshot, so an edit during a build is not lost,
+    and a build directory left by a killed build is removed by the next build."""
+    import fcntl
+    import os
+    import subprocess
+    import sys
+    root = tmp_path / "mzbridge"
+    (root / "src").mkdir(parents=True)
+    (root / "src" / "Worker.java").write_text("class Worker {}\n")
+    (root / "build.sh").write_text(FAKE_BUILD_SH)
+    log = tmp_path / "build.log"
+    code = ("from pathlib import Path\nfrom draftzero.gameplay import bridge as b\n"
+            f"root = Path({str(root)!r})\n"
+            "b.BRIDGE_DIR, b.BUILD_SH, b.JAR = root, root / 'build.sh', root / 'build' / 'mzbridge.jar'\n"
+            "b.build_jar(force=True)\n")
+    env = dict(os.environ, FAKE_BUILD_LOG=str(log))
+    (root / "build" / "build-killed").mkdir(parents=True)          # left by a build killed mid-way
+    # hold the lock while both start, so that both wait for it at once and then contend
+    with open(root / "build" / ".build.lock", "a") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        procs = [subprocess.Popen([sys.executable, "-c", code], env=env, stderr=subprocess.PIPE, text=True)
+                 for _ in range(2)]
+        time.sleep(1.5)
+        assert not log.exists() and all(p.poll() is None for p in procs)   # nobody built past the lock
+    errs = [p.communicate(timeout=60)[1] for p in procs]
+    assert [p.returncode for p in procs] == [0, 0], errs
+    events = [line.split(" ", 1) for line in log.read_text().splitlines()]
+    assert [e for e, _ in events] == ["start", "end", "start", "end"]          # one build at a time
+    dirs = [d for _, d in events]
+    assert dirs[0] == dirs[1] != dirs[2] == dirs[3] and str(root) not in (dirs[0], dirs[2])
+    jar = root / "build" / "mzbridge.jar"
+    assert jar.read_text() == "jar\n"
+    assert sorted(p.name for p in jar.parent.iterdir()) == [".build.lock", "mzbridge.jar"]   # temp dirs gone
+    # in this process: an up-to-date jar is kept, a source newer than the build's snapshot is not
+    monkeypatch.setattr(bridge, "BRIDGE_DIR", root)
+    monkeypatch.setattr(bridge, "BUILD_SH", root / "build.sh")
+    monkeypatch.setattr(bridge, "JAR", jar)
+    monkeypatch.setenv("FAKE_BUILD_LOG", str(log))
+    assert not bridge.jar_is_stale() and bridge.build_jar() == jar and len(log.read_text().splitlines()) == 4
+    edited = jar.stat().st_mtime + 0.1               # after the last build's snapshot, before now
+    os.utime(root / "src" / "Worker.java", (edited, edited))
+    assert bridge.jar_is_stale()
+    bridge.build_jar()
+    assert len(log.read_text().splitlines()) == 6 and not bridge.jar_is_stale()
+    (root / "build.sh").write_text("#!/bin/sh\nexit 3\n")
+    with pytest.raises(bridge.BridgeUnavailable, match="exit 3"):
+        bridge.build_jar(force=True)
+    assert jar.read_text() == "jar\n" and sorted(p.name for p in jar.parent.iterdir()) == [".build.lock", "mzbridge.jar"]
+
+
 # ------------------------------------------------------------------------------ worker
 
 @needs_worker
