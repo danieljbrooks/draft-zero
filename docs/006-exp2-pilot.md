@@ -6,7 +6,7 @@ Run 2026-09-26 (UTC) on two RunPod pods. Both were RTX 3090, Secure Cloud, $0.50
 - **Pod B** ran the throughput benchmark: experiment 3 (JVM layout), then experiment 2 (single-JVM tuning).
 - **Engine:** experiment #1's v0.1 stack. That is MageZero `bcc76de` plus the generalist XMage build `5a32441c`. The v0.2 Java source isn't public (ROADMAP B1).
 - **Settings:** search budget 300, search timeout 60 s, λ (`td_discount`) = 0.95, replay buffer 150,000 states, max game length 50 min. The configs are `configs/exp2_pilot_pod.yml` and `configs/curriculum_exp2.yml`.
-- **Status:** experiments 1 and 3 are complete except for one run (the shared-server run). Experiment 2's runs were still in progress when this was written; see [Still to add](#still-to-add).
+- **Status:** all three experiments are complete.
 
 ## Conclusions
 
@@ -14,9 +14,14 @@ Run 2026-09-26 (UTC) on two RunPod pods. Both were RTX 3090, Secure Cloud, $0.50
 2. **The 50-minute game cap never binds either.** Mean game time was 5.9 min offline and 9.7 min with the network. Games lasted 11–32 turns (median 18.5, n = 32).
 3. **λ = 0.95 gives well-spread value labels.** The median |label| is 0.41–0.49 and only 7–17% of labels are near 0. After one generation, the value head predicts the next generation's labels with a correlation of 0.81.
 4. **Parallel JVMs win decisively offline.** The same 28 game threads as 7 JVMs × 4 threads gave **3.3×** the search throughput of 1 JVM × 28 (554 vs 167 sims/s). They also finished 25 games in 10 minutes against 0. This confirms Will's #1 issue: one big JVM wastes most of the machine.
-5. **With the network on, inference becomes the bottleneck.** With a server per JVM, 7 × 4 reached only 177 sims/s, a 1.6× gain over 1 × 28's 112. The network path costs 3.1× relative to offline at 7 × 4. Fixing parallel JVMs alone isn't enough; the next target is the serving path: 7 Python servers on one GPU, each batching requests from only 4 clients.
-6. **Bad targets are measurable now, and they happen.** 11 of 39 classifiable targets were bad (28%, n = 39). The side that made the bad target lost all 11 of those games. But 79% of targets can't be classified yet, so the classifier needs work before this number means much.
-7. **The 17lands-style stats and color win rates work end to end, but a pilot has too few games.** GIH ρ against 17lands was 0.11 (gen 0) and 0.02 (gen 1) over 32 games, which is noise. At this scale that metric needs hundreds of games per generation.
+5. **With the network on, inference becomes the bottleneck, and one shared server beats a server per JVM.** At 7 × 4:
+   - a server per JVM reached 177 sims/s, only 1.6× over 1 × 28's 112;
+   - one shared server reached 215 sims/s (1.9×).
+
+   Even so, the network path runs at 2.6× below offline. Fixing the JVM layout alone isn't enough; the serving path is the next thing to fix. This also answers ROADMAP B3: prefer one shared server.
+6. **Tuning a single JVM gets little.** On the same pod, 1 JVM × 14 threads (115 sims/s) matched 1 × 28 (112): the second 14 threads added nothing. Generational ZGC added 10% (123 vs 112). Neither comes close to what splitting the JVM gives.
+7. **Bad targets are measurable now, and they happen.** 11 of 39 classifiable targets were bad (28%, n = 39). The side that made the bad target lost all 11 of those games. But 79% of targets can't be classified yet, so the classifier needs work before this number means much.
+8. **The 17lands-style stats and color win rates work end to end, but a pilot has too few games.** GIH ρ against 17lands was 0.11 (gen 0) and 0.02 (gen 1) over 32 games, which is noise. At this scale that metric needs hundreds of games per generation.
 
 ## Experiment 1: settings pilot (Pod A)
 
@@ -126,11 +131,15 @@ Every run used the same pod and the same 28 game threads, for 10 minutes each, a
 | off_7x4 | 7 × 4, 11 GB heaps | offline | **554** | 3,651 | 0 | 25 |
 | net_1x28 | 1 × 28 | network, 1 server | 112 | 688 | 2 | 0 |
 | net_7x4_own | 7 × 4 | network, server per JVM | 177 | 1,168 | 0 | 1 |
-| net_7x4_shared | 7 × 4 | network, 1 shared server | *pending* | | | |
+| net_7x4_shared | 7 × 4 | network, 1 shared server | **215** | 1,412 | 11 | 7 |
 
 - **Offline:** 7 × 4 beats 1 × 28 by 3.3×. The JVM layout alone decides that. No JVM died, since each JVM now has its own XMage directory and temp directory, and they start 5 s apart.
-- **Network:** splitting helps only 1.6×. The network path costs 3.1× relative to offline at 7 × 4, and even the 1 × 28 case loses 33%. Seven separate servers each batch requests from only 4 clients, so batches are tiny and seven CUDA contexts time-share one GPU. The shared-server run tests whether that is the cause; it is also Will's question B3.
-- **Cross-check from Pod A:** 1 × 16 offline ran about 228 searches/min, against about 110/min for 1 × 28 on Pod B. Adding threads to one JVM reduced total throughput. The two pods are different machines, so experiment 2's 1 × 14 run checks this on a single one.
+- **Network:** splitting helps 1.6× with a server per JVM and 1.9× with one shared server. The network path still costs 2.6× relative to offline at 7 × 4, and even at 1 × 28 it loses 33%.
+  - Seven separate servers each batch requests from only 4 clients, so batches are tiny, and seven CUDA contexts time-share one GPU.
+  - One shared server sees all 28 clients and batches better (+21% over per-JVM servers).
+  - The shared server did produce 11 timeouts in 4,460 searches (0.25%), the only real count anywhere in the pilot. At that load it queues requests: a sign it is near saturation.
+  - This answers ROADMAP B3: prefer one shared server, and optimize its batching next.
+- **Cross-check from Pod A:** 1 × 16 offline ran about 228 searches/min, against about 110/min for 1 × 28 on Pod B. Adding threads to one JVM reduced total throughput. Experiment 2's 1 × 14 run confirms the plateau on a single pod.
 
 Caveats:
 
@@ -139,15 +148,22 @@ Caveats:
 
 ## Experiment 2: single-JVM tuning (Pod B)
 
-*Pending.* These runs use 1 × 28 with the network on:
+Same pod and settings as experiment 3, with the network on and one server.
 
-- generational ZGC (`net_1x28_zgcgen`);
-- half the threads (`net_1x14`).
+| run | layout | GC | sims/s | searches | vs baseline |
+|---|---|---|---|---|---|
+| net_1x28 (baseline) | 1 × 28 | ZGC | 112 | 688 | |
+| net_1x28_zgcgen | 1 × 28 | generational ZGC | 123 | 790 | +10% |
+| net_1x14 | 1 × 14 | ZGC | 115 | 742 | +3% with half the threads |
+
+- **One JVM plateaus at about 14 threads.** Doubling the threads to 28 added no throughput. So Will's issue is contention inside the JVM, not a lack of cores.
+- **Generational ZGC is a small, free win.** Worth turning on (`--gc zgc-gen`, JDK 21+), but at +10% it is no substitute for splitting the JVM (+90% at 7 × 4 with a shared server).
+- **No 1-JVM run finished a game in 10 minutes.** At 14–28 threads in one JVM, each game takes longer than the window.
 
 ## Recommendations for the full experiment #2
 
-- **Run K × 4 JVMs, not one big JVM.** On a 31-core pod that is 7 × 4.
-- **Fix inference serving before scaling up.** Options are a shared batched server, larger effective batches, or a single CUDA context. With the network on, the full 3.3× from parallel JVMs is currently lost.
+- **Run K × 4 JVMs, not one big JVM, with one shared inference server.** On a 31-core pod that is 7 × 4. Turn on generational ZGC too.
+- **Next, optimize the shared server.** Candidates are larger batches, a batching wait window, and more server threads. With the network on, most of the 3.3× offline gain from parallel JVMs is still lost, and the shared server is already queuing (0.25% timeouts).
 - **Keep budget 300 and the 60 s timeout.** Neither binds. A larger budget is affordable if it's wanted later.
 - **Fix the watchdog's exit handling and the persist-sync recursion before any run long enough to need them.**
 - **Before quoting a bad-target rate,** extend `classify_effect` and `NON_TARGET_PROMPT_RE` to cover the unclassified cases listed above.
@@ -155,12 +171,7 @@ Caveats:
 
 ## Cost
 
-About $1.50 for both pods. The balance went from $60.56 to $59.74 at 00:53 UTC, and Pod A was removed at 00:59 UTC.
-
-## Still to add
-
-- Pod B's last three runs: `net_7x4_shared`, `net_1x28_zgcgen` and `net_1x14`.
-- Pod B's removal and the final cost.
+$1.24 for both pods: the balance went from $60.56 to $59.32. Pod A was removed at 00:59 UTC and Pod B at 01:35 UTC, both after their results were saved locally.
 
 ## Reproducing
 
