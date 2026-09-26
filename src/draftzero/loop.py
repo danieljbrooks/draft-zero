@@ -436,7 +436,9 @@ def eval_generation(run: Run, gen: int, settings: GenSettings) -> dict:
     scratch = run.dir / "scratch"
     scratch.mkdir(parents=True, exist_ok=True)
     jvms = max(1, int(run.cfg["jvm"].get("jvms", 1)))
-    chunk = max(2, run.cfg["chunk_games"] // 2 * 2)       # whole pairs per JVM
+    # whole pairs per job, spread over every JVM slot (at most chunk_games per job)
+    pairs_per_job = max(1, min(run.cfg["chunk_games"] // 2, -(-ev["pairs"] // jvms)))
+    chunk = 2 * pairs_per_job
     jobs = []
     for baseline in ev["baselines"]:
         # Seeding on the generation resamples the eval decks every time, so each point
