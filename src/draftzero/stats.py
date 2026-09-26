@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
-from magezero.metrics import wilson
+from draftzero.metrics import wilson
 
 SUMMARY_TAG = "GAME_SUMMARY "
 

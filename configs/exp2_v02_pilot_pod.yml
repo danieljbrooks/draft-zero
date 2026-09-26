@@ -1,0 +1,41 @@
+# v0.2 pilot on a RunPod pod (31 cores / 116 GB, RTX 3090): exp #2's settings on Will's v0.2
+# engine, with the layout the first pilot picked (docs/006): 7 JVMs x 4 threads, one shared
+# inference server per checkpoint, generational ZGC.
+#
+# Checks that the whole loop runs on v0.2 at pod scale (play, train, eval, a frozen gen-0
+# opponent at gen 2), and measures games/hour, training time and search completion there.
+# Not a strength test: 3 generations of 56 games.
+#   DZ_STALL_MINUTES=90 bash deploy/launch.sh configs/exp2_v02_pilot_pod.yml --fresh
+model: FDN_exp2_v02
+version: 1
+curriculum: configs/curriculum_exp2.yml
+generations: 3              # gen 0 heuristic, gen 1 self-play, gen 2 self-play + frozen gen 0
+target_games: null
+resource_interval_s: 30
+
+deck_root: data/deckgen/FDN_PremierDraft_wr60/top_player_FDN_decks
+
+bootstrap_games: 56         # two games per game thread
+games_per_gen: 56
+chunk_games: 8              # per JVM job: 2 games per thread, so 7 jobs fill the 7 JVMs
+mix: {self: 0.2, past: 0.7, gen0: 0.1}   # exp #2's mix; at gen 2 "past" falls back to gen 0
+replay_states: 150000
+
+eval:
+  baselines: [offline]
+  every_n_gens: 99          # gen 0 only: checks the parallel eval, not strength
+  pairs: 7                  # 14 games, one pair per JVM
+  fixed_decks: true
+  window_gens: 3
+stats:
+  window_gens: 3
+  min_card_games: 1
+
+jvm:
+  heap: 11g                 # 7 x 11 GB, leaving ~35 GB of the 116 GB for servers and training
+  threads: 4
+  jvms: 7
+  gc: zgc-gen
+  search_budget: 300
+  timeout_ms: 60000
+  max_minutes: 50

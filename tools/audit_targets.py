@@ -5,7 +5,7 @@
 
 A target is "bad" when a harmful effect hits the actor's own card, or a beneficial effect
 hits the opponent's. Effects are classified with MageZero's own rules
-(magezero.metrics.classify_effect), so rates stay comparable with experiment #1's metric.
+(draftzero.metrics.classify_effect, moved from the MageZero fork), so rates stay comparable with experiment #1's metric.
 
 Why this exists: in experiment #1 that metric was effectively dead. Zero targets were
 classified in generations 0-32, for two reasons:
@@ -26,7 +26,7 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from magezero.metrics import LINE_RE, NON_TARGET_PROMPT_RE, classify_effect
+from draftzero.metrics import LINE_RE, NON_TARGET_PROMPT_RE, classify_effect
 
 SUMMARY_TAG = "GAME_SUMMARY "
 SIM_RE = re.compile(r"^Player: (Player[AB]) simulated ")

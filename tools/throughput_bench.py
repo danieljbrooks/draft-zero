@@ -35,8 +35,8 @@ import psutil
 import yaml
 
 from draftzero import paths as dzpaths
-from magezero.resources import cpu_quota, mem_limit_gb
-from magezero.runner import jvm_command, start_server, stop_server
+from draftzero.resources import cpu_quota, mem_limit_gb
+from draftzero.engine import jvm_command, start_server, stop_server
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -112,12 +112,6 @@ def game_yml(path: Path, a: argparse.Namespace, port_a: int, port_b: int, out_di
     path.write_text(yaml.safe_dump(cfg, sort_keys=False))
 
 
-def gc_flags(gc: str) -> list[str]:
-    return {"zgc": ["-XX:+UseZGC"],
-            "zgc-gen": ["-XX:+UseZGC", "-XX:+ZGenerational"],
-            "g1": ["-XX:+UseG1GC"]}[gc]
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True)
@@ -130,6 +124,9 @@ def main() -> int:
     ap.add_argument("--model", default="FDN_generalist")
     ap.add_argument("--version", type=int, default=1)
     ap.add_argument("--checkpoint", default=None, help="e.g. gen33; default: model.pt.gz")
+    ap.add_argument("--clients", type=int, default=None,
+                    help="game threads each server is sized for; its HTTP pool is 2x this (min 6). "
+                         "Default: the threads that query it. 3 reproduces MageZero's fixed pool of 6")
     ap.add_argument("--minutes", type=float, default=10)
     ap.add_argument("--budget", type=int, default=300)
     ap.add_argument("--timeout-ms", type=int, default=60000)
@@ -164,20 +161,19 @@ def main() -> int:
             n_servers = 1 if a.shared_server else a.jvms
             for i in range(n_servers):
                 port = 50100 + i
-                servers.append(start_server(a.model, a.version, port, out, checkpoint=a.checkpoint))
+                clients = a.clients or (a.jvms * a.threads if a.shared_server else a.threads)
+                servers.append(start_server(a.model, a.version, port, out, checkpoint=a.checkpoint,
+                                            clients=clients))
                 ports.append(port)
         for j in range(a.jvms):
             wd = xmage_copy(Path(a.xmage), out / f"xmage_{j}")
             port = ports[0 if a.shared_server else j] if ports else 50100
             yml = out / f"game_{j}.yml"
             game_yml(yml, a, port, port, out)
-            cmd, _ = jvm_command(str(yml), heap)
-            cmd = [c for c in cmd if c != "-XX:+UseZGC"]
             # A private temp dir per JVM: jhdf5 unpacks its native library into java.io.tmpdir,
             # and two JVMs starting at once race on that file. Locally the loser died at startup
             # with "No suitable HDF5 native library found", leaving a 2-JVM run doing 1 JVM's work.
-            (wd / "tmp").mkdir(exist_ok=True)
-            cmd[1:1] = gc_flags(a.gc) + [f"-Djava.io.tmpdir={(wd / 'tmp').resolve()}"]
+            cmd, _ = jvm_command(str(yml), heap, a.gc, wd / "tmp")
             log = out / f"jvm_{j}.log"
             logs.append(log)
             procs.append(subprocess.Popen(cmd, cwd=wd, stdout=open(log, "w"), stderr=subprocess.STDOUT))
@@ -226,7 +222,7 @@ def main() -> int:
 
     result = {
         "jvms": a.jvms, "threads_per_jvm": a.threads, "total_threads": a.jvms * a.threads,
-        "mode": a.mode, "shared_server": a.shared_server, "heap_per_jvm": heap, "gc": a.gc,
+        "mode": a.mode, "shared_server": a.shared_server, "server_clients": a.clients, "heap_per_jvm": heap, "gc": a.gc,
         "budget": a.budget, "timeout_ms": a.timeout_ms, "minutes_requested": a.minutes,
         "wall_seconds": round(wall, 1), "cores": round(cores, 2), "ram_gb": round(ram_gb, 1),
         "sims": sims, "sims_per_sec": round(sims / wall, 2) if wall else None,

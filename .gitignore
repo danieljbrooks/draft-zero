@@ -1,9 +1,13 @@
 # Generated data: regenerate with `tools/extract_decks.py` / `dz pools build`, never commit.
 data/decks/
 data/17lands/
-data/deckgen/
-data/pools/
+data/deckgen
+data/pools
 data/persist/
+# training shards the loop writes per model version
+data/*/ver*/
+# XMage's card database, when a tool (VocabDump) runs from the repo root
+db/
 runs/
 models/
 logs/

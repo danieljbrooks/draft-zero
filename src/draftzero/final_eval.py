@@ -29,8 +29,8 @@ from pathlib import Path
 from draftzero import alerts, hfsync, secrets
 from draftzero.loop import (OPPONENT_PORT, PRIMARY_PORT, TMP_DIR, Run, game_yml, load_config,
                             play_job, read_games)
-from magezero import metrics
-from magezero.runner import start_server, stop_server
+from draftzero import metrics
+from draftzero.engine import start_server, stop_server
 from magezero.util.config import load_curriculum, resolve_gen
 
 KIND = "final_eval"

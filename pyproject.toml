@@ -8,8 +8,11 @@ dependencies = [
     # MageZero supplies the RL framework, the XMage bridge and the training/eval runner.
     # Pinned to a commit, not a branch: a branch pin silently changes what a result was
     # produced against. Bump it deliberately, and record it (provenance.py does).
-    # This is the mz-engine branch: framework only, no experiment code.
-    "magezero @ git+https://github.com/danieljbrooks/MageZero@bcc76de",
+    # Will's v0.2 (WillWroble/MageZero 11a5974) plus three opt-in changes, branch `draftzero`:
+    # the policy width for a set-wide action vocabulary (#7, also on `action-vocab`), a CPU
+    # fallback, and MZ_SERVER_THREADS. Exp #1 ran on the older fork, mz-engine bcc76de; its
+    # metrics/report/resources now live in draftzero.
+    "magezero @ git+https://github.com/danieljbrooks/MageZero@2f29f1d",
     "numpy>=1.24",
     "scipy>=1.10",
     "pyyaml>=6.0",
@@ -27,4 +30,4 @@ dz = "draftzero.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-draftzero = ["py.typed"]
+draftzero = ["py.typed", "assets/*"]

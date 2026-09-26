@@ -172,9 +172,16 @@ def sync(src_dirs: list[Path], dest: Path) -> tuple[bool, str]:
             continue
         # --no-o/--no-g: a RunPod network volume is MooseFS and refuses chown, which
         # plain -a attempts and then fails the whole transfer on.
-        r = subprocess.run(["rsync", "-rlptD", "--no-o", "--no-g", "--delete",
-                            f"{src}/", str(dest / src.name) + "/"],
-                           capture_output=True, text=True)
+        cmd = ["rsync", "-rlptD", "--no-o", "--no-g", "--delete"]
+        # A persist dir inside a synced dir (data/persist inside data/) must not be copied into
+        # itself: in the exp #2 pilot that nested data/persist/data/persist/... on every tick
+        # until rsync failed, and no checkpoint ever reached the volume.
+        try:
+            inner = dest.resolve().relative_to(src.resolve())
+            cmd += ["--exclude", f"/{inner.as_posix()}/"]
+        except ValueError:
+            pass
+        r = subprocess.run(cmd + [f"{src}/", str(dest / src.name) + "/"], capture_output=True, text=True)
         if r.returncode != 0:
             return False, f"rsync {src.name} failed: {r.stderr.strip()[:200]}"
     return True, "ok"
@@ -310,7 +317,10 @@ def main() -> int:
                             hdetail, a.run_dir)
 
         elapsed_h = (now - started) / 3600
-        done = n >= a.target
+        # Finished by its target, or by its own generation count: the loop writes completed_at
+        # when it exits normally. Without the second check the pilot's clean finish looked like
+        # a crash, and the watchdog restarted a run that was already done.
+        done = n >= a.target or bool(read_state(a.run_dir).get("completed_at"))
 
         # The trainer died and the run is not finished. Restart it: the loop resumes at the
         # interrupted stage, so the cost is one chunk, versus idling a rented machine until

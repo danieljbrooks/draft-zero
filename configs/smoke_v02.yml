@@ -1,0 +1,43 @@
+# End-to-end smoke test of the loop on the v0.2 engine: tiny, on a laptop, CPU only.
+# Covers gen 0 (heuristic search, offline), gen 1 (network self-play), gen 2 (self-play plus a
+# frozen gen-0 opponent on its own server), parallel JVMs, a chunked parallel eval, and
+# training / testing through MageZero v0.2. Not a measurement of anything.
+#
+#   MZ_XMAGE_DIR=<generalist v0.2 bundle>/xmage MZ_ACTION_VOCAB=assets/vocab/FDN_SPG.tsv \
+#     python -m draftzero.loop --config configs/smoke_v02.yml --fresh
+#
+# Keep every generation under 512 states: v0.2 trains in batches of 512, and on a CPU a full
+# batch's attention needs more memory than a 16 GB laptop has. GPUs are fine.
+model: FDN_smoke_v02
+version: 1
+curriculum: configs/curriculum_exp2.yml
+generations: 3
+target_games: null
+resource_interval_s: 10
+
+deck_root: data/deckgen/FDN_PremierDraft_wr60/top_player_FDN_decks
+
+bootstrap_games: 2
+games_per_gen: 2
+chunk_games: 1              # one game per JVM job, so 2 JVMs run at once
+mix: {self: 0.5, past: 0.0, gen0: 0.5}   # forces a frozen gen-0 opponent at gen 2
+replay_states: 150         # one shard: stays under a full 512-state batch on CPU
+
+eval:
+  baselines: [offline]
+  every_n_gens: 1
+  pairs: 1                  # 2 games, split over both JVMs
+  fixed_decks: true
+  window_gens: 2
+stats:
+  window_gens: 2
+  min_card_games: 1
+
+jvm:
+  heap: 4g
+  threads: 1
+  jvms: 2
+  gc: zgc
+  search_budget: 30
+  timeout_ms: 4000
+  max_minutes: 10

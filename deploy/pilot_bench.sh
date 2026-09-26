@@ -19,7 +19,7 @@ export MZ_INFER_DTYPE=float16 MZ_BATCH_SIZE=32 MZ_TORCH_THREADS=1
 
 # The container's REAL core quota (cgroup v1 or v2). Never nproc / os.cpu_count(): a pod
 # capped at 31 cores reported nproc=256, which would launch ~64 JVMs.
-CORES=$(python -c "from magezero.resources import cpu_quota; q = cpu_quota(); print(int(q) if q else '')")
+CORES=$(python -c "from draftzero.resources import cpu_quota; q = cpu_quota(); print(int(q) if q else '')")
 [ -n "$CORES" ] || { echo "!! no cgroup cpu quota found; refusing to guess from nproc"; exit 1; }
 K=$(( CORES / 4 )); [ "$K" -lt 2 ] && K=2
 T=$(( K * 4 ))                                  # total game threads, identical across layouts
