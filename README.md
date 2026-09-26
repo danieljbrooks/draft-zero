@@ -15,6 +15,10 @@ its RL framework, XMage bridge, trainer and evaluator — and adds the format-le
 |---|---|---|---|---|
 | 1 | One agent for all of FDN: 2,507 games, 34 generations, one L40S, ~$28 | Beats raw search 110/197 (55.8%); plateaued by gen 10 | tag [`exp1-fdn-generalist`](https://github.com/danieljbrooks/draft-zero/tree/exp1-fdn-generalist) | [report](docs/003-fdn-generalist-report.md) · [Hugging Face](https://huggingface.co/danbrooks/draftzero-fdn-exp1) |
 
+Studies: **[human gameplay data](docs/008-gameplay-data.md)**. 17lands and Arena logs mapped onto XMage
+states (a recorded turn replays to the same next state ~89% of the time), human-trained heads versus
+gen 33, and a first test of MCTS coaching.
+
 What comes next, and why: **[ROADMAP.md](ROADMAP.md)**.
 
 ## How the pieces relate
@@ -45,6 +49,9 @@ Dependencies point one way only. Nothing in MageZero knows DraftZero exists.
 | `src/draftzero/watchdog.py` | persist weights, detect stalls, end the run |
 | `src/draftzero/workers/` | where self-play runs: local, ssh, runpod |
 | `tools/extract_decks.py` | build the deck pool from 17lands public game data |
+| `src/draftzero/gameplay/` | human gameplay data ([docs/008](docs/008-gameplay-data.md)): 17lands replays and Arena logs → XMage states (`StateSpec`), turn replay, imitation data, coaching; `dz gameplay <tool>` |
+| `java/mzbridge/` | a long-lived XMage worker, no fork change: builds any `StateSpec` and answers build / encode / coach / replay_turn requests |
+| `tools/gameplay/` | experiment scripts for the gameplay-data study |
 | `assets/` | small versioned inputs: deck metadata, action vocab, GIH reference |
 | `assets/sample/` | 80 decks and pools, so a fresh clone runs without the full pool |
 | `configs/` | run configs (`fdn_l40s.yml` produced experiment #1) and the curriculum |

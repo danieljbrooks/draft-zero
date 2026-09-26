@@ -5,7 +5,7 @@ session, and update it before ending one** — mark items done, record decisions
 the bottom, and move anything you learned into the right phase. It's the single source of
 truth for status. Chat history isn't.
 
-*Last updated: 2026-09-25*
+*Last updated: 2026-09-26*
 
 ## Where things stand
 
@@ -293,6 +293,8 @@ which change helped. That's acceptable: the goal is a better player, not attribu
 | D3 | **What "num_trees" refers to** | Not found in draft-zero, MageZero, or upstream v0.2. If it means search budget, it's already the throughput pilot. | Open |
 | D4 | **Kaggle** | Sticking with RunPod. Kaggle results abandoned; summarized in report Appendix A. | Decided 2026-09-25 |
 | D6 | **Will's answer on the action vocabulary** ([WillWroble/MageZero#7](https://github.com/WillWroble/MageZero/issues/7)) | This decides whether our FDN agents can run in the normal MageZero flow (`mz import`, add a deck, play). The proposal is two opt-in pieces: a configurable policy width (default 128), and an optional exact action vocabulary stored inside the checkpoint and set per player. MageZero gets only that generic mechanism. The FDN vocab, the `VocabDump` builder, deck pools, 17lands stats and logging stay in draft-zero and ship with our models. If Will says no, our agents stay runnable only through draft-zero. Implementation proceeds in our forks, PR-shaped, which is useful either way. No PRs to Will until he answers. | Waiting on Will (posted 2026-09-25) |
+| D7 | **Does exp #2's network see the opponent's hand?** | Exp #1's did: `configs/game.yml` writes `hidden_info:` but the fork reads `hiddenInfo` (`Config.java:79`), so the key is ignored and the default (true) wins. Human data (17lands, Arena) never has the opponent's hand, and coaching must not assume it, so both gameplay-data goals want a hidden-information network ([docs/008](docs/008-gameplay-data.md) §6, §11). Fix the key either way. | Open |
+| D8 | **A human-prior arm in exp #2?** | Gen 33's priority head ranks a human action first 44% of the time (chance on 4+ options); heads retrained on 30k human decisions reach 73%, and its attack (binary) head, the one prior exp #1 used, loses to a power/toughness rule (docs/008 §7.3). A human prior only matters with the prior switched on; the A/B protocol is in docs/008 §7.5 (≥ 400 games per arm). | Open |
 | D5 | **Public or private draft-zero** | **Public, MIT**, since 2026-09-25. Deck data stays CC BY 4.0. Because everything pushed is now public, any experiment that should stay private needs a separate private repo. | Decided 2026-09-25 |
 
 ## Side tracks
@@ -316,6 +318,20 @@ and `stateRefresh` at 0.0%.
       changing any code. Do it **after** the parallel-JVM change: every measurement so far,
       including the local profile's ~1.9 s ZGC allocation stalls, came from a single JVM, and
       the layout change may move the bottleneck entirely.
+
+**Human gameplay data** ([docs/008](docs/008-gameplay-data.md), branch `gameplay-data`). 17lands
+replays and Arena logs now map onto XMage states; the next steps are:
+- [ ] Build the full human corpus on a pod: turn-start decisions (~6.7M, ~11 h at 2 JVMs) plus
+      replayed-turn decisions, stored as specs + labels so it survives v0.2's encoder.
+- [ ] Pretrain the binary and value heads on it; run the D8 A/B.
+- [ ] Coaching validity on a GPU with a better value net: ≥ 2,000 decisions (~$3–5 on a 3090).
+- [ ] Ask 17lands for research access to raw game histories.
+- [ ] Dan: keep FDN Arena logs with Detailed Logs on (copy `Player.log` after each session).
+- [ ] Ask Will whether v0.2 fixes: the `hiddenInfo` key, seeding (the MCTS2 constructor reseeds a
+      constant), the timeout label (`!playerAWon`), duplicate root children, the attack-defender
+      HashSet, and determinization in search (`shuffleUnknowns` is never called).
+- [ ] Add the behavioural fingerprint (`dz gameplay fingerprints`) to the loop as a per-generation
+      monitor: the exp #2 pilot's gen 1 missed land drops with a land in hand on 16–25% of turns 1–3.
 
 **Study.** Read with a specific question in mind.
 - [ ] KataGo paper (Wu, 2019): AlphaZero on a small compute budget. Its "playout cap
@@ -351,6 +367,13 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 
 Add dated entries, newest first.
 
+- **2026-09-26** — Human gameplay data study ([docs/008](docs/008-gameplay-data.md), branch
+  `gameplay-data`). Mapping works: 100% of 17lands card/token/ability ids map to XMage; turn-start
+  states build 2,004/2,004; a scripted replay of a recorded turn reproduces the next snapshot in
+  ~89% of turns; Arena logs pair 128/128 decisions with the player's answer. Imitation: human-trained
+  heads on gen 33's trunk beat gen 33 and a heuristic on held-out human decisions (73% vs 44% / 65%);
+  strength is untested (D8). Coaching works end to end but is not valid yet: no skill signal with
+  either evaluator, which agree on the best action only 51% of the time. Opened D7 and D8.
 - **2026-09-25** — Blocked on Will's v0.2 Java source (B1).
   - The v0.2 bundle's jars have the 2^31 hash, but the public `WillWroble/mage` source doesn't.
   - A bytecode comparison shows the vocab change's core classes are unchanged in v0.2, so it
