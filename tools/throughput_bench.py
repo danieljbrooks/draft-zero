@@ -36,19 +36,22 @@ import psutil
 import yaml
 
 from draftzero import paths as dzpaths
+from magezero.resources import cpu_quota, mem_limit_gb
 from magezero.runner import jvm_command, start_server, stop_server
 
 REPO = Path(__file__).resolve().parent.parent
 
 
 def cgroup_cores() -> float:
-    try:
-        quota, period = Path("/sys/fs/cgroup/cpu.max").read_text().split()[:2]
-        if quota != "max":
-            return int(quota) / int(period)
-    except Exception:
-        pass
-    return float(os.cpu_count() or 1)
+    """The container's real CPU quota (cgroup v1 or v2). Never os.cpu_count(): a pod capped at
+    31 cores reported 256."""
+    return cpu_quota() or float(os.cpu_count() or 1)
+
+
+def cgroup_ram_gb() -> float:
+    """The container's real memory limit. Never psutil's total: the same pod reported 1,007 GB
+    of host RAM against a 116 GB limit, and a heap sized from that gets the JVM OOM-killed."""
+    return mem_limit_gb() or psutil.virtual_memory().total / 2**30
 
 
 def xmage_copy(src: Path, dst: Path) -> Path:
@@ -130,7 +133,7 @@ def main() -> int:
     # draftzero.loop resolves them (without this every game fails with "deck size=0")
     a.resolved_pool = dzpaths.resolve_pool(dzpaths.read_pool(Path(a.pool)), Path(a.deck_root).resolve(),
                                            out / "pool_resolved.txt").resolve()
-    ram_gb = psutil.virtual_memory().total / 2**30
+    ram_gb = cgroup_ram_gb()
     heap = a.heap or f"{max(2, int(ram_gb * 0.7 / a.jvms))}g"
     cores = cgroup_cores()
     print(f"[bench] {a.jvms} JVM x {a.threads} threads, {a.mode}, heap {heap}/JVM, gc {a.gc}, "

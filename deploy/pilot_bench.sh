@@ -17,9 +17,9 @@ export MZ_ACTION_VOCAB="$(pwd)/assets/vocab/FDN_SPG.tsv"
 export MZ_DECK_DIR="$(pwd)/data/deckgen/FDN_PremierDraft_wr60/top_player_FDN_decks"
 export MZ_INFER_DTYPE=float16 MZ_BATCH_SIZE=32 MZ_TORCH_THREADS=1
 
-# The container's REAL core quota. Never nproc / os.cpu_count(): on a pod those report the
-# host (e.g. 384 on a box capped at ~40 cores), which would launch ~96 JVMs.
-CORES=$(awk '$1 != "max" {print int($1/$2)}' /sys/fs/cgroup/cpu.max 2>/dev/null)
+# The container's REAL core quota (cgroup v1 or v2). Never nproc / os.cpu_count(): a pod
+# capped at 31 cores reported nproc=256, which would launch ~64 JVMs.
+CORES=$(python -c "from magezero.resources import cpu_quota; q = cpu_quota(); print(int(q) if q else '')")
 [ -n "$CORES" ] || { echo "!! no cgroup cpu quota found; refusing to guess from nproc"; exit 1; }
 K=$(( CORES / 4 )); [ "$K" -lt 2 ] && K=2
 T=$(( K * 4 ))                                  # total game threads, identical across layouts
