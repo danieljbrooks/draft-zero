@@ -56,10 +56,12 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
     public Role role = Role.PUPPET;
     public Mode mode = Mode.CAPTURE;
     /**
-     * True while GameImpl.init() runs inside StateInjector.build: every yes/no question is answered
-     * "no" and not recorded. init() offers opening-hand actions (a Leyline in the first seven cards
-     * of the decklist asks "put it onto the battlefield?"); a "yes" there leaves an extra permanent
-     * that is not in the spec and takes the card out of the library.
+     * True while StateInjector.build runs (GameImpl.init() and the injection): every yes/no
+     * question is answered "no" and not recorded. init() offers opening-hand actions (a Leyline in
+     * the first seven cards of the decklist asks "put it onto the battlefield?"); a "yes" there
+     * leaves an extra permanent that is not in the spec and takes the card out of the library.
+     * Injected permanents ask "as this enters" questions: a shock land's "pay 2 life?" answered yes
+     * cost its controller 2 life during injection (39 of 105 Arena specs).
      */
     public boolean setup = true;
     public transient Decision decision;

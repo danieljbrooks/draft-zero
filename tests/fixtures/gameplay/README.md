@@ -41,3 +41,19 @@ columns dropped, the derivable `*_total_*` columns dropped), blanks `draft_id`, 
 `source_row` column with the row's index in the full file. Regenerate with:
 
     python -c "from draftzero.gameplay import replay; replay.write_excerpt([0, 1, 4, 8, 26, 42, 76, 130, 198], 'tests/fixtures/gameplay/fdn_premier_rows.csv.gz')"
+
+`fdn_premier_rows_extra.csv.gz` holds two more rows of the same file, excerpted the same way (same
+licence and attribution). They live in their own file so that tests counting over the nine rows
+above (fingerprints, belief) keep their numbers:
+
+| row | why it is here |
+|---|---|
+| 64435 | at the end of the opponent's turn 5 it controls the user's Helpful Hunter (a control change: `Perm.owner`) |
+| 89383 | the opponent's Imprisoned in the Moon arrives and no creature turns into a land, so it enchants a land; a three-attacker block |
+
+    python -c "from draftzero.gameplay import replay; replay.write_excerpt([64435, 89383], 'tests/fixtures/gameplay/fdn_premier_rows_extra.csv.gz')"
+
+No mirrored pair is committed: no two fixture rows are the two sides of one game. The pair tests
+build a synthetic partner row from a fixture row (sides swapped, made-up hands of basic lands), and
+the real-pair test reads `data/gameplay/pairs_FDN_PremierDraft.jsonl` and the replay file when they
+are there (skipped otherwise).

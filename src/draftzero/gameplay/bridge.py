@@ -9,7 +9,8 @@ about the first decision the chosen player faces there:
   encode   the same decision encoded by MageZero's StateEncoder (sorted feature ids), no search
   coach    rate every legal option with MageZero's MCTS over K determinizations of the hidden
            cards (offline heuristic or a MageZero inference server), plus the human action's rank
-           and regret
+           and regret. The determinizations are re-drawn by the bridge, or given as K concrete
+           specs (`coach_specs`, e.g. belief.determinize samples) that share one decision
   ping     liveness
 
 Each `Bridge` owns one long-lived JVM (`java/mzbridge/run.sh <name>`, ~1 s to open the card
@@ -32,6 +33,11 @@ gotchas are documented in java/mzbridge/README.md.
     with Bridge("w0") as b:
         r = b.request("coach", spec, determinizations=4, budget=300, seed=1)
         r["aggregate"][0]["label"], r["human"]
+        # K belief samples of one decision; a 17lands turn's casts as a set-valued human action
+        r = b.coach_specs(samples, budget=300, humanActions=["Cast Stab", "Play Swamp"], decisionPlayer="A")
+        r["humanSet"]["regret_best_of_set"]
+        # cards this XMage build lacks (2026 cube cards) become Plains, with a warning per card
+        b.build(spec, substitute={"missing": "Plains"})["warnings"]
 
 The decision player defaults to the spec's priority / active player. A 17lands `eot_rollover`
 spec is the OPPONENT's end step, so pass `**turn_start_options(spec)` (decision player A, window
@@ -268,6 +274,8 @@ class Bridge:
             raise BridgeError(f"mzbridge worker '{self.name}' is not running\n{self.stderr_tail()}")
         rid = next(self._ids)
         msg: dict[str, Any] = {"id": rid, "op": op, "options": {k: v for k, v in options.items() if v is not None}}
+        if msg["options"].get("specs") is not None:     # coach over pre-determinized specs
+            msg["options"]["specs"] = [spec_dict(x) for x in msg["options"]["specs"]]
         if spec is not None:
             msg["spec"] = spec_dict(spec)
         try:
@@ -305,6 +313,12 @@ class Bridge:
 
     def coach(self, spec, **options) -> dict:
         return self.request("coach", spec, **options)
+
+    def coach_specs(self, specs: Iterable, **options) -> dict:
+        """Coach one decision over K concrete determinizations (e.g. belief.determinize samples):
+        one fresh search per spec, all built with the same idSeed so they ask the same question,
+        aggregated per label. Nothing is re-drawn by the bridge (no `resample`)."""
+        return self.request("coach", None, specs=list(specs), **options)
 
     # -- plumbing ----------------------------------------------------------------------------------
 
@@ -365,6 +379,9 @@ class BridgePool:
         for w in self.workers:
             self._free.put(w)
 
+    def coach_specs(self, specs: Iterable, **options) -> dict:
+        return self.request("coach", None, specs=list(specs), **options)
+
     def request(self, op: str, spec=None, **options) -> dict:
         w = self._free.get()
         try:
@@ -413,8 +430,9 @@ def _perm_key(p: dict, seat: str, attackers: set) -> tuple:
     alias = f"{seat}:{p['id']}" if p.get("id") else None
     counters = tuple(sorted((k, v) for k, v in (p.get("counters") or {}).items() if v))
     tapped = None if alias in attackers else bool(p.get("tapped", False))
+    owner = p.get("owner") if p.get("owner") not in (None, seat) else None   # listed under the controller
     return (ident, tapped, bool(p.get("sick", False)), int(p.get("damage", 0)), counters,
-            p.get("attachTo"), bool(p.get("faceDown", False)))
+            p.get("attachTo"), bool(p.get("faceDown", False)), owner)
 
 
 def diff_dump(spec, dump: dict) -> list[str]:
@@ -423,7 +441,8 @@ def diff_dump(spec, dump: dict) -> list[str]:
     Compares what a spec pins down: position, the player on the play, the priority holder and
     passed players of a PRIORITY_HELD entry, life, lands played, hand (known cards; the hidden
     ones by count), graveyard order, exile, library top and size, mana pool, battlefield
-    (identity, tapped, sick, damage, counters, attachment), stack, attackers and blockers.
+    (identity, tapped, sick, damage, counters, attachment, owner when control changed), stack,
+    attackers and blockers.
     Attackers' tapped state comes from the engine and is not compared.
     """
     s = spec_dict(spec)
@@ -558,13 +577,18 @@ def main(argv: list[str] | None = None) -> int:
     bp.add_argument("-K", "--determinizations", type=int, default=4)
     for cmd in ("build", "encode", "coach"):
         p = sub.add_parser(cmd)
-        p.add_argument("spec", help="StateSpec v1 JSON file, or the name of a golden spec (e.g. main_phase)")
+        p.add_argument("spec", nargs="?" if cmd == "coach" else None,
+                       help="StateSpec v1 JSON file, or the name of a golden spec (e.g. main_phase)")
         p.add_argument("--seed", type=int, default=0)
         p.add_argument("--decision-player", choices=["A", "B"])
         p.add_argument("--decide-from", metavar="TURN:STEP", help="open the decision window there, e.g. 7:PRECOMBAT_MAIN")
         p.add_argument("--turn-start", action="store_true",
                        help="decide for A (or --decision-player) from its next main phase (see turn_start_options)")
         p.add_argument("--lenient", action="store_true", help="warn instead of failing on card accounting")
+        p.add_argument("--substitute-missing", metavar="CARD",
+                       help="build cards XMage lacks as CARD (e.g. Plains), with a warning per card")
+        p.add_argument("--substitute-token", metavar="CLASS",
+                       help="build tokens XMage cannot resolve as this token class")
         if cmd == "build":
             p.add_argument("--dump-decision-state", action="store_true")
             p.add_argument("--dump-library", action="store_true")
@@ -579,6 +603,10 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--priors", default="", help="comma list of priority,target,binary,opponent (remote only)")
             p.add_argument("--resample", default=None, help="seats whose hand is re-drawn, e.g. B or A,B")
             p.add_argument("--human-action")
+            p.add_argument("--human-set", action="append", metavar="LABEL",
+                           help="one member of a set-valued human action (repeat the flag); reports the set's regrets")
+            p.add_argument("--specs", metavar="JSONL",
+                           help="K pre-determinized specs of the decision, one per line (replaces the spec argument)")
             p.add_argument("--timeout-sec", type=float, default=120.0)
     for p in sub.choices.values():
         p.add_argument("--name", default="cli0", help="worker / runtime dir name")
@@ -600,11 +628,19 @@ def main(argv: list[str] | None = None) -> int:
             r = {"ready": b.ready, "ping": b.ping(), "startup_s": round(b.startup_s, 2), "rss_mb": b.rss_mb()}
         else:
             spec = a.spec
-            if not Path(spec).exists() and spec in golden_specs():
+            if spec is None and not getattr(a, "specs", None):
+                print("coach needs a spec argument or --specs", file=sys.stderr)
+                return 2
+            if spec is not None and not Path(spec).exists() and spec in golden_specs():
                 spec = golden_specs()[spec]
             opts: dict[str, Any] = {"seed": a.seed, "decisionPlayer": a.decision_player, "lenient": a.lenient or None}
+            if a.substitute_missing or a.substitute_token:
+                opts["substitute"] = {k: v for k, v in (("missing", a.substitute_missing),
+                                                        ("missingToken", a.substitute_token)) if v}
             if a.turn_start:
-                opts.update(turn_start_options(spec, a.decision_player or "A"))
+                opts.update(turn_start_options(spec if not getattr(a, "specs", None) else
+                                               json.loads(Path(a.specs).read_text().splitlines()[0]),
+                                               a.decision_player or "A"))
             if a.decide_from:
                 turn, _, step = a.decide_from.partition(":")
                 opts["decideFrom"] = {"turn": int(turn), "step": step or None}
@@ -614,8 +650,11 @@ def main(argv: list[str] | None = None) -> int:
                 opts.update(perfectInfo=a.perfect_info)
             else:
                 priors = {k: True for k in a.priors.split(",") if k}
-                opts.update(determinizations=a.determinizations, budget=a.budget, humanAction=a.human_action,
-                            timeoutSec=a.timeout_sec,
+                if a.specs:
+                    opts["specs"] = [json.loads(x) for x in Path(a.specs).read_text().splitlines() if x.strip()]
+                    spec = None
+                opts.update(determinizations=None if a.specs else a.determinizations, budget=a.budget,
+                            humanAction=a.human_action, humanActions=a.human_set, timeoutSec=a.timeout_sec,
                             evaluator={"type": a.evaluator, "host": a.host, "port": a.port},
                             priors=priors or None,
                             resample=a.resample.split(",") if a.resample else None)

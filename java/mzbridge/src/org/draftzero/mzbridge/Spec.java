@@ -8,10 +8,14 @@ import java.util.*;
  * {@code provenance} / {@code labels} are not read at all: the bridge builds states, it does not
  * interpret where they came from.
  *
- * Conventions that the Python contract leaves implicit and the bridge fixes:
+ * Conventions (statespec.py's docstring lists them too):
  *  - {@code stack} is listed bottom to top (cast order): the last item resolves first.
  *  - Attacking creatures get their tapped state from the engine (declaring an attack taps a
  *    creature without vigilance); a spec's {@code tapped} flag on an attacker is ignored.
+ *  - A permanent is listed under its CONTROLLER's seat; {@code owner} names the other seat when
+ *    control changed, and its card then comes out of the owner's decklist.
+ *
+ * {@link #validate()} and statespec.StateSpec.validate() apply the same rules: change both.
  */
 public class Spec {
     public static final int SCHEMA_VERSION = 1;
@@ -59,6 +63,8 @@ public class Spec {
         public Map<String, Integer> counters = new LinkedHashMap<>();
         public String attachTo;
         public boolean faceDown = false;
+        /** the other seat, when it owns this permanent (control changed); null = the listing seat */
+        public String owner;
 
         boolean isToken() {
             return token != null || tokenClass != null;
@@ -184,6 +190,7 @@ public class Spec {
         }
         Set<String> aliases = aliases();
         Set<String> seen = new HashSet<>();
+        Map<String, List<String>> owned = owned();
         for (String seat : SEATS) {
             PlayerState p = players.get(seat);
             if (p == null) {
@@ -199,15 +206,7 @@ public class Spec {
             }
             if (p.manaPool != null && !p.manaPool.matches("[WUBRGC]*")) errs.add(seat + ".manaPool " + q(p.manaPool) + " (use W U B R G C)");
             Map<String, Integer> pool = multiset(p.decklist);
-            List<String> used = new ArrayList<>();
-            used.addAll(p.hand);
-            used.addAll(p.graveyard);
-            used.addAll(p.exile);
-            used.addAll(p.libraryTop);
-            for (Perm perm : p.battlefield) {
-                if (perm.name != null && !perm.isToken()) for (int k = 0; k < perm.count; k++) used.add(perm.name);
-            }
-            for (StackItem si : stack) if (seat.equals(si.controller) && si.card != null) used.add(si.card);
+            List<String> used = owned.get(seat);
             Map<String, Integer> short_ = new TreeMap<>();
             for (Map.Entry<String, Integer> e : multiset(used).entrySet()) {
                 int have = pool.getOrDefault(e.getKey(), 0);
@@ -228,6 +227,8 @@ public class Spec {
                 for (Map.Entry<String, Integer> c : perm.counters.entrySet()) {
                     if (c.getValue() == null || c.getValue() < 0) errs.add(seat + ": counter " + c.getKey() + " on " + perm.describe() + " must be >= 0");
                 }
+                if (perm.owner != null && !SEATS.contains(perm.owner)) errs.add(seat + ": owner " + q(perm.owner) + " on " + perm.describe());
+                if (perm.owner != null && perm.isToken()) errs.add(seat + ": owner on a token (" + perm.describe() + ") is not supported");
             }
         }
         for (Attack a : attackers) {
@@ -265,6 +266,44 @@ public class Spec {
             }
         }
         return errs;
+    }
+
+    /**
+     * Cards each seat OWNS outside its library: its hand, graveyard, exile and known library top,
+     * the non-token permanents it owns on either battlefield (a permanent's owner is the listing
+     * seat unless {@code owner} names the other one), and the stack spells it controls.
+     */
+    Map<String, List<String>> owned() {
+        Map<String, List<String>> owned = new LinkedHashMap<>();
+        for (String seat : SEATS) owned.put(seat, new ArrayList<>());
+        for (String seat : SEATS) {
+            PlayerState p = players.get(seat);
+            if (p == null) continue;
+            List<String> mine = owned.get(seat);
+            mine.addAll(p.hand);
+            mine.addAll(p.graveyard);
+            mine.addAll(p.exile);
+            mine.addAll(p.libraryTop);
+        }
+        for (String seat : SEATS) {
+            PlayerState p = players.get(seat);
+            if (p == null) continue;
+            for (Perm perm : p.battlefield) {
+                if (perm.name == null || perm.isToken()) continue;
+                // an unknown owner is reported by validate(); count the card where it is listed
+                String own = perm.owner != null && SEATS.contains(perm.owner) ? perm.owner : seat;
+                for (int k = 0; k < perm.count; k++) owned.get(own).add(perm.name);
+            }
+        }
+        for (StackItem si : stack) {
+            if (si.controller != null && owned.containsKey(si.controller) && si.card != null) owned.get(si.controller).add(si.card);
+        }
+        return owned;
+    }
+
+    /** The seat that owns a battlefield entry listed under {@code seat}. */
+    static String ownerSeat(String seat, Perm perm) {
+        return perm.owner != null ? perm.owner : seat;
     }
 
     static Map<String, Integer> multiset(List<String> xs) {

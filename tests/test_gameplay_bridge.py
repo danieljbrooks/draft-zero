@@ -89,6 +89,28 @@ def test_diff_dump_flags_differences():
     assert any("startingPlayer" in d for d in diff_dump(s, dict(clean, startingPlayer="B")))
 
 
+def test_diff_dump_compares_owner():
+    """A control-changed permanent is listed under its controller with owner = the other seat; the
+    dump says the same, and a dump that lost the owner (or a spec that states owner = its own seat,
+    which is the default) is handled."""
+    s = spec("main_phase")
+    s["players"]["A"]["battlefield"].append({"name": "Courageous Goblin", "owner": "B", "id": "z"})
+    dump = copy.deepcopy(s)
+    for seat in "AB":
+        bf = []
+        for p in dump["players"][seat]["battlefield"]:
+            bf += [dict(p, count=1) for _ in range(p.get("count", 1))]
+        dump["players"][seat]["battlefield"] = bf
+    dump["startingPlayer"] = "A"
+    assert diff_dump(s, dump) == []
+    lost = copy.deepcopy(dump)
+    lost["players"]["A"]["battlefield"][-1].pop("owner")
+    assert any("A.battlefield" in d for d in diff_dump(s, lost))
+    same = copy.deepcopy(s)
+    same["players"]["A"]["battlefield"][0]["owner"] = "A"            # owner = listing seat: the default
+    assert diff_dump(same, dump) == []
+
+
 def test_turn_start_options():
     eot = spec("eot_rollover")                                  # B's end step of turn 6
     assert bridge.turn_start_options(eot) == {"decisionPlayer": "A",
@@ -388,3 +410,317 @@ def test_planeswalker_defender_is_not_a_decision(worker):
                 attackers=[{"attacker": "B:prowler", "defender": "A:ajani"}])
     r = worker.request("build", held, seed=1, decisionPlayer="A", advance=False)
     assert r["dump"]["attackers"] == [{"attacker": "B:prowler", "defender": "A:ajani"}]
+
+
+# ------------------------------------------------------------------------------ bridge fixes (phase 2)
+
+def with_cards(s: dict, seat: str, add: list[str], drop: list[str]) -> dict:
+    """Swap decklist cards (the decklist must stay >= 40 and account for every named card)."""
+    deck = s["players"][seat]["decklist"]
+    for new, old in zip(add, drop):
+        deck[deck.index(old)] = new
+    return s
+
+
+def angel_and_tokens() -> dict:
+    """main_phase with 'whenever a creature enters' permanents next to injected tokens on both sides."""
+    s = with_cards(spec("main_phase"), "A", ["Dazzling Angel"], ["Vanguard Seraph"])
+    with_cards(s, "B", ["Authority of the Consuls"], ["Forest"])
+    a, b = s["players"]["A"], s["players"]["B"]
+    a["battlefield"] = [x for x in a["battlefield"] if x.get("name") != "Vanguard Seraph"]
+    a["battlefield"] += [{"name": "Dazzling Angel"}, {"tokenClass": "FaerieToken", "count": 2}]
+    b["battlefield"] += [{"name": "Authority of the Consuls"}, {"tokenClass": "GoblinToken", "count": 3}]
+    return s
+
+
+@needs_worker
+def test_injected_tokens_fire_no_enter_triggers(worker):
+    """Tokens used to enter through Token.putOntoBattlefield, whose ENTERS_THE_BATTLEFIELD events
+    wait in GameState's simultaneous-event queue until the game resumes, i.e. after the injector
+    cleared the pending triggers: Dazzling Angel / Authority of the Consuls triggered once per
+    injected token (17lands row 560303 u9: 6 triggers on the stack, +6 life after rollover)."""
+    s = angel_and_tokens()
+    r = worker.request("build", s, seed=1, decisionPlayer="A", dumpDecisionState=True)
+    assert diff_dump(s, r["dump"]) == [] and r["warnings"] == []
+    assert r["decision"]["where"]["stack"] == 0 and r["decision"]["where"]["passedBefore"] == 0
+    assert {x: r["decisionState"]["players"][x]["life"] for x in "AB"} == {"A": 13, "B": 9}
+    # through a whole rollover (B's end step -> A's next main phase) nothing drifts either
+    eot = dict(copy.deepcopy(s), turn=6, activePlayer="B", phase="END", step="END_TURN")
+    r = worker.request("build", eot, seed=1, dumpDecisionState=True, **bridge.turn_start_options(eot))
+    assert r["decision"]["where"]["step"] == "PRECOMBAT_MAIN"
+    assert {x: r["decisionState"]["players"][x]["life"] for x in "AB"} == {"A": 13, "B": 9}
+
+
+@needs_worker
+def test_later_enter_triggers_still_fire(worker):
+    """Only injection is event-free: a creature that enters after the resume triggers as usual.
+    A's Burglar Rat resolves (B passed, A has only a land): Dazzling Angel gains exactly 1 life
+    (not 1 + 2 for the injected Faeries) and the Rat's own trigger makes B discard."""
+    s = angel_and_tokens()
+    s["players"]["A"]["hand"] = ["Plains"]
+    s.update(enterMode="PRIORITY_HELD", priorityPlayer="A", passedPlayers=["B"],
+             stack=[{"controller": "A", "card": "Burglar Rat"}])
+    r = worker.request("build", s, seed=1, decisionPlayer="A", dumpDecisionState=True)
+    ds = r["decisionState"]
+    assert (r["decision"]["where"]["turn"], r["decision"]["where"]["step"]) == (7, "PRECOMBAT_MAIN")
+    assert ds["players"]["A"]["life"] == 14 and len(ds["players"]["B"]["hand"]) == 2
+    assert "Burglar Rat" in {p["x"]["name"] for p in ds["players"]["A"]["battlefield"]}
+
+
+@needs_worker
+def test_fixture_row_with_tokens_rolls_over_without_bogus_triggers(worker):
+    """The 17lands evidence: fixture row 4, user turn 7 (Dazzling Angel + 2 Faerie tokens). The
+    main1 decision used to have 2 Angel triggers on the stack and the rollover gained 2 life."""
+    from pathlib import Path
+    from draftzero.gameplay import reconstruct as rc, replay
+    from draftzero.gameplay.ids import Ids
+    fixture = Path(__file__).parent / "fixtures" / "gameplay" / "fdn_premier_rows.csv.gz"
+    if not fixture.exists():
+        pytest.skip("17lands fixture missing")
+    ids = Ids.load()
+    g = next(g for g in replay.iter_games(fixture) if g.row_index == 4)
+    m = rc.state_at_user_turn(g, 7, "main1", ids=ids)
+    e = rc.state_at_user_turn(g, 7, ids=ids)
+    assert any(p.tokenClass == "FaerieToken" for p in m.players["A"].battlefield)
+    r = worker.request("build", m, seed=1, decisionPlayer="A")
+    assert diff_dump(m, r["dump"]) == [] and r["decision"]["where"]["stack"] == 0
+    r = worker.request("build", e, seed=1, decisionPlayer="A", dumpDecisionState=True,
+                       decideFrom={"turn": g.user_slot(7).global_turn, "step": "PRECOMBAT_MAIN"})
+    assert {x: r["decisionState"]["players"][x]["life"] for x in "AB"} == {x: m.players[x].life for x in "AB"}
+
+
+def animate_dead_spec() -> dict:
+    """A reanimated B's Courageous Goblin with Animate Dead: A controls it, B owns it (Perm.owner)."""
+    s = with_cards(spec("main_phase"), "A", ["Animate Dead"], ["Plains"])
+    s["players"]["A"]["battlefield"] += [{"name": "Courageous Goblin", "owner": "B", "id": "zombie"},
+                                         {"name": "Animate Dead", "id": "ad", "attachTo": "A:zombie"}]
+    return s
+
+
+@needs_worker
+def test_control_changed_permanent_with_animate_dead(worker):
+    """Perm.owner: the card comes out of B's library and enters under A's control (originalControllerId
+    = A, as a reanimation does), so control does not revert when effects are reapplied, across a
+    whole turn. Animate Dead enchants 'creature card in a graveyard' until its ETB trigger (not
+    fired by injection) swaps it: the bridge rebuilds that swap and the sacrifice link. This was
+    46 of the 105 real Arena specs ('cannot attach: A: Animate Dead -> ... was refused by XMage')."""
+    s = animate_dead_spec()
+    assert StateSpec.from_dict(s).validate() == []
+    r = worker.request("build", s, seed=1, decisionPlayer="A", dumpDecisionState=True)
+    assert diff_dump(s, r["dump"]) == [] and r["warnings"] == []
+    for state in (r["dump"], r["decisionState"]):
+        zombie = perm(state, "A", "Courageous Goblin")
+        assert zombie["owner"] == "B" and zombie["x"]["attachments"] == ["Animate Dead"]
+        assert zombie["x"]["power"] == 1 and zombie["x"]["canAttack"]        # 2/2, Animate Dead gives -1/-0
+        assert perm(state, "A", "Animate Dead")["attachTo"] == "A:zombie"
+    assert not any(p.get("owner") for p in r["dump"]["players"]["B"]["battlefield"])
+    # a turn later (B's end step -> A's main phase) A still controls it
+    eot = dict(copy.deepcopy(s), turn=6, activePlayer="B", phase="END", step="END_TURN")
+    r = worker.request("build", eot, seed=1, dumpDecisionState=True, **bridge.turn_start_options(eot))
+    assert r["decision"]["where"]["turn"] == 7
+    assert perm(r["decisionState"], "A", "Courageous Goblin")["owner"] == "B"
+    # destroying Animate Dead sacrifices the creature, which goes to its owner's graveyard
+    d = with_cards(copy.deepcopy(s), "B", ["Disenchant"], ["Forest"])
+    d["players"]["A"]["hand"] = ["Plains"]
+    d.update(turn=8, activePlayer="B", enterMode="PRIORITY_HELD", priorityPlayer="A", passedPlayers=["B"],
+             stack=[{"controller": "B", "card": "Disenchant", "targets": ["A:ad"]}])
+    ds = worker.request("build", d, seed=1, decisionPlayer="A", dumpDecisionState=True)["decisionState"]
+    assert "Courageous Goblin" not in {p["x"]["name"] for p in ds["players"]["A"]["battlefield"]}
+    assert "Courageous Goblin" in ds["players"]["B"]["graveyard"] and "Animate Dead" in ds["players"]["A"]["graveyard"]
+
+
+@needs_worker
+def test_owner_validation_matches_statespec(worker):
+    """Spec.validate (Java) and StateSpec.validate (Python) accept and reject the same specs, the
+    owner's decklist supplying a control-changed card."""
+    base = animate_dead_spec()
+
+    def case(fn):
+        s = copy.deepcopy(base)
+        fn(s)
+        return s
+
+    zombie = lambda s: s["players"]["A"]["battlefield"][-2]                      # noqa: E731
+    cases = {
+        "ok": case(lambda s: None),
+        "owner is the listing seat": case(lambda s: zombie(s).update(owner="A", name="Vampire Soulcaller")),
+        "not in the owner's decklist": case(lambda s: zombie(s).update(name="Vampire Soulcaller")),
+        "owner's copies used up": case(lambda s: s["players"]["B"]["hand"].extend(["Courageous Goblin"] * 2)),
+        "owner on a token": case(lambda s: s["players"]["A"]["battlefield"].append({"tokenClass": "BeastToken",
+                                                                                     "owner": "B"})),
+        "owner's library too small": case(lambda s: s["players"]["B"].update(handUnknown=40)),
+    }
+    for name, s in cases.items():
+        py = StateSpec.from_dict(s).validate()
+        try:
+            worker.request("build", s, seed=1, advance=False)
+            java = []
+        except BridgeError as e:
+            java = e.problems
+        assert bool(py) == bool(java), (name, py, java)
+        assert bool(py) == (name not in ("ok", "owner is the listing seat")), (name, py)
+
+
+@needs_worker
+def test_counters_set_the_count(worker):
+    """Spec counters SET the count of their type on top of what the card entered with (a saga's
+    first lore counter, a planeswalker's printed loyalty) instead of adding to it, at the build
+    and at the decision; an unlisted type keeps the entered-with count (the arena review had
+    seen loyalty 4 built as 7)."""
+    s = with_cards(spec("main_phase"), "A", ["Ajani, Caller of the Pride", "Fable of the Mirror-Breaker"],
+                   ["Plains", "Plains"])
+    s["players"]["A"]["battlefield"] += [{"name": "Ajani, Caller of the Pride", "counters": {"LOYALTY": 7}},
+                                         {"name": "Fable of the Mirror-Breaker", "counters": {"LORE": 2}}]
+    r = worker.request("build", s, seed=1, decisionPlayer="A", dumpDecisionState=True)
+    assert diff_dump(s, r["dump"]) == [] and r["decision"]["where"]["stack"] == 0
+    for state in (r["dump"], r["decisionState"]):
+        assert perm(state, "A", "Ajani, Caller of the Pride")["counters"] == {"LOYALTY": 7}
+        assert perm(state, "A", "Fable of the Mirror-Breaker")["counters"] == {"LORE": 2}
+    for p in s["players"]["A"]["battlefield"][-2:]:
+        p.pop("counters")
+    dump = worker.request("build", s, seed=1, advance=False)["dump"]
+    assert perm(dump, "A", "Ajani, Caller of the Pride")["counters"] == {"LOYALTY": 4}      # printed
+    assert perm(dump, "A", "Fable of the Mirror-Breaker")["counters"] == {"LORE": 1}
+
+
+@needs_worker
+def test_no_land_play_in_the_opponents_turn(worker):
+    """Active-player bookkeeping: A holding priority in B's main phase (PRIORITY_HELD, with or
+    without a spell on the stack) is offered instants only, never its land. The Arena review's
+    'land plays during B's main phase' were decisions of A's NEXT turn (where.turn 6, active A):
+    its only instant had been substituted by a Plains, so the bridge passed on to A's turn."""
+    for stack in ([{"controller": "B", "card": "Burst Lightning", "targets": ["A:rat"]}], []):
+        s = dict(spec("respond"), stack=stack)
+        d = worker.request("build", s, seed=1, decisionPlayer="A")["decision"]
+        assert (d["where"]["turn"], d["where"]["activePlayer"], d["where"]["passedBefore"]) == (8, "B", 0)
+        assert {o["label"] for o in d["legal"]} == {"Cast Stab", "Cast Fleeting Flight", "Pass"}
+
+
+@needs_worker
+def test_land_on_the_stack_is_a_clear_error(worker):
+    """Card.cast on a land threw 'NullPointerException ... SpellAbility.getSpellAbilityToResolve'
+    (the arena review's 3 stack NPEs were substituted Plains on the stack)."""
+    s = with_cards(spec("respond"), "B", ["Forest"], ["Burst Lightning"])
+    s["stack"] = [{"controller": "B", "card": "Forest"}]
+    with pytest.raises(BridgeError) as e:
+        worker.request("build", s, seed=1)
+    assert e.value.error["type"] == "SpecException" and "is not a spell" in e.value.problems[0]
+
+
+@needs_worker
+def test_substitute_missing_cards(worker):
+    """Default strict: every card XMage 1.4.58 lacks is listed in one error. options.substitute
+    builds the spec with stand-ins and says what it replaced or dropped."""
+    missing = "Wan Shi Tong, Librarian"                         # 2026 card in the Arena log, not in 1.4.58
+    s = with_cards(spec("respond"), "A", [missing, "Moonshadow"], ["Pilfer", "Stab"])
+    s["players"]["A"]["hand"] = [missing, "Fleeting Flight", "Plains"]
+    s["players"]["A"]["battlefield"].append({"name": "Moonshadow", "id": "moon", "counters": {"P1P1": 1}})
+    with_cards(s, "B", [missing], ["Burst Lightning"])
+    s["stack"] = [{"controller": "B", "card": missing, "targets": ["A:rat"]}]
+    with pytest.raises(BridgeError) as e:
+        worker.request("build", s, seed=1)
+    assert "2 card(s) not in the XMage card database" in e.value.problems[0] and missing in e.value.problems[0]
+    r = worker.request("build", s, seed=1, decisionPlayer="A", substitute={"missing": "Plains"})
+    assert r["substitutions"] == {missing: "Plains", "Moonshadow": "Plains"}
+    w = "\n".join(r["warnings"])
+    assert f"'{missing}' -> 'Plains' (not in the XMage card database)" in w and "dropped B's" in w
+    assert r["dump"]["stack"] == [] and r["dump"]["players"]["A"]["hand"].count("Plains") == 2
+    assert {o["label"] for o in r["decision"]["legal"]} == {"Cast Fleeting Flight", "Pass"}
+    # an explicit map (applied even to known cards), and tokens XMage cannot resolve
+    t = spec("main_phase")
+    t["players"]["B"]["battlefield"].append({"token": "Boo", "set": "HBG", "id": "boo", "counters": {"P1P1": 2}})
+    with pytest.raises(BridgeError, match="no token 'Boo'"):
+        worker.request("build", t)
+    r = worker.request("build", t, seed=1, advance=False,
+                       substitute={"missingToken": "GoblinToken", "Hero's Downfall": "Stab"})
+    assert r["substitutions"] == {"Hero's Downfall": "Stab", "token Boo/HBG": "GoblinToken"}
+    assert r["dump"]["players"]["A"]["hand"].count("Stab") == 2
+    assert perm(r["dump"], "B", "Goblin Token")["counters"] == {"P1P1": 2}
+    with pytest.raises(BridgeError, match="not in the XMage card database either"):
+        worker.request("build", t, substitute={"missing": "Not A Real Card"})
+
+
+@needs_worker
+def test_coach_over_given_determinizations(worker):
+    """options.specs: K concrete determinizations of one decision (the belief model's samples;
+    here B's hand and one unseen decklist card differ). One fresh search per spec, one shared
+    idSeed, the same question; humanActions reports a set-valued human action."""
+    base = spec("main_phase")
+    hands = [["Burst Lightning", "Forest", "Bite Down"], ["Snakeskin Veil", "Mountain", "Felling Blow"],
+             ["Forest", "Forest", "Bushwhack"]]
+    specs = []
+    for i, h in enumerate(hands):
+        s = copy.deepcopy(base)
+        s["players"]["B"]["hand"] = h
+        s["players"]["B"]["exile"] = [] if "Bushwhack" in h else ["Bushwhack"]
+        if i == 2:
+            with_cards(s, "B", ["Mountain"], ["Sower of Chaos"])
+        specs.append(s)
+    opts = dict(seed=3, budget=40, decisionPlayer="A", humanAction="Play Plains",
+                humanActions=["Play Plains", "Cast Burglar Rat", "Cast Llanowar Elves"])
+    r = worker.coach_specs(specs, **opts)
+    assert r["consistent"] and r["settings"]["specs"] == 3 and r["settings"]["resample"] == []
+    assert [d["hands"]["B"] for d in r["determinizations"]] == hands
+    assert {a["nDet"] for a in r["aggregate"]} == {3}
+    assert r["human"]["found"] and r["human"]["label"] == "Play Plains"            # the single form still works
+    hs = r["humanSet"]
+    assert [m["found"] for m in hs["members"]] == [True, True, False] and hs["nLegal"] == 2
+    q = {a["label"]: a["meanQ"] for a in r["aggregate"]}
+    best = r["aggregate"][0]["meanQ"]
+    members = [q["Play Plains"], q["Cast Burglar Rat"]]
+    assert hs["regret_best_of_set"] == pytest.approx(best - max(members))
+    assert hs["regret_mean_of_set"] == pytest.approx(best - sum(members) / 2)
+    assert 0 <= hs["regret_best_of_set"] <= hs["regret_mean_of_set"]
+    again = worker.coach_specs(specs, **opts)
+    assert [d["children"] for d in again["determinizations"]] == [d["children"] for d in r["determinizations"]]
+    with pytest.raises(BridgeError, match="do not also pass resample"):
+        worker.coach_specs(specs, resample=["B"], budget=5)
+
+
+@needs_worker
+def test_card_ids_do_not_depend_on_the_rest_of_the_decklist(worker):
+    """Determinizations with different belief decklists must ask the same question. Attack and
+    block questions come in UUID order, and card UUIDs used to be one sequential stream over both
+    decklists, so changing one of A's library cards renumbered every B card."""
+    s = spec("attack")
+    other = with_cards(copy.deepcopy(s), "A", ["Vampire Soulcaller"], ["Swamp"])   # more abilities: more ids
+    dumps = [worker.request("build", x, seed=5, advance=False)["dump"] for x in (s, other)]
+    ids = [{p["x"]["name"]: p["x"]["uuid"] for p in d["players"]["B"]["battlefield"]} for d in dumps]
+    assert ids[0] == ids[1]
+    texts = [worker.request("build", x, seed=5, decisionPlayer="B")["decision"]["text"] for x in (s, other)]
+    assert texts[0] == texts[1]
+
+
+@needs_worker
+def test_pregame_spec_is_deterministic(pool):
+    """The Arena ChooseStartingPlayerReq spec (turn 1 upkeep, empty hands) has no decision for A
+    before the safety stop: A skips its first draw, B's turn 2 gives A nothing to do. Its one-off
+    PRIORITY decision in the arena review came from a jar before the turn-1 draw fix (A drew an
+    8th card: here, the first card). Same answer on both workers and on repeats."""
+    s = spec("main_phase")
+    s.update(turn=1, phase="BEGINNING", step="UPKEEP", enterMode="BEGIN_STEP", startingPlayer="A")
+    for seat in "AB":
+        s["players"][seat].update(hand=[], graveyard=[], exile=[], battlefield=[], libraryTop=[], handUnknown=0,
+                                  life=20)
+    out = [w.request("build", s, seed=1, decisionPlayer="A") for w in pool.workers for _ in range(2)]
+    assert all(o["decision"] is None for o in out)
+    assert len({o["noDecision"] for o in out}) == 1 and "end of turn 2" in out[0]["noDecision"]
+
+
+@needs_worker
+def test_injection_answers_no_to_enter_questions(worker):
+    """Injected permanents ask 'as this enters' questions: the puppet used to pay 2 life for a
+    shock land (39 of 105 Arena specs), whose queued life-loss event then triggered A's
+    Bloodthirsty Conqueror ('whenever an opponent loses life, you gain that much') on resume.
+    Injection now declines every question and drops whatever events it queued."""
+    s = with_cards(spec("main_phase"), "A", ["Bloodthirsty Conqueror"], ["Vanguard Seraph"])
+    a = s["players"]["A"]
+    a["battlefield"] = [x for x in a["battlefield"] if x.get("name") != "Vanguard Seraph"]
+    a["battlefield"].append({"name": "Bloodthirsty Conqueror"})
+    with_cards(s, "B", ["Stomping Ground"], ["Forest"])
+    s["players"]["B"]["battlefield"].append({"name": "Stomping Ground"})
+    r = worker.request("build", s, seed=1, decisionPlayer="A", dumpDecisionState=True)
+    assert diff_dump(s, r["dump"]) == [] and r["warnings"] == []
+    assert r["decision"]["where"]["stack"] == 0
+    assert {x: r["decisionState"]["players"][x]["life"] for x in "AB"} == {"A": 13, "B": 9}
+    assert perm(r["dump"], "B", "Stomping Ground")["tapped"] is False           # the spec's state wins

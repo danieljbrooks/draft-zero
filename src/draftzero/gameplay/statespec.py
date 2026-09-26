@@ -273,7 +273,7 @@ class StateSpec:
             owned[seat] += p.hand + p.graveyard + p.exile + p.libraryTop
             for perm in p.battlefield:
                 if perm.name and not _is_token(perm):
-                    owned[perm.owner or seat] += [perm.name] * perm.count
+                    owned[perm.owner if perm.owner in owned else seat] += [perm.name] * perm.count
         for item in self.stack:
             if item.controller in owned and item.card:
                 owned[item.controller].append(item.card)
@@ -347,6 +347,8 @@ class StateSpec:
         for item in self.stack:
             if item.controller not in SEATS:
                 errs.append(f"stack controller {item.controller!r}")
+            if not item.card:
+                errs.append("stack item with no card")
             for t in item.targets:
                 if t not in ("player:A", "player:B") and t not in aliases:
                     errs.append(f"stack target {t!r} names no permanent alias or player")

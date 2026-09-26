@@ -141,6 +141,11 @@ final class Dumper {
             o.addProperty("name", pm instanceof PermanentCard ? ((PermanentCard) pm).getCard().getName() : pm.getName());
         }
         if (origin != null && origin.id != null) o.addProperty("id", origin.id);
+        // listed under its controller (getAllActivePermanents(controller)); the owner when it differs
+        String ownerSeat = b.seatOf(pm.getOwnerId());
+        if (!(pm instanceof PermanentToken) && ownerSeat != null && !ownerSeat.equals(b.seatOf(pm.getControllerId()))) {
+            o.addProperty("owner", ownerSeat);
+        }
         o.addProperty("tapped", pm.isTapped());
         o.addProperty("sick", !(boolean) Reflect.get(PermanentImpl.class, pm, "controlledFromStartOfControllerTurn"));
         o.addProperty("damage", pm.getDamage());

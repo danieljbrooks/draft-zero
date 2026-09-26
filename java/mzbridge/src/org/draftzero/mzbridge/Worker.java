@@ -100,7 +100,8 @@ public final class Worker {
                         resp = encode(spec(req), opt);
                         break;
                     case "coach":
-                        resp = Coach.run(spec(req), opt);
+                        // with options.specs (pre-determinized specs) the request spec is optional
+                        resp = Coach.run(req.has("spec") && !req.get("spec").isJsonNull() ? spec(req) : null, opt);
                         break;
                     case "quit":
                         resp = new JsonObject();
@@ -143,7 +144,9 @@ public final class Worker {
         long t0 = System.nanoTime();
         long seed = optLong(opt, "seed", 0L);
         long idSeed = optLong(opt, "idSeed", seed);
+        Substitutions.Result subs = Substitutions.apply(spec, optObject(opt, "substitute"));
         StateInjector.Built b = StateInjector.build(spec, idSeed, seed, optBool(opt, "lenient", false));
+        b.warnings.addAll(0, subs.warnings);
         long t1 = System.nanoTime();
         JsonObject dump = Dumper.dump(b, optBool(opt, "dumpLibrary", false));
         String seat = decisionSeat(spec, opt);
@@ -160,6 +163,7 @@ public final class Worker {
         if (d == null && reason[0] != null) r.addProperty("noDecision", reason[0]);
         if (atDecision[0] != null) r.add("decisionState", atDecision[0]);
         r.add("warnings", Dumper.strings(b.warnings));
+        if (!subs.applied.isEmpty()) r.add("substitutions", subs.toJson());
         JsonObject t = new JsonObject();
         t.addProperty("build", ms(t0, t1));
         t.addProperty("advance", ms(t1, t2));
@@ -172,7 +176,9 @@ public final class Worker {
         long t0 = System.nanoTime();
         long seed = optLong(opt, "seed", 0L);
         boolean perfectInfo = optBool(opt, "perfectInfo", false);
+        Substitutions.Result subs = Substitutions.apply(spec, optObject(opt, "substitute"));
         StateInjector.Built b = StateInjector.build(spec, optLong(opt, "idSeed", seed), seed, optBool(opt, "lenient", false));
+        b.warnings.addAll(0, subs.warnings);
         long t1 = System.nanoTime();
         String seat = decisionSeat(spec, opt);
         int[][] features = new int[1][];
@@ -201,6 +207,7 @@ public final class Worker {
         r.add("features", fa);
         r.addProperty("nFeatures", fa.size());
         r.add("warnings", Dumper.strings(b.warnings));
+        if (!subs.applied.isEmpty()) r.add("substitutions", subs.toJson());
         JsonObject t = new JsonObject();
         t.addProperty("build", ms(t0, t1));
         t.addProperty("advance", ms(t1, t2));
@@ -262,7 +269,13 @@ public final class Worker {
 
     static Spec spec(JsonObject req) {
         if (!req.has("spec") || !req.get("spec").isJsonObject()) throw new IllegalArgumentException("request has no spec object");
-        Spec s = SPEC_GSON.fromJson(req.get("spec"), Spec.class);
+        return specFrom(req.get("spec"));
+    }
+
+    /** A StateSpec JSON object -> Spec, with every absent list defaulted to empty. */
+    static Spec specFrom(JsonElement json) {
+        if (json == null || !json.isJsonObject()) throw new IllegalArgumentException("a spec must be a JSON object");
+        Spec s = SPEC_GSON.fromJson(json, Spec.class);
         if (s.players == null) s.players = new LinkedHashMap<>();
         if (s.stack == null) s.stack = new ArrayList<>();
         if (s.attackers == null) s.attackers = new ArrayList<>();
@@ -312,6 +325,10 @@ public final class Worker {
 
     static long ms(long a, long b) {
         return Math.round((b - a) / 1e6);
+    }
+
+    static JsonObject optObject(JsonObject o, String k) {
+        return o != null && o.has(k) && o.get(k).isJsonObject() ? o.getAsJsonObject(k) : null;
     }
 
     static String optString(JsonObject o, String k, String def) {

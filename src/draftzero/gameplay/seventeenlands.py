@@ -6,15 +6,22 @@
             python -m draftzero.gameplay.seventeenlands fetch --set FDN --format PremierDraft
   stats   one pass (full or sampled) printing sizes and the key rates of docs/008
           (replay_empirics.md §4.2 conservation, §8 flags and fidelity ladder), the StateSpec tier
-          distribution, card/ability id coverage and throughput
+          distribution, card/ability id coverage and throughput. --kinds adds the specs after each
+          user turn (after: its END_TURN; blocks: the opponent's DECLARE_ATTACKERS when it attacked)
             python -m draftzero.gameplay.seventeenlands stats --every 40            # ~20k games
+            python -m draftzero.gameplay.seventeenlands stats --every 40 --kinds turn after blocks
             python -m draftzero.gameplay.seventeenlands stats --every 16 --json data/gameplay/stats_every16.json
   specs   write StateSpec JSON (optionally with labels) for selected rows and user turns
             python -m draftzero.gameplay.seventeenlands specs --rows 0 4 --labels
             python -m draftzero.gameplay.seventeenlands specs --every 1000 --entry main1 \\
                 --out data/gameplay/specs/FDN_PremierDraft_main1
+            python -m draftzero.gameplay.seventeenlands specs --rows 4 --after --entry declare_attackers
+            python -m draftzero.gameplay.seventeenlands specs --every 5000 --exact   # mirrored rows only
 
-Specs are named <SET>_<FMT>_r<row>_u<turn>_<entry>.json and carry no 17lands user or draft ids.
+Specs are named <SET>_<FMT>_r<row>_u<turn>_<entry>.json (..._after_<entry> for the state after the
+turn, ..._exact with the mirrored row's deck and hand) and carry no 17lands user or draft ids.
+Every spec's labels["bridge"] holds the bridge request options that reach the decision its labels
+describe: pass them with every bridge request (`bridge.build(spec, **spec.labels["bridge"])`).
 17lands public data is CC BY 4.0 (https://www.17lands.com/public_datasets): credit 17lands in
 anything built from it.
 """
@@ -41,9 +48,12 @@ _SNAPSHOT_PREFIX = "eot_"
 class Stats:
     """Accumulates the research rates over a stream of games."""
 
-    def __init__(self, ids: Ids, build_specs: bool = True):
+    def __init__(self, ids: Ids, build_specs: bool = True, kinds=("turn",)):
         self.ids = ids
         self.build_specs = build_specs
+        self.kinds = tuple(kinds)                 # turn | after | blocks (see _kind_spec)
+        self.extra = {k: {"n": Counter(), "tier": Counter(), "flags": Counter(), "invalid": Counter()}
+                      for k in self.kinds if k != "turn"}
         self.n = Counter()
         self.zone = defaultdict(Counter)          # (level, zone) -> {True, False}
         self.slot = defaultdict(Counter)          # (level, scope) -> {True, False}
@@ -88,7 +98,7 @@ class Stats:
                 for c in v:
                     self.cov[kind] += 1
                     self.cov[kind + "_mapped"] += ids.is_mapped(c)
-        if self.build_specs:
+        if self.build_specs and "turn" in self.kinds:
             t0 = time.perf_counter()
             for n in g.decision_turns():
                 spec = rc.state_at_user_turn(g, n, ids=ids)
@@ -102,6 +112,20 @@ class Stats:
                     self.invalid[e.split(":")[0] if ":" in e else e[:40]] += 1
                 self.n["invalid_specs"] += bool(errs)
             self.t_specs += time.perf_counter() - t0
+        for kind, acc in self.extra.items():
+            for n in g.decision_turns():
+                try:
+                    spec = _kind_spec(g, n, kind, ids)
+                except ValueError:                # no opponent turn after it, or no attack
+                    acc["n"]["skipped"] += 1
+                    continue
+                acc["n"]["specs"] += 1
+                acc["tier"][spec.provenance.tier] += 1
+                acc["flags"].update(spec.provenance.flags)
+                errs = spec.validate()
+                for e in errs:
+                    acc["invalid"][e.split(":")[0] if ":" in e else e[:40]] += 1
+                acc["n"]["invalid_specs"] += bool(errs)
 
     def rates(self) -> dict:
         pct = lambda c: round(100.0 * c[True] / max(1, c[True] + c[False]), 2)
@@ -118,18 +142,32 @@ class Stats:
                 "ability_ids_in_table": round(100.0 * self.cov["ability_known"] / max(1, self.cov["ability"]), 4),
                 "occurrences": dict(self.cov)},
         }
-        if self.build_specs:
+        if self.build_specs and "turn" in self.kinds:
             ns = max(1, self.n["specs"])
             out["spec_tiers"] = {t: round(100.0 * self.tier[t] / ns, 2) for t in TIERS}
             out["spec_flags"] = {k: round(100.0 * v / ns, 2) for k, v in self.spec_flags.most_common()}
             out["spec_invalid"] = dict(self.invalid)
+        for kind, acc in self.extra.items():
+            ns = max(1, acc["n"]["specs"])
+            out.setdefault("kinds", {})[kind] = {
+                "counts": dict(acc["n"]), "spec_tiers": {t: round(100.0 * acc["tier"][t] / ns, 2) for t in TIERS},
+                "spec_flags": {k: round(100.0 * v / ns, 2) for k, v in acc["flags"].most_common()},
+                "spec_invalid": dict(acc["invalid"])}
         out["seconds"] = {"parse": round(self.t_parse, 3), "analyze": round(self.t_analyze, 3),
                           "specs": round(self.t_specs, 3)}
         return out
 
 
-def collect(games, ids: Ids, build_specs: bool = True) -> Stats:
-    st = Stats(ids, build_specs)
+def _kind_spec(g: replay.Game, n: int, kind: str, ids: Ids, **kw):
+    """turn: the start of user turn n (eot_rollover); after: the END_TURN of user turn n; blocks: the
+    opponent's DECLARE_ATTACKERS after it (ValueError when there is none)."""
+    if kind == "turn":
+        return rc.state_at_user_turn(g, n, ids=ids, **kw)
+    return rc.state_after_user_turn(g, n, "eot_rollover" if kind == "after" else "declare_attackers", ids=ids, **kw)
+
+
+def collect(games, ids: Ids, build_specs: bool = True, kinds=("turn",)) -> Stats:
+    st = Stats(ids, build_specs, kinds)
     it = iter(games)
     while True:
         t0 = time.perf_counter()
@@ -166,6 +204,11 @@ def _print_stats(r: dict, wall: float) -> None:
               + ", ".join(f"{k} {v}" for k, v in r["spec_tiers"].items()))
         print("spec flags: " + ", ".join(f"{k} {v}" for k, v in list(r["spec_flags"].items())[:30]))
         print(f"invalid specs: {c.get('invalid_specs', 0)} {r['spec_invalid'] or ''}")
+    for kind, k in r.get("kinds", {}).items():
+        print(f"\n{kind} specs: {k['counts']}")
+        print("  tiers: " + ", ".join(f"{t} {v}" for t, v in k["spec_tiers"].items()))
+        print("  flags: " + ", ".join(f"{f} {v}" for f, v in list(k["spec_flags"].items())[:30]))
+        print(f"  invalid: {k['counts'].get('invalid_specs', 0)} {k['spec_invalid'] or ''}")
     print("\nid coverage: " + ", ".join(f"{k} {v}%" for k, v in r["coverage"].items() if k != "occurrences"))
 
 
@@ -197,11 +240,18 @@ def main(argv=None) -> int:
         p.add_argument("--limit", type=int, default=None)
         if name == "stats":
             p.add_argument("--no-specs", action="store_true", help="skip building a spec for every decision turn")
+            p.add_argument("--kinds", nargs="+", default=["turn"], choices=["turn", "after", "blocks"],
+                           help="which specs to build and grade per decision turn (default: turn)")
             p.add_argument("--json", default=None, help="also write the rates here (default: nothing)")
         else:
             p.add_argument("--rows", type=int, nargs="*", default=None, help="data-row indices (0-based)")
             p.add_argument("--turns", default="decision", help="decision (default) | all | comma list, e.g. 3,5")
-            p.add_argument("--entry", choices=rc.ENTRIES, default="eot_rollover")
+            p.add_argument("--entry", choices=sorted(set(rc.ENTRIES) | set(rc.AFTER_ENTRIES)), default="eot_rollover",
+                           help=f"turn start: {', '.join(rc.ENTRIES)}; with --after: {', '.join(rc.AFTER_ENTRIES)}")
+            p.add_argument("--after", action="store_true",
+                           help="the state after each user turn (its blocks and off-turn plays) instead of its start")
+            p.add_argument("--exact", action="store_true",
+                           help="mirrored rows only (data/gameplay/pairs file): the opponent's real deck and hand")
             p.add_argument("--labels", action="store_true", help="put the turn label in spec.labels")
             p.add_argument("--out", default=None, help="output dir (default data/gameplay/specs/<SET>_<FMT>)")
     a = ap.parse_args(argv)
@@ -213,7 +263,8 @@ def main(argv=None) -> int:
     path = a.path or replay.replay_path(a.set, a.format)
     if a.cmd == "stats":
         t0 = time.time()
-        st = collect(replay.iter_games(path, a.limit, a.every, a.start), ids, build_specs=not a.no_specs)
+        st = collect(replay.iter_games(path, a.limit, a.every, a.start), ids, build_specs=not a.no_specs,
+                     kinds=a.kinds)
         r = st.rates()
         r["sample"] = {"path": str(path), "every": a.every, "start": a.start, "limit": a.limit}
         _print_stats(r, time.time() - t0)
@@ -221,17 +272,34 @@ def main(argv=None) -> int:
             Path(a.json).parent.mkdir(parents=True, exist_ok=True)
             Path(a.json).write_text(json.dumps(r, indent=1) + "\n")
         return 0
+    entries = rc.AFTER_ENTRIES if a.after else rc.ENTRIES
+    if a.entry not in entries:
+        ap.error(f"--entry {a.entry} needs {'no ' if a.after else ''}--after (choices: {', '.join(entries)})")
     out = Path(a.out or OUT_DIR / "specs" / f"{a.set}_{a.format}")
     out.mkdir(parents=True, exist_ok=True)
     games = (replay.read_games(a.rows, path).values() if a.rows is not None
              else replay.iter_games(path, a.limit, a.every, a.start))
+    partners = {}
+    if a.exact:                                  # the partner rows need a second read: hold the games
+        from draftzero.gameplay.pairs import load_pairs, partner_map
+        pm = partner_map(load_pairs(set_code=a.set, fmt=a.format))
+        games = [g for g in games if g.row_index in pm]    # (streamed otherwise)
+        other = replay.read_games([pm[g.row_index] for g in games], path)
+        partners = {g.row_index: other[pm[g.row_index]] for g in games}
     t0 = time.time()
-    n = bad = 0
+    n = bad = skipped = 0
     tiers = Counter()
     for g in games:
         for turn in _turns(g, a.turns):
-            spec = rc.state_at_user_turn(g, turn, a.entry, ids=ids, labels=a.labels)
-            dump(spec, out / f"{a.set}_{a.format}_r{g.row_index}_u{turn}_{a.entry}.json")
+            kw = dict(ids=ids, labels=a.labels, partner=partners.get(g.row_index))
+            try:
+                spec = (rc.state_after_user_turn(g, turn, a.entry, **kw) if a.after
+                        else rc.state_at_user_turn(g, turn, a.entry, **kw))
+            except ValueError:
+                skipped += 1                      # no opponent turn after it, or it did not attack
+                continue
+            name = f"{a.set}_{a.format}_r{g.row_index}_u{turn}_{'after_' if a.after else ''}{a.entry}"
+            dump(spec, out / f"{name}{'_exact' if a.exact else ''}.json")
             errs = spec.validate()
             if errs:
                 bad += 1
@@ -239,7 +307,7 @@ def main(argv=None) -> int:
             n += 1
             tiers[spec.provenance.tier] += 1
     print(f"wrote {n} specs to {out} in {time.time() - t0:.1f} s; tiers {dict(sorted(tiers.items()))}; "
-          f"{bad} failed validate()")
+          f"{bad} failed validate(); {skipped} turns without such a state")
     return 1 if bad else 0
 
 

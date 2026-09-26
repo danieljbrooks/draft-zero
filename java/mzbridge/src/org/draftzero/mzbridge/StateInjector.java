@@ -3,8 +3,10 @@ package org.draftzero.mzbridge;
 import mage.Mana;
 import mage.abilities.Ability;
 import mage.abilities.common.SimpleStaticAbility;
+import mage.abilities.effects.ContinuousEffect;
 import mage.abilities.effects.common.InfoEffect;
 import mage.cards.Card;
+import mage.cards.MeldCard;
 import mage.cards.decks.Deck;
 import mage.cards.repository.CardInfo;
 import mage.cards.repository.CardRepository;
@@ -20,15 +22,21 @@ import mage.counters.CounterType;
 import mage.game.Game;
 import mage.game.GameImpl;
 import mage.game.GameOptions;
+import mage.game.GameState;
 import mage.game.TwoPlayerDuel;
 import mage.game.TwoPlayerMatch;
 import mage.game.combat.Combat;
+import mage.game.events.ZoneChangeEvent;
 import mage.game.match.Match;
 import mage.game.match.MatchOptions;
 import mage.game.mulligan.MulliganType;
 import mage.game.permanent.Permanent;
+import mage.game.permanent.PermanentCard;
 import mage.game.permanent.PermanentImpl;
+import mage.game.permanent.PermanentMeld;
+import mage.game.permanent.PermanentToken;
 import mage.game.permanent.token.Token;
+import mage.game.permanent.token.TokenImpl;
 import mage.game.stack.Spell;
 import mage.game.turn.Phase;
 import mage.game.turn.Step;
@@ -52,11 +60,12 @@ import java.util.concurrent.ConcurrentHashMap;
  *  1. TwoPlayerDuel + two players + a fake TwoPlayerMatch, as ParallelDataGenerator does it;
  *  2. game.start() with stopOnTurn=1/UNTAP runs only GameImpl.init(); the opening hands go back;
  *  3. cards move from the libraries into their zones without events (hand, graveyard, exile,
- *     battlefield via CardUtil.putCardOntoBattlefieldWithEffects, tokens, counters, damage,
- *     sickness, attachments, life, lands played, mana pool, library order and size);
+ *     battlefield via CardUtil.putCardOntoBattlefieldWithEffects's recipe, tokens the same way,
+ *     counters, damage, sickness, attachments, life, lands played, mana pool, library order and
+ *     size); a control-changed permanent (Perm.owner) comes out of its owner's library;
  *  4. Turn / Phase / Step point at the target step, with Step.stepPart primed for Phase.resumeStep;
- *  5. hygiene: drop the "starting player skips the draw" TurnMod, pending triggers and watcher
- *     history, then applyEffects.
+ *  5. hygiene: drop the "starting player skips the draw" TurnMod, pending triggers, queued
+ *     simultaneous events and watcher history, then applyEffects.
  * {@link #anchor} then pauses the game and re-anchors MageZero's search at the injected state.
  *
  * What changed from the proof of concept (critique.md §3.2, C4, and the gotchas becoming checks):
@@ -66,8 +75,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *  - BEGIN_STEP is entered as "the previous step has just ended" (stepPart=POST), which a paused
  *    MCTS copy resumes exactly like the live game, so a decision made inside a step's turn-based
  *    actions (blocks at DECLARE_BLOCKERS) is searched from the right state (the 3b negative case);
- *  - verify() reads the built game back and fails on any zone, counter, tap, sickness, damage or
- *    attachment that does not match the spec, instead of warning.
+ *  - verify() reads the built game back and fails on any zone, counter, tap, sickness, damage,
+ *    attachment, controller or owner that does not match the spec, instead of warning.
  */
 public final class StateInjector {
 
@@ -145,6 +154,11 @@ public final class StateInjector {
     public static Built build(Spec spec, long idSeed, long seed, boolean lenient) {
         List<String> errs = spec.validate();
         if (!errs.isEmpty()) throw new SpecException("invalid spec", errs);
+        List<String> unknown = unknownCards(spec);
+        if (!unknown.isEmpty()) {
+            throw new SpecException("unknown card", List.of(unknown.size() + " card(s) not in the XMage card database: " + unknown
+                    + " (options.substitute {\"missing\": \"Plains\"} builds the spec with a stand-in)"));
+        }
         warm(spec);
 
         DeterministicIds.reset(idSeed);
@@ -182,7 +196,16 @@ public final class StateInjector {
             BridgePlayer p = out.players.get(seat);
             p.setTestMode(true);
             Deck deck = new Deck();
-            for (String name : spec.players.get(seat).decklist) deck.getCards().add(newCard(name, null, null));
+            Map<String, Integer> copies = new HashMap<>();
+            for (String name : spec.players.get(seat).decklist) {
+                // a card's ids depend on (seat, name, copy) only, not on the rest of the decklist, so
+                // determinizations whose belief decklists differ still share every visible card's
+                // UUID, and with it the attack/block question order (DeterministicIds)
+                int copy = copies.merge(name, 1, Integer::sum);
+                DeterministicIds.reset(mix(idSeed, cardSalt(seat, name, copy)));
+                deck.getCards().add(newCard(name, null, null));
+            }
+            DeterministicIds.reset(mix(idSeed, 6 + (seat.equals("A") ? 0 : 1)));
             game.loadCards(deck.getCards(), p.getId());
             game.addPlayer(p, deck);
             match.addPlayer(p, deck); // G11: MCTS2 reads getMatchPlayer().getDeck()
@@ -216,7 +239,6 @@ public final class StateInjector {
             throw new IllegalStateException("init() put permanents onto the battlefield: "
                     + game.getBattlefield().getAllPermanents().stream().map(Permanent::getName).toList());
         }
-        for (BridgePlayer p : out.players.values()) p.setup = false;
 
         // ---- 3. zones ----
         Ability fake = new SimpleStaticAbility(Zone.OUTSIDE, new InfoEffect("mzbridge state injection"));
@@ -297,7 +319,15 @@ public final class StateInjector {
             // mulligan / starting-player decision entered at turn 1 UPKEEP): put it back
             game.getState().getTurnMods().add(new TurnMod(starting.getId()).withSkipStep(PhaseStep.DRAW));
         }
-        game.getState().clearTriggeredAbilities();      // G7: triggers fired by injection (tokens, attach, cast)
+        game.getState().clearTriggeredAbilities();      // G7: triggers fired by injection (attach, cast, counters)
+        // ...and events queued for the next GameState.handleSimultaneousEvent, which runs only on
+        // resume and would trigger then (how injected tokens used to fire their ETB triggers). No
+        // injection step is known to queue any now; this is the safety net, and it cannot drop a
+        // real event: the game has not resumed yet. The warning finds a step that does
+        // Measured before this line and BridgePlayer.setup covered the injection: 12 of 2,004 real
+        // 17lands specs (Authority of the Consuls tapping entering creatures: TAPPED_BATCH) and 39
+        // of 105 Arena specs (a shock land's "pay 2 life?" answered yes: LOST_LIFE_BATCH) left events
+        ((List<?>) Reflect.get(GameState.class, game.getState(), "simultaneousEvents")).clear();
         game.getState().resetWatchers();                // "this turn" watchers start empty (a known limitation)
         game.applyEffects();
         // safety net only: the decision player pauses the game itself (G6: stop options are not
@@ -306,6 +336,9 @@ public final class StateInjector {
         game.getOptions().stopAtStep = PhaseStep.END_TURN;
         game.setLocalRandom(new Random(mix(seed, 2)));  // C4: in-game shuffles use this RNG, and copies carry it
 
+        // questions asked while injecting ("pay 2 life or enter tapped?" of a shock land) are
+        // answered "no" (BridgePlayer.setup): injection must not pay costs or change life totals
+        for (BridgePlayer p : out.players.values()) p.setup = false;
         List<String> problems = verify(out, made);
         if (!problems.isEmpty()) {
             if (!lenient) throw new SpecException("built state does not match the spec", problems);
@@ -358,6 +391,16 @@ public final class StateInjector {
         }
         for (int i = tops.size() - 1; i >= 0; i--) p.getLibrary().putOnTop(tops.get(i), game);
         return names;
+    }
+
+    /** Salt of one decklist card's id stream: seat, name (64-bit FNV-1a) and copy number. */
+    static long cardSalt(String seat, String name, int copy) {
+        long h = 0xcbf29ce484222325L;
+        for (byte x : (seat + "|" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8)) {
+            h ^= x & 0xff;
+            h *= 0x100000001b3L;
+        }
+        return mix(h, copy);
     }
 
     /** SplitMix-style mixing so seed, seed+1, ... give unrelated streams. */
@@ -422,6 +465,19 @@ public final class StateInjector {
         }
     }
 
+    /** Every card name of the spec the database does not know, sorted (one error lists them all). */
+    static List<String> unknownCards(Spec spec) {
+        Set<String> names = new TreeSet<>();
+        for (Spec.PlayerState ps : spec.players.values()) {
+            names.addAll(ps.decklist);
+            for (Spec.Perm perm : ps.battlefield) if (!perm.isToken() && perm.name != null) names.add(perm.name);
+        }
+        for (Spec.StackItem si : spec.stack) if (si.card != null) names.add(si.card);
+        List<String> out = new ArrayList<>();
+        for (String n : names) if (!Substitutions.known(n)) out.add(n);
+        return out;
+    }
+
     static CardInfo cardInfo(String name, String set, String number) {
         String key = name + "|" + set + "|" + number;
         CardInfo ci = CARD_INFO.get(key);
@@ -446,7 +502,7 @@ public final class StateInjector {
         }
         if (ci == null) {
             throw new SpecException("unknown card", List.of("'" + name + "'" + (set == null ? "" : " (" + set + ":" + number + ")")
-                    + " is not in the XMage card database"));
+                    + " is not in the XMage card database (options.substitute {\"missing\": \"Plains\"} builds the spec with a stand-in)"));
         }
         CARD_INFO.put(key, ci);
         return ci;
@@ -500,12 +556,14 @@ public final class StateInjector {
                     game.setLocalRandom(new Random(mix(out.idSeed, salt + 1)));
                     pm = putToken(game, p, perm, fakeTemplate);
                 } else {
-                    Card c = takeCard(game, out, p, perm.name, lenient);
+                    // a control-changed permanent's card comes out of its OWNER's library
+                    Player owner = out.players.get(Spec.ownerSeat(seat, perm));
+                    Card c = takeCard(game, out, owner, perm.name, lenient);
                     Ability src = fakeTemplate.copy();
                     src.setControllerId(p.getId());
                     src.setSourceId(c.getId());
                     // no ETB event; "enters with counters/tapped" replacements still apply
-                    CardUtil.putCardOntoBattlefieldWithEffects(src, game, c, p, perm.tapped);
+                    putCardOntoBattlefield(src, game, c, p, perm.tapped);
                     pm = game.getPermanent(c.getId());
                     if (pm == null) throw new SpecException("cannot build battlefield", List.of(seat + ": '" + perm.name + "' did not enter the battlefield"));
                 }
@@ -574,6 +632,43 @@ public final class StateInjector {
         for (int i = tops.size() - 1; i >= 0; i--) p.getLibrary().putOnTop(tops.get(i), game);
     }
 
+    /**
+     * CardUtil.putCardOntoBattlefieldWithEffects without its setOwnerId(player): the card keeps
+     * its owner (the library it came from) and enters under {@code controller}'s control, with
+     * originalControllerId = controller, as a reanimated creature does (ZonesHandler builds the
+     * PermanentCard with the new controller), so resetting control in applyEffects keeps it there.
+     * No ENTERS_THE_BATTLEFIELD event; "enters with counters / tapped" replacements still apply.
+     */
+    static void putCardOntoBattlefield(Ability source, Game game, Card card, Player controller, boolean tapped) {
+        Card permCard = CardUtil.getDefaultCardSideForBattlefield(game, card);
+        permCard.setZone(Zone.BATTLEFIELD, game);
+        PermanentCard permanent = permCard instanceof MeldCard ? new PermanentMeld(permCard, controller.getId(), game)
+                : new PermanentCard(permCard, controller.getId(), game);
+        game.getPermanentsEntering().put(permanent.getId(), permanent);
+        permCard.applyEnterWithCounters(permanent, source, game);
+        permanent.entersBattlefield(source, game, Zone.OUTSIDE, false);
+        game.addPermanent(permanent, game.getState().getNextPermanentOrderNumber());
+        game.getPermanentsEntering().remove(permanent.getId());
+        if (tapped) permanent.setTapped(true);
+        permanent.removeSummoningSickness();
+        for (ContinuousEffect effect : game.getState().getContinuousEffects().getLayeredEffects(game)) {
+            Optional<Ability> ability = game.getState().getContinuousEffects().getLayeredEffectAbilities(effect).stream().findFirst();
+            if (ability.isPresent() && permanent.getId().equals(ability.get().getSourceId())) {
+                effect.init(ability.get(), game, controller.getId());
+            }
+        }
+    }
+
+    /**
+     * A token straight onto the battlefield, event-free like a card. Token.putOntoBattlefield
+     * would queue a ZONE_CHANGE and an ENTERS_THE_BATTLEFIELD simultaneous event (and a
+     * CREATED_TOKEN one) that GameState handles only when the game resumes, i.e. after the
+     * injector cleared the pending triggers: "whenever a creature enters" permanents (Dazzling
+     * Angel, Authority of the Consuls) then triggered on every injected token (17lands row 560303
+     * user turn 9: 6 triggers on the stack at the decision, +6 life after rollover). It would
+     * also run CREATE_TOKEN replacement effects (token doublers). This is
+     * TokenImpl.putOntoBattlefieldHelper without the events.
+     */
     static Permanent putToken(Game game, Player p, Spec.Perm perm, Ability fakeTemplate) {
         String cls = tokenClassName(perm);
         Token token;
@@ -589,10 +684,24 @@ public final class StateInjector {
         Ability src = fakeTemplate.copy();
         src.setControllerId(p.getId());
         src.setSourceId(token.getId());
-        token.putOntoBattlefield(1, game, src, p.getId(), perm.tapped, false);
-        List<UUID> ids = token.getLastAddedTokenIds();
-        if (ids.size() != 1) throw new SpecException("cannot build battlefield", List.of(perm.describe() + " made " + ids.size() + " permanents"));
-        return game.getPermanent(ids.get(0));
+        if (token instanceof TokenImpl) {
+            // the image / set code TokenImpl.putOntoBattlefield would pick (the dump shows the set)
+            TokenInfo info = TokenImpl.generateTokenInfo((TokenImpl) token, game, token.getId());
+            token.setExpansionSetCode(info.getSetCode());
+            token.setImageNumber(info.getImageNumber());
+        }
+        PermanentToken pm = new PermanentToken(token, p.getId(), game); // id from game.getLocalRandom()
+        game.getState().addCard(pm);
+        game.getPermanentsEntering().put(pm.getId(), pm);
+        pm.setTapped(perm.tapped);
+        pm.updateZoneChangeCounter(game, new ZoneChangeEvent(pm, p.getId(), Zone.OUTSIDE, Zone.BATTLEFIELD));
+        game.setScopeRelevant(true);
+        pm.entersBattlefield(src, game, Zone.OUTSIDE, false); // replacements apply; no event is queued
+        game.setScopeRelevant(false);
+        game.addPermanent(pm, game.getState().getNextPermanentOrderNumber());
+        pm.setZone(Zone.BATTLEFIELD, game);
+        game.getPermanentsEntering().remove(pm.getId());
+        return pm;
     }
 
     static String tokenClassName(Spec.Perm perm) {
@@ -658,6 +767,16 @@ public final class StateInjector {
             Ability src = fakeTemplate.copy();
             src.setControllerId(p.getId());
             src.setSourceId(auraId);
+            if (ReanimatedAura.enchantsGraveyardCard(game, game.getPermanent(auraId))) {
+                // Animate Dead & co. enchant "creature card in a graveyard" until their ETB trigger
+                // (not fired by injection) swaps that for the creature they returned
+                ReanimatedAura.install(game, game.getPermanent(auraId), host, src);
+                if (!host.getControllerId().equals(p.getId())) {
+                    out.warnings.add(seat + ": " + perm.describe() + " enchants " + perm.attachTo + ", which " + seat
+                            + " does not control: the creature it returned enters under " + seat + "'s control (list it under "
+                            + seat + " with owner " + Spec.other(seat) + ")");
+                }
+            }
             // before any state-based action check, or an unattached Aura goes to the graveyard
             boolean ok = host.addAttachment(auraId, src, game);
             Permanent aura = game.getPermanent(auraId);
@@ -670,6 +789,11 @@ public final class StateInjector {
 
     static void castOntoStack(Game game, Built out, Spec.StackItem si, Card c) {
         Player p = out.players.get(si.controller);
+        if (c.getSpellAbility() == null || c.isLand(game)) {
+            // Card.cast would throw an NPE in SpellAbility.getSpellAbilityToResolve
+            throw new SpecException("cannot build stack", List.of("'" + si.card + "' is not a spell (a land or a card with no spell "
+                    + "ability cannot be on the stack; a substituted card on the stack is dropped by options.substitute)"));
+        }
         c.setZone(Zone.HAND, game);
         p.getHand().add(c);
         // Card.cast puts the spell on the stack without paying costs or choosing targets (the "stack:" cheat)
@@ -800,6 +924,11 @@ public final class StateInjector {
                         if (have != e.getValue()) bad.add(what + ": " + e.getKey() + " counters=" + have);
                     }
                     if (perm.attachTo != null && !out.aliases.get(perm.attachTo).equals(pm.getAttachedTo())) bad.add(what + ": not attached to " + perm.attachTo);
+                    if (!p.getId().equals(pm.getControllerId())) bad.add(what + ": controlled by " + out.seatOf(pm.getControllerId()));
+                    String ownerSeat = Spec.ownerSeat(seat, perm);
+                    if (!perm.isToken() && !out.players.get(ownerSeat).getId().equals(pm.getOwnerId())) {
+                        bad.add(what + ": owned by " + out.seatOf(pm.getOwnerId()) + ", spec " + ownerSeat);
+                    }
                 }
             }
         }

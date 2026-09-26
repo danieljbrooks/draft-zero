@@ -19,11 +19,20 @@ order, phase, targets or mana payment, so every list here has set semantics (sor
   offturn_flash[]      flash permanents inferred on that turn (hand -> battlefield, no cast record)
   mulligan, bottomed   user turn 1 only: {"kept_after": k, "hands": [[names], ...]}, bottomed names
 
-Aliases ("A:GleamingBarrier_4") are the permanent ids of the StateSpec that
-`reconstruct.state_at_user_turn(game, n)` builds, so a bridge can apply the labels to that spec.
-Labels of a game's last slot (`terminal`) can be incomplete: the game ended during it.
+`after_turn_label(game, n)` is the opponent-turn part alone (blocks, block_pairing, offturn_*),
+plus `attacked` (the opponent's attackers by name): the labels of
+`reconstruct.state_after_user_turn(game, n)`, whose declare_attackers entry is where the blocks are
+decided. A potential blocker is a creature of the user's at the end of its turn that did not tap
+there (attacking without vigilance, a {T} cost, a Starlight Snare), is not a land it animated, and
+was not taken by the opponent for its turn; flash blockers that entered during the opponent's turn
+are keyed from the later state.
 
-  python -m draftzero.gameplay.labels --row 0 --turn 3
+Aliases ("A:GleamingBarrier_4") are the permanent ids of the StateSpec that
+`reconstruct.state_at_user_turn(game, n)` (or `state_after_user_turn`) builds, so a bridge can
+apply the labels to that spec. Labels of a game's last slot (`terminal`) can be incomplete: the
+game ended during it.
+
+  python -m draftzero.gameplay.labels --row 0 --turn 3 [--after]
 """
 from __future__ import annotations
 
@@ -184,7 +193,6 @@ def turn_label(g: Game, n: int, ids: Ids | None = None) -> dict:
     if u is None:
         raise ValueError(f"row {g.row_index} has no user turn {n}")
     p = g.prev_slot(n)
-    q = g.next_slot(n)
     start = ana.states[p.seq] if p is not None else None
     a_start = start.bf["user"] if start else []
     lab: dict = {"user_turn": n, "global_turn": u.global_turn, "terminal": u.terminal,
@@ -244,6 +252,19 @@ def turn_label(g: Game, n: int, ids: Ids | None = None) -> dict:
         notes.append("which copy attacked is a guess for: " + ", ".join(sorted(ids.name(x) for x in dup)))
     lab["attack_notes"] = notes
     # --- the next opponent turn: blocks and instant-speed plays ------------------------------------
+    lab.update(_offturn(g, u, g.next_slot(n), ana, ids))
+    # --- mulligan ----------------------------------------------------------------------------------
+    if n == 1:
+        lab["mulligan"] = {"kept_after": int(g.meta.get("num_mulligans") or 0),
+                           "hands": [sorted(ids.name(c) for c in h) for h in g.candidate_hands]}
+        lab["bottomed"] = sorted(ids.name(c) for c in g.bottomed)
+        lab["bottomed_exact"] = g.bottomed_exact
+    return lab
+
+
+def _offturn(g: Game, u: TurnRecord, q: TurnRecord | None, ana, ids: Ids) -> dict:
+    """The user's blocks and instant-speed plays in the opponent half-turn q right after its turn u."""
+    lab: dict = {}
     lab["blocks"], lab["block_pairing"] = [], "none"
     lab["offturn_instants"], lab["offturn_flash"], lab["offturn_activations"] = [], [], []
     if q is not None and q.side == "oppo":
@@ -252,7 +273,15 @@ def turn_label(g: Game, n: int, ids: Ids | None = None) -> dict:
         tapped |= _tapped_by_abilities(u, "user", end_u.bf["user"], ids, tapped)[0]   # paid {T}: can't block
         tapped |= {i.host for i in end_u.bf["oppo"] if i.host is not None
                    and ids.info(i.name).attach.startswith("aura:freeze")}       # stays tapped: can't block
-        pot = [i for i in end_u.bf["user"] if i.kind == "crea" and i.iid not in tapped]
+        # a land the user animated on its turn (Soulstone Sanctuary) is a land again: it blocks only if
+        # animated again, an off-turn activation
+        pot = [i for i in end_u.bf["user"] if i.kind == "crea" and i.iid not in tapped and not ids.is_land(i.grp)]
+        # a creature the opponent took for its turn (a Threaten effect) does not block for the user
+        for c in [c for z, sign, cat, c in ana.checks[q.seq].cats if z == "user_crea" and sign == "-"
+                  and cat == "control_change"]:
+            gone = next((i for i in pot if i.grp == c), None)
+            if gone is not None:
+                pot.remove(gone)
         att = q.L("creatures_attacked")
         if att:
             lab["block_pairing"], lab["blocks"] = _blocks(q, pot, end_u.bf["oppo"] + ana.states[q.seq].bf["oppo"],
@@ -266,12 +295,22 @@ def turn_label(g: Game, n: int, ids: Ids | None = None) -> dict:
         lab["offturn_flash"] = sorted((_key_entry(ids.name(c), *ids.cast_key(ids.name(c))[:3]) for c in flash),
                                       key=lambda d: d["name"])
         lab["offturn_activations"] = _activations(q, "user", {i.name for i in end_u.bf["user"]}, ids)
-    # --- mulligan ----------------------------------------------------------------------------------
-    if n == 1:
-        lab["mulligan"] = {"kept_after": int(g.meta.get("num_mulligans") or 0),
-                           "hands": [sorted(ids.name(c) for c in h) for h in g.candidate_hands]}
-        lab["bottomed"] = sorted(ids.name(c) for c in g.bottomed)
-        lab["bottomed_exact"] = g.bottomed_exact
+    return lab
+
+
+def after_turn_label(g: Game, n: int, ids: Ids | None = None) -> dict:
+    """The labels of `reconstruct.state_after_user_turn(g, n)`: what the user did during the
+    opponent's half-turn right after user turn n (blocks, block_pairing, offturn_instants,
+    offturn_flash, offturn_activations, as in `turn_label`), plus `attacked`, the opponent's
+    attackers of that turn by name (the spec at DECLARE_ATTACKERS declares them)."""
+    ids = ids or Ids.load(g.meta.get("expansion") or "FDN")
+    ana = analyze(g, ids)
+    u, q = g.user_slot(n), g.next_slot(n)
+    if u is None or q is None:
+        raise ValueError(f"row {g.row_index} has no opponent turn after user turn {n}")
+    lab: dict = {"user_turn": n, "opp_turn": q.n, "global_turn": q.global_turn, "terminal": q.terminal,
+                 "attacked": sorted(ids.name(c) for c in q.L("creatures_attacked"))}
+    lab.update(_offturn(g, u, q, ana, ids))
     return lab
 
 
@@ -334,11 +373,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m draftzero.gameplay.labels", description="Print one turn label.")
     ap.add_argument("--row", type=int, required=True)
     ap.add_argument("--turn", type=int, required=True)
+    ap.add_argument("--after", action="store_true", help="only the opponent turn after it (after_turn_label)")
     ap.add_argument("--path", default=None)
     a = ap.parse_args(argv)
     from draftzero.gameplay.replay import read_games
     g = read_games([a.row], a.path)[a.row]
-    print(json.dumps(turn_label(g, a.turn), indent=1))
+    print(json.dumps((after_turn_label if a.after else turn_label)(g, a.turn), indent=1))
     return 0
 
 

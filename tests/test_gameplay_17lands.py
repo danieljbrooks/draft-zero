@@ -2,10 +2,12 @@
 
 The golden tests run on tests/fixtures/gameplay/fdn_premier_rows.csv.gz: FDN Premier Draft rows
 0, 1, 4, 8, 26, 42, 76, 130 and 198 of the 17lands public replay file (CC BY 4.0, see the fixture
-README). Rows 0 and 4 are the ones the research phase inspected by hand. They need only committed
-files. The regression test streams a seeded 5,000-game sample of the real file and skips without
-it; the engine test builds fixture specs in XMage through java/mzbridge and skips without Java or
-the XMage build.
+README), plus rows 64435 and 89383 in fdn_premier_rows_extra.csv.gz. Rows 0 and 4 are the ones the
+research phase inspected by hand. They need only committed files. Mirrored pairs are tested on a
+synthetic partner row built from a fixture row (no pair is committed) and, when the data is there,
+on real pairs from data/gameplay/pairs_FDN_PremierDraft.jsonl. The regression test streams a seeded
+5,000-game sample of the real file and skips without it; the engine test builds fixture specs in
+XMage through java/mzbridge and skips without Java or the XMage build.
 """
 from collections import Counter
 from pathlib import Path
@@ -19,7 +21,9 @@ from draftzero.gameplay.ids import Ids
 from draftzero.gameplay.statespec import TIERS, StateSpec
 
 FIXTURE = Path(__file__).parent / "fixtures" / "gameplay" / "fdn_premier_rows.csv.gz"
+EXTRA = Path(__file__).parent / "fixtures" / "gameplay" / "fdn_premier_rows_extra.csv.gz"
 REPLAY = replay.replay_path("FDN", "PremierDraft")
+PAIRS = Path(__file__).resolve().parents[1] / "data" / "gameplay" / "pairs_FDN_PremierDraft.jsonl"
 
 
 @pytest.fixture(scope="module")
@@ -30,6 +34,11 @@ def ids():
 @pytest.fixture(scope="module")
 def games():
     return {g.row_index: g for g in replay.iter_games(FIXTURE)}
+
+
+@pytest.fixture(scope="module")
+def extra():
+    return {g.row_index: g for g in replay.iter_games(EXTRA)}
 
 
 def names(ids, grps):
@@ -300,6 +309,272 @@ def test_unrecorded_draw_is_unknown(games, ids):
     assert "draw_unknown_card" in m.provenance.flags
 
 
+# --- bridge options, mirrored pairs, the state after a turn, unknown destinations, owners -------
+
+def test_every_spec_carries_its_bridge_options(games, ids):
+    """labels['bridge'] reaches A's decision of the turn the spec describes, with labels or not:
+    the main phase of user turn n (the eot_rollover spec is B's END_TURN, one turn earlier, where
+    the bridge would otherwise decide for B), or the opponent's following turn for the specs after
+    it (its upkeep for instants and flash, DECLARE_BLOCKERS for blocks)."""
+    from draftzero.gameplay.bridge import turn_start_options
+    for g in games.values():
+        for n in g.user_turn_numbers():
+            u = g.user_slot(n)
+            want = {"decisionPlayer": "A", "decideFrom": {"turn": u.global_turn, "step": "PRECOMBAT_MAIN"}}
+            for entry in rc.ENTRIES:
+                for with_labels in (False, True):
+                    s = rc.state_at_user_turn(g, n, entry, ids=ids, labels=with_labels)
+                    assert s.labels["bridge"] == want, (g.row_index, n, entry)
+                    if s.step == "END_TURN":
+                        assert s.labels["bridge"] == turn_start_options(s)
+            q = g.next_slot(n)
+            if not (u.played and q is not None and q.played):
+                continue
+            s = rc.state_after_user_turn(g, n, ids=ids)
+            assert s.labels["bridge"] == {"decisionPlayer": "A", "decideFrom": {"turn": q.global_turn, "step": "UPKEEP"}}
+            if q.L("creatures_attacked"):
+                try:
+                    s = rc.state_after_user_turn(g, n, "declare_attackers", ids=ids)
+                except ValueError:
+                    continue
+                assert s.labels["bridge"] == {"decisionPlayer": "A",
+                                              "decideFrom": {"turn": q.global_turn, "step": "DECLARE_BLOCKERS"}}
+
+
+def _grp(ids, name):
+    return min(g for g, r in ids.cards17.items() if r["name"] == name)
+
+
+def mirror(g, ids, hand_at, draws_at=lambda seq: [], board=lambda t, f: f):
+    """A synthetic partner row for g: the same game recorded by g's opponent (sides swapped, boards
+    and life mirrored). Its own hand at the end of slot k is hand_at(k) (grp ids), its draws in its
+    own turn k draws_at(k); its deck is every card g's opponent revealed plus 20 Plains and 20 Islands."""
+    turns = []
+    for t in g.turns:
+        f = {"eot_user_life": t.num("eot_oppo_life"), "eot_oppo_life": t.num("eot_user_life"),
+             "eot_user_cards_in_hand": hand_at(t.seq), "cards_drawn": draws_at(t.seq) if t.side == "oppo" else []}
+        for k in ("lands", "creatures", "non_creatures"):
+            f[f"eot_user_{k}_in_play"] = t.L(f"eot_oppo_{k}_in_play")
+            f[f"eot_oppo_{k}_in_play"] = t.L(f"eot_user_{k}_in_play")
+        turns.append(replay.TurnRecord(t.other, t.n, t.seq, t.global_turn, board(t, f), t.played, t.terminal))
+    deck = Counter(rc.analyze(g, ids).states[-1].revealed) + Counter({"Plains": 20, "Island": 20})
+    k = int(g.meta.get("opp_num_mulligans") or 0)
+    plains = _grp(ids, "Plains")
+    return replay.Game(-1, {"on_play": not g.on_play, "draft_id": "synthetic-partner"}, deck, Counter(), [],
+                       [plains] * 7, [plains] * k, True, turns)
+
+
+def test_exact_spec_from_a_mirrored_pair(games, ids):
+    """exact_spec takes B's deck from the partner row and B's hand from the partner's own hand at
+    the end of the half-turn the spec starts from (not the one before or after it); the state after
+    a user turn takes B's hand at the end of that turn and B's next draw from the partner's turn."""
+    island, plains, swamp = _grp(ids, "Island"), _grp(ids, "Plains"), _grp(ids, "Swamp")
+    for row in (0, 4):                                  # on the play (turn 1 from the opening hand), on the draw
+        g = games[row]
+
+        def hand_at(seq, g=g):
+            k = int(g.turns[seq].num("eot_oppo_cards_in_hand"))
+            j = seq % (k + 1)                           # a different mix at every slot: catches off-by-ones
+            return [island] * j + [plains] * (k - j)
+        partner = mirror(g, ids, hand_at, draws_at=lambda seq: [swamp])
+        for n in g.decision_turns():
+            s = rc.exact_spec(g, partner, n, ids=ids, labels=True)
+            p = g.prev_slot(n)
+            want = hand_at(p.seq) if p is not None else [plains] * (7 - int(g.meta.get("opp_num_mulligans") or 0))
+            B = s.players["B"]
+            assert B.hand == names(ids, want), (row, n)
+            assert (B.decklistSource, sorted(B.decklist)) == ("exact", sorted(partner.deck.elements()))
+            assert not s.is_partial() and s.validate() == [], (row, n, s.validate())
+            assert "pair_view_mismatch" not in s.provenance.flags and "opp_decklist_placeholder" not in s.provenance.flags
+            assert s.labels["bridge"]["decideFrom"]["turn"] == g.user_slot(n).global_turn
+            q = g.next_slot(n)
+            if q is None or not q.played:
+                continue
+            a = rc.exact_spec(g, partner, n, ids=ids, after=True)
+            assert a.players["B"].hand == names(ids, hand_at(g.user_slot(n).seq)), (row, n)
+            assert a.players["B"].libraryTop == ["Swamp"] and not a.is_partial() and a.validate() == []
+            if q.L("creatures_attacked"):
+                b = rc.exact_spec(g, partner, n, "declare_attackers", ids=ids, after=True)
+                assert not b.is_partial() and b.validate() == []
+                # its hand at the end of our turn + the draw - what it played before combat
+                played = Counter(p.name for p in b.players["B"].battlefield if p.name for _ in range(p.count)) \
+                    - Counter(p.name for p in a.players["B"].battlefield if p.name for _ in range(p.count))
+                assert Counter(b.players["B"].hand) == Counter(a.players["B"].hand) + Counter(["Swamp"]) - played
+    # rows that disagree about the board are flagged; two rows on the same side are no pair
+    g = games[0]
+    odd = mirror(g, ids, lambda seq: [plains] * int(g.turns[seq].num("eot_oppo_cards_in_hand")),
+                 board=lambda t, f: {**f, "eot_user_lands_in_play": f["eot_user_lands_in_play"][1:]})
+    s = rc.exact_spec(g, odd, 5, ids=ids)
+    assert "pair_view_mismatch" in s.provenance.flags and s.provenance.tier == "T3"
+    same = replay.Game(-2, {"on_play": g.on_play}, Counter(), Counter(), [], [], [], True, [])
+    with pytest.raises(ValueError, match="not a mirrored pair"):
+        rc.exact_spec(g, same, 5, ids=ids)
+
+
+def test_holdout_drafts_names_both_rows_drafts(games, ids):
+    g = games[0]
+    partner = mirror(g, ids, lambda seq: [])
+    real = replay.Game(g.row_index, {**g.meta, "draft_id": "user-draft"}, g.deck, g.sideboard, g.candidate_hands,
+                       g.opening_hand, g.bottomed, g.bottomed_exact, g.turns)
+    assert rc.holdout_drafts(real, partner) == ["synthetic-partner", "user-draft"]
+    assert rc.holdout_drafts(real) == ["user-draft"]
+    assert rc.holdout_drafts(g) == []                     # the fixture blanks draft_id
+
+
+@pytest.mark.skipif(not (REPLAY.exists() and PAIRS.exists()), reason="17lands replay file or pairs file missing")
+def test_exact_specs_on_real_pairs(ids):
+    """On real mirrored pairs (both rows below 6000): every exact spec is valid and not partial; B's
+    battlefield is the partner's own view of its battlefield, B's hand the partner's own hand of that
+    half-turn, B's deck the partner's deck; the states after a turn hold B's hand and next draw."""
+    from draftzero.gameplay.pairs import load_pairs
+    pairs = [q for q in load_pairs(PAIRS) if max(q.row_a, q.row_b) < 6000][:40]
+    assert len(pairs) >= 20
+    got = replay.read_games({r for q in pairs for r in (q.row_a, q.row_b)})
+    k = 0
+    for q in pairs:
+        for a, b in ((q.row_a, q.row_b), (q.row_b, q.row_a)):
+            g, o = got[a], got[b]
+            drafts = rc.holdout_drafts(g, o)
+            assert len(drafts) == 2 and set(drafts) == {g.meta["draft_id"], o.meta["draft_id"]}
+            for n in g.decision_turns():
+                s = rc.exact_spec(g, o, n, ids=ids)
+                assert s.validate() == [] and not s.is_partial(), (a, n)
+                B = s.players["B"]
+                # token copies are recorded under the copied card's id: a copy beyond the deck's
+                # count extends the list (flagged, T2); nothing else may differ from the real deck
+                assert B.decklistSource == "exact" and Counter(o.deck) <= Counter(B.decklist)
+                assert Counter(B.decklist) == Counter(o.deck) or {"B_decklist_extended", "token_copy_possible"} <= set(
+                    s.provenance.flags), (a, n)
+                p = g.prev_slot(n)
+                if p is None or not p.played:
+                    continue
+                m = rc.mirror_slot(g, o, p)
+                assert (m.side, m.n) == ("user", p.n)
+                theirs = Counter(ids.card(c).token_class if ids.is_token(c) else ids.name(c)
+                                 for f in ("lands", "creatures", "non_creatures") for c in m.L(f"eot_user_{f}_in_play"))
+                mine = Counter(x.tokenClass or x.name for x in B.battlefield for _ in range(x.count))
+                assert mine == theirs and B.hand == names(ids, m.L("eot_user_cards_in_hand")), (a, n)
+                assert "pair_view_mismatch" not in s.provenance.flags
+                qs = g.next_slot(n)
+                if qs is not None and qs.played and qs.side == "oppo":
+                    after = rc.exact_spec(g, o, n, ids=ids, after=True)
+                    mu, mq = rc.mirror_slot(g, o, g.user_slot(n)), rc.mirror_slot(g, o, qs)
+                    assert after.players["B"].hand == names(ids, mu.L("eot_user_cards_in_hand"))
+                    assert after.players["B"].libraryTop == [ids.name(c) for c in mq.L("cards_drawn")][:1]
+                    assert after.validate() == [] and not after.is_partial()
+                k += 1
+    assert k >= 200
+
+
+def test_state_after_user_turn(games, ids):
+    # row 1, user turn 4 (global turn 7): the opponent then attacks with Prideful Parent (vigilance)
+    # and a Cat token, and the user's Faerie token blocks the Cat
+    g = games[1]
+    e = rc.state_after_user_turn(g, 4, ids=ids, labels=True)
+    assert (e.turn, e.activePlayer, e.phase, e.step, e.enterMode, e.priorityPlayer) == (
+        7, "A", "END", "END_TURN", "PRIORITY_FRESH", "A")
+    assert e.provenance.ref == "FDN_PremierDraft:row=1:user_turn=4:after"
+    assert e.labels["blocks"] == [["A:Faerie_6", "B:Cat_10", True]] and e.labels["attacked"] == ["Cat", "Prideful Parent"]
+    # the user's lands tapped on its own turn stay tapped through the opponent's
+    assert all(p.tapped for p in bf(e, "A") if p.name in ("Plains", "Island"))
+    b = rc.state_after_user_turn(g, 4, "declare_attackers", ids=ids, labels=True)
+    assert (b.turn, b.activePlayer, b.phase, b.step, b.enterMode, b.priorityPlayer) == (
+        8, "B", "COMBAT", "DECLARE_ATTACKERS", "PRIORITY_HELD", "B")
+    assert sorted(x.attacker for x in b.attackers) == ["B:Cat_10", "B:PridefulParent_8"]
+    assert {x.defender for x in b.attackers} == {"player:A"}
+    B = b.players["B"]
+    # its untap step untapped everything; its land drop was played before combat
+    assert not any(p.tapped for p in B.battlefield if p.name in ("Plains", "Mountain"))
+    assert B.landsPlayed == 1 and sum(p.count for p in B.battlefield if p.name == "Plains") == 3
+    assert perm(b, "B", "Prideful Parent")[0].tapped is False            # vigilance
+    assert B.handUnknown == e.players["B"].handUnknown + 1 - 1           # + its draw - the land
+    assert not perm(b, "A", token="FaerieToken")[0].tapped
+    assert "opp_turn_timing_assumed" in b.provenance.flags and b.provenance.tier == "T1"
+    assert b.labels["block_pairing"] == "unique" and b.validate() == [] and e.validate() == []
+    # the labels' attacker keys are the spec's attackers
+    for blocker, attacker, _ in b.labels["blocks"]:
+        assert attacker is None or attacker in {x.attacker for x in b.attackers}
+    with pytest.raises(ValueError, match="did not attack"):
+        rc.state_after_user_turn(g, 1, "declare_attackers", ids=ids)
+    with pytest.raises(ValueError, match="no opponent turn"):
+        rc.state_after_user_turn(g, g.user_turn_numbers()[-1], ids=ids)
+
+
+@pytest.mark.parametrize("entry", rc.AFTER_ENTRIES)
+def test_every_fixture_spec_after_a_turn_is_valid(games, extra, ids, entry):
+    k = 0
+    for g in list(games.values()) + list(extra.values()):
+        for n in g.decision_turns():
+            try:
+                s = rc.state_after_user_turn(g, n, entry, ids=ids, labels=True)
+            except ValueError:
+                continue
+            assert s.validate() == [], (g.row_index, n, s.validate())
+            assert s.provenance.tier in TIERS and StateSpec.from_json(s.to_json()).to_dict() == s.to_dict()
+            assert s.labels["user_turn"] == n and s.labels["opp_turn"] == g.next_slot(n).n
+            k += 1
+    assert k >= (60 if entry == "eot_rollover" else 25)
+
+
+def test_bounced_opponent_card_has_no_zone(games, ids):
+    """Row 4: the opponent's Mischievous Pup returns its own Island to its hand on its turn 5. The
+    departure has no record, so the Island is in none of B's zones (not in exile, where it used to
+    go): the library as far as the spec is concerned, and a belief may put it in the hand. It is
+    flagged until the opponent plays an Island again (its turn 6)."""
+    g = games[4]
+    for n in (5, 6):
+        s = rc.state_at_user_turn(g, n, ids=ids)
+        assert rc.opp_location_unknown(g, n, ids) == Counter({"Island": 1})
+        assert "Island" not in s.players["B"].exile + s.players["B"].graveyard
+        assert "opp_dest_unknown" in s.provenance.flags
+        assert "Island" in s.players["B"].decklist                     # a revealed card of the placeholder
+    s = rc.state_at_user_turn(g, 7, ids=ids)
+    assert not rc.opp_location_unknown(g, 7, ids) and "opp_dest_unknown" not in s.provenance.flags
+    assert rc.opp_location_unknown(g, 4, ids, after=True) == Counter()
+    assert rc.opp_location_unknown(g, 5, ids, after=True) == Counter({"Island": 1})
+    # a known opponent hand that holds it accounts for it
+    s = rc.state_at_user_turn(g, 5, ids=ids, opp_hand=["Island"])
+    assert "opp_dest_unknown" not in s.provenance.flags
+    assert rc.spec_tier({}, {"opp_dest_unknown"}) == "T1"
+    # the Pup's slot shows one more card in the opponent's hand than its events explain: likely in
+    # hand; row 42's Vampire Nighthawk left with no such rise: hand, library or exile
+    assert rc.opp_location_unknown(g, 5, ids, split=True) == (Counter({"Island": 1}), Counter())
+    assert rc.opp_location_unknown(games[42], 6, ids, split=True) == (Counter(), Counter({"Vampire Nighthawk": 1}))
+    # the user's own unrecorded departures still go to exile: its hand is known, so not there
+    # (row 1: its Lightshell Duo leaves on the opponent's turn 5 with no record)
+    assert "Lightshell Duo" in rc.state_at_user_turn(games[1], 6, ids=ids).players["A"].exile
+    # an opponent's permanent that leaves while the user exiled something goes to exile (row 26)
+    assert rc.state_at_user_turn(games[26], 8, ids=ids).players["B"].exile == ["Skyship Buccaneer"]
+
+
+def test_control_change_names_the_owner(extra, ids):
+    """Row 64435: at the end of the opponent's turn 5 it controls the user's Helpful Hunter. The
+    permanent is listed under its controller with owner A, so its card comes out of A's decklist
+    (not B's placeholder); the spec flags that the change may be until end of turn."""
+    g = extra[64435]
+    s = rc.state_at_user_turn(g, 5, ids=ids)
+    hunter = perm(s, "B", "Helpful Hunter")[0]
+    assert hunter.owner == "A" and not any(p.owner for p in bf(s, "A"))
+    assert "A_decklist_extended" not in s.provenance.flags and "control_changed" in s.provenance.flags
+    assert s.provenance.tier == "T2" and s.validate() == []
+    assert Counter(s.players["A"].decklist) == Counter(g.deck)
+    t4, t6 = (rc.state_at_user_turn(g, n, ids=ids) for n in (4, 6))
+    assert not any(p.owner for x in (t4, t6) for seat in "AB" for p in bf(x, seat))
+
+
+def test_imprisoned_in_the_moon_without_a_creature_turning_into_a_land(extra, ids):
+    """Row 89383: the opponent's Imprisoned in the Moon arrives and no creature moves to the land
+    list, so it enchants a land (on a creature, XMage would turn that creature into a land and it
+    could no longer block)."""
+    g = extra[89383]
+    s = rc.state_at_user_turn(g, 8, ids=ids)
+    moon = perm(s, "B", "Imprisoned in the Moon")[0]
+    host = next(p for p in bf(s, "A") if f"A:{p.id}" == moon.attachTo)
+    assert host.name == "Mountain" and "attach_heuristic" in s.provenance.flags
+    b = rc.state_after_user_turn(g, 8, "declare_attackers", ids=ids, labels=True)
+    assert b.labels["blocks"] == [["A:WildwoodScourge_26", None, True]] and len(b.attackers) == 3
+
+
 def all_specs(games, ids, entry):
     for g in games.values():
         for n in g.user_turn_numbers():
@@ -403,36 +678,61 @@ def _bf_sig(p: dict) -> Counter:
                    for _ in range(x.get("count", 1)))
 
 
-def test_specs_build_and_roll_over_in_xmage(games, ids):
+def test_specs_build_and_roll_over_in_xmage(games, extra, ids, tmp_path):
     """Every fixture decision state builds in XMage in both entries, and the engine's own cleanup,
     untap, upkeep and draw from the eot_rollover spec reach the main1 spec's hand, battlefields
-    (identity, tapped, counters) and life."""
+    (identity, tapped, counters) and life. Each spec's labels['bridge'] reaches A's precombat-main
+    decision of the user turn it describes. The states after a turn build too; the block specs'
+    decision is A's block question at DECLARE_BLOCKERS of the opponent's turn (or, with no creature
+    able to block, a later one), and the END_TURN ones decide in the opponent's turn or not at all."""
     from draftzero.gameplay import bridge
     problems = bridge.environment_problems()
     if problems:
         pytest.skip("mzbridge unavailable: " + "; ".join(problems))
-    differ, n = set(), 0
-    with bridge.Bridge("pytest17lands", log_level="error") as br:
-        for g in games.values():
+    differ, differ_b, n, blocks, block_questions = set(), set(), 0, 0, 0
+    with bridge.Bridge("pytest17lands", log_level="error", heap="2g", runtime_root=tmp_path) as br:
+        for g in list(games.values()) + list(extra.values()):
             for t in g.decision_turns():
-                if g.prev_slot(t) is None:
+                u, q = g.user_slot(t), g.next_slot(t)
+                if g.prev_slot(t) is not None:
+                    m = rc.state_at_user_turn(g, t, "main1", ids=ids)
+                    e = rc.state_at_user_turn(g, t, ids=ids)
+                    built = br.build(m, seed=1, advance=False)["dump"]            # raises on a rejected spec
+                    r = br.build(e, seed=1, dumpDecisionState=True, **e.labels["bridge"])
+                    rm = br.build(m, seed=1, **m.labels["bridge"])
+                    for x in (r, rm):
+                        d = x.get("decision")
+                        assert d is None or (d["player"], d["where"]["turn"], d["where"]["step"]) == (
+                            "A", u.global_turn, "PRECOMBAT_MAIN"), (g.row_index, t, d and d["where"])
+                    ds, where = r.get("decisionState"), (r.get("decision") or {}).get("where") or {}
+                    n += 1
+                    if bridge.diff_dump(m, built) or not ds or where.get("step") != "PRECOMBAT_MAIN":
+                        differ.add((g.row_index, t))
+                    else:
+                        md = m.to_dict()["players"]
+                        if Counter(md["A"].get("hand", [])) != Counter(ds["players"]["A"]["hand"]) or any(
+                                md[s].get("life", 20) != ds["players"][s]["life"] or _bf_sig(md[s]) != _bf_sig(ds["players"][s])
+                                for s in "AB"):
+                            differ.add((g.row_index, t))
+                if q is None or not q.played or q.side != "oppo":
                     continue
-                m = rc.state_at_user_turn(g, t, "main1", ids=ids)
-                e = rc.state_at_user_turn(g, t, ids=ids)
-                built = br.build(m, seed=1, advance=False)["dump"]            # raises on a rejected spec
-                r = br.build(e, seed=1, decisionPlayer="A", dumpDecisionState=True,
-                             decideFrom={"turn": g.user_slot(t).global_turn, "step": "PRECOMBAT_MAIN"})
-                ds, where = r.get("decisionState"), (r.get("decision") or {}).get("where") or {}
-                n += 1
-                if bridge.diff_dump(m, built) or not ds or where.get("step") != "PRECOMBAT_MAIN":
-                    differ.add((g.row_index, t))
-                    continue
-                md = m.to_dict()["players"]
-                if Counter(md["A"].get("hand", [])) != Counter(ds["players"]["A"]["hand"]) or any(
-                        md[s].get("life", 20) != ds["players"][s]["life"] or _bf_sig(md[s]) != _bf_sig(ds["players"][s])
-                        for s in "AB"):
-                    differ.add((g.row_index, t))
+                a = rc.state_after_user_turn(g, t, ids=ids)
+                d = br.build(a, seed=1, **a.labels["bridge"]).get("decision")
+                assert d is None or (d["player"], d["where"]["turn"]) == ("A", q.global_turn), (g.row_index, t)
+                if q.L("creatures_attacked"):
+                    b = rc.state_after_user_turn(g, t, "declare_attackers", ids=ids, labels=True)
+                    r = br.build(b, seed=1, **b.labels["bridge"])
+                    if bridge.diff_dump(b, r["dump"]):
+                        differ_b.add((g.row_index, t))      # Giada's counters (row 198), as above
+                    d, blocks = r.get("decision"), blocks + 1
+                    if d is not None and d["type"] == "CHOOSE_TARGET":
+                        assert (d["player"], d["where"]["turn"], d["where"]["step"]) == ("A", q.global_turn, "DECLARE_BLOCKERS")
+                        block_questions += 1
+                    else:                                   # no block question: no potential blocker either
+                        assert not any(k.startswith("A:") for k, _, _ in b.labels["blocks"]), (g.row_index, t)
     assert n >= 60 and differ <= ENGINE_KNOWN_DIFFS, sorted(differ - ENGINE_KNOWN_DIFFS)
+    assert differ_b <= ENGINE_KNOWN_DIFFS, sorted(differ_b - ENGINE_KNOWN_DIFFS)
+    assert blocks >= 25 and block_questions >= blocks // 2
 
 
 # --- regression on the real file ---------------------------------------------------------------------
@@ -443,6 +743,7 @@ RE_ZONE_STRICT = {"user_hand": 92.7, "user_lands": 98.8, "user_crea": 87.8, "use
 RE_SLOT = {"strict:user_zones": 80.8, "strict:all_zones": 67.5, "benign:user_zones": 96.9,
            "benign:all_zones": 92.8, "nounexp:user_zones": 99.3, "nounexp:all_zones": 99.0}
 RE_LADDER = {"T0": 88.7, "T1": 86.8, "T1b": 59.5, "T2": 43.3, "T3": 36.7}
+TOL = 0.75
 
 
 @pytest.mark.skipif(not REPLAY.exists(), reason="17lands FDN replay file not downloaded")
@@ -453,12 +754,13 @@ def test_regression_5000_games(ids):
     st = collect(replay.iter_games(REPLAY, limit=5000, every=158, start=0), ids, build_specs=True)
     r = st.rates()
     assert r["counts"]["games"] == 5000
+    # ±0.75 pt: a 5,000-game sample's own noise is about ±0.5 pt (start=157 gives T2 -0.53)
     for z, v in RE_ZONE_STRICT.items():
-        assert abs(r["conservation_zone"][f"strict:{z}"] - v) <= 0.5, (z, r["conservation_zone"][f"strict:{z}"])
+        assert abs(r["conservation_zone"][f"strict:{z}"] - v) <= TOL, (z, r["conservation_zone"][f"strict:{z}"])
     for k, v in RE_SLOT.items():
-        assert abs(r["conservation_slot"][k] - v) <= 0.5, (k, r["conservation_slot"][k])
+        assert abs(r["conservation_slot"][k] - v) <= TOL, (k, r["conservation_slot"][k])
     for k, v in RE_LADDER.items():
-        assert abs(r["re_ladder"][k] - v) <= 0.5, (k, r["re_ladder"][k])
+        assert abs(r["re_ladder"][k] - v) <= TOL, (k, r["re_ladder"][k])
     assert r["coverage"]["event_card_ids_mapped"] == 100.0
     assert r["coverage"]["ability_ids_in_table"] == 100.0
     assert r["counts"].get("invalid_specs", 0) == 0, r["spec_invalid"]

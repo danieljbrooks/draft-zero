@@ -19,8 +19,10 @@ the flaws the completeness critique lists (§3.2, C3, C4 and WP2). The main fixe
 ```
 src/org/draftzero/mzbridge/
   Worker.java           JSONL loop, ops build / encode / ping / quit, decision capture
-  Coach.java            coach op: K determinizations x MCTS, aggregation, human rank / regret
+  Coach.java            coach op: K determinizations x MCTS (re-drawn or given), aggregation, human rank / regret
   StateInjector.java    StateSpec -> Game (the injection recipe), anchor, hand resampling, checks
+  ReanimatedAura.java   Animate Dead & co.: the enchant swap and sacrifice link their ETB trigger would make
+  Substitutions.java    options.substitute: stand-ins for cards / tokens this XMage build lacks
   BridgePlayer.java     ComputerPlayerMCTS2 for both seats: PUPPET or DECIDER (capture / search)
   Spec.java             Gson mirror of StateSpec v1 + validation
   Dumper.java           StateSpec-shaped dump of a live game
@@ -38,6 +40,9 @@ java/mzbridge/build.sh                        # -> java/mzbridge/build/mzbridge.
 echo '{"id":1,"op":"ping"}' | java/mzbridge/run.sh w0
 python -m draftzero.gameplay.bridge build main_phase          # a golden spec by name, or a path
 python -m draftzero.gameplay.bridge coach java/mzbridge/specs/respond.json -K 4 --budget 300 --human-action Pass
+python -m draftzero.gameplay.bridge coach --specs samples.jsonl --budget 300 --decision-player A \
+    --human-set "Cast Stab" --human-set "Play Swamp"            # K given determinizations, a set of human actions
+python -m draftzero.gameplay.bridge build arena_spec.json --substitute-missing Plains --substitute-token BooToken
 ```
 
 `run.sh <name>` runs a worker in `data/mzbridge/runtime/<name>/` (git-ignored), which holds:
@@ -90,9 +95,12 @@ error     {"id": 7, "op": "build", "ok": false, "error": {"type", "message", "pr
 ```
 
 The worker survives a failed request. `problems` lists every spec problem found, not just the
-first one. Invalid specs fail validation. Built states that do not read back as the spec fail
-verification: zones, tapped, sick, damage, counters, attachments, library top and size, stack.
-With `options.lenient` both become `warnings` instead.
+first one. Invalid specs fail validation (`Spec.validate()` applies the same rules as
+`statespec.StateSpec.validate()`; change both together). A spec naming cards the XMage database
+does not have fails with one error listing all of them, unless `options.substitute` is given
+(below). Built states that do not read back as the spec fail verification: zones, tapped, sick,
+damage, counters, attachments, controller and owner, library top and size, stack, and triggers
+left pending by the injection. With `options.lenient` both become `warnings` instead.
 
 ### The decision
 
@@ -163,16 +171,35 @@ null and `noDecision` says why.
 | `dumpDecisionState` | false | also dump the game at the decision (`decisionState`) |
 | `dumpLibrary` | false | full library order under `players.X.x.library` |
 | `lenient` | false | warn instead of failing on accounting or read-back mismatches |
+| `substitute` | none (strict) | stand-ins for cards XMage lacks, see below |
 
-Returns `{seed, dump, decision, noDecision?, decisionState?, warnings, timing_ms: {build, advance, total}}`.
+Returns `{seed, dump, decision, noDecision?, decisionState?, warnings, substitutions?, timing_ms: {build, advance, total}}`.
+
+**`options.substitute`** (build, encode, coach) builds a spec that names cards this XMage build
+does not have, such as the 2026 cube cards of an Arena log against XMage 1.4.58:
+
+| key | effect |
+|---|---|
+| `"missing": "Plains"` | every card the XMage database does not know becomes a Plains |
+| `"missingToken": "BooToken"` | every token that resolves to no class becomes this class (an ambiguous `token`+`set` still fails) |
+| `"<card>": "<card>"` | an explicit replacement, applied whether or not XMage knows the card |
+
+A name is replaced in every zone and in the decklist, so the accounting still holds. What a
+stand-in cannot do is dropped, each with a warning: a substituted spell on the stack when the
+stand-in is a land (that copy stays in the library), the counters of a substituted permanent,
+and attachments, attacks, blocks and stack targets involving a substituted permanent (a stack
+item keeps its targets up to the first lost one, so none slides into the wrong slot).
+`warnings` lists every substitution with the zones it touched, e.g. `substitute: 'Sear' ->
+'Plains' (not in the XMage card database): {decklist=1, stack=1}`, and `substitutions` maps
+original to stand-in. The result is an approximation of the logged state, never a silent one.
 
 `dump` is StateSpec-shaped:
 
 - `turn`, `activePlayer`, `phase`, `step`, `enterMode`, `priorityPlayer`, `passedPlayers`;
 - per player: `life`, `decklist`, `landsPlayed`, `hand`, `graveyard`, `exile`, `libraryTop`
   (as many cards as the spec gave), `librarySize`, `manaPool`, and `battlefield` with one entry
-  per permanent: `name` or `tokenClass`, `id` alias, `tapped`, `sick`, `damage`, `counters`,
-  `attachTo`;
+  per permanent (listed under its controller): `name` or `tokenClass`, `id` alias, `owner`
+  (only when another seat owns it), `tapped`, `sick`, `damage`, `counters`, `attachTo`;
 - `stack`, `attackers`, `blockers`.
 
 Engine details go under `x`, which `StateSpec.from_dict` ignores:
@@ -184,7 +211,7 @@ Engine details go under `x`, which `StateSpec.from_dict` ignores:
 `bridge.diff_dump(spec, dump)` compares a spec with its dump.
 
 **`encode`** takes `seed`, `idSeed`, `decisionPlayer`, `decideFrom`, `perfectInfo` (default **false**: the
-opponent's hand is encoded as a count only) and `lenient`.
+opponent's hand is encoded as a count only), `lenient` and `substitute`.
 
 It returns `{decision, features, nFeatures, perfectInfo, timing_ms: {build, advance, encode, total}}`.
 `features` are MageZero's StateEncoder feature ids, sorted. They come from the decision
@@ -203,25 +230,48 @@ that point has it. No search is run.
 | `priors` | all off | `{priority, target, binary, opponent: bool, temperature}`; only used with a remote evaluator (exp #1 ran with only `binary` on) |
 | `resample` | the non-decision seat | seats whose whole hand is re-drawn from their library (below the known top cards) per determinization |
 | `humanAction` | none | a label (`Play Plains`), `yes`/`no`/`true`/`false` for CHOOSE_USE, or 17lands-style ability text without the cost |
+| `humanActions` | none | a set-valued human action, e.g. every spell a 17lands player cast that turn (only one of them answers this decision); reported as `humanSet` |
+| `specs` | none | K pre-determinized specs of the same decision (e.g. `belief.determinize` samples), used instead of the request spec (which may then be omitted) and instead of `resample`; `determinizations` is K |
+| `idSeed` | `seed` | UUIDs, shared by every determinization so they ask the same question |
 | `perfectInfo` | **true** | the search's encoder setting, as experiment #1's network was trained; matters for remote evaluation only |
 | `rootFeatures` | false | also return each determinization's root features as MageZero's search encoded them (`MCTSNode.stateVector`); the tests check that `encode` reproduces them exactly |
 | `timeoutSec` | 120 | per search |
-| `decisionPlayer`, `decideFrom`, `lenient` | | as above |
+| `decisionPlayer`, `decideFrom`, `lenient`, `substitute` | | as above |
 
 A coach response contains:
 
 - `decision` (the legal list);
 - `consistent`: every determinization reached the same decision;
 - `settings`;
-- `determinizations`: one entry per k, with `k`, `seed`, `sampledHands`, `type`, `text`,
-  `best`, `rootVisits`, `rootQ`, `value`, `seconds` and `children`
-  (`[{label, idx, N, Q, prior}]`);
+- `determinizations`: one entry per k, with `k`, `seed`, `sampledHands` (or, for given
+  `specs`, `hands`: the other seat's hand as built), `type`, `text`, `best`, `rootVisits`,
+  `rootQ`, `value`, `seconds` and `children` (`[{label, idx, N, Q, prior}]`);
 - `aggregate`: one entry per label, sorted by rank, with `label`, `idx`, `meanQ`, `sdQ`,
   `visitShare`, `N`, `nDet` and `rank`;
 - `best`;
 - `human`, when `humanAction` was given: `found`, `label`, `rank`, `meanQ`, `sdQ`,
   `visitShare`, `regret` (best meanQ minus the human action's meanQ);
+- `humanSet`, when `humanActions` was given: `members` (one `human` entry per action),
+  `nLegal` (members matching a visited label, duplicates once), `bestLabel`, `setBestLabel`,
+  `regret_best_of_set` = best meanQ minus the best member's meanQ (the charitable reading: the
+  player's answer here was its best cast), `regret_mean_of_set` = best meanQ minus the members'
+  mean meanQ; both null when no member matched;
+- `warnings` (e.g. substitutions), `substitutions`;
+- `settings.specs` (K when the determinizations were given) and `settings.idSeed`;
 - `timing_ms`: `build`, `search`, `total`, `simsPerSec`.
+
+Coaching over the belief model's determinizations (the Python client):
+
+```python
+samples = [belief.determinize(...) for k in range(4)]          # K concrete specs, one decision
+r = b.coach_specs(samples, budget=300, seed=1, decisionPlayer="A",
+                  humanActions=["Cast Stab", "Play Swamp"])       # a 17lands turn's casts
+r["aggregate"], r["humanSet"]["regret_best_of_set"], r["consistent"]
+```
+
+Each spec gets a fresh tree; all are built with the request's `idSeed`, and card ids depend on
+(seat, card name, copy) only (Determinism), so specs whose unseen cards differ still ask the same
+question. `consistent` is false if they did not.
 
 How the numbers are computed:
 
@@ -303,7 +353,24 @@ Conventions the contract leaves open, and how the bridge reads them:
   (3/3) or `BeastToken2` (4/4), and Cat is `CatToken`, `CatToken2` or `CatToken3`. Use
   `tokenClass`.
 - `counters` set the count of each listed type; a type the spec does not list keeps what the
-  card entered with (a planeswalker's printed loyalty, "enters with" counters).
+  card entered with (a planeswalker's printed loyalty, a saga's first lore counter, "enters
+  with" counters). Checked on the Arena log: 19 of 19 saga LORE and 10 of 10 planeswalker
+  LOYALTY counts built exactly (`test_counters_set_the_count`). The arena build report's "spec
+  loyalty 4 built as 7" does not reproduce with this code.
+- Battlefield entries are injected in list order, and "enters with additional counters"
+  replacement effects of permanents already injected apply to later ones (Giada, Font of Hope:
+  an Angel listed after Giada gets its +1/+1 counters, one listed before does not), as if they
+  had entered in that order. List the counters to pin them.
+- A permanent is listed under its **controller**. `owner` names the other seat when control
+  changed (a reanimated or stolen creature): its card comes out of the owner's decklist and
+  library, it enters under the controller's control with the controller as its original
+  controller (what a reanimation does in XMage), so control does not revert when effects are
+  reapplied. It dies into its owner's graveyard. Tokens cannot carry `owner`. Animate Dead,
+  Dance of the Dead and Necromancy get the two lasting parts of their ETB trigger rebuilt
+  (`ReanimatedAura`): the "enchant creature card in a graveyard" -> "enchant the creature it
+  returned" swap (XMage refuses the attachment without it, and the state-based actions would
+  bury the Aura) and "when this leaves the battlefield, that creature's controller sacrifices
+  it".
 - The dump's `name` is the card's own name. Effects can rename a permanent: Witness Protection
   turns a creature into "Legitimate Businessperson". The effective name is `x.name`.
 - `hand` cards, `libraryTop` and spells on the stack are taken out of the decklist by name.
@@ -323,12 +390,21 @@ needed all of the following:
 | `RandomUtil` (thread-local; the MCTS2 constructor reseeds it with a constant, G8) | seeded after the players are constructed and again before resuming |
 | `GameState.localRandom` (in-game shuffles; carried by copies, C4) | seeded before `init()`, after injection and before the anchor copy |
 | library order | `Deck.getMaindeckCards()` is a HashSet of cards hashed by identity, so copies of a card land in a different order every build; the bridge restores the decklist order |
-| UUIDs | `UUID.randomUUID()` is made reproducible by a SecureRandom provider installed first in the worker (`DeterministicIds`); card and token classes are loaded before the stream is reset. Attack and block questions come in UUID order, and MCTS children sort by a string that contains UUIDs |
+| UUIDs | `UUID.randomUUID()` is made reproducible by a SecureRandom provider installed first in the worker (`DeterministicIds`); card and token classes are loaded before the stream is reset. Each decklist card draws from a stream seeded by (idSeed, seat, name, copy), so its ids do not depend on the rest of either decklist. Attack and block questions come in UUID order, and MCTS children sort by a string that contains UUIDs |
 | token ids | the fork draws `PermanentToken` ids from `game.getLocalRandom()`; the bridge seeds that per token from `idSeed` |
 
 In a `coach` request the determinizations share `idSeed`, so they ask the same question. They
-differ in the library order, the hidden cards and the engine RNG. Network (remote) search is not
-deterministic: up to 4 evaluations are in flight at once.
+differ in the library order, the hidden cards and the engine RNG (and, with `specs`, in whatever
+the caller's determinizations differ in). Network (remote) search is not deterministic: up to 4
+evaluations are in flight at once.
+
+A spec entered before any decision can exist gives the same answer every time. The Arena
+ChooseStartingPlayerReq spec (turn 1 upkeep, both hands empty) has no decision for A before the
+safety stop: A skips its first draw and has nothing to do in B's turn 2. Three fresh JVMs x 2
+repeats gave "no decision" 6 of 6 times (`test_pregame_spec_is_deterministic` checks both test
+workers). The arena review's one-off PRIORITY decision for it is the behaviour of the jar
+before the turn-1 draw fix, which landed during that review: with that fix reverted, the spec
+gives a PRIORITY decision in turn 1's main phase with the one card A wrongly drew (a land).
 
 ## Gotchas from the research, as handled here
 
@@ -340,10 +416,10 @@ deterministic: up to 4 evaluations are in flight at once.
 | G4 | MCTS anchor is the empty `init()` copy | `pause()` + `setLastPriority` after injection (and after resampling); checked to be at the injected step; re-anchored at MageZero's combat checkpoints on the way to the decision |
 | G5 | paused copies resume via `resumeBeginStep` | BEGIN_STEP entered as the previous step's `POST` (above) |
 | G6 | stop options are not checked inside the resumed phase | the decider pauses the game; `stopOnTurn = turn + 1` is only a safety net |
-| G7 | tokens, ATTACH, casts fire events | event-free variants; pending triggers cleared and checked; watchers reset |
+| G7 | tokens, ATTACH, casts fire events | event-free variants (tokens too, see below); "as this enters" questions declined; pending triggers cleared (checked) and queued simultaneous events dropped; watchers reset |
 | G8 | RNG | see Determinism |
 | G9 | sickness, damage, passed have no setters | reflection (`Reflect`), read back by `verify()` |
-| G10 | owner = controller | control changes are not supported (not in StateSpec v1) |
+| G10 | owner = controller | `Perm.owner`: the card comes from the owner's library and enters under the controller (above) |
 | G11 | decks >= 40, match wired | validated; `actionEncoder` preset so `printAllActionsFromDeck` is skipped |
 | G12 | JDK 26 final-field warning | flag added by `run.sh` when the JDK knows it |
 | G13 | `GameState` does not serialize | specs are the interchange format; rebuilds take a few ms |
@@ -366,9 +442,30 @@ New gotchas found while building the bridge:
   or "no 'Leyline Axe' left in the library"): 14 of the first 770 17lands specs failed this
   way. Both seats now decline every yes/no question during `init()` (`BridgePlayer.setup`), and
   the build fails if `init()` leaves anything on the battlefield.
+- **"As this enters" questions during injection.** Injected permanents still run their
+  enters-the-battlefield replacement effects, and some ask: a shock land's "pay 2 life?" was
+  answered yes by the puppet (39 of 105 Arena specs). The life total was reset afterwards, but
+  the queued life-loss event triggered "whenever an opponent loses life" permanents on resume
+  (Bloodthirsty Conqueror). `BridgePlayer.setup` now covers the whole build, so injection
+  declines every such question (the spec's tapped flag wins anyway), and events any injection
+  step still queues (Authority of the Consuls tapping entering creatures: 12 of 2,004 real
+  17lands specs) are dropped before the game resumes.
 - **The turn-1 draw.** Clearing the TurnMods (G2) also dropped "the player on the play skips its
   first draw". A spec entered before turn 1's draw (turn 1 UPKEEP, or DRAW with BEGIN_STEP: the
   Arena mulligan and starting-player decisions) drew an 8th card. The TurnMod is put back there.
+- **Tokens fired their ETB triggers after the resume.** `Token.putOntoBattlefield` queues
+  ZONE_CHANGE, ENTERS_THE_BATTLEFIELD and CREATED_TOKEN events on GameState's simultaneous-event
+  list, which is handled only when the game resumes, after the injector had cleared the pending
+  triggers. Every "whenever a creature enters" permanent then triggered once per injected token
+  (17lands row 560303 user turn 9: 6 Authority of the Consuls triggers on the stack at the
+  decision, and +6 life after an END_TURN rollover). It also ran CREATE_TOKEN replacement effects:
+  a token doubler made a spec token "made 2 permanents" (1 of 1,002 real states). Tokens now
+  enter like cards (a PermanentToken added directly, no events), and the hygiene step also
+  empties the simultaneous-event list.
+- **Card ids were one sequential stream over both decklists.** Changing one card of A's
+  library (a belief sample) renumbered every B card, and with it the order of attack and block
+  questions. Each decklist card now draws its ids from a stream seeded by (idSeed, seat, name,
+  copy number).
 - **Checkpoints.** MageZero re-anchors its search at BEGIN_COMBAT, DECLARE_ATTACKERS and
   DECLARE_BLOCKERS (`GameImpl.isCheckPoint`) even when only Pass is legal, which also clears
   both players' micro-decision histories (encoded as ChosenTargets / UseChoices). The puppet and
@@ -401,8 +498,67 @@ after encodes, 1.9 GB after coach. On 16 real 17lands `main1` states coach K=4 x
 1.64 s. All 770 specs reconstructed from the first 40 FDN games built and round-tripped
 (6 s for the 770 builds in one worker); gen33 remote search ran at 18 simulations/s.
 
+Re-measured after the second phase (2026-09-26, load average 3.8, bench with 12 seeds): build
+median 2 ms (p90 3), build + capture 3 ms (p90 6), encode request 4 ms (p90 7; StateEncoder
+0.9 ms), coach K=4 x 300 median 2.44 s (418–555 simulations/s), RSS 0.42 GB at start, 0.8 GB
+after encodes, 2.0 GB after coach. Tokens entering without events and per-card id streams
+cost nothing measurable. The 2,004 real 17lands specs above built, advanced and dumped in 8.4 s
+in one worker (about 4 ms each). Coach K=4 x 300 on 10 of those main1 states: median 1.71 s over
+4 given `specs`, 2.01 s with the bridge's own re-drawing.
+
 The research reported builds of 5–18 ms and encodes of 10–20 ms under a load of 27–49. Expect
 those numbers on a busy machine.
+
+## Fixed in the second phase (2026-09-26), measured
+
+On 1,002 real 17lands FDN decision states (every 790th game of the replay file from row 193,
+one seeded-random user turn each, row 560303 turn 9 included; `reconstruct.state_at_user_turn`
+in both entries, 2,004 specs; seed 1, decision player A, the main1 decision window), the
+committed jar against this one:
+
+| | before | after |
+|---|---|---|
+| specs that build | 2,002 / 2,004 (a token doubler: "Knight33Token made 2 permanents") | 2,004 / 2,004 |
+| exact round trip (`diff_dump`) | 1,994 / 2,002 | 1,998 / 2,004 |
+| main1 decisions with triggers on the stack (injected tokens) | 14 / 1,001 | 0 / 1,002 |
+| END_TURN rollover reaching the main1 spec (hand, life, battlefields) | 954 / 993 (96.1%); 21 of the 39 misses unexplained by the spec's flags | 973 / 994 (97.9%); 4 of the 21 misses unexplained |
+| row 560303 user turn 9 | 6 Authority of the Consuls triggers at the decision; rollover life off | 0; rollover matches |
+
+What is left, after:
+
+- Round-trip differences (6 specs, 3 states x 2 entries): all are +1/+1 counters that Giada,
+  Font of Hope puts on Angels injected after it. The specs list none (17lands does not record
+  them; reconstruct flags `counters_inexact`).
+- Rollover misses (21): 17 are flagged by reconstruct (`main1_turn_start_triggers_skipped`,
+  multiple draws, unknown draw): upkeep and draw triggers that main1 skips and the engine plays.
+  The 4 others: 2 Giada counters, a Clinquant Skymage counter from its draw-step trigger (the
+  engine is right; main1 is not flagged), and an Aura with no host (`attach_no_host`) that the
+  first state-based-action check puts into the graveyard.
+- In 6 states of 1,002 A's first decision in both entries is the attack question: A had
+  nothing to do in its main phase. In 2, A has no decision before the safety stop. Check
+  `decision.where`.
+- On the committed fixture (67 states), `(4, 7)` (Dazzling Angel + 2 Faerie tokens) no longer
+  differs; `(0, 7)`, `(1, 8)`, `(1, 9)`, `(198, 4)` and `(198, 5)` still do, for data reasons
+  (a blind draw, Clinquant Skymage, Giada, Phyrexian Arena's upkeep).
+
+On the local Arena log (105 specs of a Powered Cube session, `data/gameplay/arena/decisions.jsonl`),
+with `substitute {"missing": "Plains", "missingToken": "BooToken"}` (7 cards and the Boo token
+are not in XMage 1.4.58):
+
+| | before | after |
+|---|---|---|
+| strict build | 0 / 105 (unknown cards) | 0 / 105, with one error listing all 4-6 unknown cards |
+| with substitution | 56 / 105 (Python-side substitution; 46 Animate Dead attachments refused, 3 NPEs) | 105 / 105; the 46 specs that list the reanimated creature under its owner (as arena.py does today) build with the wrong controller and a warning |
+| with substitution, the 46 reanimated creatures moved under their controller with `owner` | not expressible | 105 / 105, no control warning |
+| saga LORE / planeswalker LOYALTY counts after the build | | 19 / 19 and 10 / 10 exact |
+| priority decisions at the logged position: exact legal-set match | | 42 / 52; 154 / 162 Arena options offered by XMage; every miss is a substituted card |
+
+The other two arena-review findings are not bridge bugs. The "land plays offered during B's main
+phase" (game 2 decisions 6-7) were decisions of A's next turn (`where`: turn 6, A active, 8-9
+windows passed): A's only instant there was substituted by a Plains, so A had nothing to do in
+B's turn and the bridge moved on. XMage offers no land play to a non-active player
+(`test_no_land_play_in_the_opponents_turn`). The 3 stack NPEs were those substituted Plains on the
+stack; a land on the stack is now a clear SpecException, and `substitute` drops such items.
 
 ## Limitations
 
@@ -410,12 +566,20 @@ those numbers on a busy machine.
   the target of the spell just chosen, a replayed human turn) need the `replay_turn` op of WP2
   with a scripted decider, which is not built yet.
 - **Not reproducible yet**: per-turn watcher history (spells cast or life gained this turn),
-  until-end-of-turn effects, linked exile (Banishing Light), control changes, face-down
-  creatures, loyalty activations used, and activated or triggered abilities on the stack (the
+  until-end-of-turn effects, linked exile (Banishing Light), face-down creatures, loyalty
+  activations used, transformed faces, and activated or triggered abilities on the stack (the
   stack holds spells only).
+- **Control changes are permanent.** An `owner` permanent's original controller is its
+  controller, which is right for reanimation. A creature taken with an Aura (Mind Control) stays
+  with the taker if the Aura leaves, and one taken until end of turn (Threaten) stays past the
+  turn. Auras that grant control still apply while attached.
+- **Substitution changes the game.** A stand-in Plains is not the card it replaces: legal sets
+  and search values around substituted cards are artefacts (on the Arena log, all 9
+  XMage-only and 8 Arena-only legal options are substituted cards). Filter coaching and imitation
+  rows on `substitutions`.
 - **Decisions the engine never asks.** A spec for an Arena mulligan or starting-player decision
-  (turn 1 UPKEEP) reaches the next priority decision instead: `init()` has already run, and the
-  MCTS players never mulligan. A spec taken mid-action (Arena `SelectTargetsReq`, flagged
+  (turn 1 UPKEEP) reaches the next priority decision, or none (Determinism): `init()` has
+  already run, and the MCTS players never mulligan. A spec taken mid-action (Arena `SelectTargetsReq`, flagged
   `mid_action`) cannot hold a half-cast spell, so it reaches a priority decision too. Compare
   `decision.type` with the logged decision type.
 - **Attack defenders.** The attack defender is `HashSet` order in the fork (C5). Coaching and
