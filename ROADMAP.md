@@ -61,12 +61,12 @@ re-measures them.
 
 | ID | Waiting for | Blocks | Doesn't block |
 |---|---|---|---|
-| **B1** | **The Java source behind the v0.2 bundle**, pushed to `WillWroble/mage` (to be asked on [#7](https://github.com/WillWroble/MageZero/issues/7)). The newest public commit is `2f35d9f7` (Sep 16), where `Features.TABLE_SIZE = 2_000_000`; the v0.2 jars have `2147483647`. | **Exp #2's engine.** Our training-only XMage additions (vocab, deck pools, per-game summaries) have to be rebuilt on v0.2's Java, so Phase 3 pilots and Phase 4 wait on this. | The Python migration, the vocab prototype on `2f35d9f7`, the XMage fork for exp #1, and the design docs |
+| ~~**B1**~~ | **Resolved 2026-09-26:** Will pushed it as `cb7e9c6f` ("v0.2.0"), and built from it the release's three MageZero jars match byte for byte (see the decision log). Was: **the Java source behind the v0.2 bundle**, pushed to `WillWroble/mage` (asked on [#7](https://github.com/WillWroble/MageZero/issues/7)). The newest public commit is `2f35d9f7` (Sep 16), where `Features.TABLE_SIZE = 2_000_000`; the v0.2 jars have `2147483647`. | **Exp #2's engine.** Our training-only XMage additions (vocab, deck pools, per-game summaries) have to be rebuilt on v0.2's Java, so Phase 3 pilots and Phase 4 wait on this. | The Python migration, the vocab prototype on `2f35d9f7`, the XMage fork for exp #1, and the design docs |
 | **B2** | **Will's answer on #7** (action vocab) | Upstream PRs, and our agents running through the normal `mz import` flow | Implementing it in our forks |
 | **B3** | **Will's preference for inference servers with parallel JVMs** (one per JVM, or shared). Not asked yet; the parallel-JVMs design doc drafts the question. | An upstream-compatible parallel-JVM implementation | The design itself |
 
 **Can run now, in parallel, without touching the same files:**
-- **A. Action vocab in our forks:** Python off v0.2, Java off `2f35d9f7`, plus moving `VocabDump`
+- **A. Action vocab in our forks:** Python off v0.2, Java off `cb7e9c6f` (v0.2), plus moving `VocabDump`
   into draft-zero.
 - **B. XMage fork on GitHub:** makes exp #1 playable. Start it first, because A's Java half needs
   this fork.
@@ -144,7 +144,7 @@ conclusions are posted on Discord.
 - a v0.2 smoke run passes
 
 **What v0.2.0 changes** ([release notes](https://github.com/WillWroble/MageZero/releases/tag/v0.2.0-alpha)):
-- It **ships its own XMage bundle**, built from Java source that isn't public yet (B1).
+- It **ships its own XMage bundle**, built from Java source Will pushed on 2026-09-26 as `WillWroble/mage` `cb7e9c6f`.
 - It **widens the feature hash from 2M to 2^31 bins**, and **upgrades the state encoder**: fewer
   redundant features, dynamic subtypes, and per-turn watchers.
 - **"No longer compatible with models and data generated with v0.1.0"**, so exp #1's checkpoints
@@ -178,8 +178,8 @@ the release notes say. For the vocab change:
   - `danieljbrooks/MageZero` `mz-engine` stays as exp #1's pinned engine. No new work there.
 - [ ] **Action vocab in our forks, PR-shaped** (#7, D6).
   - Python: `danieljbrooks/MageZero`, branch `action-vocab`, off Will's v0.2 `main`.
-  - Java: `danieljbrooks/mage`, branch `action-vocab`, off `2f35d9f7`. Rebase onto v0.2's Java
-    when Will pushes it (B1).
+  - Java: `danieljbrooks/mage`, branch `action-vocab`, off v0.2's Java (`cb7e9c6f`). Exp #1's
+    vocab commit already rebases onto it (the `v0.2-generalist` branch below).
   - A configurable width (default 128), plus an optional exact vocab stored in the checkpoint and
     set per player.
   - **Done when:** with no vocab, seeded games match upstream exactly; a vocab agent plays a
@@ -202,10 +202,19 @@ the release notes say. For the vocab change:
   - **RAM limits the JVM count.** At 48 GB of heap per JVM, exp #1's L40S pod (~116 GB usable)
     fits only 2. The Phase 3 pilot has to trade heap per JVM against JVM count.
   - v0.2 fixes "parallel JVM launches colliding on the H2 card DB", so build this on v0.2.
-- [ ] **Training-only XMage additions on v0.2:** deck pools and the per-game summary line.
-      They live in `ParallelDataGenerator` and `Config`, which v0.2 changed, so they wait for B1.
-      Last resort if B1 stalls: patch the v0.2 jars from decompiled classes. That's fine for our
-      own training, but never something to hand to Will.
+- [x] **Training-only XMage additions on v0.2** (2026-09-26): the vocab, deck pools and the
+      per-game summary line.
+  - Exp #1's commit is rebased onto `cb7e9c6f` as branch `v0.2-generalist` (`14c9228d`). It
+    is local only for now, in `~/Desktop/Code/mage`, until the XMage fork above is on GitHub.
+  - There was one conflict, in `ParallelDataGenerator`, where v0.2 added commander mode; both
+    changes were kept.
+  - `build-generalist-bundle.sh` (on that branch) rebuilds the three changed jars into Will's
+    release bundle, and leaves every other file as Will shipped it.
+  - An offline smoke test passed: 4 of 4 games, pool decks, `GAME_SUMMARY` lines, a
+    1,024-wide policy with the FDN vocab, and v0.2's 2^31 feature hashes.
+  - **Still needed before exp #2 runs on it:** MageZero's v0.2 Python has to train and serve a
+    1,024-wide head (the Python half of the action-vocab item). The FDN vocab should also be
+    re-checked against v0.2's ability text (the `VocabDump` item).
 
 **Repo boundaries.**
 
@@ -351,6 +360,13 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 
 Add dated entries, newest first.
 
+- **2026-09-26** — B1 resolved: Will pushed the v0.2 Java source (`WillWroble/mage` `cb7e9c6f`).
+  - It is the release's source: built unmodified with javac, all 46 classes in the release's
+    `mage-magezero`, `mage-player-ai` and `mage-player-ai-rl` jars match its bytecode.
+  - Exp #1's XMage commit is rebased onto it as `v0.2-generalist`, and an offline smoke test
+    passes.
+  - Will's reply on #7's configurable width is pending: he wants to measure how much a
+    1,024-logit head slows the network (B2).
 - **2026-09-25** — Blocked on Will's v0.2 Java source (B1).
   - The v0.2 bundle's jars have the 2^31 hash, but the public `WillWroble/mage` source doesn't.
   - A bytecode comparison shows the vocab change's core classes are unchanged in v0.2, so it
