@@ -140,6 +140,9 @@ if the machine is rented. Everything above that interface is identical.
 
 ### Sizing a worker
 
+**Before reserving a RunPod pod, read [docs/005-runpod-tips.md](docs/005-runpod-tips.md)**:
+stock, networks that block SSH, image and CUDA pairing, self-destruct, and billing.
+
 Self-play is **CPU-bound** XMage/MCTS up to about 24 cores per GPU. The GPU only serves
 small batched inference: 2% utilization during heuristic play, 11–14% during network
 self-play. Past ~24 cores, MageZero's single-worker inference server (~200 requests/s)
