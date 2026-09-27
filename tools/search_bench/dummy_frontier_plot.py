@@ -7,7 +7,7 @@ Every number below is made up. The plot shows the first experiment's output form
 
 Writes docs/img/012-frontier-dummy-light.png and docs/img/012-frontier-dummy-dark.png.
 Two panels share both axes: offline search (the heuristic evaluator) and a trained network.
-Colours are the first two slots of the validated default categorical palette, in both modes;
+Colours are the first three slots of the validated default categorical palette, in both modes;
 methods that fail the hidden-information test use the muted ink, hollow.
 """
 
@@ -27,36 +27,40 @@ OUT = Path(__file__).resolve().parents[2] / "docs" / "img"
 # for offline search and 250 with the network. A method's factor is its cost per simulation
 # relative to today's search. All illustrative.
 RATE = {"offline": 550.0, "network": 250.0}
-FACTOR = {"pimc4": 1.1, "pimc1": 1.05, "clairvoyant": 1.0}
+FACTOR = {"ismcts": 1.2, "pimc4": 1.1, "pimc1": 1.05, "clairvoyant": 1.0}
 
 THEMES = {
     "light": dict(
         surface="#fcfcfb", ink="#0b0b0b", ink2="#52514e", muted="#898781",
         grid="#e1e0d9", axis="#c3c2b7", band="#f0efec",
-        series={"pimc4": "#2a78d6", "pimc1": "#eb6834"},
+        series={"pimc4": "#2a78d6", "pimc1": "#eb6834", "ismcts": "#1baf7a"},
     ),
     "dark": dict(
         surface="#1a1a19", ink="#ffffff", ink2="#c3c2b7", muted="#898781",
         grid="#2c2c2a", axis="#383835", band="#262624",
-        series={"pimc4": "#3987e5", "pimc1": "#d95926"},
+        series={"pimc4": "#3987e5", "pimc1": "#d95926", "ismcts": "#199e70"},
     ),
 }
 
 LABELS = {
+    "ismcts": "Particle IS-MCTS, the same 4 worlds",
     "pimc4": "PIMC, 4 sampled worlds",
     "pimc1": "PIMC, 1 sampled world",
     "clairvoyant": "MageZero MCTS today (searches the real hidden cards)",
 }
-END_LABELS = {"pimc4": "PIMC, 4 worlds", "pimc1": "PIMC, 1 world", "clairvoyant": "Clairvoyant MCTS"}
+END_LABELS = {"ismcts": "IS-MCTS, 4 worlds", "pimc4": "PIMC, 4 worlds", "pimc1": "PIMC, 1 world",
+              "clairvoyant": "Clairvoyant MCTS"}
 
 # {panel: {method: {simulations per decision: agreement %}}}
 CURVES = {
     "offline": {
+        "ismcts": {100: 50.0, 300: 55.0, 1000: 59.0, 3000: 62.5},
         "pimc4": {100: 48.0, 300: 53.0, 1000: 57.0, 3000: 60.0},
         "clairvoyant": {100: 48.5, 300: 52.5, 1000: 55.5, 3000: 57.5},
         "pimc1": {100: 47.5, 300: 51.5, 1000: 54.0, 3000: 55.0},
     },
     "network": {
+        "ismcts": {100: 52.0, 300: 57.0, 1000: 61.5, 3000: 65.5},
         "pimc4": {100: 50.0, 300: 55.0, 1000: 59.5, 3000: 63.0},
         "clairvoyant": {100: 50.5, 300: 54.5, 1000: 58.0, 3000: 60.5},
         "pimc1": {100: 49.5, 300: 53.5, 1000: 56.5, 3000: 58.0},
@@ -123,13 +127,13 @@ def draw_panel(ax, panel: str, t, first: bool) -> None:
                     textcoords="offset points", color=colour_text, fontsize=9, va="center")
 
     # Budgets, labelled on one line only.
-    pts = CURVES[panel]["pimc4"]
+    pts = CURVES[panel]["ismcts"]
     for sims, y in pts.items():
         text = f"{sims // 1000}k" if sims >= 1000 else str(sims)
-        ax.annotate(text, (pod_seconds(panel, "pimc4", sims), y), xytext=(-6, 9),
+        ax.annotate(text, (pod_seconds(panel, "ismcts", sims), y), xytext=(-6, 9),
                     textcoords="offset points", color=t["muted"], fontsize=8, ha="right")
     if first:
-        ax.annotate("simulations per decision", (pod_seconds(panel, "pimc4", 100), pts[100]),
+        ax.annotate("simulations per decision", (pod_seconds(panel, "ismcts", 100), pts[100]),
                     xytext=(-6, 21), textcoords="offset points", color=t["muted"], fontsize=8,
                     ha="right")
 
@@ -178,7 +182,7 @@ def draw(mode: str) -> Path:
         return Line2D([], [], linestyle="none", marker=None, label=" ")
 
     passes = [header("Passes the hidden-information test")]
-    for method in ("pimc4", "pimc1"):
+    for method in ("ismcts", "pimc4", "pimc1"):
         colour = t["series"][method]
         passes.append(Line2D([], [], color=colour, linewidth=2, marker="o", markersize=7,
                              markerfacecolor=colour, markeredgecolor=t["surface"],
@@ -208,7 +212,7 @@ def draw(mode: str) -> Path:
 
     fig.text(0.06, 0.965, "ILLUSTRATIVE ONLY: the first experiment's plot", color=t["ink"],
              fontsize=13, fontweight="bold", ha="left")
-    fig.text(0.06, 0.935, "Dummy numbers that show its format: 3 methods × 4 budgets, per "
+    fig.text(0.06, 0.935, "Dummy numbers that show its format: 4 methods × 4 budgets, per "
              "evaluator. Nothing here is measured. 1 pod-second = $0.00014.",
              color=t["ink2"], fontsize=10, ha="left")
     fig.subplots_adjust(left=0.06, right=0.93, top=0.86, bottom=0.30, wspace=0.12)

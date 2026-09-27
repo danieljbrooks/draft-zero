@@ -2,10 +2,10 @@
 
 A proposal for comment, written 2026-09-27. **Nothing here has been built or run.**
 
-**What we'd like feedback on: the first experiment (§2).** It compares three search methods at
-four search budgets, with two evaluators, on about 1,000 decisions made by top 17lands players,
-and tests each method for hidden-information leaks. §3 collects follow-up ideas. They're there for
-context and don't need review yet.
+**What we'd like feedback on: the first experiment (§2).** It compares four search methods from
+three families (today's MCTS, PIMC and IS-MCTS) at four search budgets, with two evaluators, on
+about 1,000 decisions made by top 17lands players, and tests each method for hidden-information
+leaks. §3 collects follow-up ideas. They're there for context and don't need review yet.
 
 **The question.** Which search plays limited best while respecting hidden information, and what
 does it cost? Deep tree search guided by trained policy and value networks is what made AlphaZero
@@ -27,29 +27,31 @@ It builds on two earlier docs:
 
 | | |
 |---|---|
-| **Search methods** | MageZero's MCTS today, which searches the real game, hidden cards included (the reference); PIMC with 1 sampled world; PIMC with 4 sampled worlds |
+| **Search methods** | MageZero's MCTS today, which searches the real game, hidden cards included (the reference); PIMC with 1 and with 4 sampled worlds; particle IS-MCTS, one information-set tree over the same 4 worlds |
 | **Budgets** | 100, 300, 1,000 and 3,000 simulations per decision; 10,000 optional for the best method |
 | **Evaluators** | offline search, where a heuristic scores positions (CPU only); and a trained network from experiment #2 (MageZero v0.2.0) |
 | **References** | the rule heuristic and the network's policy, both with no search; XMage's MAD AI; chance |
 | **Decision quality** | agreement with top 17lands players on 1,000 held-out decisions |
 | **Hidden information** | a pass/fail leak test on about two dozen probe scenarios; it colors the plot |
 | **Compute** | pod-seconds per decision on the RTX 3090 pod at full load |
-| **Runs** | 3 methods × 4 budgets × 2 evaluators = 24, plus the references |
-| **Cost** | about 17 pod-hours (~$8.50) for the network runs; offline search runs on the laptop |
+| **Runs** | 4 methods × 4 budgets × 2 evaluators = 32, plus the references |
+| **Cost** | about 23 pod-hours (~$11.50) for the network runs; offline search runs on the laptop. IS-MCTS needs one to two weeks of engine work first |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/012-frontier-dummy-dark.png">
-  <img alt="Illustrative plot with dummy data, in two panels: offline search on the left, a trained network on the right. Each shows agreement with top 17lands players, 40 to 80 percent, against pod-seconds per decision on a log axis. Two coloured, filled lines, PIMC with 4 worlds and PIMC with 1 world, pass the hidden-information test; a gray hollow line, today's clairvoyant MCTS, fails it. Each line has four budgets from 100 to 3,000 simulations. No-search references sit at the far left: the rule heuristic on the left panel and the policy network on the right. XMage's MAD AI is a gray hollow triangle on the left panel. A shaded band near 74 to 80 percent stands in for the unknown ceiling." src="img/012-frontier-dummy-light.png">
+  <img alt="Illustrative plot with dummy data, in two panels: offline search on the left, a trained network on the right. Each shows agreement with top 17lands players, 40 to 80 percent, against pod-seconds per decision on a log axis. Three coloured, filled lines, particle IS-MCTS and PIMC with 4 and with 1 worlds, pass the hidden-information test; a gray hollow line, today's clairvoyant MCTS, fails it. Each line has four budgets from 100 to 3,000 simulations. No-search references sit at the far left: the rule heuristic on the left panel and the policy network on the right. XMage's MAD AI is a gray hollow triangle on the left panel. A shaded band near 74 to 80 percent stands in for the unknown ceiling." src="img/012-frontier-dummy-light.png">
 </picture>
 
 *Dummy numbers: they show the format, not a result (§2.8).*
 
 **What it decides:**
 
-- **The price of fairness:** how PIMC's agreement compares with today's search, which reads hidden
-  cards, at the same compute.
+- **The price of fairness:** how the fair methods' agreement compares with today's search, which
+  reads hidden cards, at the same compute.
 - **Whether more simulations buy agreement,** and where the curves flatten.
 - **Whether one sampled world is enough,** or four are worth it.
+- **Whether one information-set tree beats separate trees:** IS-MCTS against PIMC on the same four
+  worlds, at the same budget.
 - **Whether offline search and a trained network tell the same story.**
 
 **The main risk is the proxy.** In chess, adding search to a human-like network gained about 390
@@ -132,18 +134,31 @@ decisions and labels, so compare within a set, not across.
 | Method | What it does | Hidden information | Available? |
 |---|---|---|---|
 | **Clairvoyant MCTS** (MageZero's MCTS today) | AlphaZero-style PUCT on an exact copy of the real game: both hands, both libraries in order, both decks | reads them (docs/009 §3). It's the reference, expected to fail the test | exists |
-| **PIMC, 1 world** | re-deals the opponent's hand and shuffles both libraries once, from a belief, then searches that world | never sees the real ones | the coach op does it |
+| **PIMC, 1 world** | re-deals the opponent's hand and shuffles both libraries once, from a belief, then searches that world (Ginsberg 2001; named by Long et al. 2010) | never sees the real ones | the coach op does it |
 | **PIMC, 4 worlds** | four re-dealt worlds, each with a quarter of the budget; the chosen option has the most visits summed over them | never sees the real ones | the coach op does it (it ranks by mean Q today, so the benchmark adds summed visits) |
+| **Particle IS-MCTS, 4 worlds** | one tree whose nodes are what the searcher can tell apart (information sets). Each iteration picks one of the same 4 sampled worlds and follows only the options legal in it, so statistics are shared across worlds (Cowling, Powley & Whitehouse 2012). Holding the belief as a fixed set of worlds follows MAPLE (Li et al. 2026) and OpenSpiel's IS-MCTS | never sees the real ones | to build: one to two weeks of engine work (§2.9) |
 
-- **The belief** for both PIMC variants is the 17lands deck model (docs/008 §8.2). It picks a real
+- **The belief** for PIMC and IS-MCTS is the 17lands deck model (docs/008 §8.2). It picks a real
   17lands deck of the opponent's colors, consistent with the cards seen so far, and deals the
   hand from its unseen cards. The same belief is used on the test decisions and on the probes.
-- PIMC is also called ensemble determinization. It's the standard first step in card games, and
-  it's what upstream XMage's own Monte Carlo player does (docs/009 §4.1, §7).
+- **PIMC** is also called ensemble determinization. It's the standard first step in card games,
+  and it's what upstream XMage's own Monte Carlo player does (docs/009 §4.1, §7).
+- **IS-MCTS gets the same 4 worlds as PIMC,** from the same seeds. So the two differ only in the
+  tree: one tree shared across the worlds, or a separate tree per world. More worlds (16, 64) are
+  a follow-up (§3.4).
+- **How IS-MCTS is built** (docs/009 §6.4):
+  - options get world-independent keys, since the opponent's Refute is a different object in each
+    world;
+  - each node caches one game state per world;
+  - selection uses availability counts, since an option like "Cast Refute" exists only in some
+    worlds;
+  - the opponent's nodes are keyed by the opponent's own sampled information, so the plays of every
+    hand it might hold don't pile into one node. That pile-up is what hurt plain IS-MCTS in Dou Di
+    Zhu (docs/009 §6.3).
 
 **Budgets.** 100, 300, 1,000 and 3,000 fresh simulations per decision, with a fresh tree for each
-decision, as the coach does. For PIMC with 4 worlds, the budget is the total across the worlds. The
-best method optionally also runs at 10,000.
+decision, as the coach does. For PIMC with 4 worlds and for IS-MCTS, the budget is the total
+across the worlds. The best method optionally also runs at 10,000.
 
 **Evaluators: what scores a position inside the tree.**
 
@@ -250,7 +265,8 @@ A rebuilt 17lands state doesn't know the opponent's hand: 17lands records only i
 item's XMage game fills the opponent's hand and both libraries from the belief, with a fixed seed
 per item, the same for every configuration.
 
-- **PIMC ignores this filler.** It samples its own worlds, and the leak test checks that it does.
+- **PIMC and IS-MCTS ignore this filler.** They sample their own worlds, and the leak test checks
+  that they do.
 - **Clairvoyant MCTS reads the filler.** On this benchmark it peeks at a guess, not at the truth,
   and behaves roughly like PIMC with one world.
 - **So the agreement benchmark can't see a leak,** and it can't reward one. That's why the
@@ -267,12 +283,12 @@ per item, the same for every configuration.
 |---|---|---|
 | **Peeks** | its decisions depend on hidden cards the player can't know | MageZero's MCTS today; XMage's MAD AI, whose simulated cantrips draw the real next card (docs/009 §7) |
 | **Hides approximately** | never reads the hidden cards, but uses something a real player lacks | PIMC that samples from the opponent's *true* decklist, which leaks whether a counterspell is in it at all |
-| **Hides fully** | its decisions depend only on what the player could know: public state, its own hand and decklist, cards it legitimately saw, and a prior over the opponent's deck built from public data | PIMC with the 17lands deck model |
+| **Hides fully** | its decisions depend only on what the player could know: public state, its own hand and decklist, cards it legitimately saw, and a prior over the opponent's deck built from public data | PIMC or IS-MCTS with the 17lands deck model |
 
-**Only "hides fully" passes.** Passing doesn't mean the search reasons *well* about hidden cards:
-PIMC plans as if it will learn the sampled world after this move, and lets its simulated opponent
-see its hand (docs/009 §5.2). Those are weaknesses of quality, not leaks. The follow-ups test them
-(§3.6).
+**Only "hides fully" passes.** Passing doesn't mean the search reasons *well* about hidden cards.
+PIMC plans as if it will learn the sampled world after this move, and both PIMC and plain IS-MCTS
+let the simulated opponent see the searcher's hand (docs/009 §5.2). Those are weaknesses of
+quality, not leaks. The follow-ups test them (§3.6).
 
 **The probes.** Each is a pair of worlds that look identical to the agent and differ only in cards
 it can't see. A fair search decides the same in both, within noise. The pairs cover every channel
@@ -314,9 +330,17 @@ board-wipe pair needs a tree that crosses into the opponent's turn.
   verdict is per method, not per evaluator.
 - **The network is spot-checked** on the counterspell and cantrip pairs.
 - **Expected results, from docs/009:** clairvoyant MCTS fails the counterspell and cantrip pairs,
-  and MAD AI fails the cantrip pair. PIMC passes, provided it samples from the deck model. On
-  constructed positions the coach redraws hands from the opponent's real deck by default, which
-  would fail the decklist pair.
+  and MAD AI fails the cantrip pair. PIMC and IS-MCTS should pass, if their shared world sampler
+  follows three rules:
+  1. **Deal from the deck model,** not the opponent's real deck. On constructed positions the
+     coach deals from the real deck by default, which fails the decklist pair.
+  2. **Deal from the set of unseen cards, with the search's own seed.** In docs/009's test, the
+     real hand shifted where cards sat in the library before the shuffle, so 2 of 16 sampled
+     worlds differed between the two worlds.
+  3. **Keep cards the player legitimately knows.** The coach's hand-resampling mode redraws the
+     whole hand, which would shuffle away a creature the player saw bounced there.
+- **IS-MCTS gets one more check:** a node's encoding must be the same in every world. Any
+  difference is information the encoder shouldn't have (docs/009 §6.4).
 
 ### 2.6 Compute
 
@@ -335,7 +359,7 @@ to keep the pod saturated, then divides the wall-clock time by the number of dec
 **Also recorded:**
 
 - **Latency:** the wall-clock of one decision with the whole pod given to it, which is what a
-  human opponent would wait for. PIMC's worlds parallelize trivially.
+  human opponent would wait for. PIMC's worlds parallelize trivially; one IS-MCTS tree doesn't.
 - **Engine-independent counts:** fresh simulations, network evaluations and their batch sizes,
   engine steps, game copies, tree nodes and peak memory. Faster engines exist, and these counts
   let the results be re-costed on one.
@@ -357,7 +381,8 @@ server with its HTTP pool sized to the game threads, and fp16 (docs/006, docs/01
    (docs/003 §4.1).
 3. **Tree size.** Today every simulation also walks the whole tree (§2.9), so a simulation costs
    more the bigger the tree gets.
-4. **Worlds.** Each sampled world costs a game copy and a belief sample.
+4. **Worlds.** Each sampled world costs a game copy and a belief sample. IS-MCTS also caches a
+   state per node and world.
 5. **Serving the network:** batch sizes, server replicas and fp16. The network path ran 2.6×
    below offline search on this pod (docs/006), and each JVM sends at most 4 states per request.
 6. **Layout.** 7 JVMs × 4 threads beat 1 × 28 by 3.3× offline (docs/006).
@@ -384,18 +409,20 @@ re-measures them. On the laptop, the coach ran about 600 offline simulations/s p
 | Exp | Offline search (laptop) | Trained network (pod) | Pod-hours |
 |---|---|---|---|
 | **E0** References and calibration | chance, the rule heuristic, MAD AI; a second seed for PIMC with 4 worlds at 1,000, for test–retest noise; throughput | the network's policy with no search; the same for run 2's starting network, pretrained on human decisions (the ceiling's floor); the same second seed; throughput | ~2 |
-| **E1** The hidden-information test | the full probe set for all three methods and MAD AI | the counterspell and cantrip pairs | <1 |
-| **E2** Method × budget | 3 methods × 4 budgets = 12 runs | the same 12 runs | ~15 |
-| | | **Total** | **~17 (~$8.50)** |
+| **E1** The hidden-information test | the full probe set for all four methods and MAD AI | the counterspell and cantrip pairs | ~1 |
+| **E2** Method × budget | 4 methods × 4 budgets = 16 runs | the same 16 runs | ~20 |
+| | | **Total** | **~23 (~$11.50)** |
 
 The optional 10,000-simulation runs for the best method add about 11 pod-hours (~$5.50). The
-offline runs total about 21M simulations: hours to a day on the laptop, or about 11 pod-hours if
+offline runs total about 28M simulations: hours to a day on the laptop, or about 15 pod-hours if
 moved to the pod.
 
 **Order:**
 
-1. **Build** the pieces in §2.9. No pod is needed.
-2. **Laptop:** E0's and E1's offline parts, then E2's offline runs, as soon as the harness works.
+1. **Build** the pieces in §2.9. No pod is needed. IS-MCTS is the long pole, at one to two weeks,
+   and everything else can run while it's built.
+2. **Laptop:** E0's and E1's offline parts, then E2's offline runs, as soon as the harness works,
+   and IS-MCTS's as soon as it's built.
 3. **Pod, after experiment #2's runs end around Sept 29:** E0's and E1's network parts, then E2's
    network runs.
 4. **Write-up:** the plot, per-type breakdowns, and a short report.
@@ -420,18 +447,20 @@ A companion plot shows the same runs by decision type. The script that draws the
 
 | Panel | Method | Passes? | 100 → 300 → 1k → 3k simulations (dummy) |
 |---|---|---|---|
-| Offline search | PIMC, 4 worlds | yes | 48% → 53% → 57% → 60% |
+| Offline search | Particle IS-MCTS, 4 worlds | yes | 50% → 55% → 59% → 62.5% |
+| | PIMC, 4 worlds | yes | 48% → 53% → 57% → 60% |
 | | Clairvoyant MCTS | no | 48.5% → 52.5% → 55.5% → 57.5% |
 | | PIMC, 1 world | yes | 47.5% → 51.5% → 54% → 55% |
 | | Rule heuristic, no search | yes | 46% at 0.0006 pod-s |
 | | XMage MAD AI | no | 50% at 1.5 pod-s |
-| Trained network | PIMC, 4 worlds | yes | 50% → 55% → 59.5% → 63% |
+| Trained network | Particle IS-MCTS, 4 worlds | yes | 52% → 57% → 61.5% → 65.5% |
+| | PIMC, 4 worlds | yes | 50% → 55% → 59.5% → 63% |
 | | Clairvoyant MCTS | no | 50.5% → 54.5% → 58% → 60.5% |
 | | PIMC, 1 world | yes | 49.5% → 53.5% → 56.5% → 58% |
 | | Policy network, no search | yes | 44% at 0.004 pod-s |
 
-Pod-seconds are simulations ÷ 550 (offline) or ÷ 250 (network), times 1.0, 1.05 and 1.1 for
-clairvoyant MCTS and PIMC with 1 and 4 worlds.
+Pod-seconds are simulations ÷ 550 (offline) or ÷ 250 (network), times 1.0, 1.05, 1.1 and 1.2 for
+clairvoyant MCTS, PIMC with 1 and 4 worlds, and IS-MCTS.
 
 </details>
 
@@ -440,7 +469,8 @@ clairvoyant MCTS and PIMC with 1 and 4 worlds.
 | Piece | Where | Builds on |
 |---|---|---|
 | Item builder: sample, rebuild, label, canonicalize, filter, split, freeze | `src/draftzero/gameplay/`, a new `search_bench` module | `seventeenlands.py`, `reconstruct.py`, `labels.py`, `turnreplay.py` |
-| A benchmark mode for the coach op: method, budget and seeds per request; summed visits for PIMC; the whole root back; per-search counters and timers | `java/mzbridge` | the `coach` op |
+| A benchmark mode for the coach op: method (IS-MCTS included), budget and seeds per request; summed visits for PIMC; the whole root back; per-search counters and timers | `java/mzbridge` | the `coach` op |
+| **Particle IS-MCTS,** behind a flag: world-independent action keys, a cached state per node and world, availability counts, opponent nodes keyed by the opponent's sampled information. The long pole: one to two weeks | the XMage fork | `ComputerPlayerMCTS2`, `MCTSNode`; design in docs/009 §6.4 |
 | The bridge built against the v0.2.0 bundle (the local build links exp #1's v0.1 jars) | `java/mzbridge` | run 2's handoff did the same |
 | The leak test: pairs, extreme versions, controls, canaries | `tools/gameplay/` | `hidden_info_leak.py`, `MadProbe.java` |
 | A pod runner: bridge workers plus the inference server, a queue that keeps the pod full, cgroup-based load sampling | `deploy/`, `src/draftzero/` | `tools/throughput_bench.py` |
@@ -452,7 +482,7 @@ bias a result, and each fix is small:
 | Issue | Where | What it would bias |
 |---|---|---|
 | Every iteration walks the whole tree (for the node and depth limits), and the duplicate-state search runs even when pruning is off | `ComputerPlayerMCTS2`, `MCTSNode` | cost at 3,000 simulations and more |
-| The virtual loss is from the searcher's view. At an opponent node, a child waiting for its network evaluation scores +1, attracts the next simulation, and that simulation waits | `ComputerPlayerMCTS2`, `MCTSNode2` | the opponent's side of every network search. It affects all three methods alike, but should be fixed anyway |
+| The virtual loss is from the searcher's view. At an opponent node, a child waiting for its network evaluation scores +1, attracts the next simulation, and that simulation waits | `ComputerPlayerMCTS2`, `MCTSNode2` | the opponent's side of every network search. It affects all four methods alike, but should be fixed anyway |
 | The budget is enforced only once a priority decision exists below the root, so small decisions can overrun it | `ComputerPlayerMCTS2` | cost per decision: record the simulations actually run |
 | The MageZero constructor reseeds the RNG to a constant | `ComputerPlayerMCTS2` | seed-to-seed variation; the bridge seeds what it can |
 
@@ -488,6 +518,11 @@ starts every decision with a fresh tree.
 
   So the first experiment claims agreement only. If the curves stay flat as budgets grow, the
   proxy may be saturating, as in chess, and the follow-ups in §3.1 decide.
+- **IS-MCTS is new code.** A bug could cost it agreement for reasons that have nothing to do with
+  the method. It gets the same leak test, plus unit tests on small positions whose right answer is
+  known.
+- **The same 4 worlds isolate the tree, not IS-MCTS's best case.** IS-MCTS can use many more
+  worlds without splitting its budget. That's a follow-up (§3.4).
 - **The network carries open-hand habits.** Experiment #2's networks don't see the opponent's hand,
   but their training targets came from a search that did (docs/009 §3.5). Their values may suit
   clairvoyant trees, which could flatter clairvoyant MCTS in the network panel.
@@ -506,16 +541,18 @@ starts every decision with a fresh tree.
 
 1. **The proxy.** Is agreement with top 17lands players a sound first measure at our agents'
    strength? What would convince you it tracks play?
-2. **The methods.** Are clairvoyant MCTS and PIMC with 1 and 4 worlds the right first comparison?
-   Is there anything cheap to add?
-3. **The budgets.** Is 100 to 3,000 simulations the right range? Is 10,000 worth adding?
-4. **The evaluators.** Are offline search and one trained network the right pair, and which
+2. **The methods.** Are clairvoyant MCTS, PIMC with 1 and 4 worlds, and IS-MCTS on the same 4
+   worlds the right first comparison? Is there anything cheap to add?
+3. **IS-MCTS in practice.** If you've used it for Magic or a similar game: which variant, how do
+   you handle the opponent's branching and actions across worlds, and how many worlds?
+4. **The budgets.** Is 100 to 3,000 simulations the right range? Is 10,000 worth adding?
+5. **The evaluators.** Are offline search and one trained network the right pair, and which
    experiment #2 network?
-5. **The decisions.** Is the mix in §2.2 right? Is a decision type missing, or not worth its
+6. **The decisions.** Is the mix in §2.2 right? Is a decision type missing, or not worth its
    place?
-6. **Order and timing.** Are the four ways of handling them in §2.3 enough?
-7. **The leak test.** What would you add to the probes in §2.5? Is the pass rule strict enough?
-8. **Compute.** Pod-seconds at full load, or latency: which matters more to you?
+7. **Order and timing.** Are the four ways of handling them in §2.3 enough?
+8. **The leak test.** What would you add to the probes in §2.5? Is the pass rule strict enough?
+9. **Compute.** Pod-seconds at full load, or latency: which matters more to you?
 
 ---
 
@@ -527,9 +564,9 @@ reviewers can see where this could go. No feedback is needed on them yet.
 ### 3.1 First: does agreement predict strength?
 
 - **Validation by play (E9).** Five configurations that pass the leak test, spread from no search
-  to PIMC at 300 simulations, each play 400 games against a fixed fair yardstick: PIMC with offline
-  search at 100 simulations. If agreement ranks them the way win rate does, agreement is trusted
-  for screening. About 43 pod-hours at 400 games each, or half that at 200 games (±7 points instead
+  to the best fair method at 300 simulations, each play 400 games against a fixed fair yardstick:
+  PIMC with offline search at 100 simulations. If agreement ranks them the way win rate does,
+  agreement is trusted for screening. About 43 pod-hours at 400 games each, or half that at 200 games (±7 points instead
   of ±5). Variance reduction could cut it further: AIVAT, which uses a value function as a control
   variate, needed about 44× fewer games in poker (Burch et al. 2018).
 - **A human-free companion score (A_ref).** Agreement with a reference search: the best
@@ -555,22 +592,22 @@ Axis A decides whether the true hidden cards reach the search, and B how good th
 decides whether counterspells, tricks and bluffs get the value they have in human games (docs/009
 §5.2).
 
-The candidates, each a point in that space. The first experiment covers M0, M1 and M2.
+The candidates, each a point in that space. The first experiment covers M0 to M3.
 
 | Code | Method | Axes | Hidden information | Fixes | Known weakness | Cost vs today, same simulations | Build effort |
 |---|---|---|---|---|---|---|---|
 | M0 | **MageZero MCTS today** (clairvoyant PUCT) | A0 C1 D1 | peeks | — | reads hands, draws, decks | 1× | exists |
 | M1 | **PIMC, one world** | A2 B2 C1 | hides fully | the leak | "probability matching": holds the bomb in the ~12% of searches that sample a counter (docs/009 §5.4) | ~1× | the coach does it |
 | M2 | **PIMC, K worlds** | A3 B2 C1 | hides fully | the leak; averages over worlds | strategy fusion, non-locality; the opponent sees the searcher's hand; K small trees | ~1.1× | the coach does it; days for self-play |
-| M3 | **Particle IS-MCTS** (long term) | A4 B2 C1 | hides fully | the searcher's strategy fusion; one deeper tree | opponent branching (the union of every possible hand's plays); the opponent still sees the searcher's hand | ~1.2× | a week or more; designed in docs/009 §6.4 |
-| M4 | M2 **with inference** | B3 | hides fully | tells such as "passed with 1UU open" | needs a policy model; judge it by play, not accuracy (docs/009 §4.1) | + K × observed actions network calls | days after M2 |
-| M5 | M2 **with a ply or horizon cap** | D4 | hides fully | spends budget on breadth | misses what lies past the cap | cheaper per simulation | hours |
-| M6 | M2 **with a policy opponent** | C2 | hides fully | ambush and bluff value | the opponent is only as good as its policy head | ~1.5× | a week, plus an opponent-seat policy head |
+| M3 | **Particle IS-MCTS** | A4 B2 C1 | hides fully | the searcher's strategy fusion; one deeper tree | opponent branching (the union of every possible hand's plays); the opponent still sees the searcher's hand | ~1.2× | one to two weeks; in the first experiment |
+| M4 | M2 or M3 **with inference** | B3 | hides fully | tells such as "passed with 1UU open" | needs a policy model; judge it by play, not accuracy (docs/009 §4.1) | + K × observed actions network calls | days after M2 |
+| M5 | M2 or M3 **with a ply or horizon cap** | D4 | hides fully | spends budget on breadth | misses what lies past the cap | cheaper per simulation | hours |
+| M6 | M2 or M3 **with a policy opponent** | C2 | hides fully | ambush and bluff value | the opponent is only as good as its policy head | ~1.5× | a week, plus an opponent-seat policy head |
 | M7 | **Multiple-observer IS-MCTS with self-determinization** (long term) | A5 C3 | hides fully | the opponent decides from its own information | expensive; bluffing emerged only in tiny games (docs/009 §6.3) | 2× or more | weeks; research |
-| M8 | **Gumbel root** on M2 | F | as its base | better use of very small budgets | helps least at large budgets | ~1× | days |
+| M8 | **Gumbel root** on M2 or M3 | F | as its base | better use of very small budgets | helps least at large budgets | ~1× | days |
 | M9 | **PIMC repairs** (long term): EPIMC reasons over information sets for the first few plies; αμ plays one move in every world | A3+ | hides fully | strategy fusion; αμ also non-locality | EPIMC was tested on phantom games, αμ on bridge declarer play (Arjonilla et al. 2024; Cazenave & Ventos 2021) | 1–3× | weeks |
 | M10 | **Equilibrium search** (long term): Smooth UCT at the root; online outcome sampling, ReBeL, Student of Games, Obscuro | — | hides fully | exploitability, bluff frequencies. Student of Games beat a determinization bot in Scotland Yard even at 10M simulations (Schmid et al. 2023) | a limited hand has millions of possibilities (docs/009 §5.3) | high | research |
-| M11 | **Search anchored to a human policy** (piKL) on M2 | F | as its base | human-likeness and strength together (Jacob et al. 2022) | raises agreement by construction, so only play can judge it | ~1× | days, given a human policy head |
+| M11 | **Search anchored to a human policy** (piKL) on M2 or M3 | F | as its base | human-likeness and strength together (Jacob et al. 2022) | raises agreement by construction, so only play can judge it | ~1× | days, given a human policy head |
 
 Three more families were considered and left out: belief-state AlphaZero for POMDPs (BetaZero:
 Moss et al. 2024), planning over abstractions of information states from reconnaissance blind
@@ -581,10 +618,11 @@ et al. 2021), which may matter for targets and modes.
 belief sampling, then IS-MCTS with value-net cutoffs, then PIMC as the best initial baseline.
 Mostly agreed, with five changes:
 
-- **PIMC first.** docs/009 §6.5 came to the same conclusion: the coach already does it, and it's
-  the baseline IS-MCTS has to beat. It also has the closest precedent. In Legends of Code and
-  Magic, a drafted card game, PIMC with policy and value networks beat the champion bot 51.4% of
-  the time, against 26.8% without search, and gained nothing past 32 worlds (Rubin 2026, preprint).
+- **Run PIMC and IS-MCTS side by side.** docs/009 §6.5 recommended PIMC first, as the baseline
+  IS-MCTS has to beat. The first experiment runs both, on the same worlds and budget. PIMC also has
+  the closest precedent. In Legends of Code and Magic, a drafted card game, PIMC with policy and
+  value networks beat the champion bot 51.4% of the time, against 26.8% without search, and gained
+  nothing past 32 worlds (Rubin 2026, preprint).
 - **Belief sampling is its own axis.** Every fair method samples worlds from a belief, PIMC
   included, so the belief's quality (B1–B3) is crossed with the tree structure in E4. docs/008
   §8.2 found non-land beliefs weak today (recall 0.047), so better beliefs may matter as much as
@@ -647,6 +685,8 @@ because the value network covers the rest.
   trees best within 10,000 simulations in simplified Magic, and Rubin (2026) found no gain past 32
   worlds in Legends of Code and Magic. Allocating simulations across worlds adaptively is a newer
   idea (Kowalski et al. 2026, preprint).
+- **Worlds for IS-MCTS:** 4, 16 and 64 in one tree, at a fixed budget. Unlike PIMC, IS-MCTS doesn't
+  split its budget between worlds, so it can afford many more.
 - **Beliefs.** The three tiers of axis B, on the same items.
 - **Budgets by decision type.** docs/008 §6 found offline combat decisions at 300 simulations to be
   noise, and recommends at least 1,000 for attacks and blocks.
@@ -675,7 +715,7 @@ opponent's nodes.
 | Leaf evaluator | the network's value, or the offline heuristic | network; heuristic; a blend | AlphaGo blended its value network with rollouts |
 | Opponent responses | a node whenever the opponent has something to play, and at combat checkpoints | as today; only instant-speed plays that could matter; none (MAD-style, blind) | fewer irrelevant opponent nodes deepen the tree |
 | Evaluations in flight per search | one thread, up to 4 pending network calls, with a virtual loss of −1 | 1, 4, 8, 16 | latency against quality |
-| Draws inside the tree | fixed per world | fixed per world; re-sampled per iteration | IS-MCTS re-samples; PIMC fixes |
+| Draws inside the tree | the real library order (clairvoyant); fixed per sampled world (PIMC, particle IS-MCTS) | fixed per world; re-sampled per iteration | classic IS-MCTS re-samples every iteration |
 | Simulation budget or time budget | simulations | simulations; a fixed time | a fixed time shows engine-speed differences |
 
 Tree reuse and root noise stay off in every benchmark run: reuse leaks across worlds, and
@@ -710,13 +750,13 @@ Pod-hours at the first experiment's throughput assumptions.
 |---|---|---|---|---|
 | **E9** | Does agreement predict win rate? (§3.1) | 5 configurations × 400 games | games | ~44 |
 | — | A_ref, the deep reference search (§3.1) | the best configuration at 30,000 simulations | 300 test | ~10 |
-| **E3** | Depth and horizon (§3.3) | PIMC at 3,000 with ply caps 1, 2, 4, 8 and horizons (end of step, turn, opponent's turn) | dev | ~7 |
-| **E4** | Worlds and beliefs (§3.4) | PIMC with K = 1–32 at a fixed 1,000; beliefs B1–B3 | dev, then test | ~5 |
-| **E5** | Other settings (§3.5), plus Gumbel root and human anchoring | about 24 single-setting arms at 1,000; the 3 best combinations confirmed at 1,000 and 3,000 | dev, then test | ~21 |
+| **E3** | Depth and horizon (§3.3) | the best method at 3,000 with ply caps 1, 2, 4, 8 and horizons (end of step, turn, opponent's turn) | dev | ~7 |
+| **E4** | Worlds and beliefs (§3.4) | PIMC with K = 1–32 and IS-MCTS with 4, 16 and 64 worlds, at a fixed 1,000; beliefs B1–B3 | dev, then test | ~6 |
+| **E5** | Other settings (§3.5), plus Gumbel root and human anchoring | about 24 single-setting arms on the best method at 1,000; the 3 best combinations confirmed at 1,000 and 3,000 | dev, then test | ~21 |
 | **E6** | Network × search | more networks (run 2's, then the first one trained on fair self-play) × 100, 1,000 and 3,000 | test | ~9 |
-| **E7** | The simulated opponent | PIMC with a policy opponent at 1,000 and 3,000, plus the holder-side scenarios | test, probes | ~7 |
+| **E7** | The simulated opponent | the best method with a policy opponent at 1,000 and 3,000, plus the holder-side scenarios | test, probes | ~7 |
 | **E8** | Latency and layout | JVM splits and threads per search, 100 items at 1,000 | subset | ~2 |
-| | **Total** | | | **about 105 (~$53)** |
+| | **Total** | | | **about 106 (~$53)** |
 
 - **E6** measures how far search substitutes for a better network. In Hex, each 10× of training
   compute replaced about 15× of search (Jones 2021). A later extension found that the exchange
@@ -733,9 +773,9 @@ Pod-hours at the first experiment's throughput assumptions.
 
 ### 3.8 Long term
 
-Particle IS-MCTS (M3), multiple-observer IS-MCTS (M7), the PIMC repairs (M9) and equilibrium
-search (M10). Each needs real engine work, and each is worth it only if the first rounds show that
-PIMC's weaknesses cost agreement or strength.
+Multiple-observer IS-MCTS (M7), the PIMC repairs (M9) and equilibrium search (M10). Each needs
+real engine work, and each is worth it only if the first rounds show that the weaknesses of PIMC
+and single-observer IS-MCTS cost agreement or strength.
 
 ---
 
@@ -797,7 +837,7 @@ run's identity. An E2 run with the network:
 run_id: sb1-E2-pimc4-net-b1000-s1
 items: {set: sb-v1, split: test}
 method:
-  name: pimc                  # clairvoyant | pimc
+  name: pimc                  # clairvoyant | pimc | is_mcts
   worlds: 4
   belief: deck_model          # the 17lands deck model (docs/008 §8.2)
   aggregate: summed_visits
@@ -905,11 +945,17 @@ with full references there. Cited here directly:
 
 **Hidden information**
 
+- Ginsberg (2001). GIB: Imperfect information in a computationally challenging game. *JAIR* 14.
+  https://arxiv.org/abs/1106.0669
+- Long, Sturtevant, Buro & Furtak (2010). Understanding the success of perfect information Monte
+  Carlo sampling in game tree search. *AAAI*. https://ojs.aaai.org/index.php/AAAI/article/view/7562
 - Cowling, Ward & Powley (2012). Ensemble determinization in Monte Carlo tree search for the
   imperfect information card game Magic: The Gathering. *IEEE TCIAIG* 4(4).
   https://eprints.whiterose.ac.uk/id/eprint/75050/
 - Cowling, Powley & Whitehouse (2012). Information set Monte Carlo tree search. *IEEE TCIAIG* 4(2).
   https://eprints.whiterose.ac.uk/id/eprint/75048/
+- Li, Guei, Wu & Wu (2026). MAPLE. *IEEE CoG*. https://arxiv.org/abs/2605.24139
+- OpenSpiel's IS-MCTS: https://github.com/google-deepmind/open_spiel/blob/master/open_spiel/algorithms/is_mcts.cc
 - Arjonilla, Saffidine & Cazenave (2024). Perfect information Monte Carlo with postponing
   reasoning (EPIMC). *IEEE CoG*. https://arxiv.org/abs/2408.02380
 - Cazenave & Ventos (2021). The αμ search algorithm for the game of Bridge. *MCS 2020*, Springer
@@ -929,5 +975,4 @@ with full references there. Cited here directly:
   information games. *AAAI*. https://arxiv.org/abs/1612.06915
 
 Everything else cited in passing is in docs/009's reference list: Frank & Basin on strategy fusion,
-Long et al. on when PIMC works, DeltaDou, Smooth UCT, online outcome sampling, ReBeL, Obscuro,
-MAPLE and Ataraxos.
+DeltaDou, Smooth UCT, online outcome sampling, ReBeL, Obscuro and Ataraxos.

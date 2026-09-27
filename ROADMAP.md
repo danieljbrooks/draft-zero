@@ -456,15 +456,18 @@ placeholder until Dan picks it up.
 
 **Search benchmark** ([docs/012](docs/012-search-benchmark.md), branch `search-benchmark`). A
 proposal out for comment (2026-09-27), nothing built or run. Its first experiment (E0–E2):
-- **Methods:** today's clairvoyant MCTS, PIMC with 1 world and PIMC with 4 worlds.
+- **Methods:** today's clairvoyant MCTS, PIMC with 1 and with 4 worlds, and particle IS-MCTS on the
+  same 4 worlds. IS-MCTS was added after a reviewer who uses it for Magic called it the big one.
 - **Budgets:** 100 to 3,000 simulations.
 - **Evaluators:** offline search, and a trained exp #2 network.
 - **Measures:** agreement with top 17lands players on 1,000 decisions, and a pass/fail leak test
   that colors the plot.
 
-It costs ~17 pod-hours (~$8.50), with the offline runs on the laptop. The follow-ups (E3–E9, first
+It costs ~23 pod-hours (~$11.50), with the offline runs on the laptop. The follow-ups (E3–E9, first
 among them validation by play) are ideas for now.
 - [ ] Collect reviewers' comments on the first experiment (its §2.11) and revise.
+- [ ] Build particle IS-MCTS in the fork behind a flag (docs/009 §6.4), about one to two weeks:
+      the first experiment's long pole.
 - [ ] Decide funding for the network runs. The RunPod balance is committed to exp #2.
 - [ ] Fix the search issues its §2.9 lists before the benchmark runs: whole-tree walks on every
       iteration, and the virtual loss's sign at opponent nodes.
