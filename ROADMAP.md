@@ -333,7 +333,7 @@ on human decisions, so the only difference is the starting point (imitation, D8)
 116 GB, 24 GB GPU) at $0.50/hr. It runs `deploy/exp2.sh` with a $28.90 cap: a graceful stop at 57.05 h
 and hard removal at 57.8 h (about 2026-09-29 11:50 UTC). The layout is 7 × 4 threads, 112 games per
 generation, training batch 64. Weights go to HF `danbrooks/draftzero-checkpoints` under
-`2026-09-27_01-59-54/`. The original session ("RunPod CLI / exp #2", the thread that launched it)
+`2026-09-27_01-59-54/`. The session "Experiment 2 and performance - RUN 1" launched it and
 owns it. **Other sessions: don't touch this pod or that HF prefix.**
 
 **Run 2 handoff (imitation A/B).** It needs its own session, working in its own git worktree and
