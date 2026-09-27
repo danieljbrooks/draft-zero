@@ -454,6 +454,23 @@ placeholder until Dan picks it up.
       or both), what we'd ship, and what's in the way. Write up the options before building
       anything.
 
+**Search benchmark** ([docs/012](docs/012-search-benchmark.md), branch `search-benchmark`). A
+proposal out for comment (2026-09-27), nothing built or run. Its first experiment (E0–E2):
+- **Methods:** today's clairvoyant MCTS, PIMC with 1 world and PIMC with 4 worlds.
+- **Budgets:** 100 to 3,000 simulations.
+- **Evaluators:** offline search, and a trained exp #2 network.
+- **Measures:** agreement with top 17lands players on 1,000 decisions, and a pass/fail leak test
+  that colors the plot.
+
+It costs ~17 pod-hours (~$8.50), with the offline runs on the laptop. The follow-ups (E3–E9, first
+among them validation by play) are ideas for now.
+- [ ] Collect reviewers' comments on the first experiment (its §2.11) and revise.
+- [ ] Decide funding for the network runs. The RunPod balance is committed to exp #2.
+- [ ] Fix the search issues its §2.9 lists before the benchmark runs: whole-tree walks on every
+      iteration, and the virtual loss's sign at opponent nodes.
+- [ ] Dan: decide whether to raise the virtual-loss issue, and the race that can reset priors to
+      uniform, with Will.
+
 **Study.** Read with a specific question in mind.
 - [ ] KataGo paper (Wu, 2019): AlphaZero on a small compute budget. Its "playout cap
       randomization" (full search on a random fraction of moves, cheap search on the rest)
