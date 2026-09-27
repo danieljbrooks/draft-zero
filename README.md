@@ -17,7 +17,14 @@ its RL framework, XMage bridge, trainer and evaluator — and adds the format-le
 
 Studies: **[human gameplay data](docs/008-gameplay-data.md)**. 17lands and Arena logs mapped onto XMage
 states (a recorded turn replays to the same next state ~89% of the time), human-trained heads versus
-gen 33, and a first test of MCTS coaching.
+gen 33, and a first test of MCTS coaching. **[Hidden information](docs/009-hidden-information.md)**.
+MageZero's network and search both see the opponent's hand and the library order. The search plays
+around a counterspell only when it's really there. The doc:
+- compares how other hidden-information games handle this;
+- evaluates IS-MCTS;
+- checks XMage's own bots (the MAD AI never simulates an opponent's response, and upstream's Monte
+  Carlo player determinizes);
+- plans fair baselines and experiment #2.
 
 What comes next, and why: **[ROADMAP.md](ROADMAP.md)**.
 
