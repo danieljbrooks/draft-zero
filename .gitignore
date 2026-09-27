@@ -29,3 +29,8 @@ __pycache__/
 bench/
 bench_local/
 data/scryfall/
+
+# Gameplay-data work (docs/008): derived indices, bridge runtimes and build output
+data/gameplay/
+data/mzbridge/
+java/mzbridge/build/

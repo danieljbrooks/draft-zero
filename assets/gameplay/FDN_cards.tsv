@@ -1,0 +1,625 @@
+# FDN+SPG card facts from XMage (mage-1.4.58 source and class dump): printed P/T, combat keywords, mechanics tags, flashback key, land colours, attachment kind, counter tracking, +1/+1 counters it enters with.
+name	xmage_set	xmage_num	mana_cost	power	toughness	loyalty	keywords	features	flashback_key	land_mana	attach	counter_mode	etb_counters
+Abrade	FDN	188	{1}{R}					noncombat_damage,modal,spell_targets				none	
+Abyssal Harvester	FDN	316	{1}{B}{B}	3	2			token_maker,copy				none	
+Adamant Will	FDN	488	{1}{W}				Indestructible	pump_until_eot,spell_targets				none	
+Adaptive Automaton	FDN	723	{3}	2	2							none	
+Adventuring Gear	FDN	249	{1}					equipment			equipment	none	
+Aegis Turtle	FDN	150	{U}	0	5							none	
+Aetherize	FDN	151	{3}{U}					bounce_to_hand				none	
+Affectionate Indrik	FDN	211	{5}{G}	4	4			fight,etb_trigger,spell_targets				none	
+Aggressive Mammoth	FDN	551	{3}{G}{G}{G}	8	8		Trample					none	
+Ajani's Pridemate	FDN	135	{1}{W}	2	2			counters,p1p1_counters				self_tracked	
+Ajani, Caller of the Pride	FDN	134	{1}{W}{W}			4	Flying,DoubleStrike	counters,p1p1_counters,token_maker,spell_targets				loyalty	
+Akroma's Memorial	SPG	81	{7}				Flying,FirstStrike,Trample,Vigilance,Haste					none	
+Alesha, Who Laughs at Fate	FDN	115	{1}{B}{R}	2	2		FirstStrike	counters,p1p1_counters,gy_to_battlefield				self_tracked	
+Ambush Wolf	FDN	98	{2}{G}	4	2		Flash	flash,exile,etb_trigger				none	
+An Offer You Can't Refuse	FDN	160	{U}					token_maker,counterspell,spell_targets,mana_ability_nonland				none	
+Ancestor Dragon	FDN	489	{4}{W}{W}	5	6		Flying					none	
+Angel of Finality	FDN	136	{3}{W}	3	4		Flying	etb_trigger,spell_targets				none	
+Angel of Vitality	FDN	706	{2}{W}	2	2		Flying	pump_until_eot				none	
+Angelic Destiny	FDN	565	{2}{W}{W}				Flying,FirstStrike	aura,bounce_to_hand,spell_targets			aura:friendly:creature	none	
+Angelic Edict	FDN	490	{4}{W}					exile,spell_targets				none	
+Anthem of Champions	FDN	116	{G}{W}					pump_until_eot				none	
+Apothecary Stomper	FDN	99	{4}{G}{G}	4	4		Vigilance	counters,p1p1_counters,etb_trigger,lifegain,modal				untracked	
+Arahbo, the First Fang	FDN	2	{2}{W}	2	2			token_maker,pump_until_eot				none	
+Arbiter of Woe	FDN	55	{4}{B}{B}	5	4		Flying	draw,discard,sacrifice,etb_trigger,lifegain,noncombat_damage				none	
+Arcane Epiphany	FDN	29	{3}{U}{U}					draw				none	
+Arcanis the Omnipotent	FDN	585	{3}{U}{U}{U}	3	4			bounce_to_hand,draw				none	
+Archmage of Runes	FDN	30	{3}{U}{U}	3	6			draw				none	
+Archway Angel	FDN	566	{5}{W}	3	4		Flying	etb_trigger,lifegain				none	
+Arid Mesa	SPG	109										none	
+Armasaur Guide	FDN	3	{4}{W}	4	4		Vigilance	counters,p1p1_counters				untracked	
+Ashroot Animist	FDN	117	{2}{R}{G}	4	4		Trample	pump_until_eot,spell_targets				none	
+Aurelia, the Warleader	FDN	651	{2}{R}{R}{W}{W}	3	4		Flying,Vigilance,Haste					none	
+Authority of the Consuls	FDN	137	{W}					lifegain				none	
+Axgard Cavalry	FDN	189	{1}{R}	2	2		Haste	spell_targets				none	
+Ayli, Eternal Pilgrim	FDN	652	{W}{B}	2	3		Deathtouch	exile,sacrifice,lifegain				none	
+Azorius Guildgate	FDN	683						mana_ability_nonland,etb_tapped		WU		none	
+Bake into a Pie	FDN	169	{2}{B}{B}					token_maker,spell_targets				none	
+Ball Lightning	FDN	618	{R}{R}{R}	6	1		Trample,Haste					none	
+Ballyrush Banneret	FDN	567	{1}{W}	2	1							none	
+Balmor, Battlemage Captain	FDN	237	{U}{R}	1	3		Flying,Trample	pump_until_eot				none	
+Banishing Light	FDN	138	{2}{W}					exile,etb_trigger,spell_targets,exile_until_leaves				none	
+Banner of Kinship	FDN	127	{5}					counters				untracked	
+Basilisk Collar	FDN	669	{1}				Deathtouch,Lifelink	equipment,lifegain			equipment	none	
+Battle-Rattle Shaman	FDN	533	{3}{R}	2	2			pump_until_eot,spell_targets				none	
+Battlesong Berserker	FDN	78	{3}{R}	3	4		Menace	pump_until_eot				none	
+Bear Cub	FDN	552	{1}{G}	2	2							none	
+Beast-Kin Ranger	FDN	100	{2}{G}	3	3		Trample	pump_until_eot,etb_trigger				none	
+Bigfin Bouncer	FDN	31	{3}{U}	3	2			bounce_to_hand,etb_trigger				none	
+Billowing Shriekmass	FDN	56	{3}{B}	2	3		Flying	mill,pump_until_eot,etb_trigger				none	
+Biogenic Upgrade	FDN	553	{4}{G}{G}					counters,p1p1_counters,spell_targets				none	
+Bishop's Soldier	FDN	491	{1}{W}	2	2		Lifelink	lifegain				none	
+Bite Down	FDN	212	{1}{G}					spell_targets				none	
+Blanchwood Armor	FDN	213	{2}{G}					aura,spell_targets			aura:friendly:creature	none	
+Blasphemous Edict	FDN	317	{3}{B}{B}					sacrifice,kicker_or_alt_cost				none	
+Bloodfell Caves	FDN	259						etb_trigger,lifegain,mana_ability_nonland,etb_tapped		BR		none	
+Bloodthirsty Conqueror	FDN	318	{3}{B}{B}	5	5		Flying,Deathtouch	lifegain				none	
+Bloodtithe Collector	FDN	516	{4}{B}	3	4		Flying	discard,etb_trigger				none	
+Bloom Tender	SPG	79	{1}{G}	1	1			mana_ability_nonland				none	
+Blossoming Sands	FDN	260						etb_trigger,lifegain,mana_ability_nonland,etb_tapped		WG		none	
+Bolt Bend	FDN	619	{3}{R}					spell_targets				none	
+Boltwave	FDN	79	{R}					noncombat_damage				none	
+Bone Miser	SPG	87	{4}{B}	4	4			token_maker,draw				none	
+Boros Charm	FDN	721	{R}{W}				DoubleStrike,Indestructible	noncombat_damage,modal,spell_targets				none	
+Boros Guildgate	FDN	684						mana_ability_nonland,etb_tapped		WR		none	
+Brass's Bounty	FDN	190	{6}{R}					token_maker,mana_ability_nonland				none	
+Brazen Borrower	SPG	30	{1}{U}{U}	3	1		Flying,Flash	flash,bounce_to_hand,cast_from_other_zone,spell_targets,blocks_only_flyers				none	
+Brazen Scourge	FDN	191	{1}{R}{R}	3	3		Haste					none	
+Breeches, Brazen Plunderer	SPG	6	{3}{R}	3	3		Menace					none	
+Bridge from Below	SPG	3	{B}{B}{B}					token_maker,exile,dies_trigger				none	
+Brineborn Cutthroat	FDN	152	{1}{U}	2	1		Flash	counters,p1p1_counters,flash				self_tracked	
+Broken Wings	FDN	214	{2}{G}					spell_targets				none	
+Bulk Up	FDN	80	{1}{R}					cast_from_other_zone,pump_until_eot,spell_targets	Flashback {4}{R}{R}			none	
+Burgeoning	SPG	126	{G}									none	
+Burglar Rat	FDN	170	{1}{B}	1	1			discard,etb_trigger				none	
+Burnished Hart	FDN	250	{3}	2	2			search_library,sacrifice				none	
+Burrog Befuddler	FDN	504	{1}{U}	2	1		Flash	flash,pump_until_eot,etb_trigger				none	
+Burst Lightning	FDN	192	{R}					noncombat_damage,spell_targets,kicker_or_alt_cost				none	
+Bushwhack	FDN	215	{G}					search_library,fight,modal,spell_targets				none	
+Cackling Prowler	FDN	101	{3}{G}	4	3		Ward	counters,p1p1_counters				self_tracked	
+Campus Guide	FDN	251	{2}	2	1			search_library,etb_trigger				none	
+Cancel	FDN	505	{1}{U}{U}					counterspell,spell_targets				none	
+Carnage Tyrant	SPG	10	{4}{G}{G}	7	6		Trample					none	
+Carnelian Orb of Dragonkind	FDN	534	{2}{R}				Haste	mana_ability_nonland				none	
+Cat Collector	FDN	4	{2}{W}	3	2			token_maker,etb_trigger				none	
+Cathar Commando	FDN	139	{1}{W}	3	1		Flash	flash,sacrifice,spell_targets				none	
+Cavalier of Dawn	SPG	84	{2}{W}{W}{W}	4	6		Vigilance	token_maker,gy_to_hand,etb_trigger,dies_trigger				none	
+Celestial Armor	FDN	295	{2}{W}				Flying,Indestructible,Flash	equipment,flash			equipment:etb	none	
+Cemetery Recruitment	FDN	517	{1}{B}					spell_targets				none	
+Cephalid Inkmage	FDN	32	{2}{U}	2	2			scry_surveil,etb_trigger				none	
+Chandra's Ignition	SPG	89	{3}{R}{R}					spell_targets				none	
+Chandra, Flameshaper	FDN	360	{5}{R}{R}			6	Haste	token_maker,copy				loyalty	
+Charming Prince	FDN	568	{1}{W}	2	2			exile,flicker,scry_surveil,etb_trigger,lifegain,modal,spell_targets				none	
+Chart a Course	FDN	586	{1}{U}					draw				none	
+Chrome Mox	SPG	102	{0}					etb_trigger,mana_ability_nonland				none	
+Circuitous Route	FDN	635	{3}{G}					search_library				none	
+Claws Out	FDN	6	{3}{W}{W}					pump_until_eot				none	
+Clinquant Skymage	FDN	33	{3}{U}	1	1		Flying	counters,p1p1_counters,draw				self_tracked	
+Cloudblazer	FDN	653	{3}{W}{U}	2	2		Flying	draw,etb_trigger,lifegain				none	
+Collected Company	SPG	72	{3}{G}					scry_surveil				none	
+Condemn	SPG	74	{W}					library_put,spell_targets				none	
+Confiscate	FDN	709	{4}{U}{U}					aura,gain_control,spell_targets			aura:control:permanent	none	
+Consuming Aberration	FDN	238	{3}{U}{B}	0	0							none	
+Corsair Captain	FDN	506	{2}{U}	2	2			token_maker,pump_until_eot,etb_trigger,mana_ability_nonland				none	
+Courageous Goblin	FDN	82	{1}{R}	2	2		Menace	pump_until_eot				none	
+Crackling Cyclops	FDN	83	{2}{R}	0	4			pump_until_eot				none	
+Crash Through	FDN	620	{R}				Trample	draw				none	
+Crashing Footfalls	SPG	25						token_maker				untracked	
+Crawling Barrens	FDN	685						counters,p1p1_counters,type_change,mana_ability_nonland		C		untracked	
+Crossway Troublemakers	FDN	518	{5}{B}	5	5		Deathtouch,Lifelink	draw,dies_trigger,lifegain				none	
+Crow of Dark Tidings	FDN	519	{2}{B}	2	1		Flying	mill,dies_trigger				none	
+Crusader of Odric	FDN	569	{2}{W}	0	0							none	
+Crypt Feaster	FDN	59	{3}{B}	3	4		Menace	pump_until_eot				none	
+Cryptic Caves	FDN	686						draw,sacrifice,mana_ability_nonland		C		none	
+Crystal Barricade	FDN	296	{1}{W}	0	4		Defender					none	
+Cultivator's Caravan	FDN	670	{3}					type_change,vehicle_crew,mana_ability_nonland				none	
+Curator of Destinies	FDN	305	{4}{U}{U}	5	5		Flying	etb_trigger				none	
+Damnation	SPG	68	{2}{B}{B}									none	
+Dargo, the Shipwrecker	SPG	7	{6}{R}	7	5		Trample					none	
+Darkness	SPG	124	{B}									none	
+Darksteel Colossus	FDN	671	{11}	11	11		Trample,Indestructible	library_put				none	
+Dauntless Veteran	FDN	8	{1}{W}{W}	2	2			pump_until_eot				none	
+Dawnwing Marshal	FDN	570	{1}{W}	2	2		Flying	pump_until_eot				none	
+Day of Judgment	FDN	140	{2}{W}{W}									none	
+Dazzling Angel	FDN	9	{2}{W}	2	3		Flying	etb_trigger,lifegain				none	
+Deadly Brew	FDN	654	{B}{G}					spell_targets				none	
+Deadly Plot	FDN	520	{3}{B}					gy_to_battlefield,modal,spell_targets				none	
+Deadly Riposte	FDN	492	{1}{W}					lifegain,noncombat_damage,spell_targets				none	
+Deafening Silence	SPG	120	{W}									none	
+Death Baron	FDN	521	{1}{B}{B}	2	2		Deathtouch	pump_until_eot				none	
+Deathmark	FDN	601	{B}					spell_targets				none	
+Demolition Field	FDN	687						search_library,sacrifice,spell_targets,mana_ability_nonland		C		none	
+Demonic Pact	FDN	602	{2}{B}{B}					draw,discard,lifegain,noncombat_damage,modal,spell_targets,turn_start_trigger				none	
+Desecration Demon	FDN	603	{2}{B}{B}	6	6		Flying	counters,p1p1_counters				untracked	
+Desert	SPG	37						noncombat_damage,spell_targets,mana_ability_nonland		C		none	
+Desertion	SPG	31	{3}{U}{U}					spell_targets				none	
+Devout Decree	FDN	571	{1}{W}					exile,scry_surveil,spell_targets				none	
+Diamond Mare	FDN	672	{2}	1	3			lifegain				none	
+Dictate of Kruphix	FDN	587	{1}{U}{U}				Flash	flash,draw				none	
+Dimir Guildgate	FDN	688						mana_ability_nonland,etb_tapped		UB		none	
+Diregraf Ghoul	FDN	171	{B}	2	2			etb_tapped				none	
+Disenchant	FDN	572	{1}{W}					spell_targets				none	
+Dismal Backwater	FDN	261						etb_trigger,lifegain,mana_ability_nonland,etb_tapped		UB		none	
+Dismember	SPG	41	{1}{B/P}{B/P}					pump_until_eot,spell_targets				none	
+Dive Down	FDN	588	{U}					pump_until_eot,spell_targets				none	
+Divine Resilience	FDN	10	{W}				Indestructible	spell_targets,kicker_or_alt_cost				none	
+Doubling Season	FDN	216	{4}{G}									untracked	
+Dragon Fodder	FDN	535	{1}{R}					token_maker				none	
+Dragon Mage	FDN	621	{5}{R}{R}	5	5		Flying	draw,discard				none	
+Dragon Trainer	FDN	84	{3}{R}{R}	1	1			token_maker,etb_trigger				none	
+Dragonlord's Servant	FDN	536	{1}{R}	1	3							none	
+Dragonmaster Outcast	FDN	622	{R}	1	1			token_maker,turn_start_trigger				none	
+Drake Hatcher	FDN	306	{1}{U}	1	3		Vigilance	counters,token_maker				untracked	
+Drakuseth, Maw of Flames	FDN	193	{4}{R}{R}{R}	7	7		Flying	spell_targets				none	
+Dread Summons	FDN	604	{X}{B}{B}					token_maker				none	
+Dreadwing Scavenger	FDN	118	{1}{U}{B}	2	2		Flying,Deathtouch	draw,discard,pump_until_eot				none	
+Driver of the Dead	FDN	605	{3}{B}	3	2			gy_to_battlefield,dies_trigger				none	
+Drogskol Reaver	FDN	655	{5}{W}{U}	3	5		Flying,DoubleStrike,Lifelink	draw,lifegain				none	
+Dropkick Bomber	FDN	537	{2}{R}	2	3		Flying	pump_until_eot,spell_targets				none	
+Drown in the Loch	SPG	27	{U}{B}					counterspell,modal,spell_targets				none	
+Druid of the Cowl	FDN	554	{1}{G}	1	3			mana_ability_nonland				none	
+Dryad Militant	FDN	656	{G/W}	2	1							none	
+Duress	FDN	606	{B}					discard,spell_targets				none	
+Dwynen's Elite	FDN	218	{1}{G}	2	2			token_maker,etb_trigger				none	
+Dwynen, Gilt-Leaf Daen	FDN	217	{2}{G}{G}	3	4		Reach	pump_until_eot,lifegain				none	
+Eager Trufflesnout	FDN	102	{2}{G}	4	2		Trample	token_maker				none	
+Eaten Alive	FDN	172	{B}					exile,sacrifice,spell_targets				none	
+Eaten by Piranhas	FDN	507	{1}{U}				Flash	aura,flash,spell_targets			aura:hostile:creature	none	
+Eerie Ultimatum	SPG	104	{W}{W}{B}{B}{B}{G}{G}									none	
+Electroduplicate	FDN	328	{2}{R}				Haste	token_maker,copy,cast_from_other_zone,spell_targets	Flashback {2}{R}{R}			none	
+Elementalist Adept	FDN	36	{1}{U}	2	1		Flash	flash				none	
+Elenda, Saint of Dusk	FDN	119	{2}{W}{B}	4	4		Lifelink,Menace	pump_until_eot,lifegain				none	
+Elfsworn Giant	FDN	103	{3}{G}{G}	5	3		Reach	token_maker				none	
+Elspeth's Smite	FDN	493	{W}					noncombat_damage,spell_targets				none	
+Elvish Archdruid	FDN	219	{1}{G}{G}	2	2			pump_until_eot,mana_ability_nonland				none	
+Elvish Regrower	FDN	104	{2}{G}{G}	4	3			gy_to_hand,etb_trigger				none	
+Embercleave	SPG	77	{4}{R}{R}				DoubleStrike,Trample,Flash	equipment,flash			equipment:etb	none	
+Emergent Ultimatum	SPG	105	{B}{B}{G}{G}{G}{U}{U}									none	
+Empyrean Eagle	FDN	239	{1}{W}{U}	2	3		Flying	pump_until_eot				none	
+Endurance	SPG	48	{1}{G}{G}	3	4		Reach,Flash	flash,etb_trigger,spell_targets				none	
+Enigma Drake	FDN	657	{1}{U}{R}	0	4		Flying					none	
+Erudite Wizard	FDN	37	{2}{U}	2	3			counters,p1p1_counters				self_tracked	
+Essence Scatter	FDN	153	{1}{U}					counterspell,spell_targets				none	
+Etali, Primal Storm	FDN	194	{4}{R}{R}	6	6							none	
+Evolving Wilds	FDN	262						search_library,sacrifice				none	
+Exclusion Mage	FDN	508	{2}{U}	2	2			bounce_to_hand,etb_trigger,spell_targets				none	
+Exemplar of Light	FDN	11	{2}{W}{W}	3	3		Flying	counters,p1p1_counters,draw				untracked	
+Expedition Map	FDN	724	{1}					search_library,sacrifice				none	
+Expressive Iteration	SPG	43	{U}{R}					cast_from_other_zone				none	
+Expropriate	SPG	66	{7}{U}{U}					gain_control,spell_targets				none	
+Exsanguinate	FDN	173	{X}{B}{B}					x_cost				none	
+Extravagant Replication	FDN	154	{4}{U}{U}					token_maker,copy,spell_targets,turn_start_trigger				none	
+Fabricate	SPG	20	{2}{U}					search_library				none	
+Faebloom Trick	FDN	38	{2}{U}					token_maker,tap_effect				none	
+Fake Your Own Death	FDN	174	{1}{B}					token_maker,gy_to_battlefield,pump_until_eot,dies_trigger,spell_targets,mana_ability_nonland				none	
+Fanatical Firebrand	FDN	195	{R}	1	1		Haste	sacrifice,noncombat_damage,spell_targets				none	
+Feed the Swarm	FDN	712	{1}{B}					spell_targets				none	
+Feldon's Cane	FDN	673	{1}									none	
+Felidar Cub	FDN	573	{1}{W}	2	2			sacrifice				none	
+Felidar Retreat	FDN	574	{3}{W}				Vigilance	counters,p1p1_counters,token_maker,modal				untracked	
+Felidar Savior	FDN	12	{3}{W}	2	3		Lifelink	counters,p1p1_counters,etb_trigger,lifegain,spell_targets				untracked	
+Felling Blow	FDN	105	{2}{G}					counters,p1p1_counters,spell_targets				none	
+Field of the Dead	SPG	28						token_maker,mana_ability_nonland,etb_tapped		C		none	
+Fiend Artisan	SPG	83	{B/G}{B/G}	1	1			search_library,sacrifice,pump_until_eot				none	
+Fiendish Panda	FDN	120	{2}{W}{B}	3	2			counters,p1p1_counters,gy_to_battlefield,dies_trigger				self_tracked	
+Fierce Empath	FDN	636	{2}{G}	1	1			search_library,etb_trigger				none	
+Fiery Annihilation	FDN	86	{2}{R}					equipment,exile,noncombat_damage,spell_targets				none	
+Finale of Revelation	FDN	589	{X}{U}{U}									none	
+Fire Elemental	FDN	538	{3}{R}{R}	5	4							none	
+Firebrand Archer	FDN	196	{1}{R}	2	1			noncombat_damage				none	
+Fireshrieker	FDN	674	{3}				DoubleStrike	equipment			equipment	none	
+Firespitter Whelp	FDN	197	{2}{R}	2	2		Flying	noncombat_damage				none	
+Fishing Pole	FDN	128	{1}					counters,token_maker,equipment			equipment	untracked	
+Flamewake Phoenix	FDN	198	{1}{R}{R}	2	2		Flying,Haste	gy_to_battlefield				none	
+Flashfreeze	FDN	590	{1}{U}					counterspell,spell_targets				none	
+Fleeting Distraction	FDN	155	{U}					draw,pump_until_eot,spell_targets				none	
+Fleeting Flight	FDN	13	{W}				Flying	counters,p1p1_counters,spell_targets				none	
+Fog Bank	FDN	591	{1}{U}	0	2		Flying,Defender					none	
+Forest	FDN	280								G		none	
+Frenzied Goblin	FDN	199	{R}	1	1			spell_targets				none	
+Frogmite	SPG	61	{4}	2	2							none	
+Fumigate	FDN	575	{3}{W}{W}									none	
+Fury	SPG	47	{3}{R}{R}	3	3		DoubleStrike	etb_trigger				none	
+Fynn, the Fangbearer	FDN	637	{1}{G}	1	3		Deathtouch	counters				none	
+Galvanic Blast	SPG	100	{R}					noncombat_damage,spell_targets				none	
+Gamble	SPG	24	{R}					search_library,discard				none	
+Garna, Bloodfist of Keld	FDN	658	{1}{B}{R}{R}	4	3			draw,dies_trigger,noncombat_damage				none	
+Garruk's Uprising	FDN	220	{2}{G}				Trample	draw,etb_trigger				none	
+Gate Colossus	FDN	675	{8}	8	8			etb_trigger				none	
+Gatekeeper of Malakir	FDN	713	{B}{B}	2	2			sacrifice,etb_trigger,spell_targets,kicker_or_alt_cost				none	
+Gateway Sneak	FDN	592	{2}{U}	1	3			draw,etb_trigger				none	
+Genesis Ultimatum	SPG	106	{G}{G}{U}{U}{U}{R}{R}					scry_surveil				none	
+Genesis Wave	FDN	221	{X}{G}{G}{G}									none	
+Ghalta, Primal Hunger	FDN	222	{10}{G}{G}	12	12		Trample					none	
+Ghitu Lavarunner	FDN	623	{R}	1	2		Haste	pump_until_eot				none	
+Ghostly Prison	SPG	19	{2}{W}									none	
+Giada, Font of Hope	FDN	141	{1}{W}	2	2		Flying,Vigilance	counters,p1p1_counters,mana_ability_nonland				untracked	
+Giant Cindermaw	FDN	624	{2}{R}	4	3		Trample					none	
+Giant Growth	FDN	223	{G}					pump_until_eot,spell_targets				none	
+Gigantosaurus	FDN	718	{G}{G}{G}{G}{G}	10	10							none	
+Gilded Lotus	FDN	725	{5}					mana_ability_nonland				none	
+Gleaming Barrier	FDN	252	{2}	0	4		Defender	token_maker,dies_trigger,mana_ability_nonland				none	
+Gnarlback Rhino	FDN	638	{2}{G}{G}	4	4		Trample	draw				none	
+Gnarlid Colony	FDN	224	{1}{G}	2	2		Trample	counters,p1p1_counters,kicker_or_alt_cost				untracked	
+Goblin Boarders	FDN	87	{2}{R}	3	2			counters,p1p1_counters				untracked	
+Goblin Bushwhacker	SPG	78	{R}	1	1		Haste	pump_until_eot,etb_trigger,kicker_or_alt_cost				none	
+Goblin Firebomb	FDN	562	{1}				Flash	flash,sacrifice,spell_targets				none	
+Goblin Negotiation	FDN	88	{X}{R}{R}					token_maker,spell_targets				none	
+Goblin Oriflamme	FDN	539	{1}{R}					pump_until_eot				none	
+Goblin Smuggler	FDN	540	{2}{R}	2	2		Haste	spell_targets				none	
+Goblin Surprise	FDN	200	{2}{R}					token_maker,pump_until_eot,modal				none	
+Goldvein Pick	FDN	253	{2}					token_maker,equipment,mana_ability_nonland			equipment	none	
+Golgari Guildgate	FDN	689						mana_ability_nonland,etb_tapped		BG		none	
+Good-Fortune Unicorn	FDN	240	{1}{G}{W}	2	2			counters,p1p1_counters,etb_trigger				untracked	
+Gorehorn Raider	FDN	89	{4}{R}	4	4			etb_trigger,noncombat_damage,spell_targets				none	
+Grappling Kraken	FDN	39	{4}{U}{U}	5	6			counters,tap_effect				untracked	
+Gratuitous Violence	FDN	715	{2}{R}{R}{R}									none	
+Green Sun's Zenith	SPG	127	{X}{G}					search_library				none	
+Grief	SPG	46	{2}{B}{B}	3	2		Menace	discard,etb_trigger				none	
+Grim Tutor	SPG	76	{1}{B}{B}					search_library				none	
+Grow from the Ashes	FDN	225	{2}{G}					search_library,kicker_or_alt_cost				none	
+Gruul Guildgate	FDN	690						mana_ability_nonland,etb_tapped		RG		none	
+Guarded Heir	FDN	14	{5}{W}	1	1		Lifelink	token_maker,etb_trigger,lifegain				none	
+Gutless Plunderer	FDN	60	{2}{B}	2	2		Deathtouch	scry_surveil,etb_trigger				none	
+Guttersnipe	FDN	716	{2}{R}	2	2			noncombat_damage				none	
+Halana and Alena, Partners	FDN	659	{2}{R}{G}	2	3		Reach,FirstStrike,Haste	counters,p1p1_counters,spell_targets				untracked	
+Hallowed Haunting	SPG	64	{2}{W}{W}				Flying,Vigilance	token_maker				none	
+Harbinger of the Tides	FDN	593	{U}{U}	2	2			flash,bounce_to_hand,etb_trigger,spell_targets				none	
+Hare Apparent	FDN	15	{1}{W}	2	2			token_maker,etb_trigger				none	
+Harmless Offering	FDN	625	{2}{R}					gain_control,spell_targets				none	
+Healer's Hawk	FDN	142	{W}	1	1		Flying,Lifelink	lifegain				none	
+Heartfire Immolator	FDN	201	{1}{R}	2	2			sacrifice,noncombat_damage				none	
+Hedron Archive	FDN	726	{4}					draw,sacrifice,mana_ability_nonland				none	
+Helpful Hunter	FDN	16	{1}{W}	1	1			draw,etb_trigger				none	
+Herald of Eternal Dawn	FDN	17	{4}{W}{W}{W}	6	6		Flying,Flash	flash				none	
+Herald of Faith	FDN	494	{3}{W}{W}	4	3		Flying	lifegain				none	
+Heraldic Banner	FDN	254	{3}					mana_ability_nonland				none	
+Hero's Downfall	FDN	175	{1}{B}{B}					spell_targets				none	
+Heroes' Bane	FDN	639	{3}{G}{G}	0	0			counters,p1p1_counters				untracked	4
+Heroic Reinforcements	FDN	241	{2}{R}{W}				Haste	token_maker,pump_until_eot				none	
+Hidetsugu's Second Rite	FDN	202	{3}{R}					spell_targets				none	
+High Fae Trickster	FDN	307	{3}{U}	4	2		Flying,Flash	flash				none	
+High-Society Hunter	FDN	320	{3}{B}{B}	5	3		Flying	counters,p1p1_counters,draw,sacrifice,dies_trigger				untracked	
+Highborn Vampire	FDN	522	{3}{B}	4	3							none	
+Hinterland Sanctifier	FDN	730	{W}	1	2			etb_trigger,lifegain				none	
+Hoarding Dragon	FDN	626	{3}{R}{R}	4	4		Flying	exile,etb_trigger,dies_trigger				none	
+Homunculus Horde	FDN	308	{3}{U}	2	2			token_maker,copy				none	
+Hungry Ghoul	FDN	62	{1}{B}	2	2			counters,p1p1_counters,sacrifice				self_tracked	
+Icewind Elemental	FDN	42	{4}{U}	3	4		Flying	draw,discard,etb_trigger				none	
+Immersturm Predator	FDN	660	{2}{B}{R}	3	3		Flying,Indestructible	counters,p1p1_counters,exile,sacrifice				untracked	
+Impact Tremors	FDN	717	{1}{R}					etb_trigger,noncombat_damage				none	
+Imperious Perfect	FDN	719	{2}{G}	2	2			token_maker,pump_until_eot				none	
+Imprisoned in the Moon	FDN	156	{2}{U}					aura,spell_targets,mana_ability_nonland			aura:hostile:creature	none	
+Incinerating Blast	FDN	90	{4}{R}					draw,noncombat_damage,spell_targets				none	
+Infernal Vessel	FDN	63	{2}{B}	2	1			counters,p1p1_counters,gy_to_battlefield,counterspell,dies_trigger				none	
+Infestation Sage	FDN	64	{B}	1	1			token_maker,dies_trigger				none	
+Ingenious Leonin	FDN	495	{4}{W}	4	4		FirstStrike	counters,p1p1_counters,spell_targets				untracked	
+Inspiration from Beyond	FDN	43	{2}{U}					mill,cast_from_other_zone	Flashback {5}{U}{U}			none	
+Inspired Ultimatum	SPG	107	{U}{U}{R}{R}{R}{W}{W}					spell_targets				none	
+Inspiring Call	FDN	226	{2}{G}				Indestructible	draw				none	
+Inspiring Overseer	FDN	496	{2}{W}	2	1		Flying	draw,etb_trigger,lifegain				none	
+Inspiring Paladin	FDN	18	{2}{W}	3	3		FirstStrike	counters,p1p1_counters				none	
+Into the Roil	FDN	509	{1}{U}					bounce_to_hand,draw,spell_targets,kicker_or_alt_cost				none	
+Involuntary Employment	FDN	203	{3}{R}				Haste	token_maker,gain_control,spell_targets,mana_ability_nonland				none	
+Island	FDN	274								U		none	
+Izzet Guildgate	FDN	691						mana_ability_nonland,etb_tapped		UR		none	
+Jazal Goldmane	FDN	497	{2}{W}{W}	4	4		FirstStrike	pump_until_eot				none	
+Joraga Invocation	FDN	555	{4}{G}{G}					pump_until_eot				none	
+Joust Through	FDN	19	{W}					lifegain,noncombat_damage,spell_targets				none	
+Juggernaut	FDN	255	{4}	5	3							none	
+Jungle Hollow	FDN	263						etb_trigger,lifegain,mana_ability_nonland,etb_tapped		BG		none	
+Kaito, Cunning Infiltrator	FDN	358	{1}{U}{U}			3		counters,token_maker,draw,discard				loyalty	
+Kalamax, the Stormsire	SPG	13	{1}{G}{U}{R}	4	4			counters,p1p1_counters,copy				untracked	
+Kalastria Highborn	FDN	607	{B}{B}	2	2			dies_trigger,spell_targets				none	
+Kargan Dragonrider	FDN	541	{1}{R}	2	2		Flying					none	
+Kellan, Planar Trailblazer	FDN	330	{R}	2	1		DoubleStrike					none	
+Kindled Fury	FDN	542	{R}				FirstStrike	pump_until_eot,spell_targets				none	
+Kindred Charge	SPG	58	{4}{R}{R}					token_maker,exile,copy				none	
+Kiora, the Rising Tide	FDN	309	{2}{U}	3	2			token_maker,draw,discard,etb_trigger				none	
+Kitesail Corsair	FDN	510	{1}{U}	2	1		Flying					none	
+Knight of Grace	FDN	576	{1}{W}	2	2		FirstStrike	pump_until_eot				none	
+Knight of Malice	FDN	608	{1}{B}	2	2		FirstStrike	pump_until_eot				none	
+Koma, World-Eater	FDN	121	{3}{G}{G}{U}{U}	8	12		Trample,Ward	token_maker				none	
+Krenko, Mob Boss	FDN	204	{2}{R}{R}	3	3			token_maker				none	
+Kykar, Zephyr Awakener	FDN	122	{2}{W}{U}	3	4		Flying	token_maker,exile,flicker,modal,spell_targets				none	
+Lathliss, Dragon Queen	FDN	627	{4}{R}{R}	6	6		Flying	token_maker,pump_until_eot,etb_trigger				none	
+Lathril, Blade of the Elves	FDN	242	{2}{B}{G}	2	3		Menace	token_maker,lifegain,noncombat_damage				none	
+Ledger Shredder	SPG	55	{1}{U}	1	3		Flying					untracked	
+Leonin Skyhunter	FDN	498	{W}{W}	2	2		Flying					none	
+Leonin Vanguard	FDN	499	{W}	1	1			pump_until_eot,lifegain				none	
+Leyline Axe	FDN	129	{4}				DoubleStrike,Trample	equipment			equipment	none	
+Lightshell Duo	FDN	157	{3}{U}	3	4			scry_surveil,etb_trigger				none	
+Liliana, Dreadhorde General	FDN	176	{4}{B}{B}			6		token_maker,draw,sacrifice,dies_trigger				loyalty	
+Linden, the Steadfast Queen	FDN	577	{W}{W}{W}	3	3		Vigilance	lifegain				none	
+Llanowar Elves	FDN	227	{G}	1	1			mana_ability_nonland				none	
+Loot, Exuberant Explorer	FDN	106	{2}{G}	1	4			scry_surveil				none	
+Lord Windgrace	SPG	14	{2}{B}{R}{G}			5		token_maker,gy_to_battlefield,spell_targets				loyalty	
+Lord of Atlantis	SPG	1	{U}{U}	2	2			pump_until_eot				none	
+Lord of the Undead	SPG	88	{1}{B}{B}	2	2			gy_to_hand,pump_until_eot				none	
+Luminous Rebuke	FDN	20	{4}{W}					spell_targets				none	
+Lunar Insight	FDN	310	{2}{U}					draw				none	
+Lyra Dawnbringer	FDN	707	{3}{W}{W}	5	5		Flying,FirstStrike,Lifelink	pump_until_eot,lifegain				none	
+Maalfeld Twins	FDN	523	{5}{B}	4	4			token_maker,dies_trigger				none	
+Macabre Waltz	FDN	177	{1}{B}					gy_to_hand,discard,spell_targets				none	
+Maddening Hex	SPG	70	{1}{R}{R}					aura,spell_targets			aura:friendly:player	none	
+Maelstrom Pulse	FDN	661	{1}{B}{G}					spell_targets				none	
+Magnigoth Sentry	FDN	556	{3}{G}	4	4		Reach					none	
+Magus of the Moon	SPG	125	{2}{R}	2	2			mana_ability_nonland				none	
+Make Your Move	FDN	143	{2}{W}					spell_targets				none	
+Make a Stand	FDN	708	{2}{W}				Indestructible	pump_until_eot				none	
+Malcolm, Keen-Eyed Navigator	SPG	2	{2}{U}	2	2		Flying	token_maker,mana_ability_nonland				none	
+Mana Crypt	SPG	17a	{0}					mana_ability_nonland,turn_start_trigger				none	
+Marauding Blight-Priest	FDN	178	{2}{B}	3	2			noncombat_damage				none	
+Marsh Flats	SPG	110										none	
+Massacre Wurm	FDN	714	{3}{B}{B}{B}	6	5			etb_trigger,noncombat_damage				none	
+Maze's End	FDN	727						bounce_to_hand,search_library,mana_ability_nonland,etb_tapped		C		none	
+Mazemind Tome	FDN	676	{2}					counters,scry_surveil,draw,lifegain				untracked	
+Mentor of the Meek	FDN	578	{2}{W}	2	2			draw,etb_trigger				none	
+Mephidross Vampire	SPG	4	{4}{B}{B}	3	4		Flying	counters,p1p1_counters				untracked	
+Meteor Golem	FDN	256	{7}	3	3			etb_trigger,spell_targets				none	
+Micromancer	FDN	158	{3}{U}	3	3			search_library,etb_trigger				none	
+Midnight Reaper	FDN	609	{2}{B}	3	2			draw,dies_trigger				none	
+Midnight Snack	FDN	65	{2}{B}					token_maker,sacrifice,noncombat_damage				none	
+Mild-Mannered Librarian	FDN	228	{G}	1	1			counters,p1p1_counters,draw				self_tracked	
+Mindsparker	FDN	628	{1}{R}{R}	3	2		FirstStrike					none	
+Mirri, Weatherlight Duelist	SPG	15	{1}{G}{W}	3	2		FirstStrike					none	
+Mischievous Mystic	FDN	47	{1}{U}	2	1		Flying	token_maker				none	
+Mischievous Pup	FDN	144	{2}{W}	3	1		Flash	flash,bounce_to_hand,etb_trigger				none	
+Misty Rainforest	SPG	111										none	
+Mocking Sprite	FDN	159	{2}{U}	2	1		Flying					none	
+Mold Adder	FDN	640	{G}	1	1			counters,p1p1_counters				untracked	
+Moment of Craving	FDN	524	{1}{B}					pump_until_eot,lifegain,spell_targets				none	
+Moment of Triumph	FDN	500	{W}					pump_until_eot,lifegain,spell_targets				none	
+Morbid Opportunist	SPG	32	{2}{B}	1	3			draw,dies_trigger				none	
+Mortify	FDN	662	{1}{W}{B}					spell_targets				none	
+Mossborn Hydra	FDN	107	{2}{G}	0	0		Trample	counters,p1p1_counters				self_tracked	1
+Mountain	FDN	278								R		none	
+Muldrotha, the Gravetide	FDN	243	{3}{B}{G}{U}	6	6							none	
+Myojin of Night's Reach	FDN	610	{5}{B}{B}{B}	5	2		Indestructible	counters				untracked	
+Mystic Archaeologist	FDN	511	{1}{U}	2	1			draw				none	
+Mystic Snake	SPG	35	{1}{G}{U}{U}	2	2		Flash	flash,counterspell,etb_trigger				none	
+Mystical Teachings	FDN	594	{3}{U}					flash,search_library,cast_from_other_zone	Flashback {5}{B}			none	
+Needletooth Pack	FDN	108	{3}{G}{G}	4	5			counters,p1p1_counters				untracked	
+Negate	FDN	710	{1}{U}					counterspell,spell_targets				none	
+Nessian Hornbeetle	FDN	229	{1}{G}	2	2			counters,p1p1_counters				self_tracked	
+New Horizons	FDN	557	{2}{G}					counters,p1p1_counters,aura,etb_trigger,spell_targets,mana_ability_nonland			aura:friendly:land	untracked	
+Nexus of Fate	SPG	122	{5}{U}{U}					library_put				none	
+Nine-Lives Familiar	FDN	321	{1}{B}{B}	1	1			counters,gy_to_battlefield,dies_trigger				untracked	
+Niv-Mizzet, Visionary	FDN	123	{4}{U}{R}	5	5		Flying	draw				none	
+Notion Thief	SPG	36	{2}{U}{B}	3	1		Flash	flash				none	
+Noxious Revival	SPG	73	{G/P}					library_put,spell_targets				none	
+Nullpriest of Oblivion	FDN	611	{1}{B}	2	1		Lifelink,Menace	gy_to_battlefield,etb_trigger,lifegain,kicker_or_alt_cost				none	
+Obliterating Bolt	FDN	629	{1}{R}					noncombat_damage,spell_targets				none	
+Offer Immortality	FDN	525	{1}{B}				Deathtouch,Indestructible	spell_targets				none	
+Omniscience	FDN	161	{7}{U}{U}{U}									none	
+Opt	FDN	512	{U}					scry_surveil,draw				none	
+Ordeal of Nylea	FDN	641	{1}{G}					counters,p1p1_counters,aura,search_library,spell_targets			aura:friendly:creature	untracked	
+Orzhov Guildgate	FDN	692						mana_ability_nonland,etb_tapped		WB		none	
+Overrun	FDN	230	{2}{G}{G}{G}				Trample	pump_until_eot				none	
+Ovika, Enigma Goliath	FDN	663	{5}{U}{R}	6	6		Flying,Haste,Ward	token_maker				none	
+Pacifism	FDN	501	{1}{W}					aura,spell_targets,host_cant_attack_block			aura:hostile:creature	none	
+Painful Quandary	FDN	179	{3}{B}{B}									none	
+Paradise Druid	SPG	80	{1}{G}	2	1			mana_ability_nonland				none	
+Paradox Haze	SPG	123	{2}{U}					aura,spell_targets			aura:friendly:player	none	
+Pathbreaker Ibex	SPG	101	{4}{G}{G}	3	3		Trample	pump_until_eot				none	
+Pelakka Wurm	FDN	720	{4}{G}{G}{G}	7	7		Trample	draw,etb_trigger,dies_trigger,lifegain				none	
+Perforating Artist	FDN	124	{1}{B}{R}	3	2		Deathtouch	spell_targets				none	
+Persist	SPG	42	{1}{B}					counters,gy_to_battlefield,counterspell,spell_targets				none	
+Phantasmal Image	SPG	67	{1}{U}	0	0			copy				none	
+Phyrexian Arena	FDN	180	{1}{B}{B}					draw,turn_start_trigger,upkeep_draw				none	
+Pilfer	FDN	181	{1}{B}					discard,spell_targets				none	
+Pirate's Cutlass	FDN	563	{3}					equipment			equipment:etb	none	
+Pitiless Plunderer	SPG	5	{3}{B}	1	4			token_maker,dies_trigger,mana_ability_nonland				none	
+Plains	FDN	272								W		none	
+Polyraptor	SPG	12	{6}{G}{G}	5	5			token_maker,copy				none	
+Port Razer	SPG	33	{3}{R}{R}	4	4							none	
+Prayer of Binding	FDN	502	{3}{W}				Flash	flash,exile,etb_trigger,lifegain,spell_targets,exile_until_leaves				none	
+Predator Ooze	FDN	642	{G}{G}{G}	1	1		Indestructible	counters,p1p1_counters				untracked	
+Preposterous Proportions	FDN	109	{5}{G}{G}				Vigilance	pump_until_eot				none	
+Prideful Parent	FDN	21	{2}{W}	2	2		Vigilance	token_maker,etb_trigger				none	
+Primal Might	FDN	643	{X}{G}					fight,pump_until_eot,x_cost,spell_targets				none	
+Prime Speaker Zegana	FDN	664	{2}{G}{G}{U}{U}	1	1			counters,p1p1_counters,draw,etb_trigger				untracked	
+Primeval Bounty	FDN	644	{5}{G}					counters,p1p1_counters,token_maker,lifegain				untracked	
+Prismatic Ending	SPG	40	{X}{W}					spell_targets				none	
+Prismatic Vista	SPG	38						search_library,sacrifice				none	
+Progenitus	FDN	244	{W}{W}{U}{U}{B}{B}{R}{R}{G}{G}	10	10			library_put				none	
+Pulse Tracker	FDN	612	{B}	1	1			noncombat_damage				none	
+Pyromancer's Goggles	FDN	677	{5}					copy,mana_ability_nonland				none	
+Quakestrider Ceratops	FDN	110	{3}{G}{G}{G}	12	8							none	
+Quick Study	FDN	513	{2}{U}					draw				none	
+Quick-Draw Katana	FDN	130	{2}				FirstStrike	equipment			equipment	none	
+Quilled Greatwurm	FDN	111	{4}{G}{G}	7	7		Trample	counters,p1p1_counters				untracked	
+Raging Redcap	FDN	543	{2}{R}	1	2		DoubleStrike					none	
+Raise the Past	FDN	22	{2}{W}{W}									none	
+Rakdos Guildgate	FDN	693						mana_ability_nonland,etb_tapped		BR		none	
+Ramos, Dragon Engine	FDN	678	{6}	4	4		Flying	counters,p1p1_counters,mana_ability_nonland				untracked	
+Rampaging Baloths	FDN	645	{4}{G}{G}	6	6		Trample	token_maker				none	
+Rampaging Ferocidon	SPG	8	{2}{R}	3	3		Menace	etb_trigger,noncombat_damage				none	
+Rapacious Dragon	FDN	544	{4}{R}	3	3		Flying	token_maker,etb_trigger,mana_ability_nonland				none	
+Rat Colony	SPG	56	{1}{B}	2	1			pump_until_eot				none	
+Ravenous Amulet	FDN	131	{2}					counters,draw,sacrifice,noncombat_damage				untracked	
+Ravenous Giant	FDN	630	{2}{R}{R}	5	5			turn_start_trigger				none	
+Reassembling Skeleton	FDN	182	{1}{B}	1	1			gy_to_battlefield				none	
+Reclamation Sage	FDN	231	{2}{G}	2	1			etb_trigger,spell_targets				none	
+Redcap Gutter-Dweller	FDN	631	{2}{R}{R}	3	3		Menace	counters,p1p1_counters,token_maker,sacrifice,etb_trigger,turn_start_trigger				untracked	
+Refute	FDN	313	{1}{U}{U}					draw,discard,counterspell,spell_targets				none	
+Regal Caracal	FDN	579	{3}{W}{W}	3	3		Lifelink	token_maker,pump_until_eot,etb_trigger,lifegain				none	
+Release the Dogs	FDN	580	{3}{W}					token_maker				none	
+Relentless Rats	SPG	57	{1}{B}{B}	2	2							none	
+Resolute Reinforcements	FDN	145	{1}{W}	1	1		Flash	token_maker,flash,etb_trigger				none	
+Revenge of the Rats	FDN	67	{2}{B}{B}					token_maker,cast_from_other_zone	Flashback {2}{B}{B}			none	
+Rise of the Dark Realms	FDN	183	{7}{B}{B}									none	
+Rite of Replication	FDN	711	{2}{U}{U}					token_maker,copy,spell_targets,kicker_or_alt_cost				none	
+Rite of the Dragoncaller	FDN	331	{4}{R}{R}					token_maker				none	
+River's Rebuke	FDN	595	{4}{U}{U}					spell_targets				none	
+Robe of Stars	SPG	121	{1}{W}					equipment			equipment	none	
+Rogue's Passage	FDN	264						spell_targets,mana_ability_nonland		C		none	
+Ruby, Daring Tracker	FDN	245	{R}{G}	1	2		Haste	pump_until_eot,mana_ability_nonland				none	
+Rugged Highlands	FDN	265						etb_trigger,lifegain,mana_ability_nonland,etb_tapped		RG		none	
+Ruinous Ultimatum	SPG	108	{R}{R}{W}{W}{W}{B}{B}									none	
+Run Away Together	FDN	162	{1}{U}					bounce_to_hand,spell_targets				none	
+Rune-Scarred Demon	FDN	184	{5}{B}{B}	6	6		Flying	search_library,etb_trigger				none	
+Rune-Sealed Wall	FDN	49	{2}{U}	0	6		Defender	scry_surveil				none	
+Sacrifice	SPG	69	{B}					sacrifice				none	
+Sanguine Indulgence	FDN	613	{3}{B}					gy_to_hand,spell_targets				none	
+Sanguine Syphoner	FDN	68	{1}{B}	1	3			lifegain,noncombat_damage				none	
+Savage Ventmaw	FDN	665	{4}{R}{G}	4	4		Flying					none	
+Savannah Lions	FDN	146	{W}	2	1							none	
+Scalding Tarn	SPG	112										none	
+Scapeshift	SPG	34	{2}{G}{G}									none	
+Scavenging Ooze	FDN	232	{1}{G}	2	2			counters,p1p1_counters				untracked	
+Scorching Dragonfire	FDN	545	{1}{R}					noncombat_damage,spell_targets				none	
+Scoured Barrens	FDN	266						etb_trigger,lifegain,mana_ability_nonland,etb_tapped		WB		none	
+Scrawling Crawler	FDN	132	{3}	3	2			draw,noncombat_damage,turn_start_trigger,upkeep_draw,opp_draw_trigger				none	
+Searslicer Goblin	FDN	332	{1}{R}	2	1			token_maker				none	
+Secluded Courtyard	FDN	267						mana_ability_nonland		WUBRGC		none	
+Seeker's Folly	FDN	69	{2}{B}					discard,pump_until_eot,modal,spell_targets				none	
+Seismic Rupture	FDN	205	{2}{R}					noncombat_damage				none	
+Seize the Spoils	FDN	546	{2}{R}					token_maker,draw,mana_ability_nonland				none	
+Selesnya Guildgate	FDN	694						mana_ability_nonland,etb_tapped		WG		none	
+Self-Reflection	FDN	163	{4}{U}{U}					token_maker,copy,cast_from_other_zone,spell_targets	Flashback {3}{U}			none	
+Serra Angel	FDN	147	{3}{W}{W}	4	4		Flying,Vigilance					none	
+Shipwreck Dowser	FDN	596	{3}{U}{U}	3	3			gy_to_hand,etb_trigger				none	
+Shivan Dragon	FDN	206	{4}{R}{R}	5	5		Flying	pump_until_eot				none	
+Show and Tell	SPG	21	{2}{U}									none	
+Simic Guildgate	FDN	695						mana_ability_nonland,etb_tapped		UG		none	
+Sire of Seven Deaths	FDN	1	{7}	7	7		Reach,FirstStrike,Trample,Vigilance,Lifelink,Menace,Ward	lifegain				none	
+Skeleton Archer	FDN	526	{3}{B}	3	3			etb_trigger,noncombat_damage,spell_targets				none	
+Skyknight Squire	FDN	23	{1}{W}	1	1		Flying	counters,p1p1_counters,etb_trigger				self_tracked	
+Skyraker Giant	FDN	547	{2}{R}{R}	4	3		Reach					none	
+Skyship Buccaneer	FDN	50	{3}{U}{U}	4	3		Flying	draw,etb_trigger				none	
+Skysovereign, Consul Flagship	SPG	103	{5}				Flying	type_change,vehicle_crew,noncombat_damage,spell_targets				none	
+Slagstorm	FDN	207	{1}{R}{R}					noncombat_damage,modal				none	
+Sliver Overlord	SPG	128	{W}{U}{B}{R}{G}	7	7			search_library,gain_control,spell_targets				none	
+Slumbering Cerberus	FDN	94	{1}{R}	4	2			tap_effect,doesnt_untap				none	
+Snakeskin Veil	FDN	233	{G}					counters,p1p1_counters,spell_targets				none	
+Solemn Simulacrum	FDN	257	{4}	2	2			search_library,draw,etb_trigger,dies_trigger				none	
+Solitude	SPG	44	{3}{W}{W}	3	2		Lifelink,Flash	flash,etb_trigger,lifegain,spell_targets				none	
+Sorcerous Spyglass	FDN	679	{2}					mana_ability_nonland				none	
+Soul Warden	SPG	65	{W}	1	1			etb_trigger,lifegain				none	
+Soul-Guide Lantern	FDN	680	{1}					exile,draw,sacrifice,etb_trigger				none	
+Soul-Shackled Zombie	FDN	70	{3}{B}	4	2			etb_trigger				none	
+Soulstone Sanctuary	FDN	133					Vigilance	token_maker,type_change,mana_ability_nonland		C		none	
+Sower of Chaos	FDN	95	{3}{R}	4	3			spell_targets				none	
+Spectral Sailor	FDN	164	{U}	1	1		Flying,Flash	flash,draw				none	
+Sphinx of Forgotten Lore	FDN	314	{2}{U}{U}	3	3		Flying,Flash	flash,cast_from_other_zone				none	
+Sphinx of the Final Word	FDN	597	{5}{U}{U}	5	5		Flying					none	
+Sphinx's Tutelage	SPG	75	{2}{U}					draw,discard				none	
+Spinner of Souls	FDN	112	{2}{G}	4	3		Reach	dies_trigger				none	
+Spitfire Lagac	FDN	208	{3}{R}	3	4			noncombat_damage				none	
+Springbloom Druid	FDN	646	{2}{G}	1	1			search_library,sacrifice,etb_trigger				none	
+Squad Rallier	FDN	24	{3}{W}	3	4			scry_surveil				none	
+Stab	FDN	71	{B}					pump_until_eot,spell_targets				none	
+Star Compass	SPG	18	{2}					mana_ability_nonland,etb_tapped				none	
+Starlight Snare	FDN	514	{2}{U}					aura,tap_effect,etb_trigger,spell_targets			aura:freeze:creature	none	
+Stasis Snare	FDN	581	{1}{W}{W}				Flash	flash,exile,etb_trigger,exile_until_leaves				none	
+Steel Hellkite	FDN	681	{6}	5	5		Flying	pump_until_eot				none	
+Stoneforge Mystic	SPG	29	{1}{W}	1	2			equipment,search_library,etb_trigger				none	
+Storm Fleet Spy	FDN	515	{2}{U}	2	2			draw,etb_trigger				none	
+Strix Lookout	FDN	52	{1}{U}	1	2		Flying,Vigilance	draw,discard				none	
+Stroke of Midnight	FDN	148	{2}{W}					token_maker,spell_targets				none	
+Stromkirk Bloodthief	FDN	185	{2}{B}	2	2			counters,p1p1_counters,spell_targets				untracked	
+Stromkirk Noble	FDN	632	{R}	1	1			counters,p1p1_counters				untracked	
+Strongbox Raider	FDN	96	{2}{R}{R}	5	2			etb_trigger				none	
+Subtlety	SPG	45	{2}{U}{U}	3	3		Flying,Flash	flash,library_put,etb_trigger				none	
+Sun-Blessed Healer	FDN	25	{1}{W}	3	1		Lifelink	gy_to_battlefield,etb_trigger,lifegain,kicker_or_alt_cost				none	
+Sure Strike	FDN	209	{1}{R}				FirstStrike	pump_until_eot,spell_targets				none	
+Surrak, the Hunt Caller	FDN	647	{2}{G}{G}	5	4		Haste					none	
+Suspicious Shambler	FDN	527	{3}{B}	4	2			token_maker				none	
+Swab Goblin	FDN	548	{1}{R}	2	2							none	
+Swamp	FDN	276								B		none	
+Swiftblade Vindicator	FDN	246	{R}{W}	1	1		DoubleStrike,Trample,Vigilance					none	
+Swiftfoot Boots	FDN	258	{2}				Haste	equipment			equipment	none	
+Swiftwater Cliffs	FDN	268						etb_trigger,lifegain,mana_ability_nonland,etb_tapped		UR		none	
+Sword of Fire and Ice	SPG	62	{3}					equipment,draw,noncombat_damage,spell_targets			equipment	none	
+Swords to Plowshares	SPG	54	{W}					spell_targets				none	
+Sylvan Scavenging	FDN	113	{1}{G}{G}					counters,p1p1_counters,token_maker,modal				untracked	
+Sylvan Tutor	SPG	59	{G}					search_library				none	
+Syr Alin, the Lion's Claw	FDN	582	{3}{W}{W}	4	4		FirstStrike	pump_until_eot				none	
+Tajuru Pathwarden	FDN	558	{4}{G}	5	4		Trample,Vigilance					none	
+Tatyova, Benthic Druid	FDN	247	{3}{G}{U}	3	3			draw,lifegain				none	
+Taurean Mauler	FDN	633	{2}{R}	2	2			counters,p1p1_counters				untracked	
+Teach by Example	FDN	666	{U/R}{U/R}									none	
+Tempest Djinn	FDN	598	{U}{U}{U}	0	4		Flying	pump_until_eot				none	
+Temple of Abandon	FDN	696						scry_surveil,etb_trigger,mana_ability_nonland,etb_tapped		RG		none	
+Temple of Deceit	FDN	697						scry_surveil,etb_trigger,mana_ability_nonland,etb_tapped		UB		none	
+Temple of Enlightenment	FDN	698						scry_surveil,etb_trigger,mana_ability_nonland,etb_tapped		WU		none	
+Temple of Epiphany	FDN	699						scry_surveil,etb_trigger,mana_ability_nonland,etb_tapped		UR		none	
+Temple of Malady	FDN	700						scry_surveil,etb_trigger,mana_ability_nonland,etb_tapped		BG		none	
+Temple of Malice	FDN	701						scry_surveil,etb_trigger,mana_ability_nonland,etb_tapped		BR		none	
+Temple of Mystery	FDN	702						scry_surveil,etb_trigger,mana_ability_nonland,etb_tapped		UG		none	
+Temple of Plenty	FDN	703						scry_surveil,etb_trigger,mana_ability_nonland,etb_tapped		WG		none	
+Temple of Silence	FDN	704						scry_surveil,etb_trigger,mana_ability_nonland,etb_tapped		WB		none	
+Temple of Triumph	FDN	705						scry_surveil,etb_trigger,mana_ability_nonland,etb_tapped		WR		none	
+Temporal Manipulation	SPG	82	{3}{U}{U}									none	
+Terror of Mount Velus	FDN	549	{5}{R}{R}	5	5		Flying,DoubleStrike	etb_trigger				none	
+Think Twice	FDN	165	{1}{U}					draw,cast_from_other_zone	Flashback {2}{U}			none	
+Thornweald Archer	FDN	559	{1}{G}	2	1		Reach,Deathtouch					none	
+Thornwood Falls	FDN	269						etb_trigger,lifegain,mana_ability_nonland,etb_tapped		UG		none	
+Thought-Knot Seer	SPG	39	{3}{C}	4	4			draw,etb_trigger				none	
+Thoughtcast	SPG	85	{4}{U}					draw				none	
+Thousand-Year Storm	FDN	248	{4}{U}{R}									none	
+Thrashing Brontodon	FDN	560	{1}{G}{G}	3	4			sacrifice,spell_targets				none	
+Thrasios, Triton Hero	SPG	16	{G}{U}	1	3			draw				none	
+Three Tree Mascot	FDN	682	{2}	2	1			mana_ability_nonland				none	
+Thrill of Possibility	FDN	210	{1}{R}					draw				none	
+Time Stop	FDN	166	{4}{U}{U}									none	
+Tinybones, Bauble Burglar	FDN	324	{1}{B}	1	3			counters,discard				none	
+Tireless Tracker	SPG	26	{2}{G}	3	2			counters,p1p1_counters				untracked	
+Tolarian Terror	FDN	167	{6}{U}	5	5		Ward					none	
+Toski, Bearer of Secrets	SPG	60	{3}{G}	1	1		Indestructible	draw				none	
+Tragic Banshee	FDN	73	{4}{B}	5	3			pump_until_eot,etb_trigger				none	
+Tragic Slip	SPG	22	{B}					pump_until_eot,spell_targets				none	
+Tranquil Cove	FDN	270						etb_trigger,lifegain,mana_ability_nonland,etb_tapped		WU		none	
+Treetop Snarespinner	FDN	114	{3}{G}	1	4		Reach,Deathtouch	counters,p1p1_counters				untracked	
+Tribute to Hunger	FDN	614	{2}{B}					spell_targets				none	
+Trygon Predator	FDN	667	{1}{G}{U}	2	3		Flying	spell_targets				none	
+Twinblade Blessing	FDN	26	{1}{W}{W}				DoubleStrike,Flash	aura,flash,spell_targets			aura:friendly:creature	none	
+Twinblade Paladin	FDN	503	{3}{W}	3	3		DoubleStrike	counters,p1p1_counters				self_tracked	
+Twinflame Tyrant	FDN	333	{3}{R}{R}	3	5		Flying					none	
+Uncharted Haven	FDN	564						mana_ability_nonland				none	
+Uncharted Voyage	FDN	53	{3}{U}					library_put,scry_surveil,spell_targets				none	
+Underworld Breach	SPG	9	{1}{R}					cast_from_other_zone				none	
+Undying Malice	FDN	528	{B}					counters,p1p1_counters,gy_to_battlefield,dies_trigger,spell_targets				none	
+Unflinching Courage	FDN	722	{1}{G}{W}				Trample,Lifelink	aura,lifegain,spell_targets			aura:friendly:creature	none	
+Unholy Heat	SPG	71	{R}					noncombat_damage,spell_targets				none	
+Unsummon	FDN	599	{U}					bounce_to_hand,spell_targets				none	
+Untamed Hunger	FDN	529	{2}{B}				Menace	aura,spell_targets			aura:friendly:creature	none	
+Valkyrie's Call	FDN	27	{3}{W}{W}				Flying	counters,p1p1_counters,dies_trigger				none	
+Valorous Stance	FDN	583	{1}{W}				Indestructible	modal,spell_targets				none	
+Vampire Gourmand	FDN	74	{1}{B}	2	2			draw,sacrifice				none	
+Vampire Interloper	FDN	530	{1}{B}	2	1		Flying	cant_block				none	
+Vampire Neonate	FDN	531	{B}	0	3			lifegain,noncombat_damage				none	
+Vampire Nighthawk	FDN	186	{1}{B}{B}	2	3		Flying,Deathtouch,Lifelink	lifegain				none	
+Vampire Soulcaller	FDN	75	{4}{B}	3	2		Flying	gy_to_hand,etb_trigger,cant_block				none	
+Vampire Spawn	FDN	532	{2}{B}	2	3			etb_trigger,lifegain,noncombat_damage				none	
+Vampiric Rites	FDN	615	{B}					draw,sacrifice,lifegain				none	
+Vanguard Seraph	FDN	28	{3}{W}	3	3		Flying	scry_surveil				none	
+Vengeful Bloodwitch	FDN	325	{1}{B}	1	1			dies_trigger,lifegain,noncombat_damage				none	
+Venom Connoisseur	FDN	648	{1}{G}	2	2		Deathtouch					none	
+Verdant Catacombs	SPG	113										none	
+Viashino Pyromancer	FDN	634	{1}{R}	2	1			etb_trigger,noncombat_damage,spell_targets				none	
+Victimize	SPG	23	{2}{B}					sacrifice,spell_targets				none	
+Vile Entomber	FDN	616	{2}{B}{B}	2	2		Deathtouch	search_library,etb_trigger				none	
+Vivien Reid	FDN	234	{3}{G}{G}			5		scry_surveil,spell_targets				loyalty	
+Vizier of the Menagerie	FDN	649	{3}{G}	3	4							none	
+Volley Veteran	FDN	550	{3}{R}	4	2			etb_trigger,noncombat_damage				none	
+Voracious Greatshark	FDN	600	{3}{U}{U}	5	4		Flash	flash,counterspell,etb_trigger				none	
+Wardens of the Cycle	FDN	125	{1}{B}{G}{G}	3	4			draw,lifegain,modal				none	
+Warping Wail	SPG	119	{1}{C}					token_maker,exile,counterspell,modal,spell_targets				none	
+Wary Thespian	FDN	235	{1}{G}	3	1			scry_surveil,dies_trigger				none	
+Whir of Invention	SPG	86	{X}{U}{U}{U}					search_library				none	
+Wildborn Preserver	FDN	650	{1}{G}	2	2		Reach,Flash	counters,p1p1_counters,flash,etb_trigger				untracked	
+Wildheart Invoker	FDN	561	{2}{G}{G}	4	3		Trample	pump_until_eot,spell_targets				none	
+Wildwood Scourge	FDN	236	{X}{G}	0	0			counters,p1p1_counters				untracked	X
+Wilt-Leaf Liege	FDN	668	{1}{G/W}{G/W}{G/W}	4	4			pump_until_eot				none	
+Wind-Scarred Crag	FDN	271						etb_trigger,lifegain,mana_ability_nonland,etb_tapped		WR		none	
+Wishclaw Talisman	FDN	617	{1}{B}					counters,search_library,gain_control,spell_targets				untracked	
+Witness Protection	FDN	168	{U}					aura,spell_targets			aura:hostile:creature	none	
+Youthful Valkyrie	FDN	149	{1}{W}	1	3		Flying	counters,p1p1_counters,etb_trigger				self_tracked	
+Zetalpa, Primal Dawn	FDN	584	{6}{W}{W}	4	8		Flying,DoubleStrike,Trample,Vigilance,Indestructible					none	
+Zimone, Paradox Sculptor	FDN	126	{2}{G}{U}	1	4			counters,p1p1_counters,spell_targets				untracked	
+Zombify	FDN	187	{3}{B}					gy_to_battlefield,spell_targets				none	
+Zul Ashur, Lich Lord	FDN	326	{1}{B}	2	2		Ward	cast_from_other_zone				none	

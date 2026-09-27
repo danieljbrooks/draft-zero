@@ -1,0 +1,230 @@
+# FDN ability id -> source card(s), category and (activated non-mana only) XMage key per source. Text: 17lands abilities.csv at runtime; not stored here.
+id	category	sources	method	confidence	in_abilities_csv	keys	vocab_idx	self_p1p1	self_double	counter_other	loyalty	text_flags	occurrences	note
+90050	triggered	Bloodfell Caves; Blossoming Sands; Dismal Backwater; Jungle Hollow; Rugged Highlands; Scoured Barrens; Swiftwater Cliffs; Thornwood Falls; Tranquil Cove; Wind-Scarred Crag	arena_db	multi	1			0	0	0			561221	
+122104	triggered	Dazzling Angel; Hinterland Sanctifier	arena_db	multi	1			0	0	0			503692	
+137	triggered	Drake Hatcher; Elementalist Adept; Heartfire Immolator; Lightshell Duo; Shipwreck Dowser	arena_db	multi	1			0	0	0			308941	
+1268	activated	Adventuring Gear; Goldvein Pick; Robe of Stars; Swiftfoot Boots	arena_db	multi	1	[["Adventuring Gear", "Equip {1} <i>({1}: Attach to target creature you control. Equip only as a sorcery.)</i>"], ["Goldvein Pick", "Equip {1} <i>({1}: Attach to target creature you control. Equip only as a sorcery.)</i>"], ["Robe of Stars", "Equip {1}"], ["Swiftfoot Boots", "Equip {1}"]]	507,507,506,506	0	0	0			303796	
+171049	triggered	Helpful Hunter	cooccurrence	high	1			0	0	0			236035	
+92927	triggered	Burglar Rat	cooccurrence	high	0			0	0	0			227732	
+166736	triggered	Wary Thespian	arena_db	high	1			0	0	0		mill_surveil	222060	
+92970	triggered	Ajani's Pridemate; Exemplar of Light; Fiendish Panda; Twinblade Paladin	arena_db	multi	1			1	0	0		counter_on	212522	
+197	activated	Food	arena_db	high	1	[["Food", "{2}, {T}, Sacrifice {this}: You gain 3 life."]]	848	0	0	0			198800	
+116799	triggered	Goldvein Pick	arena_db	high	1			0	0	0			194949	
+88024	activated	Evolving Wilds	arena_db	high	1	[["Evolving Wilds", "{T}, Sacrifice {this}: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle."]]	624	0	0	0			193591	
+96307	triggered	Bigfin Bouncer; Exclusion Mage	arena_db	multi	1			0	0	0			193121	
+175865	triggered	Beast-Kin Ranger	cooccurrence	high	0			0	0	0			189785	
+175885	triggered	Dreadwing Scavenger	cooccurrence	high	0			0	0	0			173327	
+175764	triggered	Felidar Savior	cooccurrence	high	0			0	0	1			169233	
+20997	triggered	Banishing Light	cooccurrence	high	0			0	0	0			166051	
+175881	activated	Treetop Snarespinner	arena_db	high	1	[["Treetop Snarespinner", "{2}{G}: Put a +1/+1 counter on target creature you control. Activate only as a sorcery."]]	590	0	0	1		counter_on	161548	
+1003	mana	Swamp	cooccurrence	basic_land	1			0	0	0			161307	
+175773	triggered	Prideful Parent	arena_db	high	1			0	0	0			154907	
+175834	triggered	Vengeful Bloodwitch	cooccurrence	high	0			0	0	0			149061	
+175832	triggered	Vampire Gourmand	arena_db	high	1			0	0	0		attack_trigger	148630	
+175817	activated	Hungry Ghoul	cooccurrence	high	0	[["Hungry Ghoul", "{1}, Sacrifice another creature: Put a +1/+1 counter on {this}."]]	569	1	0	0			141857	
+175819	triggered	Infestation Sage	arena_db	high	1			0	0	0			141317	
+175908	triggered	Scrawling Crawler	arena_db	high	1			0	0	0			135263	
+175826	triggered	Sanguine Syphoner	arena_db	high	1			0	0	0		attack_trigger	135099	
+8760	activated	Strix Lookout	arena_db	high	1	[["Strix Lookout", "{1}{U}, {T}: Draw a card, then discard a card."]]	581	0	0	0			125294	
+1002	mana	Island	cooccurrence	basic_land	1			0	0	0			122499	
+175756	triggered	Cat Collector	arena_db	high	1			0	0	0			110971	
+62618	triggered	Marauding Blight-Priest	arena_db	high	1			0	0	0			105956	
+1004	mana	Mountain	cooccurrence	basic_land	1			0	0	0			105077	
+175836	triggered	Battlesong Berserker	arena_db	high	1			0	0	0			103044	
+136227	triggered	Mischievous Mystic	arena_db	high	1			0	0	0			99390	
+136564	triggered	Nessian Hornbeetle	arena_db	high	1			1	0	0		counter_on	97628	
+1001	mana	Plains	cooccurrence	basic_land	1			0	0	0			95235	
+175880	triggered	Sylvan Scavenging	arena_db	high	1			0	0	1		counter_on	94328	
+141700	activated	Rune-Sealed Wall	arena_db	high	1	[["Rune-Sealed Wall", "{T}: Surveil 1. <i>(Look at the top card of your library. You may put that card into your graveyard.)</i>"]]	639	0	0	0		mill_surveil	91221	
+1005	mana	Druid of the Cowl; Llanowar Elves	arena_db	multi	1			0	0	0			87133	
+137605	triggered	Good-Fortune Unicorn	arena_db	high	1			0	0	1		counter_on	86774	
+175828	triggered	Soul-Shackled Zombie	arena_db	high	1			0	0	0			86639	
+1188	activated	Reassembling Skeleton	arena_db	high	1	[["Reassembling Skeleton", "{1}{B}: Return this card from your graveyard to the battlefield tapped."]]	578	0	0	0			86580	
+153246	triggered	Clinquant Skymage	cooccurrence	high	0			1	0	0			84789	
+175991	triggered	Faebloom Trick	arena_db	high	1			0	0	0			83971	reflexive/delayed/emblem trigger inside another XMage ability
+175862	triggered	Ambush Wolf	cooccurrence	high	0			0	0	0			82636	
+175894	triggered	Perforating Artist	arena_db	high	1			0	0	0			81922	
+175775	triggered	Skyknight Squire	cooccurrence	high	0			1	0	0			81155	
+103667	triggered	Firebrand Archer	cooccurrence	high	1			0	0	0			80393	
+175755	triggered	Cat Collector	cooccurrence	high	0			0	0	0			79873	
+175792	triggered	Icewind Elemental	cooccurrence	high	0			0	0	0			79452	
+175780	triggered	Vanguard Seraph	arena_db	high	1			0	0	0		mill_surveil	78601	
+1706	triggered	Phyrexian Arena	arena_db	high	1			0	0	0			77763	
+175777	activated	Squad Rallier	arena_db	high	1	[["Squad Rallier", "{2}{W}: Look at the top four cards of your library. You may reveal a creature card with power 2 or less from among them and put it into your hand. Put the rest on the bottom of your library in a random order."]]	595	0	0	0			76138	
+121357	triggered	Lightshell Duo	arena_db	high	1			0	0	0		mill_surveil	75998	
+118897	triggered	Tatyova, Benthic Druid	arena_db	high	1			0	0	0			75679	
+1104	activated	Spectral Sailor	arena_db	high	1	[["Spectral Sailor", "{3}{U}: Draw a card."]]	600	0	0	0			75423	
+102713	triggered	Campus Guide	arena_db	high	1			0	0	0			75390	
+175868	triggered	Elfsworn Giant	arena_db	high	1			0	0	0			75254	
+175788	triggered	Erudite Wizard	cooccurrence	high	0			1	0	0			73049	
+175814	triggered	Gutless Plunderer	arena_db	high	1			0	0	0			72474	
+76694	triggered	Authority of the Consuls	arena_db	high	1			0	0	0			72093	
+90106	activated	Scavenging Ooze	arena_db	high	1	[["Scavenging Ooze", "{G}: Exile target card from a graveyard. If it was a creature card, put a +1/+1 counter on {this} and you gain 1 life."]]	615	0	0	0		counter_on	70966	
+175857	triggered	Searslicer Goblin	arena_db	high	1			0	0	0			70158	
+152888	triggered	Balmor, Battlemage Captain	arena_db	high	1			0	0	0			67217	
+175866	triggered	Cackling Prowler	arena_db	high	1			1	0	0		counter_on	66887	
+133509	triggered	Brineborn Cutthroat	arena_db	high	1			1	0	0		counter_on	65356	
+175833	triggered	Vampire Soulcaller	cooccurrence	high	0			0	0	0			65242	
+152745	triggered	Micromancer	arena_db	high	1			0	0	0			63912	
+175851	triggered	Gorehorn Raider	cooccurrence	high	0			0	0	0			63010	
+175831	triggered	Tragic Banshee	arena_db	high	1			0	0	0			62840	
+149424	triggered	Fake Your Own Death	arena_db	high	1			0	0	0			62531	reflexive/delayed/emblem trigger inside another XMage ability
+99866	triggered	Resolute Reinforcements	arena_db	high	1			0	0	0			60527	
+145283	triggered	Stromkirk Bloodthief	arena_db	high	1			0	0	1		counter_on	60339	
+175843	triggered	Courageous Goblin	arena_db	high	1			0	0	0		attack_trigger	58744	
+175816	triggered	High-Society Hunter	arena_db	high	1			0	0	0			57777	
+90052	triggered	Angel of Finality	arena_db	high	1			0	0	0			57539	
+175767	triggered	Hare Apparent	arena_db	high	1			0	0	0			56554	
+175818	triggered	Infernal Vessel	arena_db	high	1			0	0	0		counter_on	56083	
+175858	triggered	Slumbering Cerberus	arena_db	high	1			0	0	0			55290	
+175791	triggered	Homunculus Horde	arena_db	high	1			0	0	0			55048	
+175808	triggered	Arbiter of Woe	arena_db	high	1			0	0	0			52189	
+175753	triggered	Arahbo, the First Fang	arena_db	high	1			0	0	0			51895	
+175845	triggered	Dragon Trainer	cooccurrence	high	0			0	0	0			51649	
+138835	triggered	Skyship Buccaneer; Storm Fleet Spy	arena_db	multi	1			0	0	0			51270	
+175907	triggered	Scrawling Crawler	arena_db	high	1			0	0	0			50924	
+102318	triggered	Dwynen's Elite	arena_db	high	1			0	0	0			50128	
+175869	triggered	Elvish Regrower	arena_db	high	1			0	0	0			48834	
+96640	triggered	Frenzied Goblin	arena_db	high	1			0	0	0		attack_trigger	47954	
+175823	triggered	Nine-Lives Familiar	arena_db	high	1			0	0	0		counter_on	46984	
+175809	triggered	Billowing Shriekmass	cooccurrence	high	0			0	0	0			45581	
+175766	triggered	Guarded Heir	arena_db	high	1			0	0	0			44712	
+179839	triggered	Nine-Lives Familiar	arena_db	high	1			0	0	0		counter_on	44469	reflexive/delayed/emblem trigger inside another XMage ability
+1156	activated	Embercleave; Leyline Axe	arena_db	multi	1	[["Embercleave", "Equip {3}"], ["Leyline Axe", "Equip {3} <i>({3}: Attach to target creature you control. Equip only as a sorcery.)</i>"]]	510,511	0	0	0			44109	
+133162	triggered	Garruk's Uprising	arena_db	high	1			0	0	0			43163	
+175919	triggered	Firespitter Whelp	arena_db	high	1			0	0	0			43049	
+175778	triggered	Sun-Blessed Healer	arena_db	high	1			0	0	0			41826	
+175873	triggered	Mossborn Hydra	arena_db	high	1			0	1	0		counter_on	41794	
+141939	triggered	Cackling Prowler; Tolarian Terror	arena_db	multi	1			0	0	0			41418	
+171655	triggered	Archmage of Runes	arena_db	high	1			0	0	0			41398	
+117109	activated	Fanatical Firebrand	arena_db	high	1	[["Fanatical Firebrand", "{T}, Sacrifice {this}: It deals 1 damage to any target."]]	623	0	0	0			40469	
+175867	triggered	Eager Trufflesnout	cooccurrence	high	0			0	0	0			40136	
+175928	activated	Mild-Mannered Librarian	arena_db	high	1	[["Mild-Mannered Librarian", "{3}{G}: {this} becomes a Werewolf. Put two +1/+1 counters on it and you draw a card. Activate only once."]]	599	2	0	0		counter_on	39280	
+102099	triggered	Affectionate Indrik	arena_db	high	1			0	0	0			38876	
+175799	triggered	Kiora, the Rising Tide	cooccurrence	high	0			0	0	0			38853	
+175905	activated	Ravenous Amulet	arena_db	high	1	[["Ravenous Amulet", "{1}, {T}, Sacrifice a creature: Draw a card and put a soul counter on {this}. Activate only as a sorcery."]]	573	0	0	0		counter_on	38438	
+175783	triggered	Cephalid Inkmage	cooccurrence	high	0			0	0	0			38277	
+140196	triggered	Youthful Valkyrie	arena_db	high	1			1	0	0		counter_on	38199	
+19060	triggered	Bloodthirsty Conqueror	arena_db	high	1			0	0	0			36627	
+175860	triggered	Strongbox Raider	arena_db	high	1			0	0	0			36412	
+1319	activated	Basilisk Collar; Fireshrieker; Fishing Pole; Pirate's Cutlass; Quick-Draw Katana; Sword of Fire and Ice	arena_db	multi	1	[["Basilisk Collar", "Equip {2}"], ["Fireshrieker", "Equip {2} <i>({2}: Attach to target creature you control. Equip only as a sorcery.)</i>"], ["Fishing Pole", "Equip {2}"], ["Pirate's Cutlass", "Equip {2} <i>({2}: Attach to target creature you control. Equip only as a sorcery.)</i>"], ["Quick-Draw Katana", "Equip {2} <i>({2}: Attach to target creature you control. Equip only as a sorcery.)</i>"], ["Sword of Fire and Ice", "Equip {2}"]]	508,509,508,509,509,508	0	0	0			36222	
+175829	triggered	Tinybones, Bauble Burglar	arena_db	high	1			0	0	0		counter_on	34713	
+175895	triggered	Wardens of the Cycle	arena_db	high	1			0	0	0			34362	
+137939	activated	Heartfire Immolator	arena_db	high	1	[["Heartfire Immolator", "{R}, Sacrifice {this}: It deals damage equal to its power to target creature or planeswalker."]]	617	0	0	0			34362	
+175864	triggered	Apothecary Stomper	arena_db	high	1			0	0	1		counter_on	34312	
+19665	triggered	Consuming Aberration	arena_db	high	1			0	0	0			34299	
+175874	triggered	Needletooth Pack	arena_db	high	1			0	0	1		counter_on	34272	
+175760	triggered	Dauntless Veteran	cooccurrence	high	0			0	0	0			33814	
+175883	triggered	Alesha, Who Laughs at Fate	arena_db	high	1			0	0	0			33589	
+175785	triggered	Curator of Destinies	arena_db	high	1			0	0	0			33490	
+92125	triggered	Solemn Simulacrum	arena_db	high	1			0	0	0			32891	
+175896	triggered	Zimone, Paradox Sculptor	arena_db	high	1			0	0	1		counter_on	32571	
+137982	triggered	Wildwood Scourge	arena_db	high	1			1	0	0		counter_on	32239	
+15166	activated	Axgard Cavalry	arena_db	high	1	[["Axgard Cavalry", "{T}: Target creature gains haste until end of turn."]]	640	0	0	0			32028	
+175794	triggered	Kaito, Cunning Infiltrator	arena_db	high	1			0	0	0		counter_on	31937	
+175763	triggered	Exemplar of Light	arena_db	high	1			0	0	0		counter_on	31669	
+168943	triggered	Ruby, Daring Tracker	arena_db	high	1			0	0	0		attack_trigger	31448	
+175878	triggered	Spinner of Souls	arena_db	high	1			0	0	0			30637	
+169458	triggered	Mischievous Pup	arena_db	high	1			0	0	0			29775	
+175757	triggered	Celestial Armor	arena_db	high	1			0	0	0			29713	
+175786	triggered	Drake Hatcher	arena_db	high	1			0	0	0		counter_on	29643	
+175892	triggered	Kykar, Zephyr Awakener	arena_db	high	1			0	0	0			29394	
+175844	triggered	Crackling Cyclops	arena_db	high	1			0	0	0			29273	
+89285	activated	Cathar Commando; Thrashing Brontodon	arena_db	multi	1	[["Cathar Commando", "{1}, Sacrifice {this}: Destroy target artifact or enchantment."], ["Thrashing Brontodon", "{1}, Sacrifice {this}: Destroy target artifact or enchantment."]]	571,571	0	0	0			29265	
+19226	activated	Krenko, Mob Boss	arena_db	high	1	[["Krenko, Mob Boss", "{T}: Create X 1/1 red Goblin creature tokens, where X is the number of Goblins you control."]]	635	0	0	0			28034	
+19190	activated	Ajani, Caller of the Pride	arena_db	high	1	[["Ajani, Caller of the Pride", "+1: Put a +1/+1 counter on up to one target creature."]]	10	0	0	1	+1	counter_on	27670	
+133255	triggered	Liliana, Dreadhorde General	arena_db	high	1			0	0	0			26842	
+175790	triggered	Grappling Kraken	arena_db	high	1			0	0	0		counter_on	26502	
+175914	triggered	Extravagant Replication	arena_db	high	1			0	0	0			26218	
+175882	triggered	Alesha, Who Laughs at Fate	cooccurrence	high	0			1	0	0			25267	
+175820	triggered	Midnight Snack	arena_db	high	1			0	0	0			24525	
+119141	triggered	Meteor Golem	arena_db	high	1			0	0	0			23759	
+188566	triggered	Dwynen, Gilt-Leaf Daen	cooccurrence	high	0			0	0	0			23188	
+152795	activated	Tinybones, Bauble Burglar	arena_db	high	1	[["Tinybones, Bauble Burglar", "{3}{B}, {T}: Each opponent discards a card. Activate only as a sorcery."]]	598	0	0	0			22972	
+175795	activated	Kaito, Cunning Infiltrator	arena_db	high	1	[["Kaito, Cunning Infiltrator", "+1: Up to one target creature you control can't be blocked this turn. Draw a card, then discard a card."]]	11	0	0	0	+1		22784	
+175889	triggered	Fiendish Panda	arena_db	high	1			0	0	0			22441	
+175807	activated	Abyssal Harvester	arena_db	high	1	[["Abyssal Harvester", "{T}: Exile target creature card from a graveyard that was put there this turn. Create a token that's a copy of it, except it's a Nightmare in addition to its other types. Then exile all other Nightmare tokens you control."]]	637	0	0	0			21749	
+175853	triggered	Kellan, Planar Trailblazer	arena_db	high	1			0	0	0			20494	reflexive/delayed/emblem trigger inside another XMage ability
+175815	triggered	High-Society Hunter	arena_db	high	1			0	0	0		counter_on,attack_trigger	20460	
+175854	activated	Kellan, Planar Trailblazer	arena_db	high	1	[["Kellan, Planar Trailblazer", "{1}{R}: If {this} is a Scout, it becomes a Human Faerie Detective and gains \"Whenever {this} deals combat damage to a player, exile the top card of your library. You may play that card this turn.\""]]	580	0	0	0			20453	
+88164	triggered	Solemn Simulacrum	arena_db	high	1			0	0	0			20451	
+133256	activated	Liliana, Dreadhorde General	arena_db	high	1	[["Liliana, Dreadhorde General", "+1: Create a 2/2 black Zombie creature token."]]	7	0	0	0	+1		20444	
+99188	triggered	Adventuring Gear	arena_db	high	1			0	0	0			19873	
+119115	activated	Vivien Reid	arena_db	high	1	[["Vivien Reid", "+1: Look at the top four cards of your library. You may reveal a creature or land card from among them and put it into your hand. Put the rest on the bottom of your library in a random order."]]	9	0	0	0	+1		19457	
+1257	triggered	Rune-Scarred Demon	arena_db	high	1			0	0	0			19154	
+165758	activated	Celestial Armor	arena_db	high	1	[["Celestial Armor", "Equip {3}{W}"]]	512	0	0	0			18768	
+100173	activated	Rogue's Passage	arena_db	high	1	[["Rogue's Passage", "{4}, {T}: Target creature can't be blocked this turn."]]	605	0	0	0			18391	
+175876	triggered	Quilled Greatwurm	arena_db	high	1			0	0	1		counter_on	18239	
+175871	activated	Loot, Exuberant Explorer	arena_db	high	1	[["Loot, Exuberant Explorer", "{4}{G}{G}, {T}: Look at the top six cards of your library. You may put a creature card with mana value less than or equal to the number of lands you control from among them onto the battlefield. Put the rest on the bottom of your library in a random order."]]	609	0	0	0			17241	
+101429	triggered	Reclamation Sage	arena_db	high	1			0	0	0			16856	
+175779	triggered	Valkyrie's Call	arena_db	high	1			0	0	0		counter_on	16292	
+137965	triggered	Garruk's Uprising	arena_db	high	1			0	0	0			16089	
+175754	triggered	Armasaur Guide	arena_db	high	1			0	0	1		counter_on	16041	
+18235	triggered	Painful Quandary	arena_db	high	1			0	0	0			15579	
+175909	activated	Soulstone Sanctuary	arena_db	high	1	[["Soulstone Sanctuary", "{4}: This land becomes a 3/3 creature with vigilance and all creature types. It's still a land."]]	607	0	0	0			15317	
+102504	triggered	Spitfire Lagac	arena_db	high	1			0	0	0			14877	
+175855	activated	Kellan, Planar Trailblazer	arena_db	high	1	[["Kellan, Planar Trailblazer", "{2}{R}: If {this} is a Detective, it becomes a 3/2 Human Faerie Rogue and gains double strike."]]	592	0	0	0			14761	
+100860	activated	Burnished Hart	arena_db	high	1	[["Burnished Hart", "{3}, Sacrifice {this}: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle."]]	596	0	0	0			14428	
+116851	triggered	Gleaming Barrier	arena_db	high	1			0	0	0			14387	
+175800	triggered	Kiora, the Rising Tide	arena_db	high	1			0	0	0		attack_trigger	14007	
+175804	triggered	Sphinx of Forgotten Lore	arena_db	high	1			0	0	0		attack_trigger	13853	
+180340	triggered	Etali, Primal Storm	cooccurrence	high	0			0	0	0			13040	
+175884	triggered	Ashroot Animist	arena_db	high	1			0	0	0		attack_trigger	12793	
+1097	activated	Shivan Dragon	arena_db	high	1	[["Shivan Dragon", "{R}: {this} gets +1/+0 until end of turn."]]	619	0	0	0			12067	
+175859	activated	Sower of Chaos	arena_db	high	1	[["Sower of Chaos", "{2}{R}: Target creature can't block this turn."]]	593	0	0	0			11180	
+175796	activated	Kaito, Cunning Infiltrator	arena_db	high	1	[["Kaito, Cunning Infiltrator", "-2: Create a 2/1 blue Ninja creature token."]]	13	0	0	0	-2		9478	
+188560	triggered	Flamewake Phoenix	arena_db	weak	1			0	0	0			9354	
+175787	activated	Drake Hatcher	arena_db	high	1	[["Drake Hatcher", "Remove three incubation counters from {this}: Create a 2/2 blue Drake creature token with flying."]]	566	0	0	0			8912	
+181081	activated	Liliana, Dreadhorde General	arena_db	high	1	[["Liliana, Dreadhorde General", "-4: Each player sacrifices two creatures of their choice."]]	16	0	0	0	-4		7960	
+175897	activated	Zimone, Paradox Sculptor	arena_db	high	1	[["Zimone, Paradox Sculptor", "{G}{U}, {T}: Double the number of each kind of counter on up to two target creatures and/or artifacts you control."]]	616	0	0	1		counter_on	7942	
+175856	triggered	Rite of the Dragoncaller	arena_db	high	1			0	0	0			7889	
+175842	activated	Chandra, Flameshaper	arena_db	high	1	[["Chandra, Flameshaper", "-4: {this} deals 8 damage divided as you choose among any number of target creatures and/or planeswalkers."]]	17	0	0	0	-4		7854	
+175902	triggered	Fishing Pole	arena_db	high	1			0	0	0			7775	
+175900	activated	Fishing Pole	arena_db	high	1			0	0	0		counter_on	7621	granted ability: not in the vocab (hashed tail)
+102235	triggered	Sphinx's Tutelage	arena_db	high	1			0	0	0		mill_surveil	7473	
+175835	activated	Zul Ashur, Lich Lord	arena_db	high	1	[["Zul Ashur, Lich Lord", "{T}: You may cast target Zombie creature card from your graveyard this turn."]]	641	0	0	0			7298	
+175890	triggered	Koma, World-Eater	arena_db	high	1			0	0	0			7066	
+1152	mana	Crawling Barrens; Cryptic Caves; Demolition Field; Desert; Field of the Dead; Imprisoned in the Moon; Maze's End; Rogue's Passage; Secluded Courtyard; Soulstone Sanctuary	arena_db	multi	1			0	0	0			7045	
+119116	activated	Vivien Reid	arena_db	high	1	[["Vivien Reid", "-3: Destroy target artifact, enchantment, or creature with flying."]]	14	0	0	0	-3		6238	
+175992	triggered	Kykar, Zephyr Awakener	arena_db	high	1			0	0	0			6006	reflexive/delayed/emblem trigger inside another XMage ability
+188569	triggered	Lathril, Blade of the Elves	cooccurrence	high	0			0	0	0			5955	
+175839	activated	Chandra, Flameshaper	arena_db	high	1	[["Chandra, Flameshaper", "+2: Add {R}{R}{R}. Exile the top three cards of your library. Choose one of them. You may play that card this turn."]]	12	0	0	0	+2		5703	
+1577	triggered	Zul Ashur, Lich Lord	arena_db	high	1			0	0	0			5321	
+1223	mana	Elvish Archdruid	arena_db	high	1			0	0	0			5020	
+181303	triggered	Drakuseth, Maw of Flames	arena_db	high	1			0	0	0		attack_trigger	4865	
+175840	triggered	Electroduplicate	cooccurrence	weak	0			0	0	0			4684	reflexive/delayed/emblem trigger inside another XMage ability
+175751	triggered	Sire of Seven Deaths	arena_db	high	1			0	0	0			4149	
+175813	triggered	Crypt Feaster	arena_db	high	1			0	0	0		attack_trigger	3890	
+175841	activated	Chandra, Flameshaper	arena_db	high	1	[["Chandra, Flameshaper", "+1: Create a token that's a copy of target creature you control, except it has haste and \"At the beginning of the end step, sacrifice this token.\""]]	8	0	0	0	+1		3404	
+1211	mana	Bloodfell Caves; Rakdos Guildgate; Temple of Malice	arena_db	multi	1			0	0	0			3337	
+1167	mana	Dimir Guildgate; Dismal Backwater; Temple of Deceit	arena_db	multi	1			0	0	0			3333	
+1515	triggered	Koma, World-Eater	arena_db	high	1			0	0	0			3184	
+87680	activated	Ajani, Caller of the Pride	arena_db	high	1	[["Ajani, Caller of the Pride", "-3: Target creature gains flying and double strike until end of turn."]]	15	0	0	0	-3		3097	
+18472	mana	Orzhov Guildgate; Scoured Barrens; Temple of Silence	arena_db	multi	1			0	0	0			2912	
+183	mana	Treasure	arena_db	high	1			0	0	0			2781	
+175797	triggered	Kaito, Cunning Infiltrator	arena_db	high	1			0	0	0	-9		2571	reflexive/delayed/emblem trigger inside another XMage ability
+149358	mana	Giada, Font of Hope	arena_db	high	1			0	0	0			2560	
+175821	activated	Midnight Snack	arena_db	high	1	[["Midnight Snack", "{2}{B}, Sacrifice {this}: Target opponent loses X life, where X is the amount of life you gained this turn."]]	589	0	0	0			2362	
+121458	triggered	Thousand-Year Storm	arena_db	high	1			0	0	0			2227	
+1039	mana	Izzet Guildgate; Swiftwater Cliffs; Temple of Epiphany	arena_db	multi	1			0	0	0			2152	
+1131	mana	Gruul Guildgate; Ruby, Daring Tracker; Rugged Highlands; Temple of Abandon	arena_db	multi	1			0	0	0			2017	
+2374	mana	Heraldic Banner; Uncharted Haven	arena_db	multi	1			0	0	0			1964	
+93125	triggered	Embercleave	arena_db	high	1			0	0	0			1912	
+4407	mana	Golgari Guildgate; Jungle Hollow; Temple of Malady	arena_db	multi	1			0	0	0			1892	
+175906	activated	Ravenous Amulet	arena_db	high	1	[["Ravenous Amulet", "{4}, {T}, Sacrifice {this}: Each opponent loses 1 life for each soul counter on {this}."]]	604	0	0	0		counter_on	1631	
+18504	mana	Simic Guildgate; Temple of Mystery; Thornwood Falls	arena_db	multi	1			0	0	0			1360	
+175893	triggered	Niv-Mizzet, Visionary	arena_db	high	1			0	0	0			1336	
+137384	activated	Fiend Artisan	arena_db	high	1	[["Fiend Artisan", "{X}{B/G}, {T}, Sacrifice another creature: Search your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle. Activate only as a sorcery."]]	643	0	0	0			1307	
+4247	mana	Boros Guildgate; Temple of Triumph; Wind-Scarred Crag	arena_db	multi	1			0	0	0			1304	
+1209	mana	Azorius Guildgate; Temple of Enlightenment; Tranquil Cove	arena_db	multi	1			0	0	0			1298	
+2158	triggered	Goblin Bushwhacker	arena_db	high	1			0	0	0			810	
+175798	activated	Kaito, Cunning Infiltrator	arena_db	high	1	[["Kaito, Cunning Infiltrator", "-9: You get an emblem with \"Whenever a player casts a spell, you create a 2/1 blue Ninja creature token.\""]]	21	0	0	0	-9		747	
+1203	mana	Blossoming Sands; Selesnya Guildgate; Temple of Plenty	arena_db	multi	1			0	0	0			736	
+3145	mana	Bloom Tender	arena_db	high	1			0	0	0			581	
+61932	activated	Sphinx's Tutelage	arena_db	high	1	[["Sphinx's Tutelage", "{5}{U}: Draw a card, then discard a card."]]	611	0	0	0			549	
+119147	activated	Vivien Reid	arena_db	high	1	[["Vivien Reid", "-8: You get an emblem with \"Creatures you control get +2/+2 and have vigilance, trample, and indestructible.\""]]	19	0	0	0	-8		471	
+87681	activated	Ajani, Caller of the Pride	arena_db	high	1	[["Ajani, Caller of the Pride", "-8: Create X 2/2 white Cat creature tokens, where X is your life total."]]	18	0	0	0	-8		353	
+133052	activated	Liliana, Dreadhorde General	arena_db	high	1	[["Liliana, Dreadhorde General", "-9: Each opponent chooses a permanent they control of each permanent type and sacrifices the rest."]]	20	0	0	0	-9		228	
+1495	mana	Secluded Courtyard	arena_db	high	1			0	0	0			111	
+175933	activated	Lathril, Blade of the Elves	arena_db	high	1	[["Lathril, Blade of the Elves", "{T}, Tap ten untapped Elves you control: Each opponent loses 10 life and you gain 10 life."]]	625	0	0	0			82	
+1055	mana	Cultivator's Caravan; Paradise Druid	arena_db	multi	1			0	0	0			66	

@@ -1,0 +1,55 @@
+{
+ "version": 1,
+ "comment": "Variant of scenario 1: floating mana (BB) in A pool, A library trimmed to 10 cards, B exile has a card",
+ "turn": 7,
+ "activePlayer": "A",
+ "phase": "PRECOMBAT_MAIN",
+ "step": "PRECOMBAT_MAIN",
+ "enterMode": "PRIORITY_FRESH",
+ "players": {
+  "A": {
+   "name": "PlayerA",
+   "life": 13,
+   "decklist": ["Arbiter of Woe", "Burglar Rat", "Eaten Alive", "Fake Your Own Death", "Fleeting Flight", "Gutless Plunderer", "Hero's Downfall", "Infestation Sage", "Make Your Move", "Mischievous Pup", "Pilfer", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Prideful Parent", "Sanguine Syphoner", "Scrawling Crawler", "Seeker's Folly", "Felidar Savior", "Soul-Shackled Zombie", "Squad Rallier", "Stab", "Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Swamp", "Pacifism", "Vampire Gourmand", "Vampire Soulcaller", "Vanguard Seraph"],
+   "decklistSource": "exact",
+   "landsPlayed": 0,
+   "hand": ["Stab", "Burglar Rat", "Hero's Downfall", "Plains"],
+   "graveyard": ["Fake Your Own Death", "Eaten Alive"],
+   "libraryTop": ["Squad Rallier"],
+   "librarySize": 10,
+   "manaPool": "BB",
+   "battlefield": [
+    {"name": "Plains", "count": 4},
+    {"name": "Swamp", "count": 2},
+    {"name": "Felidar Savior", "tapped": true},
+    {"name": "Vanguard Seraph", "sick": true},
+    {"name": "Pacifism", "attachTo": "B:goblin"}
+   ]
+  },
+  "B": {
+   "name": "PlayerB",
+   "life": 9,
+   "decklist": ["Abrade", "Bite Down", "Burst Lightning", "Bushwhack", "Cackling Prowler", "Cackling Prowler", "Courageous Goblin", "Courageous Goblin", "Courageous Goblin", "Eager Trufflesnout", "Eager Trufflesnout", "Felling Blow", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Forest", "Gnarlid Colony", "Heartfire Immolator", "Kellan, Planar Trailblazer", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Needletooth Pack", "Needletooth Pack", "Nessian Hornbeetle", "Searslicer Goblin", "Slumbering Cerberus", "Snakeskin Veil", "Sower of Chaos", "Strongbox Raider"],
+   "decklistSource": "exact",
+   "landsPlayed": 0,
+   "hand": ["Burst Lightning", "Forest", "Bite Down"],
+   "graveyard": ["Abrade"],
+   "exile": ["Bushwhack"],
+   "battlefield": [
+    {"name": "Forest", "count": 3},
+    {"name": "Mountain", "count": 3},
+    {
+     "name": "Cackling Prowler",
+     "id": "prowler",
+     "counters": {"P1P1": 1},
+     "damage": 1
+    },
+    {"name": "Courageous Goblin", "id": "goblin"},
+    {"name": "Needletooth Pack"},
+    {"tokenClass": "BeastToken"}
+   ]
+  }
+ },
+ "provenance": {"source": "synthetic", "ref": "research PoC scenario1b_mana_library", "tier": "T0"},
+ "labels": {"decisionPlayer": "A"}
+}

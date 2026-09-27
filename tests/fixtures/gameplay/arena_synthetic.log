@@ -1,0 +1,547 @@
+Initialize engine version: 2022.3.fake (fake)
+[UnityMemory] Configuration Parameters - Can be set up in boot.config
+DETAILED LOGS: ENABLED
+Version: 2026.99.10 / 2026.99.10.0000.0000000
+Loading localization from file: /Users/fakeuser/Library/Application Support/fake/Raw_Fake.mtga {}
+[UnityCrossThreadLogger]9/1/2026 1:05:00 PM: Match to FAKEACCT0000042: AuthenticateResponse
+{"transactionId": "aaaaaaaa-0000-4000-8000-000000000001", "requestId": 1, "authenticateResponse": {"clientId": "FAKEUSERIDLOCAL000000001", "sessionId": "bbbbbbbb-0000-4000-8000-000000000001", "screenName": "Testy McFakeface#12345"}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]Connecting to matchId 00000000-1111-2222-3333-444444444444
+[UnityCrossThreadLogger]9/1/2026 1:10:00 PM: Match to FAKEACCT0000042: MatchGameRoomStateChangedEvent
+{"transactionId": "aaaaaaaa-0000-4000-8000-000000000002", "timestamp": "1790000000000", "matchGameRoomStateChangedEvent": {"gameRoomInfo": {"gameRoomConfig": {"matchId": "00000000-1111-2222-3333-444444444444", "reservedPlayers": [{"userId": "FAKEUSERIDLOCAL000000001", "playerName": "Testy McFakeface#12345", "systemSeatId": 1, "teamId": 1}, {"userId": "FAKEUSERIDOPPON000000002", "playerName": "Opponent Fakename#67890", "systemSeatId": 2, "teamId": 2}]}, "stateType": "MatchGameRoomStateType_Playing"}}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:14:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000003","requestId":1,"timestamp":"1790000000500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_ConnectResp","systemSeatIds":[1],"msgId":1,"connectResp":{"status":"ConnectionStatus_Success","protoVer":"ProtoVersion_PersistentAnnotations","deckMessage":{"deckCards":[95192,95192,95192,95192,95192,95192,95192,95192,95192,95192,95192,95192,95192,95192,95192,95192,95192,93859,93859,93859,93859,93650,93650,93725,93725,93725,93725,93725,93725,93725,93725,93725,93741,93741,93741,93741,93741,93741,93741,93741],"sideboardCards":[93741]},"grpVersion":{"majorVersion":2026,"minorVersion":99,"buildVersion":999}}},{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":1,"gameStateMessage":{"type":"GameStateType_Full","gameStateId":1,"gameInfo":{"matchID":"00000000-1111-2222-3333-444444444444","gameNumber":1,"stage":"GameStage_Start","type":"GameType_Duel","variant":"GameVariant_Normal","matchState":"MatchState_GameInProgress","superFormat":"SuperFormat_Limited","mulliganType":"MulliganType_London"},"players":[{"lifeTotal":20,"systemSeatNumber":1,"status":"PlayerStatus_InGame","teamId":1,"controllerSeatId":1},{"lifeTotal":20,"systemSeatNumber":2,"status":"PlayerStatus_InGame","teamId":2,"controllerSeatId":2}],"turnInfo":{"decisionPlayer":1},"zones":[{"zoneId":18,"type":"ZoneType_Revealed","visibility":"Visibility_Public","ownerSeatId":1},{"zoneId":19,"type":"ZoneType_Revealed","visibility":"Visibility_Public","ownerSeatId":2},{"zoneId":27,"type":"ZoneType_Stack","visibility":"Visibility_Public"},{"zoneId":28,"type":"ZoneType_Battlefield","visibility":"Visibility_Public"},{"zoneId":29,"type":"ZoneType_Exile","visibility":"Visibility_Public"},{"zoneId":30,"type":"ZoneType_Limbo","visibility":"Visibility_Public"},{"zoneId":31,"type":"ZoneType_Hand","visibility":"Visibility_Private","ownerSeatId":1},{"zoneId":32,"type":"ZoneType_Library","visibility":"Visibility_Hidden","objectInstanceIds":[1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027,1028,1029,1030,1031,1032,1033,1034,1035,1036,1037,1038,1039,1040],"ownerSeatId":1},{"zoneId":33,"type":"ZoneType_Graveyard","visibility":"Visibility_Public","ownerSeatId":1},{"zoneId":35,"type":"ZoneType_Hand","visibility":"Visibility_Private","ownerSeatId":2},{"zoneId":36,"type":"ZoneType_Library","visibility":"Visibility_Hidden","objectInstanceIds":[2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026,2027,2028,2029,2030,2031,2032,2033,2034,2035,2036,2037,2038,2039,2040],"ownerSeatId":2},{"zoneId":37,"type":"ZoneType_Graveyard","visibility":"Visibility_Public","ownerSeatId":2}]}},{"type":"GREMessageType_ChooseStartingPlayerReq","systemSeatIds":[1],"msgId":2,"gameStateId":1,"chooseStartingPlayerReq":{"teamType":"TeamType_Individual","systemSeatIds":[1,2]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:18:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 2,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968020000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000004",
+ "payload": {
+  "type": "ClientMessageType_ChooseStartingPlayerResp",
+  "gameStateId": 1,
+  "respId": 2,
+  "chooseStartingPlayerResp": {
+   "teamType": "TeamType_Individual",
+   "systemSeatId": 1,
+   "teamId": 1
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:37:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000005","requestId":3,"timestamp":"1790000002500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":2,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":2,"prevGameStateId":1,"zones":[{"zoneId":31,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[101,102,103,104,105,106,107],"ownerSeatId":1},{"zoneId":32,"type":"ZoneType_Library","visibility":"Visibility_Hidden","objectInstanceIds":[1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027,1028,1029,1030,1031,1032,1033,1034,1035,1036,1037,1038,1039,1040],"ownerSeatId":1},{"zoneId":35,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[201,202,203,204,205,206,207],"ownerSeatId":2},{"zoneId":36,"type":"ZoneType_Library","visibility":"Visibility_Hidden","objectInstanceIds":[2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026,2027,2028,2029,2030,2031,2032,2033,2034,2035,2036,2037,2038,2039,2040],"ownerSeatId":2}],"gameObjects":[{"instanceId":101,"grpId":95192,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1,"visibility":"Visibility_Private"},{"instanceId":102,"grpId":95192,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":103,"grpId":93859,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1,"power":{"value":2},"toughness":{"value":1}},{"instanceId":104,"grpId":93650,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":105,"grpId":95192,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":106,"grpId":93725,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":107,"grpId":93741,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1}]}},{"type":"GREMessageType_MulliganReq","systemSeatIds":[1],"msgId":3,"gameStateId":2,"mulliganReq":{"mulliganType":"MulliganType_London"},"prompt":{"promptId":34,"parameters":[{"parameterName":"NumberOfCards","type":"ParameterType_Number","numberValue":7}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:41:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 4,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968065000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000006",
+ "payload": {
+  "type": "ClientMessageType_MulliganResp",
+  "gameStateId": 2,
+  "respId": 3,
+  "mulliganResp": {
+   "decision": "MulliganOption_AcceptHand"
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:58:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000007","requestId":5,"timestamp":"1790000007000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":3,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":3,"prevGameStateId":2,"turnInfo":{"turnNumber":1,"phase":"Phase_Main1","activePlayer":1,"priorityPlayer":1,"decisionPlayer":1},"players":[{"lifeTotal":20,"systemSeatNumber":1,"status":"PlayerStatus_InGame","teamId":1,"controllerSeatId":1},{"lifeTotal":20,"systemSeatNumber":2,"status":"PlayerStatus_InGame","teamId":2,"controllerSeatId":2}],"annotations":[{"id":10,"type":["AnnotationType_NewTurnStarted"],"affectorId":1,"affectedIds":[1]}]}},{"type":"GREMessageType_ActionsAvailableReq","systemSeatIds":[1],"msgId":4,"gameStateId":3,"actionsAvailableReq":{"actions":[{"actionType":"ActionType_Play","grpId":95192,"instanceId":101},{"actionType":"ActionType_Play","grpId":95192,"instanceId":102},{"actionType":"ActionType_Play","grpId":95192,"instanceId":105},{"actionType":"ActionType_Pass"}],"inactiveActions":[{"actionType":"ActionType_Cast","grpId":93859,"instanceId":103,"manaCost":[{"color":["ManaColor_White"],"count":1}]},{"actionType":"ActionType_Cast","grpId":93650,"instanceId":104,"manaCost":[{"color":["ManaColor_Generic"],"count":1},{"color":["ManaColor_White"],"count":1}]}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:02:00 PM: FAKEACCT0000042 to Match: ClientToGreuimessage
+{
+  "requestId": 0,
+  "payload": {
+    "type": "ClientMessageType_UIMessage",
+    "uiMessage": {
+      "onHover": {
+        "objectId": 101
+      }
+    }
+  }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:16:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 6,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968085000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000008",
+ "payload": {
+  "type": "ClientMessageType_PerformActionResp",
+  "gameStateId": 3,
+  "respId": 4,
+  "performActionResp": {
+   "actions": [
+    {
+     "actionType": "ActionType_Play",
+     "grpId": 95192,
+     "instanceId": 101
+    }
+   ],
+   "autoPassPriority": "AutoPassPriority_Yes"
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:40:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000009","requestId":7,"timestamp":"1790000009000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":4,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":4,"prevGameStateId":3,"zones":[{"zoneId":28,"type":"ZoneType_Battlefield","visibility":"Visibility_Public","objectInstanceIds":[150]},{"zoneId":30,"type":"ZoneType_Limbo","visibility":"Visibility_Public","objectInstanceIds":[101]},{"zoneId":31,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[102,103,104,105,106,107],"ownerSeatId":1}],"gameObjects":[{"instanceId":150,"grpId":95192,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"cardTypes":["CardType_Land"],"subtypes":["SubType_Plains"]}],"annotations":[{"id":11,"type":["AnnotationType_ObjectIdChanged"],"affectedIds":[101],"details":[{"key":"orig_id","type":"KeyValuePairValueType_int32","valueInt32":[101]},{"key":"new_id","type":"KeyValuePairValueType_int32","valueInt32":[150]}]},{"id":12,"type":["AnnotationType_ZoneTransfer"],"affectedIds":[150],"details":[{"key":"zone_src","type":"KeyValuePairValueType_int32","valueInt32":[31]},{"key":"zone_dest","type":"KeyValuePairValueType_int32","valueInt32":[28]},{"key":"category","type":"KeyValuePairValueType_string","valueString":["PlayLand"]}]},{"id":13,"type":["AnnotationType_UserActionTaken"],"affectorId":1,"affectedIds":[150],"details":[{"key":"actionType","type":"KeyValuePairValueType_int32","valueInt32":[3]},{"key":"abilityGrpId","type":"KeyValuePairValueType_int32","valueInt32":[0]}]}],"persistentAnnotations":[{"id":14,"type":["AnnotationType_EnteredZoneThisTurn"],"affectorId":28,"affectedIds":[150]}]}},{"type":"GREMessageType_ActionsAvailableReq","systemSeatIds":[1],"msgId":5,"gameStateId":4,"actionsAvailableReq":{"actions":[{"actionType":"ActionType_Cast","grpId":93859,"instanceId":103,"manaCost":[{"color":["ManaColor_White"],"count":1}]},{"actionType":"ActionType_Activate_Mana","grpId":95192,"instanceId":150,"abilityGrpId":1001},{"actionType":"ActionType_Pass"}],"inactiveActions":[{"actionType":"ActionType_Play","grpId":95192,"instanceId":102},{"actionType":"ActionType_Play","grpId":95192,"instanceId":105},{"actionType":"ActionType_Cast","grpId":93650,"instanceId":104,"manaCost":[{"color":["ManaColor_Generic"],"count":1},{"color":["ManaColor_White"],"count":1}]}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:44:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 8,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968105000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000010",
+ "payload": {
+  "type": "ClientMessageType_PerformActionResp",
+  "gameStateId": 4,
+  "respId": 5,
+  "performActionResp": {
+   "actions": [
+    {
+     "actionType": "ActionType_Cast",
+     "grpId": 93859,
+     "instanceId": 103,
+     "manaCost": [
+      {
+       "color": [
+        "ManaColor_White"
+       ],
+       "count": 1
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:15:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000011","requestId":9,"timestamp":"1790000011000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":5,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":5,"prevGameStateId":4,"zones":[{"zoneId":27,"type":"ZoneType_Stack","visibility":"Visibility_Public","objectInstanceIds":[151]},{"zoneId":31,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[102,104,105,106,107],"ownerSeatId":1}],"gameObjects":[{"instanceId":150,"grpId":95192,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"isTapped":true},{"instanceId":151,"grpId":93859,"type":"GameObjectType_Card","zoneId":27,"ownerSeatId":1,"controllerSeatId":1}],"annotations":[{"id":15,"type":["AnnotationType_ObjectIdChanged"],"affectedIds":[103],"details":[{"key":"orig_id","type":"KeyValuePairValueType_int32","valueInt32":[103]},{"key":"new_id","type":"KeyValuePairValueType_int32","valueInt32":[151]}]},{"id":16,"type":["AnnotationType_ZoneTransfer"],"affectedIds":[151],"details":[{"key":"zone_src","type":"KeyValuePairValueType_int32","valueInt32":[31]},{"key":"zone_dest","type":"KeyValuePairValueType_int32","valueInt32":[27]},{"key":"category","type":"KeyValuePairValueType_string","valueString":["CastSpell"]}]},{"id":17,"type":["AnnotationType_UserActionTaken"],"affectorId":1,"affectedIds":[151],"details":[{"key":"actionType","type":"KeyValuePairValueType_int32","valueInt32":[1]},{"key":"abilityGrpId","type":"KeyValuePairValueType_int32","valueInt32":[0]}]}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:19:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000012","requestId":10,"timestamp":"1790000011500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":6,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":6,"prevGameStateId":5,"zones":[{"zoneId":27,"type":"ZoneType_Stack","visibility":"Visibility_Public"},{"zoneId":28,"type":"ZoneType_Battlefield","visibility":"Visibility_Public","objectInstanceIds":[152,150]}],"gameObjects":[{"instanceId":152,"grpId":93859,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"cardTypes":["CardType_Creature"],"hasSummoningSickness":true,"power":{"value":2},"toughness":{"value":1}}],"diffDeletedInstanceIds":[151],"annotations":[{"id":18,"type":["AnnotationType_ObjectIdChanged"],"affectedIds":[151],"details":[{"key":"orig_id","type":"KeyValuePairValueType_int32","valueInt32":[151]},{"key":"new_id","type":"KeyValuePairValueType_int32","valueInt32":[152]}]},{"id":19,"type":["AnnotationType_ZoneTransfer"],"affectedIds":[152],"details":[{"key":"zone_src","type":"KeyValuePairValueType_int32","valueInt32":[27]},{"key":"zone_dest","type":"KeyValuePairValueType_int32","valueInt32":[28]},{"key":"category","type":"KeyValuePairValueType_string","valueString":["Resolve"]}]}],"persistentAnnotations":[{"id":14,"type":["AnnotationType_EnteredZoneThisTurn"],"affectorId":28,"affectedIds":[150,152]}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:23:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000013","requestId":11,"timestamp":"1790000012000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":7,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":7,"prevGameStateId":6,"turnInfo":{"turnNumber":2,"phase":"Phase_Main1","activePlayer":2,"priorityPlayer":2,"decisionPlayer":2},"zones":[{"zoneId":35,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[208,201,202,203,204,205,206,207],"ownerSeatId":2},{"zoneId":36,"type":"ZoneType_Library","visibility":"Visibility_Hidden","objectInstanceIds":[2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026,2027,2028,2029,2030,2031,2032,2033,2034,2035,2036,2037,2038,2039,2040],"ownerSeatId":2}],"diffDeletedPersistentAnnotationIds":[14]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:27:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000014","requestId":12,"timestamp":"1790000012500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":8,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":8,"prevGameStateId":7,"zones":[{"zoneId":28,"type":"ZoneType_Battlefield","visibility":"Visibility_Public","objectInstanceIds":[250,152,150]},{"zoneId":35,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[208,202,203,204,205,206,207],"ownerSeatId":2}],"gameObjects":[{"instanceId":250,"grpId":95192,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":2,"controllerSeatId":2,"subtypes":["SubType_Plains"]}],"annotations":[{"id":20,"type":["AnnotationType_ObjectIdChanged"],"affectedIds":[201],"details":[{"key":"orig_id","type":"KeyValuePairValueType_int32","valueInt32":[201]},{"key":"new_id","type":"KeyValuePairValueType_int32","valueInt32":[250]}]},{"id":21,"type":["AnnotationType_ZoneTransfer"],"affectedIds":[250],"details":[{"key":"zone_src","type":"KeyValuePairValueType_int32","valueInt32":[35]},{"key":"zone_dest","type":"KeyValuePairValueType_int32","valueInt32":[28]},{"key":"category","type":"KeyValuePairValueType_string","valueString":["PlayLand"]}]},{"id":22,"type":["AnnotationType_UserActionTaken"],"affectorId":2,"affectedIds":[250],"details":[{"key":"actionType","type":"KeyValuePairValueType_int32","valueInt32":[3]},{"key":"abilityGrpId","type":"KeyValuePairValueType_int32","valueInt32":[0]}]}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:31:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000015","requestId":13,"timestamp":"1790000013000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":9,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":9,"prevGameStateId":8,"zones":[{"zoneId":28,"type":"ZoneType_Battlefield","visibility":"Visibility_Public","objectInstanceIds":[252,250,152,150]},{"zoneId":27,"type":"ZoneType_Stack","visibility":"Visibility_Public","objectInstanceIds":[253]},{"zoneId":35,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[208,203,204,205,206,207],"ownerSeatId":2}],"gameObjects":[{"instanceId":250,"grpId":95192,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":2,"controllerSeatId":2,"isTapped":true,"subtypes":["SubType_Plains"]},{"instanceId":252,"grpId":93734,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":2,"controllerSeatId":2,"color":["CardColor_White"],"cardTypes":["CardType_Creature"],"hasSummoningSickness":true,"power":{"value":2},"toughness":{"value":2}},{"instanceId":253,"grpId":175773,"type":"GameObjectType_Ability","zoneId":27,"ownerSeatId":2,"controllerSeatId":2,"objectSourceGrpId":93734,"parentId":252}],"annotations":[{"id":23,"type":["AnnotationType_ObjectIdChanged"],"affectedIds":[202],"details":[{"key":"orig_id","type":"KeyValuePairValueType_int32","valueInt32":[202]},{"key":"new_id","type":"KeyValuePairValueType_int32","valueInt32":[252]}]},{"id":24,"type":["AnnotationType_AbilityInstanceCreated"],"affectorId":252,"affectedIds":[253],"details":[{"key":"source_zone","type":"KeyValuePairValueType_int32","valueInt32":[28]}]}],"turnInfo":{"turnNumber":2,"phase":"Phase_Main1","activePlayer":2,"priorityPlayer":1,"decisionPlayer":1}}},{"type":"GREMessageType_ActionsAvailableReq","systemSeatIds":[1],"msgId":6,"gameStateId":9,"actionsAvailableReq":{"actions":[{"actionType":"ActionType_Activate_Mana","grpId":95192,"instanceId":150,"abilityGrpId":1001},{"actionType":"ActionType_Pass"}],"inactiveActions":[{"actionType":"ActionType_Play","grpId":95192,"instanceId":102}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:35:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 14,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968145000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000016",
+ "payload": {
+  "type": "ClientMessageType_PerformActionResp",
+  "gameStateId": 9,
+  "respId": 6,
+  "performActionResp": {
+   "actions": [
+    {
+     "actionType": "ActionType_Pass"
+    }
+   ]
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:56:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000017","requestId":15,"timestamp":"1790000015000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_QueuedGameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":10,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":10,"prevGameStateId":9,"zones":[{"zoneId":27,"type":"ZoneType_Stack","visibility":"Visibility_Public"},{"zoneId":28,"type":"ZoneType_Battlefield","visibility":"Visibility_Public","objectInstanceIds":[254,252,250,152,150]}],"gameObjects":[{"instanceId":254,"grpId":94156,"type":"GameObjectType_Token","zoneId":28,"ownerSeatId":2,"controllerSeatId":2,"color":["CardColor_White"],"cardTypes":["CardType_Creature"],"hasSummoningSickness":true,"power":{"value":1},"toughness":{"value":1},"objectSourceGrpId":93734}],"diffDeletedInstanceIds":[253],"annotations":[{"id":25,"type":["AnnotationType_TokenCreated"],"affectorId":253,"affectedIds":[254]},{"id":26,"type":["AnnotationType_ResolutionComplete"],"affectorId":253,"affectedIds":[253],"details":[{"key":"grpid","type":"KeyValuePairValueType_int32","valueInt32":[175773]}]}],"persistentAnnotations":[{"id":27,"type":["AnnotationType_EnteredZoneThisTurn"],"affectorId":28,"affectedIds":[250,252,254]}],"turnInfo":{"turnNumber":2,"phase":"Phase_Main1","activePlayer":2,"priorityPlayer":2,"decisionPlayer":2}}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:00:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000018","requestId":16,"timestamp":"1790000015500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":11,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":11,"prevGameStateId":10,"turnInfo":{"turnNumber":3,"phase":"Phase_Main1","activePlayer":1,"priorityPlayer":1,"decisionPlayer":1},"zones":[{"zoneId":31,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[108,102,104,105,106,107],"ownerSeatId":1},{"zoneId":32,"type":"ZoneType_Library","visibility":"Visibility_Hidden","objectInstanceIds":[1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027,1028,1029,1030,1031,1032,1033,1034,1035,1036,1037,1038,1039,1040],"ownerSeatId":1}],"gameObjects":[{"instanceId":150,"grpId":95192,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"cardTypes":["CardType_Land"]},{"instanceId":152,"grpId":93859,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"cardTypes":["CardType_Creature"],"power":{"value":3},"toughness":{"value":2}},{"instanceId":108,"grpId":95192,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1}],"diffDeletedPersistentAnnotationIds":[27],"persistentAnnotations":[{"id":30,"type":["AnnotationType_ModifiedToughness","AnnotationType_ModifiedPower","AnnotationType_Counter"],"affectorId":4002,"affectedIds":[152],"details":[{"key":"count","type":"KeyValuePairValueType_int32","valueInt32":[1]},{"key":"counter_type","type":"KeyValuePairValueType_int32","valueInt32":[1]}]}],"annotations":[{"id":31,"type":["AnnotationType_ObjectIdChanged"],"affectedIds":[1008],"details":[{"key":"orig_id","type":"KeyValuePairValueType_int32","valueInt32":[1008]},{"key":"new_id","type":"KeyValuePairValueType_int32","valueInt32":[108]}]},{"id":32,"type":["AnnotationType_ZoneTransfer"],"affectedIds":[108],"details":[{"key":"zone_src","type":"KeyValuePairValueType_int32","valueInt32":[32]},{"key":"zone_dest","type":"KeyValuePairValueType_int32","valueInt32":[31]},{"key":"category","type":"KeyValuePairValueType_string","valueString":["Draw"]}]}]}},{"type":"GREMessageType_ActionsAvailableReq","systemSeatIds":[1],"msgId":7,"gameStateId":11,"actionsAvailableReq":{"actions":[{"actionType":"ActionType_Play","grpId":95192,"instanceId":108},{"actionType":"ActionType_Play","grpId":95192,"instanceId":102},{"actionType":"ActionType_Cast","grpId":93650,"instanceId":104,"manaCost":[{"color":["ManaColor_Generic"],"count":1},{"color":["ManaColor_White"],"count":1}]},{"actionType":"ActionType_Activate_Mana","grpId":95192,"instanceId":150,"abilityGrpId":1001},{"actionType":"ActionType_Pass"}],"inactiveActions":[{"actionType":"ActionType_Cast","grpId":93725,"instanceId":106},{"actionType":"ActionType_Cast","grpId":93741,"instanceId":107}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:04:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 17,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968170000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000019",
+ "payload": {
+  "type": "ClientMessageType_PerformActionResp",
+  "gameStateId": 11,
+  "respId": 7,
+  "performActionResp": {
+   "actions": [
+    {
+     "actionType": "ActionType_Cast",
+     "grpId": 93650,
+     "instanceId": 104,
+     "manaCost": [
+      {
+       "color": [
+        "ManaColor_Generic"
+       ],
+       "count": 1
+      },
+      {
+       "color": [
+        "ManaColor_White"
+       ],
+       "count": 1
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:41:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000020","requestId":18,"timestamp":"1790000017500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":12,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":12,"prevGameStateId":11,"zones":[{"zoneId":27,"type":"ZoneType_Stack","visibility":"Visibility_Public","objectInstanceIds":[160]},{"zoneId":31,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[108,102,105,106,107],"ownerSeatId":1}],"gameObjects":[{"instanceId":160,"grpId":93650,"type":"GameObjectType_Card","zoneId":27,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":150,"grpId":95192,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"isTapped":true}],"annotations":[{"id":33,"type":["AnnotationType_ObjectIdChanged"],"affectedIds":[104],"details":[{"key":"orig_id","type":"KeyValuePairValueType_int32","valueInt32":[104]},{"key":"new_id","type":"KeyValuePairValueType_int32","valueInt32":[160]}]}]}},{"type":"GREMessageType_SelectTargetsReq","systemSeatIds":[1],"msgId":8,"gameStateId":12,"selectTargetsReq":{"targets":[{"targetIdx":1,"targets":[{"targetInstanceId":252,"legalAction":"SelectAction_Select"},{"targetInstanceId":254,"legalAction":"SelectAction_Select"},{"targetInstanceId":152,"legalAction":"SelectAction_Select"}],"minTargets":1,"maxTargets":1}],"sourceId":160}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:45:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 19,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968190000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000021",
+ "payload": {
+  "type": "ClientMessageType_SelectTargetsResp",
+  "gameStateId": 12,
+  "respId": 8,
+  "selectTargetsResp": {
+   "target": {
+    "targetIdx": 1,
+    "targets": [
+     {
+      "targetInstanceId": 252,
+      "legalAction": "SelectAction_Select"
+     }
+    ]
+   }
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:10:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000022","requestId":20,"timestamp":"1790000019500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":13,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":13,"prevGameStateId":12,"annotations":[{"id":34,"type":["AnnotationType_PlayerSelectingTargets"],"affectorId":1,"affectedIds":[160]}]}},{"type":"GREMessageType_SelectTargetsReq","systemSeatIds":[1],"msgId":9,"gameStateId":13,"selectTargetsReq":{"targets":[{"targetIdx":1,"targets":[{"targetInstanceId":252,"legalAction":"SelectAction_Unselect"}],"minTargets":1,"maxTargets":1,"selectedTargets":1}],"sourceId":160}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:14:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 21,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968210000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000023",
+ "payload": {
+  "type": "ClientMessageType_SubmitTargetsReq",
+  "gameStateId": 13,
+  "respId": 9
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:28:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000024","requestId":22,"timestamp":"1790000021500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":14,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":14,"prevGameStateId":13,"persistentAnnotations":[{"id":35,"type":["AnnotationType_TargetSpec"],"affectorId":160,"affectedIds":[252],"details":[{"key":"abilityGrpId","type":"KeyValuePairValueType_int32","valueInt32":[0]},{"key":"index","type":"KeyValuePairValueType_int32","valueInt32":[1]}]}],"annotations":[{"id":36,"type":["AnnotationType_PlayerSubmittedTargets"],"affectorId":1,"affectedIds":[160]},{"id":37,"type":["AnnotationType_UserActionTaken"],"affectorId":1,"affectedIds":[160],"details":[{"key":"actionType","type":"KeyValuePairValueType_int32","valueInt32":[1]},{"key":"abilityGrpId","type":"KeyValuePairValueType_int32","valueInt32":[0]}]}]}},{"type":"GREMessageType_ActionsAvailableReq","systemSeatIds":[1],"msgId":10,"gameStateId":14,"actionsAvailableReq":{"actions":[{"actionType":"ActionType_Pass"}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:32:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 23,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968230000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000025",
+ "payload": {
+  "type": "ClientMessageType_PerformActionResp",
+  "gameStateId": 14,
+  "respId": 10,
+  "performActionResp": {
+   "actions": [
+    {
+     "actionType": "ActionType_Pass"
+    }
+   ]
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:53:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000026","requestId":24,"timestamp":"1790000023500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":15,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":15,"prevGameStateId":14,"zones":[{"zoneId":27,"type":"ZoneType_Stack","visibility":"Visibility_Public"},{"zoneId":28,"type":"ZoneType_Battlefield","visibility":"Visibility_Public","objectInstanceIds":[161,254,252,250,152,150]}],"gameObjects":[{"instanceId":161,"grpId":93650,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"cardTypes":["CardType_Enchantment"],"subtypes":["SubType_Aura"]}],"diffDeletedInstanceIds":[160],"diffDeletedPersistentAnnotationIds":[35],"annotations":[{"id":38,"type":["AnnotationType_ObjectIdChanged"],"affectedIds":[160],"details":[{"key":"orig_id","type":"KeyValuePairValueType_int32","valueInt32":[160]},{"key":"new_id","type":"KeyValuePairValueType_int32","valueInt32":[161]}]}],"persistentAnnotations":[{"id":39,"type":["AnnotationType_Attachment"],"affectorId":161,"affectedIds":[252]}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:57:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000027","requestId":25,"timestamp":"1790000024000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":16,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":16,"prevGameStateId":15,"turnInfo":{"turnNumber":3,"phase":"Phase_Combat","activePlayer":1,"priorityPlayer":1,"decisionPlayer":1,"step":"Step_DeclareAttack"}}},{"type":"GREMessageType_DeclareAttackersReq","systemSeatIds":[1],"msgId":11,"gameStateId":16,"declareAttackersReq":{"attackers":[{"attackerInstanceId":152,"legalDamageRecipients":[{"type":"DamageRecType_Player","playerSystemSeatId":2}]}],"qualifiedAttackers":[{"attackerInstanceId":152,"legalDamageRecipients":[{"type":"DamageRecType_Player","playerSystemSeatId":2}]}],"canSubmitAttackers":true}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:01:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 26,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968255000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000028",
+ "payload": {
+  "type": "ClientMessageType_DeclareAttackersResp",
+  "gameStateId": 16,
+  "respId": 11,
+  "declareAttackersResp": {
+   "selectedAttackers": [
+    {
+     "attackerInstanceId": 152,
+     "selectedDamageRecipient": {
+      "type": "DamageRecType_Player",
+      "playerSystemSeatId": 2
+     }
+    }
+   ]
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:26:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000029","requestId":27,"timestamp":"1790000026000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":17,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":17,"prevGameStateId":16}},{"type":"GREMessageType_DeclareAttackersReq","systemSeatIds":[1],"msgId":12,"gameStateId":17,"declareAttackersReq":{"attackers":[{"attackerInstanceId":152,"legalDamageRecipients":[{"type":"DamageRecType_Player","playerSystemSeatId":2}],"selectedDamageRecipient":{"type":"DamageRecType_Player","playerSystemSeatId":2}}],"qualifiedAttackers":[{"attackerInstanceId":152,"legalDamageRecipients":[{"type":"DamageRecType_Player","playerSystemSeatId":2}]}],"canSubmitAttackers":true}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:30:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 28,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968275000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000030",
+ "payload": {
+  "type": "ClientMessageType_SubmitAttackersReq",
+  "gameStateId": 17,
+  "respId": 12
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:44:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000031","requestId":29,"timestamp":"1790000028000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":18,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":18,"prevGameStateId":17,"gameObjects":[{"instanceId":152,"grpId":93859,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"cardTypes":["CardType_Creature"],"isTapped":true,"power":{"value":3},"toughness":{"value":2},"attackState":"AttackState_Declared","attackInfo":{"targetId":2}}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:48:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000032","requestId":30,"timestamp":"1790000028500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":19,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":19,"prevGameStateId":18,"turnInfo":{"turnNumber":3,"phase":"Phase_Combat","activePlayer":1,"priorityPlayer":1,"decisionPlayer":1,"step":"Step_CombatDamage"},"players":[{"lifeTotal":17,"systemSeatNumber":2,"status":"PlayerStatus_InGame","teamId":2,"controllerSeatId":2}],"gameObjects":[{"instanceId":152,"grpId":93859,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"cardTypes":["CardType_Creature"],"isTapped":true,"power":{"value":3},"toughness":{"value":2},"attackState":"AttackState_Attacking","blockState":"BlockState_Unblocked","attackInfo":{"targetId":2}}],"annotations":[{"id":40,"type":["AnnotationType_DamageDealt"],"affectorId":152,"affectedIds":[2],"details":[{"key":"damage","type":"KeyValuePairValueType_int32","valueInt32":[3]},{"key":"type","type":"KeyValuePairValueType_int32","valueInt32":[1]}]},{"id":41,"type":["AnnotationType_ModifiedLife"],"affectedIds":[2],"details":[{"key":"life","type":"KeyValuePairValueType_int32","valueInt32":[-3]}]}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:52:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000033","requestId":31,"timestamp":"1790000029000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":20,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":20,"prevGameStateId":19,"turnInfo":{"turnNumber":4,"phase":"Phase_Combat","activePlayer":2,"priorityPlayer":2,"decisionPlayer":1,"step":"Step_DeclareBlock"},"gameObjects":[{"instanceId":152,"grpId":93859,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"cardTypes":["CardType_Creature"],"power":{"value":3},"toughness":{"value":2}},{"instanceId":254,"grpId":94156,"type":"GameObjectType_Token","zoneId":28,"ownerSeatId":2,"controllerSeatId":2,"color":["CardColor_White"],"isTapped":true,"power":{"value":1},"toughness":{"value":1},"attackState":"AttackState_Attacking","attackInfo":{"targetId":1}}]}},{"type":"GREMessageType_DeclareBlockersReq","systemSeatIds":[1],"msgId":13,"gameStateId":20,"declareBlockersReq":{"blockers":[{"blockerInstanceId":152,"attackerInstanceIds":[254],"maxAttackers":1}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:56:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 32,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968305000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000034",
+ "payload": {
+  "type": "ClientMessageType_DeclareBlockersResp",
+  "gameStateId": 20,
+  "respId": 13,
+  "declareBlockersResp": {
+   "selectedBlockers": [
+    {
+     "blockerInstanceId": 152,
+     "selectedAttackerInstanceIds": [
+      254
+     ]
+    }
+   ]
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:20:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000035","requestId":33,"timestamp":"1790000031000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":21,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":21,"prevGameStateId":20}},{"type":"GREMessageType_DeclareBlockersReq","systemSeatIds":[1],"msgId":14,"gameStateId":21,"declareBlockersReq":{"blockers":[{"blockerInstanceId":152,"attackerInstanceIds":[254],"selectedAttackerInstanceIds":[254],"maxAttackers":1}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:24:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 34,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968325000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000036",
+ "payload": {
+  "type": "ClientMessageType_SubmitBlockersReq",
+  "gameStateId": 21,
+  "respId": 14
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:38:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000037","requestId":35,"timestamp":"1790000033000","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":22,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":22,"prevGameStateId":21,"gameObjects":[{"instanceId":152,"grpId":93859,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"cardTypes":["CardType_Creature"],"power":{"value":3},"toughness":{"value":2},"blockState":"BlockState_Declared","blockInfo":{"attackerIds":[254]}}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:42:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000038","requestId":36,"timestamp":"1790000033500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":23,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":23,"prevGameStateId":22,"turnInfo":{"turnNumber":4,"phase":"Phase_Combat","activePlayer":2,"priorityPlayer":2,"decisionPlayer":2,"step":"Step_EndCombat"},"zones":[{"zoneId":28,"type":"ZoneType_Battlefield","visibility":"Visibility_Public","objectInstanceIds":[161,252,250,152,150]}],"gameObjects":[{"instanceId":152,"grpId":93859,"type":"GameObjectType_Card","zoneId":28,"ownerSeatId":1,"controllerSeatId":1,"cardTypes":["CardType_Creature"],"power":{"value":3},"toughness":{"value":2},"damage":1}],"diffDeletedInstanceIds":[254],"annotations":[{"id":42,"type":["AnnotationType_DamageDealt"],"affectorId":254,"affectedIds":[152],"details":[{"key":"damage","type":"KeyValuePairValueType_int32","valueInt32":[1]},{"key":"type","type":"KeyValuePairValueType_int32","valueInt32":[1]}]}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:46:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+[Message summarized because one or more GameStateMessages exceeded the 50 GameObject or 50 Annotation limit.]
+::: GameStateMessage
+:: GameObject Count = 51
+:: Annotation Count = 2
+::: ActionsAvailableReq
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:54:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 37,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968350000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000039",
+ "payload": {
+  "type": "ClientMessageType_PerformActionResp",
+  "gameStateId": 24,
+  "respId": 15,
+  "performActionResp": {
+   "actions": [
+    {
+     "actionType": "ActionType_Pass"
+    }
+   ]
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:15:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000040","requestId":38,"timestamp":"1790000035500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":25,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":25,"prevGameStateId":24,"turnInfo":{"turnNumber":5,"phase":"Phase_Main1","activePlayer":1,"priorityPlayer":1,"decisionPlayer":1},"zones":[{"zoneId":31,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[109,108,102,105,106,107],"ownerSeatId":1},{"zoneId":32,"type":"ZoneType_Library","visibility":"Visibility_Hidden","objectInstanceIds":[1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027,1028,1029,1030,1031,1032,1033,1034,1035,1036,1037,1038,1039,1040],"ownerSeatId":1}],"gameObjects":[{"instanceId":109,"grpId":93741,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1}]}},{"type":"GREMessageType_ActionsAvailableReq","systemSeatIds":[1],"msgId":16,"gameStateId":25,"actionsAvailableReq":{"actions":[{"actionType":"ActionType_Play","grpId":95192,"instanceId":108},{"actionType":"ActionType_Pass"}],"inactiveActions":[{"actionType":"ActionType_Cast","grpId":93741,"instanceId":109}]}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:19:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 39,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968370000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000041",
+ "payload": {
+  "type": "ClientMessageType_PerformActionResp",
+  "gameStateId": 25,
+  "respId": 16,
+  "performActionResp": {
+   "actions": [
+    {
+     "actionType": "ActionType_Pass"
+    }
+   ]
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:40:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000042","requestId":40,"timestamp":"1790000037500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":26,"gameStateMessage":{"type":"GameStateType_Diff","gameStateId":26,"prevGameStateId":25,"gameInfo":{"matchID":"00000000-1111-2222-3333-444444444444","gameNumber":1,"stage":"GameStage_GameOver","type":"GameType_Duel","variant":"GameVariant_Normal","matchState":"MatchState_GameComplete","superFormat":"SuperFormat_Limited","mulliganType":"MulliganType_London","results":[{"scope":"MatchScope_Game","result":"ResultType_WinLoss","winningTeamId":1,"reason":"ResultReason_Concede"}]}}},{"type":"GREMessageType_IntermissionReq","systemSeatIds":[1],"msgId":17,"gameStateId":26,"intermissionReq":{"result":{"scope":"MatchScope_Match","result":"ResultType_WinLoss","winningTeamId":1,"reason":"ResultReason_Concede"}}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:44:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 41,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968390000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000043",
+ "payload": {
+  "type": "ClientMessageType_SubmitDeckResp",
+  "submitDeckResp": {
+   "deck": {
+    "deckCards": [
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     95192,
+     93859,
+     93859,
+     93859,
+     93859,
+     93650,
+     93650,
+     93725,
+     93725,
+     93725,
+     93725,
+     93725,
+     93725,
+     93725,
+     93725,
+     93725,
+     93741,
+     93741,
+     93741,
+     93741,
+     93741,
+     93741,
+     93741,
+     95192
+    ],
+    "sideboardCards": [
+     93725
+    ]
+   }
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:45:00 PM: Match to FAKEACCT0000042: GreToClientEvent
+{"transactionId":"aaaaaaaa-0000-4000-8000-000000000044","requestId":42,"timestamp":"1790000039500","greToClientEvent":{"greToClientMessages":[{"type":"GREMessageType_GameStateMessage","systemSeatIds":[1],"msgId":0,"gameStateId":1,"gameStateMessage":{"type":"GameStateType_Full","gameStateId":1,"gameInfo":{"matchID":"00000000-1111-2222-3333-444444444444","gameNumber":2,"stage":"GameStage_Start","type":"GameType_Duel","variant":"GameVariant_Normal","matchState":"MatchState_GameInProgress","superFormat":"SuperFormat_Limited","mulliganType":"MulliganType_London"},"players":[{"lifeTotal":20,"systemSeatNumber":1,"status":"PlayerStatus_InGame","teamId":1,"controllerSeatId":1},{"lifeTotal":20,"systemSeatNumber":2,"status":"PlayerStatus_InGame","teamId":2,"controllerSeatId":2}],"turnInfo":{"decisionPlayer":1},"zones":[{"zoneId":18,"type":"ZoneType_Revealed","visibility":"Visibility_Public","ownerSeatId":1},{"zoneId":19,"type":"ZoneType_Revealed","visibility":"Visibility_Public","ownerSeatId":2},{"zoneId":27,"type":"ZoneType_Stack","visibility":"Visibility_Public"},{"zoneId":28,"type":"ZoneType_Battlefield","visibility":"Visibility_Public"},{"zoneId":29,"type":"ZoneType_Exile","visibility":"Visibility_Public"},{"zoneId":30,"type":"ZoneType_Limbo","visibility":"Visibility_Public"},{"zoneId":31,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[111,112,113,114,115,116,117],"ownerSeatId":1},{"zoneId":32,"type":"ZoneType_Library","visibility":"Visibility_Hidden","objectInstanceIds":[1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027,1028,1029,1030,1031,1032,1033,1034,1035,1036,1037,1038,1039,1040],"ownerSeatId":1},{"zoneId":35,"type":"ZoneType_Hand","visibility":"Visibility_Private","objectInstanceIds":[211,212,213,214,215,216,217],"ownerSeatId":2},{"zoneId":36,"type":"ZoneType_Library","visibility":"Visibility_Hidden","objectInstanceIds":[2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026,2027,2028,2029,2030,2031,2032,2033,2034,2035,2036,2037,2038,2039,2040],"ownerSeatId":2}],"gameObjects":[{"instanceId":111,"grpId":95192,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":112,"grpId":93741,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":113,"grpId":93741,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":114,"grpId":93741,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":115,"grpId":93725,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":116,"grpId":93725,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1},{"instanceId":117,"grpId":93859,"type":"GameObjectType_Card","zoneId":31,"ownerSeatId":1,"controllerSeatId":1}]}},{"type":"GREMessageType_MulliganReq","systemSeatIds":[1],"msgId":3,"gameStateId":1,"mulliganReq":{"mulliganType":"MulliganType_London"}}]}}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]9/1/2026 1:49:00 PM: FAKEACCT0000042 to Match: ClientToGremessage
+{
+ "requestId": 43,
+ "clientToMatchServiceMessageType": "ClientToMatchServiceMessageType_ClientToGREMessage",
+ "timestamp": "639255968410000000",
+ "transactionId": "aaaaaaaa-0000-4000-8000-000000000045",
+ "payload": {
+  "type": "ClientMessageType_MulliganResp",
+  "gameStateId": 1,
+  "respId": 3,
+  "mulliganResp": {
+   "decision": "MulliganOption_Mulligan"
+  }
+ }
+}
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+[UnityCrossThreadLogger]STATE CHANGED {"old":"Playing","new":"MatchCompleted"}
