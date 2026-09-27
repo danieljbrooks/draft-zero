@@ -255,9 +255,18 @@ estimate as a pessimistic ceiling.** The JVM-layout pilot below replaces it with
 
 Each pilot costs a few dollars. **Every pilot gets an external hard time limit.**
 
-- [ ] **v0.2 smoke test.** Does the pipeline run end to end? On a laptop, yes (2026-09-26:
-      3 generations including a frozen gen-0 opponent and evals). The pod pilot
-      (`deploy/pilot_v02.sh`) checks it at scale.
+- [x] **v0.2 smoke test** (2026-09-26, [docs/010](docs/010-v02-migration-pilot.md)). It runs end to
+      end, on a laptop and on a 13.6-core pod:
+  - 78 games over 3 generations, 0 failed games, 0 search timeouts in 8,556 searches.
+  - Network self-play ran at 59 games/hr on 3 × 4 threads, CPU-bound, about $0.012 per game.
+  - A sized server pool beat v0.2's fixed 6 threads by 16%. Training needed batch 128: 512 ran
+    a 32 GB GPU out of memory.
+  - Follow-ups:
+    - [ ] Re-measure 7 × 4 with a sized shared server on a 31-core pod before sizing exp #2.
+    - [ ] Smaller jobs per generation, to cut the straggler tail (CPU averaged 70–78% of the
+          quota per generation, against 98% in steady state).
+    - [ ] Self-play value labels sat closer to 0 under v0.2 than v0.1 at λ = 0.95 (median |v|
+          0.10–0.37 vs 0.41–0.45). Confirm on a larger run before fixing λ.
 - [x] **JVM layout × search budget** (2026-09-26, on v0.1, budget 300 only; see
       [docs/006](docs/006-exp2-pilot.md)). 7 JVMs × 4 threads beat 1 × 28 by 3.3× offline, and by 1.9× with
       one shared inference server. Re-measure on v0.2 before sizing exp #2.
@@ -380,6 +389,9 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 
 Add dated entries, newest first.
 
+- **2026-09-26** — v0.2 pod pilot ([docs/010](docs/010-v02-migration-pilot.md)): the loop runs end to
+  end on v0.2 at pod scale, and both watchdog fixes held on the pod. `v02-migration` stays off
+  `main` for now: the gameplay-data work still runs on the v0.1 engine and exp #1's checkpoint.
 - **2026-09-26** — Moved to Will's v0.2 engine (branch `v02-migration`). The v0.2 server's
   HTTP pool is fixed at 6 threads, which caps a shared server's batch at 6. That's a problem
   with several JVMs, so our MageZero branch makes it opt-in configurable. Exp #1's
