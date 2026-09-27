@@ -255,14 +255,19 @@ def model_from(state: dict, rows: int):
 # ================================================================================================
 
 def agreement(checkpoint: Path, *, table: str = "turnstart_test", rows: int | None = None,
-              attack: bool = True, seed: int = 12345) -> dict:
+              attack: bool = True, seed: int = 12345, keep: Path | None = None,
+              attack_keep: Path | None = None) -> dict:
     """How closely a checkpoint matches held-out human decisions: priority top-1 / top-3 in S and
     set NLL (docs/008 §7.3's scoring, ties broken in expectation), the same on decisions with 4+
     legal options, the value head's AUC against game results, and the attack head's accuracy.
-    `rows` scores a fixed random subset (the same rows every call), for cheap per-generation use."""
+    `rows` scores a fixed random subset (the same rows every call), for cheap per-generation use.
+    `keep` / `attack_keep` (.npy row positions) restrict the tables first, e.g. to the test rows
+    whose mirrored game (pairs.py) is not in the train or val split."""
     im._torch_env()
     model, vocab = im.load_checkpoint(Path(checkpoint))
     t = im.load_table(H5 / f"{table}.h5")
+    if keep is not None:
+        t = im.subset_table(t, np.load(keep))
     if rows is not None and rows < len(t["z"]):
         sel = np.sort(np.random.default_rng(seed).choice(len(t["z"]), rows, replace=False))
         t = im.subset_table(t, sel)
@@ -278,6 +283,11 @@ def agreement(checkpoint: Path, *, table: str = "turnstart_test", rows: int | No
            "mapped_share": p["mapped_share"]}
     if attack:
         a = im.load_attack(H5 / "replay_attack_test.h5")
+        if attack_keep is not None:
+            sel = np.load(attack_keep)
+            ind, off = _sub_csr(a, sel)
+            a = {**{k: v[sel] for k, v in a.items() if k not in ("indices", "offsets")},
+                 "indices": ind, "offsets": off}
         if rows is not None and rows < len(a["y"]):
             sel = np.sort(np.random.default_rng(seed).choice(len(a["y"]), rows, replace=False))
             ind, off = _sub_csr(a, sel)
@@ -314,6 +324,8 @@ def main(argv=None) -> int:
     a.add_argument("--table", default="turnstart_test")
     a.add_argument("--rows", type=int, default=None)
     a.add_argument("--no-attack", action="store_true")
+    a.add_argument("--keep", type=Path, default=None, help="table row positions to score (.npy)")
+    a.add_argument("--attack-keep", type=Path, default=None, help="attack table row positions (.npy)")
     a.add_argument("--json", action="store_true", help="print one JSON line (for the loop)")
     args = ap.parse_args(argv)
     if args.cmd == "train":
@@ -322,7 +334,8 @@ def main(argv=None) -> int:
                      n_train=args.n_train, seed=args.seed)
         args.out.with_suffix("").with_suffix(".json").write_text(json.dumps(info, indent=1))
     else:
-        r = agreement(args.checkpoint, table=args.table, rows=args.rows, attack=not args.no_attack)
+        r = agreement(args.checkpoint, table=args.table, rows=args.rows, attack=not args.no_attack,
+                      keep=args.keep, attack_keep=args.attack_keep)
         print(("HUMAN_AGREEMENT " + json.dumps(r)) if args.json else json.dumps(r, indent=1))
     return 0
 

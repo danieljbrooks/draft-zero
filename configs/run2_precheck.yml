@@ -1,0 +1,39 @@
+# Exp #2 run 2, before launch (ROADMAP "Run 2 handoff" step 4): 16 games of network self-play from
+# the pretrained start at run 2's settings (budget 300, hidden hand, priors off), to check they
+# are legal and sensible, and the loop's init path on the pod. One generation, no eval.
+#
+#   MZ_DECK_DIR=... MZ_ACTION_VOCAB=$PWD/assets/vocab/FDN_SPG.tsv \
+#     python -m draftzero.loop --config configs/run2_precheck.yml --fresh
+model: FDN_run2_precheck
+version: 1
+curriculum: configs/curriculum_exp2.yml
+generations: 1
+target_games: null
+resource_interval_s: 30
+
+deck_root: data/deckgen/FDN_PremierDraft_wr60/top_player_FDN_decks
+
+bootstrap_games: 16
+games_per_gen: 16
+chunk_games: 2
+mix: {self: 0.2, past: 0.7, gen0: 0.1}
+replay_states: 150000
+train_batch: 64
+hidden_info: {see_opponent_hand: false}
+init_checkpoint: models/imitation/pretrained.pt.gz
+human_agreement: {rows: 3000}
+
+eval:
+  baselines: []
+stats:
+  window_gens: 1
+  min_card_games: 1
+
+jvm:
+  heap: 10g
+  threads: 2
+  jvms: 8
+  gc: zgc-gen
+  search_budget: 300
+  timeout_ms: 60000
+  max_minutes: 50
