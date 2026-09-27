@@ -336,7 +336,16 @@ generation, training batch 64. Weights go to HF `danbrooks/draftzero-checkpoints
 `2026-09-27_01-59-54/`. The session "Experiment 2 and performance - RUN 1" launched it and
 owns it. **Other sessions: don't touch this pod or that HF prefix.**
 
-**Run 2 handoff (imitation A/B).** It needs its own session, working in its own git worktree and
+**Run 2** (2026-09-27, [docs/011](docs/011-exp2-run2-imitation.md)): `dz-exp2-run2`, RunPod pod
+`xdslbqu0imovu0`, a Secure RTX 3090 (31.1 cores, 116 GB) at $0.50/hr, from a network pretrained on human
+decisions. On clean held-out decisions it scores 73.0% top-1 and value AUC 0.70, and its games look
+sane. The cap is $28.20 in total (what the balance allowed after run 1). `deploy/exp2.sh` runs
+`configs/exp2_run2.yml` with $27.45 left after setup: a graceful stop at 54.15 h and hard removal at
+54.90 h (about 2026-09-29 10:36 UTC). Weights go to HF under `2026-09-27_03-42-21/`, where
+`gen0.pt.gz` is the pretrained start. Priors are off as in run 1, so the search reads only the
+pretrained value head and trunk, never its human policy. The session "Experiment 2 run 2" owns it.
+
+**Run 2 handoff (imitation A/B)**, done as above. It needs its own session, working in its own git worktree and
 branch, never the shared `~/Desktop/Code/draft-zero` checkout.
 - **Question:** at equal cost, does starting self-play from a network pretrained on human
   decisions do better on the three goals above than run 1's heuristic-search start?
