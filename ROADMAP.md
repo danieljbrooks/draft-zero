@@ -420,6 +420,9 @@ Add dated entries, newest first.
   game, hidden cards included. Card statistics for counterspells and combat tricks carry that
   bias. Exp #3's direction is docs/009 §8: a world sampler with determinized search, a
   certification suite, and a fair gen-0 search. The head-to-head measurement above sizes it.
+  The engine work goes on a `danieljbrooks/mage` branch `hidden-info`, stacked on
+  `v0.2-generalist` with one commit per piece, so each can be offered upstream (it overlaps
+  MageZero#4). The engine then reads: Will's v0.2.0, then `v0.2-generalist`, then `hidden-info`.
 
 - **2026-09-26** — v0.2 pod pilot ([docs/010](docs/010-v02-migration-pilot.md)): the loop runs end to
   end on v0.2 at pod scale, and both watchdog fixes held on the pod. `v02-migration` stays off
