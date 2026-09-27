@@ -276,6 +276,16 @@ Each pilot costs a few dollars. **Every pilot gets an external hard time limit.*
   - Measure games/hr, sims/s, cost per game, and the inference server's request rate, to see
     whether inference becomes the cap once the JVM stops being one.
   - This sizes exp #2 and the funding ask. Don't lower the budget to hit a throughput target.
+- [x] **Hide the opponent's hand from the network** (2026-09-26). `configs/game.yml` said
+      `hidden_info:`, but the Java reads `hiddenInfo`, so exp #1 (and the v0.2 pilot) encoded both hands
+      in every state (docs/009). The key is fixed, set to false, and set explicitly by the loop
+      (`hidden_info` in its config). Checked in the JVM: the other player's hand now encodes as a
+      card count (`CardsInHand`), which never appears with the switch on.
+- [ ] **Measure what the search's leak is worth** (docs/009 §8.3). A throwaway flag that re-deals the
+      opponent's hidden cards before each search (`shuffleUnknowns` in `createMCTSGame`) and turns off
+      tree reuse. Then play the clairvoyant raw search against it, head to head: CPU only, a few hours.
+      Measurement only: it ignores known cards and uses the global RNG, so don't train with it.
+      This sizes the fix planned for exp #3.
 - [ ] **Dedup off.** Will measured it at ~25% of each inference request. Verify the speedup,
       and check that outputs are identical.
 - [ ] **λ sweep**, 2–3 generations per arm at budget 96. Which λ gives roughly flat value-label
@@ -388,6 +398,12 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 ## Decision log
 
 Add dated entries, newest first.
+
+- **2026-09-26** — Hidden information: exp #2 accepts some leakage; exp #3 should do better. For
+  exp #2 the network no longer sees the opponent's hand, but the search still runs on the real
+  game, hidden cards included. Card statistics for counterspells and combat tricks carry that
+  bias. Exp #3's direction is docs/009 §8: a world sampler with determinized search, a
+  certification suite, and a fair gen-0 search. The head-to-head measurement above sizes it.
 
 - **2026-09-26** — v0.2 pod pilot ([docs/010](docs/010-v02-migration-pilot.md)): the loop runs end to
   end on v0.2 at pod scale, and both watchdog fixes held on the pod. `v02-migration` stays off

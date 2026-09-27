@@ -78,6 +78,9 @@ DEFAULTS = {
     # states per training batch (MageZero's default: 512). A format-wide state is ~1,700
     # features, and 512 of them ran a 32 GB GPU out of memory in the v0.2 pilot.
     "train_batch": None,
+    # Whether a player's network input includes the opponent's hand. False from exp #2 on
+    # (docs/009); exp #1 had it on, by accident. The search still sees hidden cards either way.
+    "hidden_info": {"see_opponent_hand": False},
 }
 
 
@@ -175,7 +178,8 @@ def create_run(cfg: dict) -> Path:
 
 # ── game.yml ─────────────────────────────────────────────────
 
-def _player(p: dict, pool: str, mode: str, out: Path, ptype: str, offline: bool, settings: GenSettings, jvm: dict):
+def _player(p: dict, pool: str, mode: str, out: Path, ptype: str, offline: bool, settings: GenSettings, jvm: dict,
+            hidden: dict):
     p["deckPath"] = ""
     p["deck_pool"] = str(Path(pool).resolve())
     p["deck_pool_mode"] = mode
@@ -188,6 +192,10 @@ def _player(p: dict, pool: str, mode: str, out: Path, ptype: str, offline: bool,
     p["priors"]["prior_temperature"] = settings.prior_temperature
     for head in ("binary", "priority", "target", "opponent"):
         p["priors"][head] = bool(getattr(settings.priors, head)) and not offline
+    # set explicitly: the Java reads `hiddenInfo`, and a stale `hidden_info` block in a base
+    # game.yml is ignored without a word, which is how exp #1 ended up seeing both hands
+    p.pop("hidden_info", None)
+    p["hiddenInfo"] = {"see_opponent_hand": bool(hidden["see_opponent_hand"])}
 
 
 def game_yml(run: Run, name: str, settings: GenSettings, games: int, *,
@@ -196,8 +204,9 @@ def game_yml(run: Run, name: str, settings: GenSettings, games: int, *,
              type_b: str = "mcts", b_port: int = PRIMARY_PORT) -> str:
     cfg = yaml.safe_load(Path(run.cfg["base_game_yml"]).read_text())
     jvm = run.cfg["jvm"]
-    _player(cfg["player_a"], pool_a, mode, out_a, "mcts", offline_a, settings, jvm)
-    _player(cfg["player_b"], pool_b, mode, out_b, type_b, offline_b, settings, jvm)
+    hidden = run.cfg.get("hidden_info") or DEFAULTS["hidden_info"]
+    _player(cfg["player_a"], pool_a, mode, out_a, "mcts", offline_a, settings, jvm, hidden)
+    _player(cfg["player_b"], pool_b, mode, out_b, type_b, offline_b, settings, jvm, hidden)
     cfg["training"]["games"] = games
     cfg["training"]["threads"] = min(jvm["threads"], games)
     cfg["training"]["max_minutes"] = jvm["max_minutes"]

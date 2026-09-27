@@ -31,8 +31,13 @@ player_a:
     mulligans_enabled: false
     manual_tapping: false
 
-  hidden_info:
-    see_opponent_hand: true
+  # The key MageZero's Config.java reads is `hiddenInfo`. Until 2026-09-26 this file said
+  # `hidden_info`, which was silently ignored, so the default (true) applied and every state
+  # encoded the opponent's hand (docs/009). draftzero.loop now sets this from its own config.
+  # false: a hand is encoded only for the player deciding at that state. The search itself
+  # still runs on the real game, hidden cards included: a known leak, accepted for exp #2.
+  hiddenInfo:
+    see_opponent_hand: false
 
 player_b:
   deckPath: xmage/decks/UWTempo.dck
@@ -61,8 +66,13 @@ player_b:
     mulligans_enabled: false
     manual_tapping: false
 
-  hidden_info:
-    see_opponent_hand: true
+  # The key MageZero's Config.java reads is `hiddenInfo`. Until 2026-09-26 this file said
+  # `hidden_info`, which was silently ignored, so the default (true) applied and every state
+  # encoded the opponent's hand (docs/009). draftzero.loop now sets this from its own config.
+  # false: a hand is encoded only for the player deciding at that state. The search itself
+  # still runs on the real game, hidden cards included: a known leak, accepted for exp #2.
+  hiddenInfo:
+    see_opponent_hand: false
 
 training:
   games: 200
