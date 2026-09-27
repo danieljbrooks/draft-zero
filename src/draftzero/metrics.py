@@ -432,6 +432,11 @@ def dataset_stats(files: list[str]) -> dict:
         "mean_top_action_mass": float(np.mean(top_mass)) if top_mass else None,
         "value_label_mean": float(v.mean()), "value_label_abs_mean": float(np.abs(v).mean()),
         "value_label_pos_frac": float((v > 0).mean()),
+        # Will's check on λ: roughly flat is the target, bimodal means λ too high (docs/003 §8).
+        # The share near 0 is what looked high in the v0.2 pilot (docs/010).
+        "value_label_abs_median": float(np.median(np.abs(v))),
+        "value_label_near0_frac": float((np.abs(v) < 0.1).mean()),
+        "value_label_hist": np.histogram(np.clip(v, -1, 1), np.linspace(-1, 1, 11))[0].tolist(),
     }
 
 

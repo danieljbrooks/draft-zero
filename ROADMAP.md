@@ -286,8 +286,10 @@ Each pilot costs a few dollars. **Every pilot gets an external hard time limit.*
       tree reuse. Then play the clairvoyant raw search against it, head to head: CPU only, a few hours.
       Measurement only: it ignores known cards and uses the global RNG, so don't train with it.
       This sizes the fix planned for exp #3.
-- [ ] **Dedup off.** Will measured it at ~25% of each inference request. Verify the speedup,
-      and check that outputs are identical.
+- [x] **Dedup off** (checked 2026-09-26). Will measured the server's feature dedup at ~25% of each
+      request. In v0.2 the dedup (`FeatureVocab._dedupe`) first checks whether each bag is already
+      sorted and unique, which XMage guarantees, and skips the work when it is. Nothing to turn
+      off.
 - [ ] **λ sweep**, 2–3 generations per arm at budget 96. Which λ gives roughly flat value-label
       histograms? This shows early shape, not long-run stability. Arms depend on decision D1.
 
@@ -315,7 +317,19 @@ which change helped. That's acceptable: the goal is a better player, not attribu
 | Value-label histograms | Not every generation (§6.2) | Every generation |
 | Strength eval | 40 games every 5 gens, plus a 400-game final eval | 200 games per opponent, less often |
 
-**Success criteria.** Fix these before launch; don't choose them after seeing results.
+**Goals** (Dan, 2026-09-26), in order:
+1. **A high win rate against the baseline:** raw search at the same budget, 200-game evals every
+   8 generations.
+2. **High throughput:** games per hour and cost per game, logged every generation.
+3. **A good rank correlation with 17lands on commons:** above exp #1's 0.28.
+
+**Runs and budget:** one or two runs, **hard-capped at $29 per pod** (`deploy/exp2.sh`: the
+watchdog stops at budget − 0.75 h, pushes the weights to HF and removes the pod, and a
+self-destruct fires at the budget whatever happens). Run 1 uses Will's settings
+(`configs/exp2.yml`). Run 2, if affordable, uses the same settings from a network pretrained
+on human decisions, so the only difference is the starting point (imitation, D8).
+
+**Secondary checks**, carried over:
 
 - [ ] Rank correlation with 17lands on commons beats **0.28** (the exp #1 figure for gens 10+).
 - [ ] Premium removal closes its gap to 17lands: Stab, Burst Lightning and Refute were 45–46%
@@ -323,12 +337,14 @@ which change helped. That's acceptable: the goal is a better player, not attribu
 - [ ] Strength against a yardstick that stays fixed across experiments. Raw search at budget
       300 is stronger than at 96, so a raw-search win rate at 300 isn't comparable to exp #1's
       55.8%. Keep a raw-search-at-96 opponent. Exp #1's gen 33 is incompatible with v0.2
-      (per Will's release notes), so it can't be played directly.
+      (per Will's release notes), so it can't be played directly. Not in `configs/exp2.yml` yet:
+      the eval runs its baseline at the agent's budget, so this needs a per-baseline budget.
 - [ ] Qualitative: Dan plays it, and it doesn't make exp #1's blunders (like chumping a 2/2
       with a 1/1).
 
 **Gate:**
-- [ ] Send the exp #2 design to Will before launching (committed to on Discord, 2026-09-23).
+- [x] ~~Send the exp #2 design to Will before launching~~. Will has given a lot of feedback
+      already; Dan communicates the parameters when the run starts (2026-09-26).
 
 ---
 

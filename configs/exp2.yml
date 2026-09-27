@@ -1,0 +1,46 @@
+# Experiment #2: Will's recommendations on the v0.2 engine, run until its budget is spent.
+#   bash deploy/exp2.sh            (on a pod, after deploy/pilot_v02_setup.sh)
+#
+# Goals, in order: a high win rate against the baseline, high throughput, and a good rank
+# correlation with 17lands on commons (above exp #1's 0.28).
+#
+# The layout below is for a 31-core pod; deploy/exp2.sh re-sizes jvms, heap, games_per_gen and
+# the eval from the pod's cgroup, and derives the time limit from its hourly price.
+model: FDN_exp2
+version: 1
+curriculum: configs/curriculum_exp2.yml   # λ fixed at 0.95, all priors off
+generations: null                         # open-ended: the budget stops it
+target_games: null
+resource_interval_s: 30
+
+deck_root: data/deckgen/FDN_PremierDraft_wr60/top_player_FDN_decks
+
+bootstrap_games: 112        # gen 0: heuristic search on both sides
+games_per_gen: 112          # 4 waves of 28 game threads
+# One game per game thread per job, so a generation is many short jobs: a JVM that finishes
+# early picks up the next one instead of idling while the slowest JVM finishes (the v0.2
+# pilot's 8-game jobs left CPU at 70-78% of the quota per generation, docs/010).
+chunk_games: 4
+mix: {self: 0.2, past: 0.7, gen0: 0.1}   # Will: 20 / 70 / 10 (exp #1: 70 / 20 / 10)
+replay_states: 150000
+train_batch: 128            # 512 (MageZero's default) ran a 32 GB GPU out of memory
+hidden_info: {see_opponent_hand: false}  # the search still sees hidden cards: accepted for exp #2
+
+eval:
+  baselines: [offline]      # raw search at the same budget; goal 1
+  every_n_gens: 8           # Will: bigger evals, less often
+  pairs: 100                # 200 games per eval, about ±7 points
+  fixed_decks: true
+  window_gens: 1            # each eval stands alone
+stats:
+  window_gens: 10
+  min_card_games: 15
+
+jvm:
+  heap: 11g
+  threads: 4
+  jvms: 7
+  gc: zgc-gen
+  search_budget: 300        # Will: at least 300 (exp #1: 96)
+  timeout_ms: 60000
+  max_minutes: 50
