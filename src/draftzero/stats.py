@@ -8,6 +8,8 @@ card each player drew, opening hand included). From those:
                           hand"), from self-play games, where both players are the same network, and
                           its Spearman rank correlation with 17lands' human GIH WR
   deck records            W/L of every deck played, aggregated by the deck's main colors
+  commons                 the same rank correlation over commons only, with at least 30 games each:
+                          exp #2's goal 3, and exp #1's method (0.28 for gens 10+, docs/003 §6.4)
 
   python -m draftzero.stats runs/<run_id>     prints the current tables
 """
@@ -20,6 +22,8 @@ from typing import Optional
 from draftzero.metrics import wilson
 
 SUMMARY_TAG = "GAME_SUMMARY "
+RARITY_TSV = Path(__file__).resolve().parents[2] / "assets" / "gameplay" / "FDN_card_ids.tsv"
+MIN_COMMON_GAMES = 30       # exp #1's threshold for its commons correlation
 
 
 def parse_summaries(log_path: Path) -> list[dict]:
@@ -47,6 +51,21 @@ def load_deck_meta(tsv: Path) -> dict[str, dict]:
         vals = dict(zip(header, r.split("\t")))
         meta[vals.pop("deck")] = vals
     return meta
+
+
+def load_rarity(path: Path = RARITY_TSV) -> dict[str, str]:
+    """card name -> rarity, from 17lands' cards.csv (assets/gameplay/FDN_card_ids.tsv). A name printed
+    in several sets takes its FDN rarity."""
+    out: dict[str, str] = {}
+    if not Path(path).exists():
+        return out
+    rows = [l for l in Path(path).read_text().splitlines() if l and not l.startswith("#")]
+    header = rows[0].split("\t")
+    for r in rows[1:]:
+        v = dict(zip(header, r.split("\t")))
+        if v.get("expansion") == "FDN" or v["name"] not in out:
+            out[v["name"]] = v.get("rarity", "")
+    return out
 
 
 def load_reference(path: Path) -> dict:
@@ -96,9 +115,11 @@ def card_gih(games: list[dict]) -> dict[str, list[int]]:
     return acc
 
 
-def gih_correlation(acc: dict, reference: dict, min_games: int) -> tuple[Optional[float], int]:
+def gih_correlation(acc: dict, reference: dict, min_games: int,
+                    only: Optional[set] = None) -> tuple[Optional[float], int]:
     ref = reference.get("cards", {})
-    pairs = [(w / n, ref[c]["gih_wr"]) for c, (n, w) in acc.items() if n >= min_games and c in ref]
+    pairs = [(w / n, ref[c]["gih_wr"]) for c, (n, w) in acc.items()
+             if n >= min_games and c in ref and (only is None or c in only)]
     return spearman([p[0] for p in pairs], [p[1] for p in pairs]), len(pairs)
 
 
@@ -128,8 +149,10 @@ def selfplay_games(games: list[dict], gens: Optional[tuple[int, int]] = None) ->
 
 
 def summarize(games: list[dict], meta: dict, reference: dict, window_gens: int = 10,
-              min_card_games: int = 15) -> dict:
+              min_card_games: int = 15, rarity: Optional[dict] = None) -> dict:
     """Everything the dashboard shows about format knowledge, from games.jsonl rows."""
+    rarity = load_rarity() if rarity is None else rarity
+    commons = {c for c, r in rarity.items() if r == "common"}
     gens = sorted({g["gen"] for g in games})
     last = gens[-1] if gens else 0
     net = selfplay_games(games, (1, last))
@@ -150,6 +173,8 @@ def summarize(games: list[dict], meta: dict, reference: dict, window_gens: int =
             cum[c][1] += w
         rho, n = gih_correlation(cum, reference, min_card_games)
         rho_series.append({"gen": gen, "series": "network self-play, all gens", "v": rho, "cards": n})
+        rho, n = gih_correlation(cum, reference, MIN_COMMON_GAMES, commons)
+        rho_series.append({"gen": gen, "series": "commons, all gens", "v": rho, "cards": n})
 
     ref_cards = reference.get("cards", {})
     acc_all, acc_recent, acc_heur = card_gih(net), card_gih(recent), card_gih(heuristic)
@@ -162,7 +187,8 @@ def summarize(games: list[dict], meta: dict, reference: dict, window_gens: int =
         cards.append({"card": c, "games": n, "wr": w / n if n else None,
                       "recent_games": nr, "recent_wr": wr_ / nr if nr else None,
                       "heuristic_games": nh, "heuristic_wr": wh / nh if nh else None,
-                      "ref_wr": ref.get("gih_wr"), "ref_games": ref.get("gih_games")})
+                      "ref_wr": ref.get("gih_wr"), "ref_games": ref.get("gih_games"),
+                      "rarity": rarity.get(c)})
 
     ref_colors = reference.get("colors", {})
     col_all, col_recent, col_heur = color_records(net, meta), color_records(recent, meta), color_records(heuristic, meta)
@@ -180,11 +206,17 @@ def summarize(games: list[dict], meta: dict, reference: dict, window_gens: int =
     rho_all, n_all = gih_correlation(acc_all, reference, min_card_games)
     rho_recent, n_recent = gih_correlation(acc_recent, reference, min_card_games)
     rho_heur, n_heur = gih_correlation(acc_heur, reference, min_card_games)
+    rc_all, nc_all = gih_correlation(acc_all, reference, MIN_COMMON_GAMES, commons)
+    rc_recent, nc_recent = gih_correlation(acc_recent, reference, MIN_COMMON_GAMES, commons)
+    rc_heur, nc_heur = gih_correlation(acc_heur, reference, MIN_COMMON_GAMES, commons)
     return {
         "window_gens": window_gens, "min_card_games": min_card_games,
         "selfplay_games": {"network": len(net), "recent": len(recent), "heuristic": len(heuristic)},
         "gih_rho": {"network": rho_all, "network_cards": n_all, "recent": rho_recent, "recent_cards": n_recent,
                     "heuristic": rho_heur, "heuristic_cards": n_heur},
+        "gih_rho_commons": {"network": rc_all, "network_cards": nc_all, "recent": rc_recent,
+                            "recent_cards": nc_recent, "heuristic": rc_heur, "heuristic_cards": nc_heur,
+                            "min_games": MIN_COMMON_GAMES, "commons_known": len(commons)},
         "rho_series": rho_series,
         "cards": cards,
         "colors": colors,
@@ -201,7 +233,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
     rows = [json.loads(l) for l in (Path(args.run_dir) / "games.jsonl").read_text().splitlines() if l.strip()]
     s = summarize(rows, load_deck_meta(Path(args.meta)), load_reference(Path(args.reference)))
-    print(json.dumps({k: s[k] for k in ("selfplay_games", "gih_rho", "decks_seen")}, indent=1))
+    print(json.dumps({k: s[k] for k in ("selfplay_games", "gih_rho", "gih_rho_commons", "decks_seen")}, indent=1))
     for c in s["colors"][:12]:
         print(f"{c['colors']:6s} {c['games']:5d} games  wr {c['wr'] if c['wr'] is None else round(c['wr'], 3)}  "
               f"17lands {c['ref_wr'] if c['ref_wr'] is None else round(c['ref_wr'], 3)}")
