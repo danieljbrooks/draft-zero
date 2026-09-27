@@ -50,9 +50,15 @@ k = max(1, int(cores // 4))
 threads = cfg["jvm"]["threads"]
 cfg["jvm"].update(jvms=k, heap=f"{max(4, int(ram * 0.7 / k))}g")
 cfg["bootstrap_games"] = cfg["games_per_gen"] = 4 * k * threads
+# training batch from GPU memory: 128 peaked at 25.8 GB (training plus the inference servers)
+# on the v0.2 pilot's 32 GB card, so a 24 GB card gets 64
+import torch
+gpu_gb = torch.cuda.get_device_properties(0).total_memory / 2**30 if torch.cuda.is_available() else 0
+cfg["train_batch"] = 128 if gpu_gb >= 30 else 64
 yaml.safe_dump(cfg, open(sys.argv[2], "w"), sort_keys=False)
 print(f"== layout: {k} JVMs x {threads} threads, heap {cfg['jvm']['heap']}, "
-      f"{cfg['games_per_gen']} games per generation, cores {cores:.1f}, RAM {ram:.0f} GB")
+      f"{cfg['games_per_gen']} games per generation, cores {cores:.1f}, RAM {ram:.0f} GB, "
+      f"GPU {gpu_gb:.0f} GB -> train batch {cfg['train_batch']}")
 PY
 
 DZ_MAX_HOURS="$MAXH" DZ_GRACE_HOURS=0.5 DZ_STALL_MINUTES=90 DZ_HF_ENV="$ENVF" \
