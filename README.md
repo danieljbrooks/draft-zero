@@ -88,11 +88,12 @@ For local development against a MageZero checkout:
 pip install -e ../MageZero && pip install -e . --no-deps
 ```
 
-**Two engines.** Everything new runs on MageZero v0.2 (the pin above) with the v0.2 XMage bundle.
-Studies of experiment #1's gen-33 checkpoint need exp #1's engine instead, because v0.2 can't load
-v0.1 checkpoints or reproduce their state encoding. That applies to
-`draftzero.gameplay.imitation` and remote coaching with gen 33 (docs/008). Keep a separate venv
-for those:
+**Two engines.** Everything new runs on MageZero v0.2 (the pin above) with the v0.2 XMage bundle,
+imitation learning included (`draftzero.gameplay.imitation`: build its tables with the v0.2 bundle
+and pass a v0.2 checkpoint to `load_checkpoint`). Only the stages built on experiment #1's gen-33
+checkpoint (`gen33*`, `heads`, `finetune`, `extras`, and remote coaching with gen 33, docs/008) need
+exp #1's engine, because v0.2 neither produces gen 33's state encodings nor loads it the same way.
+Keep a separate venv for those:
 
 ```bash
 python -m venv .venv-exp1 && .venv-exp1/bin/pip install \

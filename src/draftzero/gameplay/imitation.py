@@ -719,26 +719,47 @@ def _torch_env() -> None:
 
 
 def _require_exp1_engine() -> None:
-    """These experiments are built on experiment #1's engine: gen33, its NetTransformer signature,
-    and v0.1 state encodings (2M-bin feature hash). draft-zero itself now runs on MageZero v0.2,
-    which can load none of them, so run them in an environment with exp #1's engine."""
+    """gen33 is experiment #1's checkpoint: its feature vocab holds v0.1 state encodings
+    (2M-bin hash), which MageZero v0.2's encoder never produces. Its stages therefore need exp
+    #1's whole engine: the MageZero fork and the v0.1 XMage bundle, for tables built with it."""
     import magezero.model as mzm
     if not hasattr(mzm, "build_model_from_checkpoint"):
         raise RuntimeError(
-            "draftzero.gameplay.imitation needs experiment #1's engine, not MageZero v0.2. Use a "
-            "separate venv: pip install 'magezero @ git+https://github.com/danieljbrooks/MageZero@bcc76de' "
-            "&& pip install -e . --no-deps, with the v0.1 XMage bundle (danieljbrooks/mage "
-            "exp1-fdn-generalist) for the bridge.")
+            "the gen33 stages need experiment #1's engine, not MageZero v0.2. Use a separate venv: "
+            "pip install 'magezero @ git+https://github.com/danieljbrooks/MageZero@bcc76de' && "
+            "pip install -e . --no-deps, and build the tables with the v0.1 XMage bundle "
+            "(danieljbrooks/mage exp1-fdn-generalist). On v0.2, pass a v0.2 checkpoint instead "
+            "(load_checkpoint).")
+
+
+def new_net(num_embeddings: int, width: int = A_DIM):
+    """A NetTransformer with `width`-wide policy heads, on either engine: MageZero v0.2 takes one
+    width per head (policy_size_pA / pB / t), exp #1's fork took one (policy_size_A)."""
+    import inspect
+    from magezero.model import NetTransformer
+    if "policy_size_pA" in inspect.signature(NetTransformer.__init__).parameters:
+        return NetTransformer(num_embeddings=num_embeddings, policy_size_pA=width, policy_size_pB=width,
+                              policy_size_t=width)
+    return NetTransformer(num_embeddings=num_embeddings, policy_size_A=width)
+
+
+def load_checkpoint(path: Path):
+    """(NetTransformer, FeatureVocab) of any MageZero checkpoint with a dense feature vocab, sized
+    from its own weights. Use it with tables encoded by the same engine as the checkpoint."""
+    from magezero.model import load_model
+    from magezero.vocab import FeatureVocab
+    ck = load_model(str(path))
+    sd = ck["model_state_dict"]
+    model = new_net(sd["embedding.weight"].shape[0], sd["player_priority_head.2.weight"].shape[0])
+    model.load_state_dict(sd)
+    return model, FeatureVocab.from_state_dict(ck["feature_vocab"])
 
 
 def load_gen33(path: Path = GEN33):
-    """(NetTransformer, FeatureVocab) of the experiment #1 checkpoint."""
+    """(NetTransformer, FeatureVocab) of the experiment #1 checkpoint (exp #1's engine only)."""
     _torch_env()
     _require_exp1_engine()
-    from magezero.model import build_model_from_checkpoint, load_model
-    from magezero.vocab import FeatureVocab
-    ck = load_model(str(path))
-    return build_model_from_checkpoint(ck), FeatureVocab.from_state_dict(ck["feature_vocab"])
+    return load_checkpoint(path)
 
 
 def map_features(vocab, indices: np.ndarray, offsets: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -796,7 +817,7 @@ def trunk(model, indices, offsets, pad_to: int | None = None):
     length (`pad_to`, else the next BUCKETS size) so MPS compiles few kernel shapes. Bags longer
     than the pad length are cut (none in these data at 3,072). Dropout follows model.training."""
     import torch
-    indices = indices % model.num_embeddings
+    indices = indices % model.embedding.num_embeddings
     ends = torch.cat([offsets[1:], torch.tensor([indices.shape[0]], device=offsets.device)])
     lengths = ends - offsets
     max_len = pad_to or bucket_len(int(lengths.max().item()))
@@ -1492,16 +1513,14 @@ def stage_scratch(n_train: int | None = None, budget_s: float = 600, lr: float =
     (the heads-only subset, or n_train of it), vocab by MageZero's ignore rule, rows initialised as
     MageZero does (vocab.initial_rows); wall-clock budget."""
     _torch_env()
-    _require_exp1_engine()
     import torch
-    from magezero.model import NetTransformer
     from magezero.vocab import initial_rows
     tr, _ = _train_subset(n_train, seed)
     tag = tag or f"scratch_{len(tr['z'])}"
     va = load_table(OUT_DIR / "h5" / "turnstart_val.h5")
     vocab = _scratch_vocab(tr)
     torch.manual_seed(seed)
-    model = NetTransformer(num_embeddings=len(vocab), policy_size_A=A_DIM)
+    model = new_net(len(vocab))
     with torch.no_grad():
         model.embedding.weight.copy_(torch.as_tensor(initial_rows(vocab.ids, 512)))
     rtr, ptr_tr = map_features(vocab, tr["indices"], tr["offsets"])
