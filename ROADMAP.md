@@ -329,6 +329,48 @@ self-destruct fires at the budget whatever happens). Run 1 uses Will's settings
 (`configs/exp2.yml`). Run 2, if affordable, uses the same settings from a network pretrained
 on human decisions, so the only difference is the starting point (imitation, D8).
 
+**Run 1** (2026-09-27): `dz-exp2-run1`, RunPod pod `206haai9na81zy`, a Secure RTX 3090 (31.1 cores,
+116 GB, 24 GB GPU) at $0.50/hr. It runs `deploy/exp2.sh` with a $28.90 cap: a graceful stop at 57.05 h
+and hard removal at 57.8 h (about 2026-09-29 11:50 UTC). The layout is 7 × 4 threads, 112 games per
+generation, training batch 64. Weights go to HF `danbrooks/draftzero-checkpoints` under
+`2026-09-27_01-59-54/`. The original session ("RunPod CLI / exp #2", the thread that launched it)
+owns it. **Other sessions: don't touch this pod or that HF prefix.**
+
+**Run 2 handoff (imitation A/B).** It needs its own session, working in its own git worktree and
+branch, never the shared `~/Desktop/Code/draft-zero` checkout.
+- **Question:** at equal cost, does starting self-play from a network pretrained on human
+  decisions do better on the three goals above than run 1's heuristic-search start?
+- **Same as run 1 except the starting network:** same pod type (Secure RTX 3090, 31 cores,
+  $0.50/hr; take one with `vcpuCount` ≥ 31, and remove a smaller one at once), same
+  `configs/exp2.yml` through `deploy/exp2.sh`, same settings.
+- **Budget:** whatever is left after run 1's $28.90, minus about a $1 margin. Check
+  `runpodctl user` before creating anything. Never add credits.
+- **Steps:**
+  1. Rebuild the human-decision tables on v0.2 with the imitation study (docs/008;
+     `python -m draftzero.gameplay.imitation splits / build / tables`), building the mzbridge
+     against the v0.2 bundle, with the opponent's hand hidden.
+  2. Pretrain a network on them with the study's from-scratch path (`new_net`,
+     `load_checkpoint`; the policy fit to the human action sets, attack decisions, value from
+     game results), saved in MageZero's checkpoint format (`model_state_dict` +
+     `feature_vocab`), so `train.py --checkpoint` continues from it. The pod GPU is fine for
+     this: minutes, inside the run's budget.
+  3. Add an `init_checkpoint` option to `draftzero.loop`. Gen 0 then plays network self-play
+     with that network instead of heuristic search, and it becomes `gen0.pt.gz` (the "gen 0"
+     opponent in the mix). Smoke-test on the laptop (`configs/smoke_v02.yml`) first.
+  4. Before launching, check that the pretrained network matches held-out human decisions at
+     about docs/008's level (73% top-1), and that a few games look legal and sensible.
+  5. Log the human-agreement rate every generation, to see whether self-play keeps the prior
+     or washes it out.
+- **Setup notes:**
+  - The pod credential is the fine-grained HF token `draftzero-pod-write` in the laptop's HF
+    token store (write access to `danbrooks/draftzero-checkpoints` only). Never print it.
+  - It goes to the pod as `/root/.dz_env` (`HF_TOKEN=`, `HF_REPO=danbrooks/draftzero-checkpoints`)
+    and `/root/.hf_token`, mode 600, written through the SSH proxy with a leading-space `echo <base64> | base64 -d` line.
+  - Then `deploy/pilot_v02_setup.sh` and `deploy/exp2.sh`. Pass `DZ_COST_PER_HR` and `DZ_BUDGET_USD`.
+  - Read `docs/005-runpod-tips.md` before reserving.
+- **Done when:** run 2 is launched with the pretrained start, and step 4's checks are recorded
+  in a doc. After both runs end, compare them at equal spend.
+
 **Secondary checks**, carried over:
 
 - [ ] Rank correlation with 17lands on commons beats **0.28** (the exp #1 figure for gens 10+).
