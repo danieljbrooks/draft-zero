@@ -209,9 +209,9 @@ def parse_test_output(lines: list[str], deck: str, version: int, gen: int) -> Op
 
 
 def run_train(deck: str, version: int, epochs: int, use_checkpoint: bool, run_dir: Path, gen: int,
-              steps: Optional[int] = None, batch: Optional[int] = None) -> None:
+              steps: Optional[int] = None, batch: Optional[int] = None, keep_as: Optional[str] = None) -> None:
     """Train, log per-epoch losses to metrics.jsonl, and keep this generation's checkpoint as
-    gen<N>.pt.gz (the league and the evals play against those)."""
+    gen<N>.pt.gz (the league and the evals play against those), or as `keep_as`."""
     cmd = [PYTHON, "-u", str(MZ_SRC / "train.py"), "--deck", deck, "--version", str(version),
            "--epochs", str(epochs)]
     if steps:
@@ -222,7 +222,7 @@ def run_train(deck: str, version: int, epochs: int, use_checkpoint: bool, run_di
     for row in parse_train_output(lines, deck, version, gen):
         metrics.append_jsonl(run_dir / "metrics.jsonl", row)
     models = Path("models") / deck / f"ver{version}"
-    shutil.copyfile(models / "model.pt.gz", models / f"gen{gen}.pt.gz")
+    shutil.copyfile(models / "model.pt.gz", models / f"{keep_as or f'gen{gen}'}.pt.gz")
 
 
 def run_test(deck: str, version: int, run_dir: Path, gen: int, batch: Optional[int] = None) -> None:

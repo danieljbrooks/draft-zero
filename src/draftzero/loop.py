@@ -4,7 +4,8 @@ loop.py — train one network on the whole FDN format (see README.md).
 Every game draws both decks at random from the training pool (~28k top-player decks). Each
 generation:
 
-  1. play      gen 0: heuristic search (no network) on both sides.
+  1. play      gen 0: heuristic search (no network) on both sides, or network self-play from
+               `init_checkpoint` when the run starts from a pretrained network.
                gen 1+: ~70% self-play (both sides use the current net, both sides are training
                data), ~20% vs a random older checkpoint and ~10% vs gen 0's net (only the current
                net's side is training data). Games run in chunks, so the dashboard refreshes as
@@ -19,10 +20,12 @@ the newest unfinished run, redoing the interrupted stage.
   PYTHONPATH=src python -m draftzero.loop --config configs/laptop.yml
 """
 import argparse
+import hashlib
 import json
 import os
 import random
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -81,6 +84,14 @@ DEFAULTS = {
     # Whether a player's network input includes the opponent's hand. False from exp #2 on
     # (docs/009); exp #1 had it on, by accident. The search still sees hidden cards either way.
     "hidden_info": {"see_opponent_hand": False},
+    # A network to start from instead of heuristic search (exp #2 run 2: a network pretrained on
+    # human decisions, draftzero.gameplay.pretrain). Gen 0 then plays network self-play with it,
+    # and it is kept as gen0.pt.gz: the "gen 0" opponent in the mix, and gen 0's eval.
+    "init_checkpoint": None,
+    # Score every generation's network on held-out human decisions (pretrain.agreement), for
+    # example {"rows": 3000}: does self-play keep a human prior or wash it out? Needs the
+    # imitation tables under data/gameplay/imitation/h5. Never stops the run.
+    "human_agreement": None,
 }
 
 
@@ -293,6 +304,9 @@ def plan_games(run: Run, gen: int, rng: random.Random) -> list[dict]:
             total -= chunk
         return out
 
+    if gen == 0 and cfg.get("init_checkpoint"):
+        # a pretrained start: gen 0 is network self-play, with no heuristic bootstrap
+        return chunks(cfg["bootstrap_games"], opponent="self", checkpoint=None)
     if gen == 0 or not run.has_checkpoint():
         return chunks(cfg["bootstrap_games"], opponent="heuristic", checkpoint=None)
     n = cfg["games_per_gen"]
@@ -430,10 +444,53 @@ def train_generation(run: Run, gen: int) -> dict:
             kept += _states(f)
     run.update(stage="train")
     use_ckpt = run.has_checkpoint()
+    # a pretrained start stays gen0.pt.gz; the network trained on gen 0's games is kept aside
+    keep_as = "gen0_trained" if gen == 0 and run.cfg.get("init_checkpoint") else None
     run_train(run.model, run.version, run.cfg["epochs"] if use_ckpt else run.cfg["epochs_bootstrap"],
               use_checkpoint=use_ckpt, run_dir=run.dir, gen=gen, steps=run.cfg.get("train_steps"),
-              batch=run.cfg.get("train_batch"))
+              batch=run.cfg.get("train_batch"), keep_as=keep_as)
+    if run.cfg.get("human_agreement"):
+        human_agreement(run, gen, keep_as or f"gen{gen}")
     return {"train_seconds": time.time() - t0, "replay_states": kept}
+
+
+def install_init(run: Run) -> None:
+    """Start a fresh run from `init_checkpoint`: it becomes model.pt.gz (gen 0 plays with it)
+    and gen0.pt.gz (the gen-0 opponent of the mix)."""
+    src = Path(run.cfg["init_checkpoint"])
+    if not src.exists():
+        raise SystemExit(f"[run] init_checkpoint {src} not found")
+    run.models.mkdir(parents=True, exist_ok=True)
+    for name in ("model", "gen0"):
+        shutil.copyfile(src, run.models / f"{name}.pt.gz")
+    sha = hashlib.sha256(src.read_bytes()).hexdigest()
+    run.update(init_checkpoint={"path": str(src), "sha256": sha})
+    print(f"[run] starting from {src} (sha256 {sha[:12]}) as model.pt.gz and gen0.pt.gz")
+    if run.cfg.get("human_agreement"):
+        human_agreement(run, 0, "gen0")
+
+
+def human_agreement(run: Run, gen: int, checkpoint: str) -> None:
+    """Held-out human decisions scored by one checkpoint, in its own process (the loop never
+    imports torch), appended to metrics.jsonl. A failure is a warning, never the run's end."""
+    ha = run.cfg.get("human_agreement") or {}
+    cmd = [sys.executable, "-m", "draftzero.gameplay.pretrain", "agreement", "--json",
+           "--checkpoint", str(run.models / f"{checkpoint}.pt.gz")]
+    if ha.get("rows"):
+        cmd += ["--rows", str(int(ha["rows"]))]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=float(ha.get("timeout_s", 900)))
+        line = next((l for l in out.stdout.splitlines() if l.startswith("HUMAN_AGREEMENT ")), None)
+        if line is None:
+            print(f"[human] WARNING agreement failed for {checkpoint}: {out.stderr.strip()[-400:]}")
+            return
+        r = json.loads(line[len("HUMAN_AGREEMENT "):])
+        metrics.append_jsonl(run.dir / "metrics.jsonl", {"kind": "human_agreement", "gen": gen,
+                                                         "agreement_checkpoint": checkpoint, **r})
+        print(f"[human] {checkpoint}: top-1 {r['top1']:.3f} on {r['rows']} human decisions, "
+              f"value AUC {r['value_auc']:.3f}, attack acc {r.get('attack_acc')}")
+    except Exception as e:           # noqa: BLE001
+        print(f"[human] WARNING agreement failed for {checkpoint}: {e}")
 
 
 # ── eval ─────────────────────────────────────────────────────
@@ -588,6 +645,8 @@ def main(cfg: dict, resume: Optional[bool], extend: bool = False) -> None:
             json_path.write_text(json.dumps(s, indent=2))
         run = Run(cfg, create_run(cfg))
         gen, stage = 0, "play"
+        if cfg.get("init_checkpoint"):
+            install_init(run)
     print(f"[run] {run.dir}")
     curriculum = load_curriculum(cfg["curriculum"])
 
