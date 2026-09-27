@@ -58,6 +58,7 @@ echo "== $(date -u +%H:%M) loop finished"
 
 # The shared server, v0.2's fixed HTTP pool (6 threads: --clients 3) vs one sized to all
 # K x 4 game threads, on the pilot's own gen-1 checkpoint.
+mkdir -p bench
 for C in 3 $((K * 4)); do
   echo "== $(date -u +%H:%M) bench shared server, clients=$C"
   python tools/throughput_bench.py --out "bench/v02_${K}x4_shared_c$C" --jvms "$K" --threads 4 --heap "$HEAP" \
