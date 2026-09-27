@@ -5,7 +5,7 @@ session, and update it before ending one** — mark items done, record decisions
 the bottom, and move anything you learned into the right phase. It's the single source of
 truth for status. Chat history isn't.
 
-*Last updated: 2026-09-26*
+*Last updated: 2026-09-27*
 
 ## Where things stand
 
@@ -438,6 +438,21 @@ replays and Arena logs now map onto XMage states; the next steps are:
       HashSet, and determinization in search (`shuffleUnknowns` is never called).
 - [ ] Add the behavioural fingerprint (`dz gameplay fingerprints`) to the loop as a per-generation
       monitor: the exp #2 pilot's gen 1 missed land drops with a land in hand on 16–25% of turns 1–3.
+
+**Limited bots.** Research how we might get some Limited bots up. Not started: this is a
+placeholder until Dan picks it up.
+- Prompted by Jack Maiorino's [Spellbench](https://jackmaiorino.github.io/spellbench/)
+  ([repo](https://github.com/jackmaiorino/spellbench)): one protocol for MTG bots on any rules
+  engine, plus a public Elo leaderboard. XMage support is planned next, for FDN Limited and the
+  Standard pool, with DraftZero and MageZero named as candidates.
+- Worth knowing going in: Spellbench's draft protocol v2
+  ([spec](https://github.com/jackmaiorino/spellbench/blob/main/spec/SPELLBENCH_PROTOCOL_V2.md))
+  is a fair-play contract. A bot sees only its own seat's view and can't search a copy of the
+  real game. Our search does exactly that today (D7, docs/009), so a v2 entry probably waits on
+  exp #3's hidden-information work.
+- [ ] Research: what "up" should mean (a leaderboard entry, something people can play against,
+      or both), what we'd ship, and what's in the way. Write up the options before building
+      anything.
 
 **Study.** Read with a specific question in mind.
 - [ ] KataGo paper (Wu, 2019): AlphaZero on a small compute budget. Its "playout cap
