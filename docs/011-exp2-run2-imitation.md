@@ -11,6 +11,10 @@ The goals are win rate against raw search, throughput, and 17lands rank correlat
 This doc records how the start was built and the checks made before launch. It was written
 2026-09-27 on branch `exp2-run2`.
 
+**Outcome:** run 2 was stopped early on 2026-09-28 after gen 12. The pretrained start stopped
+learning within three generations. Results, the plasticity test that explains why, and next steps
+are in [docs/013](013-exp2-imitation-report.md).
+
 ## Summary
 
 - **The pretrained network matches held-out human decisions at docs/008's level.**

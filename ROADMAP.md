@@ -340,7 +340,9 @@ owns it. **Other sessions: don't touch this pod or that HF prefix.**
 [docs/013](docs/013-exp2-imitation-report.md).** The imitation start matched run 1 against raw search
 at gen 0 (47%), but its network stopped learning within three generations: league 49% against run 1's
 58%, flat training losses. A fresh network trained for two epochs on run 2's own games predicted the
-next generation as well as run 2's network did after twelve. The 17lands agreement on commons rose to
+next generation as well as run 2's network did after twelve. A plasticity test found the heavily
+pretrained start trained worst of four starting networks; run 1's lightly trained gen 0 trained best,
+and shrink and perturb restored the pretrained one. The 17lands agreement on commons rose to
 0.46 early and fell back to 0.30. Next steps are in docs/013 §4. As launched:
 
 **Run 2** (2026-09-27, [docs/011](docs/011-exp2-run2-imitation.md)): `dz-exp2-run2`, RunPod pod

@@ -370,12 +370,16 @@ def fig_run2(run2: Path, out: Path, plasticity: dict | None, human_nonpass: dict
     if plasticity:
         style = {"fresh": (INK2, "fresh network"), "pretrained": (C2, "run 2's pretrained start"),
                  "run1gen0": (C1, "run 1's gen 0"), "shrinkperturb": (C3, "pretrained, shrink and perturb")}
+        ref_line = plasticity.pop("_reference", None)
         for n, ep in plasticity.items():
             c, lab = style.get(n, (C4, n))
-            _series(ax, list(range(len(ep))), [np.nan if v is None else v for v in ep], c, lab)
-        ax.set_xticks([0, 1, 2])
-        ax.set_title("Plasticity test: held-out loss after each epoch")
-        ax.set_xlabel("epochs on run 2 gens 8–11 (0 = before training)")
+            _series(ax, [1, 2], ep, c, lab)
+        if ref_line is not None:
+            ax.axhline(ref_line, color=INK2, lw=1, ls=":", label=f"run 2's own net after 12 gens ({ref_line:.3f})")
+        ax.set_xticks([1, 2])
+        ax.set_xlim(0.8, 2.2)
+        ax.set_title("Plasticity test: same data, four starting networks")
+        ax.set_xlabel("epochs of train.py on run 2 gens 8–11 (55k states)")
         ax.set_ylabel("total loss on gen 12")
         ax.legend()
     else:
@@ -448,7 +452,7 @@ def main() -> None:
     f.add_argument("--run1", required=True)
     f.add_argument("--run2", required=True)
     f.add_argument("--out", default=str(REPO / "docs" / "img"))
-    f.add_argument("--plasticity", default=None, help="json: start -> [held-out loss per epoch]")
+    f.add_argument("--plasticity", default=None, help="json: start -> [held-out loss after epochs 1, 2]; _reference -> a line")
     f.add_argument("--human-nonpass", default=None, help="json: network label -> non-Pass top-1")
     a = ap.parse_args()
     if a.cmd == "reference":

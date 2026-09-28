@@ -24,9 +24,15 @@ How the pretrained start was built, and the checks made before launch, are in
 - **Run 2's network stopped learning after about three generations.**
   - Its training losses went flat: target-policy loss moved 0.492 → 0.482 over gens 3–12, and
     value loss plateaued near 0.10, against run 1's 0.052.
-  - A fresh network trained for two epochs on run 2's own games predicts the next generation as
-    well as run 2's network did after twelve generations: held-out loss **0.828 against 0.833**.
-  - The plasticity test in §2.3 compares four starting networks on identical data.
+  - **A plasticity test confirmed the cause** (§2.3). On identical data, the pretrained start
+    trained worst of four starting networks (held-out loss 0.890 after two epochs).
+    - A fresh network reached 0.828. That matches what run 2's own network achieved in twelve
+      generations (0.833).
+    - Run 1's lightly trained gen 0 reached 0.802.
+    - The pretrained start after *shrink and perturb* (weights scaled down, plus noise) reached
+      0.808.
+  - So the heavy human pretraining cost the network its ability to learn, and a standard fix
+    restores it.
 - **The pretrained network was a good model of humans, but the search barely uses that part.**
   - It chose a play the human made in **73.0%** of 16,081 held-out decisions, matching docs/008's
     best. Its value head predicted human game results with AUC 0.70.
@@ -47,7 +53,9 @@ How the pretrained start was built, and the checks made before launch, are in
   - Keep run 1 going.
   - Fix the measurements, which are cheap.
   - If we try imitation again, deliver the human data through the search prior, or keep mixing
-    it into training from a fresh network. Don't warm-start the whole network (§4).
+    it into training from a fresh network.
+  - If we warm-start again, pretrain lightly and apply shrink and perturb, then screen the start
+    offline with the §2.3 test before paying for a run (§4.3).
 
 ## 1. Approach
 
@@ -138,8 +146,8 @@ side, 0.14 missed land drops, and no passing with a play available.
 | Pod | `xdslbqu0imovu0`, Secure RTX 3090, rented 2026-09-27 02:18 UTC |
 | Launch | 03:42 UTC, `deploy/exp2.sh configs/exp2_run2.yml` |
 | Stopped | 2026-09-28 05:15 UTC, during gen 13's play. Gens 0–12 complete: 1,415 self-play and league games, 394 eval games. |
-| Cost | about $14 of the $28.20 cap: 1.4 h setup and pretraining, 25.5 h of run, 0.8 h of the post-stop test and uploads |
-| Data | HF `danbrooks/draftzero-checkpoints` under `2026-09-27_03-42-21/`: every checkpoint (`gen0.pt.gz` is the pretrained start), `games.jsonl`, `metrics.jsonl`, `run.json`, and `logs.tar.gz` (all 497 logs) |
+| Cost | **about $13.90** of the $28.20 cap: 27.8 pod-hours = 1.4 h setup and pretraining, 25.5 h of run, 0.9 h of the plasticity test and uploads. The pod was removed at 06:08 UTC. |
+| Data | HF `danbrooks/draftzero-checkpoints` under `2026-09-27_03-42-21/`: every checkpoint (`gen0.pt.gz` is the pretrained start), `games.jsonl`, `metrics.jsonl`, `run.json`, and `logs.tar.gz` (all 499 logs, including the plasticity test's) |
 
 ## 2. Results
 
@@ -202,8 +210,9 @@ on them. It measures whether the network is getting better at predicting its own
 another, often trains worse than a fresh one. This is documented: warm-starting hurts later
 training (Ash & Adams, 2020, *On Warm-Starting Neural Network Training*), and networks lose
 plasticity when their targets shift (Lyle et al., 2023, *Understanding Plasticity in Neural
-Networks*; Dohare et al., 2024). The pretrained network had 17 passes over human data, and its
-value head was pushed toward ±1 targets through a tanh output.
+Networks*; Dohare et al., 2024). The pretrained network had 17 passes over human data. One
+plausible mechanism is its value head: it was fit to ±1 targets through a tanh output, where
+gradients shrink. This test doesn't isolate the mechanism.
 
 **The test** ran on the pod's GPU after the run stopped, using MageZero's own `train.py` with the
 run's batch and learning rate:
@@ -217,7 +226,36 @@ run's batch and learning rate:
   - the pretrained start after *shrink and perturb*: weights × 0.4 plus small noise, Ash & Adams'
     remedy.
 
-PLASTICITY_RESULTS
+**Results.** Total loss on gen 12's 13,578 held-out states:
+
+| Starting network | Before training | After epoch 1 | After epoch 2 | Held-out value loss, epoch 2 | Training value loss, epoch 2 |
+|---|---|---|---|---|---|
+| Fresh network | – | 0.867 | 0.828 | 0.101 | 0.083 |
+| **Run 2's pretrained start** | 2.925 | 0.907 | **0.890** | 0.117 | **0.122** |
+| Run 1's gen 0 | 0.924 | 0.841 | **0.802** | 0.094 | 0.083 |
+| Pretrained, after shrink and perturb | 2.233 | 0.877 | **0.808** | 0.098 | **0.072** |
+| *Reference: run 2's gen-11 network, after 12 generations* | *0.833* | | | *0.091* | |
+
+- **The pretrained start trains worst, by a wide margin.** After two epochs it is 0.06–0.09 behind
+  the other three. It is also worse than run 2's own gen-11 network (0.833). That network came
+  from the same start, but twelve generations of self-play had shifted it toward the search's
+  targets.
+- **Its value head barely moves:** training value loss 0.145 → 0.122, while the others reach
+  0.072–0.083. This is loss of plasticity, and it matches run 2's flat curves in §2.2.
+- **Warm-starting isn't the problem in itself.** Run 1's gen 0, a light warm start from 108 games,
+  trains *best* (0.802). What hurt was 17 passes of human data.
+- **Shrink and perturb restores trainability almost completely:** 0.808, with the lowest
+  training value loss of all four.
+  - Its before-training loss (2.233) is mostly the human policy disagreeing with the search's
+    targets (priority loss 0.99).
+  - How much human knowledge survives the shrink and perturb step is untested.
+- **Two epochs on 55k states from a fresh network match twelve generations of run 2**: 0.828
+  against 0.833 on the same data.
+- **Caveat:** one seed and one slice of data. Gaps of about 0.01–0.03 between the fresh, run-1
+  and shrink-and-perturb starts could move with another seed. The pretrained start's gap is much
+  larger than that.
+- The raw logs are `plasticity.log` and `pretest.log` in run 2's `logs.tar.gz`. `test.py`
+  produced the before-training numbers.
 
 ### 2.4 What happened to the human prior
 
@@ -269,14 +307,15 @@ About 1,100–1,300 games per run and 75–80 commons each; exp #1's commons GIH
   figure). Exp #1 showed the same pattern: 0.43–0.45 early, 0.05 later.
 - **Whatever card sense the human data gave, self-play appears to erode it.** Run 1's ρ has
   hovered at 0.22–0.30.
-- **All cards:** run 2 0.31 (174 cards), run 1 0.17 (157 cards).
+- **All cards, at equal spend:** run 2 0.31 (174 cards), run 1 0.17 (157 cards).
 
 **Absolute win rates are not comparable between the runs.** Run 1's league games count the
 network that wins 58%, and run 2's the one that wins 49%, so run 1's per-card win rates sit a few
 points higher. Rank correlations are unaffected.
 
 **Removal shows a real difference in how the cards are used.** IWD is how much a card's win rate
-rises when it is drawn:
+rises when it is drawn (equal spend: run 1 gens 1–10, run 2 gens 1–12; 170–255 games in hand
+each):
 
 | Card (17lands GIH rank among 88 commons) | 17lands IWD | Run 1 IWD | Run 2 IWD |
 |---|---|---|---|
@@ -311,14 +350,15 @@ hurts in run 2. That fits a network whose value judgments are not improving.
   means λ too high, one hump too low). Each of the 10 bins held 8–12% of states. Run 2's median
   |label| rose from 0.45 to 0.50; the share near zero was 8–14%.
 - This settles the v0.2 pilot's concern that labels bunched near zero (median |v| 0.10–0.37
-  there). λ = 0.95 looks right.
+  there). By that rule λ = 0.95 is about right.
 - Search policy targets were one-hot in 46–49% of states in both runs.
 
 ### 2.7 Operations
 
 - **Throughput:** run 2 played 72–89 games/hr from gen 2, against run 1's 47–68. The cause isn't
   established: it could be the host, game length, or the smaller feature vocab.
-- **Engine failures:** 48 games (2.6%) were dropped by an XMage assertion ("Error in unit tests").
+- **Engine failures:** at least 48 games (about 2.6%) were dropped by an XMage assertion ("Error in
+  unit tests").
   The v0.2 pilot had none.
 - **Inference failures:** about 0.2% of network evaluations timed out: one server shared by 28
   game threads, with OkHttp's 10 s default timeout. On failure, `MCTSNode2` backs up 0 where a
@@ -327,7 +367,7 @@ hurts in run 2. That fits a network whose value judgments are not improving.
 - **Disk:** the 40 GB container disk would have filled at about hour 31. Checkpoints carry
   optimizer state (about 175 MB each), the league needs every old one locally, and the watchdog
   mirrors everything a second time into `data/persist` on the same disk. Hard-linking identical
-  mirror copies (`dedupe_persist.py`, run hourly) fixed it without deleting anything.
+  mirror copies (`tools/dedupe_persist.py`, run hourly) fixed it without deleting anything.
 - **A rare search stall:** on one board with Koma, World-Eater, v0.2's search found no legal node
   and ran to its 300 s hard cap, re-counting the whole tree every simulation.
 
@@ -336,9 +376,11 @@ hurts in run 2. That fits a network whose value judgments are not improving.
 1. **A good human model is not a good self-play start.** 73% agreement with humans and a value
    head with AUC 0.70 bought no extra strength against raw search. Run 1's gen-0 network, trained
    on 108 heuristic games, did as well and then kept improving.
-2. **Warm-starting the whole network cost it the ability to learn.** Run 2's training losses went
-   flat within three generations (§2.2). The plasticity test (§2.3) separates "the pretrained
-   weights resist training" from "the data isn't informative".
+2. **Heavy pretraining cost the network its ability to learn; a light warm start didn't.** Run 2's
+   losses went flat within three generations (§2.2).
+   - On identical data the pretrained start trained worst (§2.3), while run 1's lightly trained
+     gen 0 trained best.
+   - Shrink and perturb restored it. The data was informative; the weights resisted it.
 3. **Pretraining ran about 10× past the point of diminishing returns.** 4 minutes got nearly all
    the validation gain; 40 minutes produced a network that was harder to move.
 4. **With priors off, the human policy can't matter.** The search reads only the value head. The
@@ -360,8 +402,9 @@ hurts in run 2. That fits a network whose value judgments are not improving.
 
 ## 4. Recommended next steps
 
-Roughly in order of value per dollar. The account balance is about $30, of which run 1 still
-needs about $14.
+Roughly in order of value per dollar. After run 2's pod was removed the account balance was
+$29.86. Run 1 still has about $14.80 committed, so about $15 is free: enough for one more
+~25-hour arm on the same pod type.
 
 ### 4.1 Let run 1 finish, and read it properly (no cost)
 
@@ -418,13 +461,20 @@ and where the human data is strongest.
 - This keeps the 17lands-like card sense from eroding (lesson 6) without freezing the network.
 - **Cost:** a code change in `train.py` (a second dataset and a loss weight); the same run cost.
 
-**(c) If we warm-start again, keep the network trainable.**
+**(c) If we warm-start again, keep the network trainable.** §2.3 shows this can work.
 
 - Pretrain lightly: stop at the validation knee (4–8 minutes here), with weight decay.
-- Before self-play, apply shrink and perturb (weights × 0.4 to 0.6, plus small noise), or
-  re-initialise the value and target heads while keeping the trunk.
-- Screen it offline first with the §2.3 test: the start must train at least as fast as a fresh
-  network on the same self-play data. That check takes 10 minutes and about $0.10 of GPU.
+- Before self-play, apply shrink and perturb. The test used weights × 0.4 plus noise at 0.1 of
+  each tensor's spread, and it trained as well as a fresh network.
+  - The open question is how much human knowledge survives the step. Measure the non-Pass human
+    agreement and the value AUC after shrink and perturb, and after a generation of self-play.
+- Re-initialising only the value and target heads, keeping the trunk, is a gentler variant worth
+  the same screen.
+- Screen any warm start offline first with the §2.3 test (`tools/plasticity_test.sh`): it must
+  train at least as fast as a fresh network on the same self-play data. It takes about 10 minutes
+  and $0.10 of GPU per start, on any run's replay shards.
+- Combined with (a), this is the cheapest next imitation arm: a lightly pretrained,
+  shrink-and-perturbed start plus the human prior from a frozen copy.
 
 **(d) Better human data for the value head.**
 
@@ -434,8 +484,8 @@ and where the human data is strongest.
   (38k priority and 17k attack rows here). The value head should see those, since those are the
   positions the search asks about.
 - *A better target:* the game result from a turn-1 snapshot is mostly noise. Gen 33's value head
-  had AUC 0.54 on turns 1–2 in docs/008. Weighting later turns more, or discounting toward a TD-style target, would
-  match the self-play labels better.
+  had AUC 0.54 on turns 1–2 in docs/008. Weighting later turns more, or discounting toward a
+  TD-style target, would match the self-play labels better.
 
 ### 4.4 Engine and throughput fixes (help every run)
 
@@ -449,7 +499,7 @@ and where the human data is strongest.
    simulation (`root.size()` in the loop).
 5. **Disk:**
    - skip the same-disk `data/persist` mirror on pods without a network volume, or hard-link it
-     as `dedupe_persist.py` does;
+     as `tools/dedupe_persist.py` does;
    - save optimizer state only in `model.pt.gz`, not in every `genN.pt.gz`;
    - request 60 GB for multi-day runs.
 
@@ -478,9 +528,15 @@ python tools/exp2_analysis.py figures --run1 <run 1 dir> --run2 <run 2 dir> --ou
   --plasticity plasticity.json --human-nonpass human_nonpass.json
 # human agreement of any checkpoint (docs/011)
 python -m draftzero.gameplay.pretrain agreement --checkpoint <genN.pt.gz> --rows 3000
+# the plasticity test (§2.3), on a pod with the run's replay shards
+bash tools/plasticity_test.sh <run dir> <model name> <first train gen> <last train gen> <test gen> \
+  <run 1 gen 0 checkpoint>
 ```
 
 - A run directory is the HF prefix's `games.jsonl` and `metrics.jsonl`:
   - run 1: `danbrooks/draftzero-checkpoints/2026-09-27_01-59-54/`;
   - run 2: `2026-09-27_03-42-21/`.
 - Run 2's per-game JVM logs are in its `logs.tar.gz`.
+- The figures' two small inputs, from §2.3 and §2.4:
+  - `plasticity.json`: `{"fresh": [0.867, 0.828], "pretrained": [0.907, 0.890], "run1gen0": [0.841, 0.802], "shrinkperturb": [0.877, 0.808], "_reference": 0.833}`
+  - `human_nonpass.json`: `{"start": 0.727, "0": 0.607, "1": 0.584, "2": 0.591, "3": 0.597, "6": 0.617, "9": 0.61, "12": 0.615}`
