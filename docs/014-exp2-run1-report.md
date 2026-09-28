@@ -24,14 +24,19 @@ Experiment #2 had three goals:
   - In gens 1–8, new networks beat older ones **58.7% (357/608)**.
   - In gens 9–18 that fell to **51.7% (449/869)**, and to 50.4% (262/520) in gens 13–18.
   - Later networks still beat the gen-0 network (61.5%, 67/109, gens 9–18), but not each other.
-- **The policy heads kept learning after strength stopped; the value head didn't.**
+- **The policy heads kept learning to the end. The value head, the only part the search reads
+  with priors off, memorised heavily and improved only slowly.** §2.8 has an offline diagnosis
+  that scores every checkpoint on the same games.
   - Held-out loss (the previous network on each new generation's games) fell from 0.907 to 0.553.
-    Almost all of that is policy.
-  - Held-out value loss was 0.075–0.087 in gens 1–9 and 0.090–0.102 in gens 14–18, while
-    training value loss kept falling (0.089 → 0.049). That's overfitting.
-  - With priors off, the search reads only the value head. So the part of the network that
-    improved never reached play, and the part that reached play stopped improving at about the
-    time the league flattened.
+    Almost all of that is policy, which never reaches play with priors off.
+  - On positions it had trained on, value error halved with repeated training: 0.051 after one
+    pass, 0.026 after eleven. On games it never saw, error was about 2× higher.
+  - On one fixed set of held-out games, the value head kept improving until about gen 14 (error
+    −0.019 from gen 7, 95% CI −0.025 to −0.013), then stopped.
+  - The run's own held-out value loss rose (0.075–0.087 → 0.090–0.102). That was mostly each
+    generation's games being harder to predict, not the value head getting worse.
+  - None of this explains the league flattening at gen 9: the value head was still improving
+    then.
 - **Throughput: 65–74 games/hr in steady state,** 2,673 games in 43.6 hours. The single shared
   inference server was the bottleneck: the pod's CPU quota was only 59–72% used and the GPU
   16–41% busy.
@@ -114,16 +119,15 @@ timeouts.*
 
 - **Policy heads:** the target head was still improving at the end (training loss 0.50 → 0.27;
   held-out accuracy 27% → 38–41%). The priority head plateaued at about 82–83% from gen 8.
-- **Value head: the gap between held-out and training loss grew steadily from gen 5,** from about
-  0.01 to 0.04–0.05. Held-out value loss was lowest at gen 5 (0.075) and reached 0.090–0.102 in
-  gens 14–18, while training value loss fell to 0.049. The network was memorising each
-  generation's positions rather than learning to evaluate new ones. The held-out series is noisy
-  (it's one generation's games each time), but its trend matches the league flattening.
+- **Value head: the logs make it look worse than it was.** Held-out value loss was lowest at gen 5
+  (0.075) and reached 0.090–0.102 in gens 14–18, while training value loss fell to 0.049. That
+  reads as overfitting that grew worse. §2.8 separates the two effects:
+  - the memorisation is real;
+  - on fixed held-out games the value head kept improving slowly until about gen 14;
+  - the rise in the logged number came mostly from later games being harder.
 - **Why it matters here:** with every prior off, MageZero's search starts each option with equal
-  prior and never reads the policy heads. The value head is the network's only influence on play.
-  Better policy heads couldn't make better play, and a value head that had stopped generalising is
-  the most likely reason the league flattened. That's a correlation in time, not a tested cause;
-  §4 item 1 is the test.
+  prior and never reads the policy heads. The value head is the network's only influence on play,
+  so better policy heads couldn't make better play.
 
 ### 2.3 17lands correlations
 
@@ -308,14 +312,125 @@ made that turn. It uses the same 2,533 held-out 17lands decisions as docs/013 §
 - **Alerts:** one, a harmless rsync "file vanished" on a scratch shard (gen 2). There were no
   crashes and no loop restarts.
 
+### 2.8 The value head, diagnosed offline
+
+§2.2's logs suggested the value head was overfitting and getting worse. To test that without
+paying for a pod, I scored run 1's checkpoints (gens 7–18) on the replay shards saved at the end of
+the run. No networks were retrained. Retraining on the M1 Pro runs at 5.6 states/s, so one pass over
+the data takes about 5 hours; inference runs at 93 states/s.
+
+**Method.**
+- **Positions:** every game sequence in the final replay window (gens 7–18; 1,567 sequences,
+  since a self-play game gives one per side). One position in 6 is scored, one in 3 for gens 16–18:
+  31,278 positions in all.
+- **Game boundaries and results:** recovered exactly from the label recursion (below), which the
+  stored labels reproduce to 4 × 10⁻⁷.
+- **How often each checkpoint trained on each position:** every generation trains one epoch over
+  a 150,000-state window, so the gen-K checkpoint trained on gen j's positions K − j + 1 times.
+- **Intervals:** 95%, resampling whole games. Checkpoint comparisons are paired: the same games,
+  resampled together.
+
+**How the labels are built.** MageZero labels each position backwards from the end of its game:
+label = λ × (next position's label) + (1 − λ) × (the search's score here), starting from ±1 for
+the result. At λ 0.95 a label is mostly a weighted average of the next ~20 positions' search
+scores. The result dominates only near the end of a game:
+
+| λ | Result's weight in a label, mean / median | Labels mostly the result | Correlation with the result | Label variance shared within a game | Effective independent samples in the window |
+|---|---|---|---|---|---|
+| **0.95 (run 1)** | 0.19 / 0.08 | 13.5% | 0.77 | **74%** | **~2,100** |
+| 0.9 | 0.09 / 0.01 | 6% | 0.69 | 66% | ~2,400 |
+| 0.8 | 0.04 / 0.00 | 3% | 0.64 | 62% | ~2,500 |
+| 0.7 | 0.02 / 0.00 | 1% | 0.63 | 60% | ~2,600 |
+
+*Other λs relabel the same games offline. Effective samples = positions / (1 + (positions per game − 1) × the shared share).*
+
+- **The value head's real sample size is small.** The window's 150,351 positions are worth about
+  2,100 independent samples, roughly one per game side.
+- **λ is not the main cause.** The search's own scores persist through a game, so labels are
+  strongly shared within a game at any λ. λ 0.7 would add only about 20% effective samples.
+
+![Run 1 value-head diagnosis](img/014-run1-value-head.png)
+
+*Left: error on positions a checkpoint trained on, by number of passes (all checkpoint and
+generation pairs pooled), and on games it never saw, by how many generations later they were
+played. Middle: every checkpoint up to gen 15 on the same held-out games (gens 16–18). The bars are
+per-checkpoint intervals; the paired differences below are much tighter. Right: the gen-7 network,
+and each generation's predecessor, on each generation's games.*
+
+**1. It memorises.** Error against the label (MSE):
+
+| Positions it trained on, passes | 1 | 2 | 4 | 6 | 8 | 11 |
+|---|---|---|---|---|---|---|
+| MSE | 0.051 | 0.042 | 0.034 | 0.030 | 0.028 | 0.026 |
+
+| Checkpoint | Trained on (its last 3 gens) | Unseen (the next 3 gens) | Ratio |
+|---|---|---|---|
+| Gen 10 | 0.045 [0.042–0.048] | 0.087 [0.080–0.096] | 1.9× |
+| Gen 12 | 0.043 [0.040–0.046] | 0.098 [0.088–0.106] | 2.3× |
+| Gen 15 | 0.043 [0.040–0.046] | 0.096 [0.087–0.105] | 2.3× |
+
+The run's logged training loss (0.049 at gen 18) is measured with dropout on. With dropout off,
+the network fits positions it has seen far more tightly, so the logs understated the gap
+(1.8× logged, against about 2.2× here).
+
+**2. But it didn't get worse; it improved slowly, then stopped.** Every checkpoint up to gen 15
+scored on the same held-out games (gens 16–18, 12,300 positions from about 400 game sequences):
+
+| Checkpoint | Gen 7 | Gen 9 | Gen 11 | Gen 13 | Gen 14 | Gen 15 |
+|---|---|---|---|---|---|---|
+| MSE vs label | 0.111 | 0.103 | 0.099 | 0.093 | **0.092** | 0.096 |
+| AUC predicting the game result | 0.816 | 0.823 | 0.827 | 0.830 | **0.831** | 0.825 |
+
+| Paired change | MSE (95% CI) | AUC (95% CI) |
+|---|---|---|
+| Gen 7 → 11 | −0.011 (−0.016 to −0.006) | +0.010 (+0.002 to +0.018) |
+| Gen 11 → 14 | −0.008 (−0.013 to −0.002) | +0.004 (−0.004 to +0.013) |
+| Gen 14 → 15 | +0.004 (+0.000 to +0.008) | −0.005 (−0.011 to +0.000) |
+
+- For comparison, the search's own score after 300 simulations, stored with each position,
+  predicts the same results with AUC 0.845 (0.818–0.870). The search adds a little on top of the
+  raw value head.
+- Far from the end of the game (30+ positions before it), every checkpoint's AUC is about 0.71–0.73.
+
+**3. Later games are harder for any fixed network.** The gen-7 network's error rises from 0.080 on
+gen 8's games to 0.114 on gens 17–18, 43% higher. Label variance stays flat at 0.33–0.37, so the
+labels didn't get more extreme; the positions got harder to judge.
+- Each generation's own predecessor keeps up only partly: 0.080 on gen 8, rising to 0.091–0.103
+  on gens 14–18. That's the loop's logged held-out metric, and the rise is this moving target,
+  not a worse network.
+- Why later games are harder isn't established. Candidates are the networks' changing play and
+  the league's changing opponents.
+
+**What this changes.**
+- **§2.2's "overfitting that got worse" was wrong.** The value head memorised heavily and its
+  improvement on new games was slow (AUC +0.014 over seven generations), but it didn't degrade.
+- **It doesn't explain the league flattening at gen 9.** The value head was still measurably
+  improving between gens 11 and 14. Its slow progress fits the flat evals, but the plateau needs
+  another explanation, or a more sensitive strength measure than the league.
+- **The binding constraint looks like independent games.** About 2,100 effective samples, each
+  reused about 11 times, is what the value head learns from.
+
+**Caveats.**
+- This is one run and one sample of positions, with no retraining.
+- The label is itself produced by the evolving networks' search. The AUC against actual game
+  results is the cleaner yardstick, and it tells the same story.
+- Whether regularisation or fewer passes would improve error on unseen games (and not just shrink
+  the memorisation) is untested (§4 item 1).
+
 ## 3. Lessons learned
 
-1. **With priors off, only the value head matters, so watch its held-out loss.** The policy heads
-   improved to the end and none of it reached play. Held-out value loss started rising at about
-   the same time the league flattened. It is the cheapest early warning we have.
-2. **The value head overfits at 112 games per generation.** Training value loss fell from 0.089 to
-   0.049 while held-out value loss rose from its gen-5 low of 0.075 to 0.090–0.102. More data per update, fewer passes, or regularisation is the first
-   thing to fix before paying for longer runs.
+1. **With priors off, only the value head matters, and its logged held-out loss is misleading on
+   its own.** The policy heads improved to the end and none of it reached play.
+   - Each generation's games were harder for any fixed network than the last, so the logged
+     held-out loss rose while the value head was actually improving (§2.8).
+   - Score every checkpoint on one fixed set of held-out games instead, as evals do for strength.
+2. **The value head learns from about 2,000 effective samples at a time, and memorises them.**
+   - Positions within a game share 74% of their label variance, so the replay window's 150,000
+     positions are worth roughly one independent sample per game side.
+   - Each position is trained on about 11 times. Training error halves while error on unseen games
+     stays twice as high.
+   - It needs more games, not more passes. Lowering λ barely helps: it adds about 20% effective
+     samples.
 3. **The league is the sensitive strength signal; 200-game evals every 8 generations are not.**
    The league showed learning by gen 3 and the plateau by gen 9. The evals couldn't separate any
    of the three networks. (docs/013 lesson 7, confirmed over the full run.)
@@ -337,14 +452,19 @@ made that turn. It uses the same 2,533 held-out 17lands decisions as docs/013 §
 These add to docs/013 §4, which still applies: a fixed yardstick every 2–4 generations,
 head-to-head at equal spend, an Elo ladder from league games, and the engine fixes.
 
-1. **Fix the value head's overfitting before any longer run.** In rough order of cost:
-   - train fewer epochs per generation, or stop on held-out value loss;
-   - enlarge the replay window, so each update sees more distinct positions;
-   - add weight decay or dropout on the value head;
-   - log held-out value loss prominently on the dashboard.
-
-   Test offline first on this run's saved replay shards (§5), in the style of docs/013 §2.3.
-   That costs about $1 of GPU, against $20+ for a run.
+1. **Give the value head more independent games, and measure it on a fixed yardstick.**
+   - **Yardstick:** freeze a held-out set of about 200 games from one generation. Score every
+     checkpoint on it: value MSE and AUC against game results. That's about 5 minutes per
+     checkpoint on the laptop (§2.8's method).
+   - **Fewer positions from more games:** keep more games in the replay window and subsample
+     positions within each game, keeping training cost flat. This is AlphaGo's fix for correlated
+     positions.
+   - **Throughput** (item 2) is the other route to more games.
+   - **Regularisation** (the optimizer has no weight decay) or fewer passes should shrink the
+     memorisation. Whether that improves error on unseen games needs a retraining test on this
+     run's shards (§5).
+     - That test is GPU work. Training runs at 5.6 states/s on the M1 Pro, against about 180 on
+       the pod's RTX 3090, so it's about $1–2 on a pod rather than days on the laptop.
 2. **Apply the replica inference servers** (`jvm.servers`, c40714a). The CPU was 30–40% idle,
    waiting on one server. Measure games/hr with 2–3 replicas in a short smoke run before
    committing.
@@ -372,6 +492,7 @@ head-to-head at equal spend, an Elo ladder from league games, and the engine fix
 | `games.jsonl`, `metrics.jsonl`, `run.json`, `alerts.jsonl`, `deck_records.tsv` (through gen 18) | same HF prefix, top level |
 | All logs: 711 JVM game logs, train and test logs, loop, watchdog, diskguard, the config; final `games.jsonl` and `metrics.jsonl` including gen 19's 19 games | HF `…/final/run1_logs.tar.gz` (104 MB) |
 | Replay shards (`data/FDN_exp2/ver1`, training and testing) | HF `…/final/run1_training_data.tar` (5.4 GB) |
+| Value-head diagnosis (§2.8): the sampled table, every checkpoint's predictions, results, label stats, scripts | `bench_local/exp2_run1/shards/` and `bench_local/exp2_run1/value_diag_*.py` in the main checkout; the replay shards themselves are re-downloadable from HF |
 | Analysis scripts, the bad-target audit rows (`run1_targets_classified.jsonl`, every classified target), figures' sources | `bench_local/exp2_run1/` in the main checkout (laptop only) |
 
 The pod was removed on Sep 28, within half an hour of the stop, after the uploads were verified.

@@ -20,7 +20,8 @@ Exp #2 is under way ([ROADMAP](ROADMAP.md), Phase 4). Its imitation arm has a re
 pretrained on 17lands decisions (73% agreement with humans) did not help: the network stopped learning
 within three generations, while the heuristic start kept improving. The heuristic-start arm has its own
 report: **[run 1, final](docs/014-exp2-run1-report.md)**. It learned for about eight generations (league
-59%), then plateaued at 50% against raw search as its value head overfit; 17lands agreement on
+59%), then plateaued at 50% against raw search. Its value head, the only part the search reads,
+memorised its training positions and improved only slowly on new games. 17lands agreement on
 commons ended at ρ +0.20.
 
 Studies: **[human gameplay data](docs/008-gameplay-data.md)**. 17lands and Arena logs mapped onto XMage
