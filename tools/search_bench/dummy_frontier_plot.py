@@ -27,7 +27,7 @@ OUT = Path(__file__).resolve().parents[2] / "docs" / "img"
 # for offline search and 250 with the network. A method's factor is its cost per simulation
 # relative to today's search. All illustrative.
 RATE = {"offline": 550.0, "network": 250.0}
-FACTOR = {"ismcts": 1.2, "pimc4": 1.1, "pimc1": 1.05, "clairvoyant": 1.0}
+FACTOR = {"ismcts": 3.0, "pimc4": 1.1, "pimc1": 1.05, "clairvoyant": 1.0}
 
 THEMES = {
     "light": dict(
@@ -43,25 +43,25 @@ THEMES = {
 }
 
 LABELS = {
-    "ismcts": "Particle IS-MCTS, the same 4 worlds",
+    "ismcts": "IS-MCTS, a fresh world every iteration",
     "pimc4": "PIMC, 4 sampled worlds",
     "pimc1": "PIMC, 1 sampled world",
     "clairvoyant": "MageZero MCTS today (searches the real hidden cards)",
 }
-END_LABELS = {"ismcts": "IS-MCTS, 4 worlds", "pimc4": "PIMC, 4 worlds", "pimc1": "PIMC, 1 world",
+END_LABELS = {"ismcts": "IS-MCTS", "pimc4": "PIMC, 4 worlds", "pimc1": "PIMC, 1 world",
               "clairvoyant": "Clairvoyant MCTS"}
 
 # {panel: {method: {simulations per decision: agreement %}}}
 CURVES = {
     "offline": {
-        "ismcts": {100: 50.0, 300: 55.0, 1000: 59.0, 3000: 62.5},
+        "ismcts": {100: 49.5, 300: 55.5, 1000: 61.5, 3000: 64.5},
         "pimc4": {100: 48.0, 300: 53.0, 1000: 57.0, 3000: 60.0},
         "clairvoyant": {100: 48.5, 300: 52.5, 1000: 55.5, 3000: 57.5},
         "pimc1": {100: 47.5, 300: 51.5, 1000: 54.0, 3000: 55.0},
     },
     "network": {
-        "ismcts": {100: 52.0, 300: 57.0, 1000: 61.5, 3000: 65.5},
-        "pimc4": {100: 50.0, 300: 55.0, 1000: 59.5, 3000: 63.0},
+        "ismcts": {100: 51.5, 300: 57.5, 1000: 64.5, 3000: 67.5},
+        "pimc4": {100: 50.0, 300: 55.0, 1000: 59.5, 3000: 62.5},
         "clairvoyant": {100: 50.5, 300: 54.5, 1000: 58.0, 3000: 60.5},
         "pimc1": {100: 49.5, 300: 53.5, 1000: 56.5, 3000: 58.0},
     },
@@ -69,7 +69,7 @@ CURVES = {
 # No-search references: (label, panel, pod-seconds per decision, agreement %, marker, eligible)
 REFERENCES = [
     ("Rule heuristic (no search)", "offline", 0.0006, 46.0, "D", True),
-    ("XMage MAD AI (reads its own next draw)", "offline", 1.5, 50.0, "^", False),
+    ("XMage MAD AI (reads its own next draw)", "offline", 2.5, 46.0, "^", False),
     ("Policy network (no search)", "network", 0.004, 44.0, "s", True),
 ]
 PANEL_TITLES = {
@@ -102,7 +102,7 @@ def style_axes(ax, t) -> None:
     ax.axhspan(*CEILING, color=t["band"], zorder=0, linewidth=0)
 
 
-def draw_panel(ax, panel: str, t, first: bool) -> None:
+def draw_panel(ax, panel: str, t) -> None:
     style_axes(ax, t)
     ax.set_title(PANEL_TITLES[panel], color=t["ink"], fontsize=11, loc="left", pad=10)
     ax.text(150, CEILING[1] - 1.0, "Ceiling: unknown, below 100% (placeholder band)",
@@ -125,17 +125,6 @@ def draw_panel(ax, panel: str, t, first: bool) -> None:
             colour_text = t["ink"]
         ax.annotate(END_LABELS[method], (xs[-1], ys[-1]), xytext=(9, 0),
                     textcoords="offset points", color=colour_text, fontsize=9, va="center")
-
-    # Budgets, labelled on one line only.
-    pts = CURVES[panel]["ismcts"]
-    for sims, y in pts.items():
-        text = f"{sims // 1000}k" if sims >= 1000 else str(sims)
-        ax.annotate(text, (pod_seconds(panel, "ismcts", sims), y), xytext=(-6, 9),
-                    textcoords="offset points", color=t["muted"], fontsize=8, ha="right")
-    if first:
-        ax.annotate("simulations per decision", (pod_seconds(panel, "ismcts", 100), pts[100]),
-                    xytext=(-6, 21), textcoords="offset points", color=t["muted"], fontsize=8,
-                    ha="right")
 
     for label, where, x, y, marker, eligible in REFERENCES:
         if where != panel:
@@ -169,8 +158,8 @@ def draw(mode: str) -> Path:
     })
     fig, axes = plt.subplots(1, 2, figsize=(13, 6.6), dpi=160, sharex=True, sharey=True)
     fig.patch.set_facecolor(t["surface"])
-    for i, (ax, panel) in enumerate(zip(axes, ("offline", "network"))):
-        draw_panel(ax, panel, t, first=(i == 0))
+    for ax, panel in zip(axes, ("offline", "network")):
+        draw_panel(ax, panel, t)
         ax.set_xlabel("Pod-seconds per decision (log scale)", color=t["ink2"], labelpad=6)
     axes[0].set_ylabel("Agreement with top 17lands players", color=t["ink2"], labelpad=8)
 
@@ -212,9 +201,9 @@ def draw(mode: str) -> Path:
 
     fig.text(0.06, 0.965, "ILLUSTRATIVE ONLY: the first experiment's plot", color=t["ink"],
              fontsize=13, fontweight="bold", ha="left")
-    fig.text(0.06, 0.935, "Dummy numbers that show its format: 4 methods × 4 budgets, per "
-             "evaluator. Nothing here is measured. 1 pod-second = $0.00014.",
-             color=t["ink2"], fontsize=10, ha="left")
+    fig.text(0.06, 0.935, "Dummy numbers that show its format; nothing here is measured. Each "
+             "line's points are 100, 300, 1,000 and 3,000 simulations per decision, left to right. "
+             "1 pod-second = $0.00014.", color=t["ink2"], fontsize=10, ha="left")
     fig.subplots_adjust(left=0.06, right=0.93, top=0.86, bottom=0.30, wspace=0.12)
 
     OUT.mkdir(parents=True, exist_ok=True)
