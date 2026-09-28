@@ -193,6 +193,10 @@ const r = D.gih_rho, sg = D.selfplay_games;
 tile("GIH rank corr., network", num(r.network), `${r.network_cards} cards · ${sg.network} self-play games`);
 tile(`GIH rank corr., last ${D.window_gens} gens`, num(r.recent), `${r.recent_cards} cards · ${sg.recent} games`);
 tile("GIH rank corr., heuristic gen 0", num(r.heuristic), `${r.heuristic_cards} cards · ${sg.heuristic} games`);
+const rc = D.gih_rho_commons || {};
+tile(`Commons, last ${D.window_gens} gens`, num(rc.recent),
+     `${rc.recent_cards || 0} commons with ≥ ${rc.min_games} games · exp #1: 0.28`);
+tile("Commons, network, all gens", num(rc.network), `${rc.network_cards || 0} commons with ≥ ${rc.min_games} games`);
 tile("Distinct decks played", (D.decks_seen || 0).toLocaleString(), "drawn at random from the pools");
 root.append(tiles);
 

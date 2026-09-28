@@ -37,6 +37,7 @@ jvm:
   heap: 4g
   threads: 1
   jvms: 2
+  servers: 2                # two inference server replicas per checkpoint: exercises the replica path
   gc: zgc
   search_budget: 30
   timeout_ms: 4000

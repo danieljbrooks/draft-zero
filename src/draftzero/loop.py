@@ -75,7 +75,10 @@ DEFAULTS = {
     # jvms: JVMs run at once, each with `threads` game threads. Several small JVMs beat one big
     # one by 3.3x offline in the exp #2 pilot (docs/006); all of them share one inference
     # server per checkpoint. gc: zgc | zgc-gen | g1.
-    "jvm": {"heap": "8g", "threads": 3, "jvms": 1, "gc": "zgc",
+    # servers: inference server processes per checkpoint, each shared by a slice of the JVMs.
+    # One Python server tops out at about one core (exp #2 run 1: 28 game threads kept it
+    # at ~130% CPU with the GPU 25% busy, and searches took 12x longer than offline).
+    "jvm": {"heap": "8g", "threads": 3, "jvms": 1, "servers": 1, "gc": "zgc",
             "search_budget": 200, "timeout_ms": 8000, "max_minutes": 30},
     "train_steps": None,          # cap on optimizer steps per epoch (MageZero's default: 15000)
     # states per training batch (MageZero's default: 512). A format-wide state is ~1,700
@@ -212,7 +215,7 @@ def _player(p: dict, pool: str, mode: str, out: Path, ptype: str, offline: bool,
 def game_yml(run: Run, name: str, settings: GenSettings, games: int, *,
              pool_a: str, pool_b: str, mode: str,
              out_a: Path, out_b: Path, offline_a: bool, offline_b: bool,
-             type_b: str = "mcts", b_port: int = PRIMARY_PORT) -> str:
+             type_b: str = "mcts", b_port: int = PRIMARY_PORT, a_port: int = PRIMARY_PORT) -> str:
     cfg = yaml.safe_load(Path(run.cfg["base_game_yml"]).read_text())
     jvm = run.cfg["jvm"]
     hidden = run.cfg.get("hidden_info") or DEFAULTS["hidden_info"]
@@ -221,7 +224,7 @@ def game_yml(run: Run, name: str, settings: GenSettings, games: int, *,
     cfg["training"]["games"] = games
     cfg["training"]["threads"] = min(jvm["threads"], games)
     cfg["training"]["max_minutes"] = jvm["max_minutes"]
-    cfg["server"]["port"] = PRIMARY_PORT
+    cfg["server"]["port"] = a_port
     cfg["server"]["opponent_port"] = b_port   # self-play: both players query the same server
     out = TMP_DIR / f"game_{name}.yml"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -326,6 +329,19 @@ def plan_games(run: Run, gen: int, rng: random.Random) -> list[dict]:
     return jobs
 
 
+def replica_ports(base: int, n: int) -> list[int]:
+    """Ports of n server replicas for one checkpoint: base, base+100, base+200, ...
+    PRIMARY_PORT and OPPONENT_PORT + k stay the first replica's ports."""
+    return [base + 100 * r for r in range(max(1, n))]
+
+
+def start_replicas(run: "Run", port0: int, n: int, clients: int, checkpoint=None) -> list:
+    """n servers for one checkpoint; each is sized for its share of the game threads."""
+    per = -(-clients // max(1, n))
+    return [start_server(run.model, run.version, port, run.dir, checkpoint=checkpoint, clients=per)
+            for port in replica_ports(port0, n)]
+
+
 def _stagger(i: int, jvms: int) -> None:
     """Space out the first wave of JVM starts: simultaneous card-DB bootstraps and native-library
     unpacking are where concurrent JVMs collided in the pilot."""
@@ -349,7 +365,9 @@ def play_generation(run: Run, gen: int, settings: GenSettings) -> dict:
     # players), plus one per frozen checkpoint in the plan. The pilot measured one shared
     # server 21% faster than a server per JVM (docs/006).
     frozen = sorted({j["checkpoint"] for j in jobs if j["checkpoint"]})
-    port_of = {c: OPPONENT_PORT + i for i, c in enumerate(frozen)}
+    replicas = max(1, int(run.cfg["jvm"].get("servers", 1)))
+    primary = replica_ports(PRIMARY_PORT, replicas)
+    port_of = {c: replica_ports(OPPONENT_PORT + i, replicas) for i, c in enumerate(frozen)}
     for i, job in enumerate(jobs):          # run.json isn't thread-safe: reserve ids up front
         job["sid"], job["name"] = run.next_session(), f"{i:02d}_{job['opponent']}"
 
@@ -359,10 +377,11 @@ def play_generation(run: Run, gen: int, settings: GenSettings) -> dict:
         both = job["checkpoint"] is None
         out_a = testing / f"session{job['sid']}_A_{job['opponent']}.hdf5"
         out_b = (testing if both else scratch) / f"session{job['sid']}_B_{job['opponent']}.hdf5"
+        r = i % replicas                        # this job's server replica
         yml = game_yml(run, f"gen{gen}_{job['name']}", settings, job["games"],
                        pool_a=run.train_pool_file, pool_b=run.train_pool_file, mode="random",
                        out_a=out_a, out_b=out_b, offline_a=offline, offline_b=offline,
-                       b_port=PRIMARY_PORT if both else port_of[job["checkpoint"]])
+                       a_port=primary[r], b_port=primary[r] if both else port_of[job["checkpoint"]][r])
         recs = play_job(run, gen, job["name"], yml, "selfplay", job["opponent"], "both" if both else "a")
         if not both:
             for f in scratch.glob(f"session{job['sid']}_B_*"):
@@ -375,10 +394,9 @@ def play_generation(run: Run, gen: int, settings: GenSettings) -> dict:
     try:
         if not offline:
             clients = jvms * run.cfg["jvm"]["threads"]
-            servers.append(start_server(run.model, run.version, PRIMARY_PORT, run.dir, clients=clients))
+            servers += start_replicas(run, PRIMARY_PORT, replicas, clients)
             for c in frozen:
-                servers.append(start_server(run.model, run.version, port_of[c], run.dir, checkpoint=c,
-                                            clients=clients))
+                servers += start_replicas(run, port_of[c][0], replicas, clients, checkpoint=c)
         with ThreadPoolExecutor(max_workers=jvms) as pool:
             for both, recs in pool.map(one, enumerate(jobs)):
                 (selfplay_records if both else league).extend(recs)
@@ -502,6 +520,8 @@ def eval_generation(run: Run, gen: int, settings: GenSettings) -> dict:
     scratch = run.dir / "scratch"
     scratch.mkdir(parents=True, exist_ok=True)
     jvms = max(1, int(run.cfg["jvm"].get("jvms", 1)))
+    replicas = max(1, int(run.cfg["jvm"].get("servers", 1)))
+    primary = replica_ports(PRIMARY_PORT, replicas)
     # whole pairs per job, spread over every JVM slot (at most chunk_games per job)
     pairs_per_job = max(1, min(run.cfg["chunk_games"] // 2, -(-ev["pairs"] // jvms)))
     chunk = 2 * pairs_per_job
@@ -531,7 +551,8 @@ def eval_generation(run: Run, gen: int, settings: GenSettings) -> dict:
                            pool_a=str(fa), pool_b=str(fb), mode="sequential",
                            out_a=scratch / f"{name}_A.hdf5", out_b=scratch / f"{name}_B.hdf5",
                            offline_a=False, offline_b=True,
-                           type_b="minimax" if baseline == "minimax" else "mcts", b_port=OPPONENT_PORT)
+                           type_b="minimax" if baseline == "minimax" else "mcts", b_port=OPPONENT_PORT,
+                           a_port=primary[len(jobs) % replicas])
             jobs.append((baseline, name, yml))
 
     def one(i_job):
@@ -539,13 +560,13 @@ def eval_generation(run: Run, gen: int, settings: GenSettings) -> dict:
         _stagger(i, jvms)
         play_job(run, gen, name, yml, "strength_eval", baseline, "a")
 
-    server = start_server(run.model, run.version, PRIMARY_PORT, run.dir, checkpoint=f"gen{gen}",
-                          clients=jvms * run.cfg["jvm"]["threads"])
+    servers = start_replicas(run, PRIMARY_PORT, replicas, jvms * run.cfg["jvm"]["threads"], checkpoint=f"gen{gen}")
     try:
         with ThreadPoolExecutor(max_workers=jvms) as pool:
             list(pool.map(one, enumerate(jobs)))
     finally:
-        stop_server(server)
+        for srv in servers:
+            stop_server(srv)
         shutil.rmtree(scratch, ignore_errors=True)
 
     # rolling window: a few games per gen are too noisy alone

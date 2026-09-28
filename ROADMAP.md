@@ -5,7 +5,7 @@ session, and update it before ending one** — mark items done, record decisions
 the bottom, and move anything you learned into the right phase. It's the single source of
 truth for status. Chat history isn't.
 
-*Last updated: 2026-09-26*
+*Last updated: 2026-09-27*
 
 ## Where things stand
 
@@ -454,6 +454,55 @@ replays and Arena logs now map onto XMage states; the next steps are:
       HashSet, and determinization in search (`shuffleUnknowns` is never called).
 - [ ] Add the behavioural fingerprint (`dz gameplay fingerprints`) to the loop as a per-generation
       monitor: the exp #2 pilot's gen 1 missed land drops with a land in hand on 16–25% of turns 1–3.
+
+**Limited bots.** Research how we might get some Limited bots up. Not started: this is a
+placeholder until Dan picks it up.
+- Prompted by Jack Maiorino's [Spellbench](https://jackmaiorino.github.io/spellbench/)
+  ([repo](https://github.com/jackmaiorino/spellbench)): one protocol for MTG bots on any rules
+  engine, plus a public Elo leaderboard. XMage support is planned next, for FDN Limited and the
+  Standard pool, with DraftZero and MageZero named as candidates.
+- Worth knowing going in: Spellbench's draft protocol v2
+  ([spec](https://github.com/jackmaiorino/spellbench/blob/main/spec/SPELLBENCH_PROTOCOL_V2.md))
+  is a fair-play contract. A bot sees only its own seat's view and can't search a copy of the
+  real game. Our search does exactly that today (D7, docs/009), so a v2 entry probably waits on
+  exp #3's hidden-information work.
+- [ ] Research: what "up" should mean (a leaderboard entry, something people can play against,
+      or both), what we'd ship, and what's in the way. Write up the options before building
+      anything.
+
+**Search benchmark** ([docs/012](docs/012-search-benchmark.md), branch `search-benchmark`). A
+proposal out for comment (2026-09-27), nothing built or run. Its first experiment (E0–E2):
+- **Methods:** today's clairvoyant MCTS, PIMC with 1 and with 4 worlds, and IS-MCTS in its
+  published form, with a fresh world every iteration. IS-MCTS was added after a reviewer who uses it
+  for Magic called it the big one.
+- **Budgets:** 100 to 3,000 simulations.
+- **Evaluators:** offline search, and a trained exp #2 network.
+- **Also swept:** the backprop discount (1.0, 0.99, 0.95, 0.9) for clairvoyant MCTS and PIMC at
+  1,000 simulations. It was suggested in review; does it help fair search as much as clairvoyant?
+- **Measures:** agreement with top 17lands players on 1,000 decisions, and a pass/fail leak test
+  that colors the plot.
+
+It costs ~39 pod-hours (~$19.50), with the offline runs on the laptop. The follow-ups (E3–E9, first
+among them validation by play) are ideas for now.
+- [ ] Collect reviewers' comments on the first experiment (its §2.11) and revise.
+- [ ] Build IS-MCTS in the fork behind a flag (docs/009 §6.4), about a week: the first
+      experiment's long pole. Each iteration deals a fresh world and replays its path from the root.
+- [ ] Decide funding for the network runs. The RunPod balance is committed to exp #2.
+- [ ] Fix the search issues its §2.9 lists before the benchmark runs: whole-tree walks on every
+      iteration, and the virtual loss's sign at opponent nodes.
+- [ ] Dan: decide whether to raise the virtual-loss issue, and the race that can reset priors to
+      uniform, with Will.
+
+**Faster engines.** Explore Jack Maiorino's [mtg-kernel](https://github.com/jackmaiorino/mtg-kernel),
+the engine behind Spellbench's first benchmark. It's reportedly about 40× faster than XMage
+overall, and 1,000× for training (unverified). Not started: this is a backlog item.
+- Why it matters: XMage's speed caps the search budget and the cost of every run. docs/012 records
+  engine-independent counts so its results can be re-costed on a faster engine.
+- [ ] Explore:
+  - its card and rules coverage (FDN?);
+  - what the 40× and 1,000× figures measure;
+  - whether its search can be kept to one seat's view (Spellbench v2's contract);
+  - what running MageZero's search and networks on it would take.
 
 **Study.** Read with a specific question in mind.
 - [ ] KataGo paper (Wu, 2019): AlphaZero on a small compute budget. Its "playout cap
