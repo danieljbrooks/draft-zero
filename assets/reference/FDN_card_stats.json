@@ -1,0 +1,2580 @@
+{
+"cards": {
+"Abrade": {
+"gih_n": 36439,
+"gih_wr": 0.57235,
+"gns_n": 45606,
+"gns_wr": 0.54499,
+"gp_n": 82045,
+"gp_wr": 0.55715,
+"iwd": 0.02736
+},
+"Abyssal Harvester": {
+"gih_n": 18045,
+"gih_wr": 0.55683,
+"gns_n": 22265,
+"gns_wr": 0.52886,
+"gp_n": 40310,
+"gp_wr": 0.54138,
+"iwd": 0.02797
+},
+"Adventuring Gear": {
+"gih_n": 2429,
+"gih_wr": 0.46727,
+"gns_n": 3686,
+"gns_wr": 0.50353,
+"gp_n": 6115,
+"gp_wr": 0.48913,
+"iwd": -0.03626
+},
+"Aegis Turtle": {
+"gih_n": 11332,
+"gih_wr": 0.49876,
+"gns_n": 12607,
+"gns_wr": 0.50972,
+"gp_n": 23939,
+"gp_wr": 0.50453,
+"iwd": -0.01095
+},
+"Aetherize": {
+"gih_n": 12096,
+"gih_wr": 0.50116,
+"gns_n": 15217,
+"gns_wr": 0.50227,
+"gp_n": 27313,
+"gp_wr": 0.50178,
+"iwd": -0.00111
+},
+"Affectionate Indrik": {
+"gih_n": 25262,
+"gih_wr": 0.55494,
+"gns_n": 33733,
+"gns_wr": 0.5344,
+"gp_n": 58995,
+"gp_wr": 0.5432,
+"iwd": 0.02054
+},
+"Ajani's Pridemate": {
+"gih_n": 33187,
+"gih_wr": 0.5576,
+"gns_n": 39141,
+"gns_wr": 0.55229,
+"gp_n": 72328,
+"gp_wr": 0.55472,
+"iwd": 0.00531
+},
+"Ajani, Caller of the Pride": {
+"gih_n": 7592,
+"gih_wr": 0.576,
+"gns_n": 10506,
+"gns_wr": 0.53674,
+"gp_n": 18098,
+"gp_wr": 0.55321,
+"iwd": 0.03926
+},
+"Akroma's Memorial": {
+"gih_n": 961,
+"gih_wr": 0.55359,
+"gns_n": 1356,
+"gns_wr": 0.52212,
+"gp_n": 2317,
+"gp_wr": 0.53517,
+"iwd": 0.03147
+},
+"Alesha, Who Laughs at Fate": {
+"gih_n": 16532,
+"gih_wr": 0.61826,
+"gns_n": 21700,
+"gns_wr": 0.51359,
+"gp_n": 38232,
+"gp_wr": 0.55885,
+"iwd": 0.10466
+},
+"Ambush Wolf": {
+"gih_n": 40641,
+"gih_wr": 0.55282,
+"gns_n": 45215,
+"gns_wr": 0.53734,
+"gp_n": 85856,
+"gp_wr": 0.54467,
+"iwd": 0.01547
+},
+"An Offer You Can't Refuse": {
+"gih_n": 1855,
+"gih_wr": 0.48086,
+"gns_n": 2375,
+"gns_wr": 0.48211,
+"gp_n": 4230,
+"gp_wr": 0.48156,
+"iwd": -0.00124
+},
+"Angel of Finality": {
+"gih_n": 29924,
+"gih_wr": 0.56677,
+"gns_n": 37890,
+"gns_wr": 0.54663,
+"gp_n": 67814,
+"gp_wr": 0.55552,
+"iwd": 0.02013
+},
+"Anthem of Champions": {
+"gih_n": 8648,
+"gih_wr": 0.55504,
+"gns_n": 11707,
+"gns_wr": 0.51995,
+"gp_n": 20355,
+"gp_wr": 0.53486,
+"iwd": 0.0351
+},
+"Apothecary Stomper": {
+"gih_n": 20237,
+"gih_wr": 0.51623,
+"gns_n": 27053,
+"gns_wr": 0.52907,
+"gp_n": 47290,
+"gp_wr": 0.52358,
+"iwd": -0.01284
+},
+"Arahbo, the First Fang": {
+"gih_n": 17856,
+"gih_wr": 0.60921,
+"gns_n": 23552,
+"gns_wr": 0.54416,
+"gp_n": 41408,
+"gp_wr": 0.57221,
+"iwd": 0.06505
+},
+"Arbiter of Woe": {
+"gih_n": 41599,
+"gih_wr": 0.5854,
+"gns_n": 49557,
+"gns_wr": 0.53383,
+"gp_n": 91156,
+"gp_wr": 0.55736,
+"iwd": 0.05157
+},
+"Arcane Epiphany": {
+"gih_n": 36853,
+"gih_wr": 0.5586,
+"gns_n": 42397,
+"gns_wr": 0.5311,
+"gp_n": 79250,
+"gp_wr": 0.54389,
+"iwd": 0.0275
+},
+"Archmage of Runes": {
+"gih_n": 16956,
+"gih_wr": 0.55461,
+"gns_n": 19263,
+"gns_wr": 0.51866,
+"gp_n": 36219,
+"gp_wr": 0.53549,
+"iwd": 0.03595
+},
+"Armasaur Guide": {
+"gih_n": 12709,
+"gih_wr": 0.50523,
+"gns_n": 17696,
+"gns_wr": 0.5317,
+"gp_n": 30405,
+"gp_wr": 0.52064,
+"iwd": -0.02647
+},
+"Ashroot Animist": {
+"gih_n": 11345,
+"gih_wr": 0.58466,
+"gns_n": 15940,
+"gns_wr": 0.52177,
+"gp_n": 27285,
+"gp_wr": 0.54792,
+"iwd": 0.06289
+},
+"Authority of the Consuls": {
+"gih_n": 4686,
+"gih_wr": 0.52027,
+"gns_n": 6345,
+"gns_wr": 0.52088,
+"gp_n": 11031,
+"gp_wr": 0.52062,
+"iwd": -0.00061
+},
+"Axgard Cavalry": {
+"gih_n": 33464,
+"gih_wr": 0.5214,
+"gns_n": 41620,
+"gns_wr": 0.55593,
+"gp_n": 75084,
+"gp_wr": 0.54054,
+"iwd": -0.03454
+},
+"Bake into a Pie": {
+"gih_n": 103949,
+"gih_wr": 0.58014,
+"gns_n": 98894,
+"gns_wr": 0.52185,
+"gp_n": 202843,
+"gp_wr": 0.55172,
+"iwd": 0.05829
+},
+"Balmor, Battlemage Captain": {
+"gih_n": 21473,
+"gih_wr": 0.556,
+"gns_n": 19770,
+"gns_wr": 0.50587,
+"gp_n": 41243,
+"gp_wr": 0.53197,
+"iwd": 0.05013
+},
+"Banishing Light": {
+"gih_n": 88026,
+"gih_wr": 0.57449,
+"gns_n": 91140,
+"gns_wr": 0.54582,
+"gp_n": 179166,
+"gp_wr": 0.55991,
+"iwd": 0.02867
+},
+"Banner of Kinship": {
+"gih_n": 2807,
+"gih_wr": 0.50623,
+"gns_n": 4351,
+"gns_wr": 0.52494,
+"gp_n": 7158,
+"gp_wr": 0.5176,
+"iwd": -0.0187
+},
+"Battlesong Berserker": {
+"gih_n": 32403,
+"gih_wr": 0.57593,
+"gns_n": 42314,
+"gns_wr": 0.55294,
+"gp_n": 74717,
+"gp_wr": 0.56291,
+"iwd": 0.023
+},
+"Beast-Kin Ranger": {
+"gih_n": 53446,
+"gih_wr": 0.55228,
+"gns_n": 55079,
+"gns_wr": 0.53345,
+"gp_n": 108525,
+"gp_wr": 0.54272,
+"iwd": 0.01883
+},
+"Bigfin Bouncer": {
+"gih_n": 96673,
+"gih_wr": 0.57086,
+"gns_n": 81482,
+"gns_wr": 0.52698,
+"gp_n": 178155,
+"gp_wr": 0.55079,
+"iwd": 0.04389
+},
+"Billowing Shriekmass": {
+"gih_n": 23466,
+"gih_wr": 0.53682,
+"gns_n": 27115,
+"gns_wr": 0.51746,
+"gp_n": 50581,
+"gp_wr": 0.52644,
+"iwd": 0.01936
+},
+"Bite Down": {
+"gih_n": 62971,
+"gih_wr": 0.55565,
+"gns_n": 67229,
+"gns_wr": 0.53185,
+"gp_n": 130200,
+"gp_wr": 0.54336,
+"iwd": 0.0238
+},
+"Blanchwood Armor": {
+"gih_n": 3051,
+"gih_wr": 0.52016,
+"gns_n": 4132,
+"gns_wr": 0.52106,
+"gp_n": 7183,
+"gp_wr": 0.52067,
+"iwd": -0.0009
+},
+"Blasphemous Edict": {
+"gih_n": 20309,
+"gih_wr": 0.59368,
+"gns_n": 24931,
+"gns_wr": 0.52373,
+"gp_n": 45240,
+"gp_wr": 0.55513,
+"iwd": 0.06995
+},
+"Bloodfell Caves": {
+"gih_n": 31524,
+"gih_wr": 0.54403,
+"gns_n": 39430,
+"gns_wr": 0.5455,
+"gp_n": 70954,
+"gp_wr": 0.54485,
+"iwd": -0.00147
+},
+"Bloodthirsty Conqueror": {
+"gih_n": 9182,
+"gih_wr": 0.62721,
+"gns_n": 11785,
+"gns_wr": 0.50581,
+"gp_n": 20967,
+"gp_wr": 0.55897,
+"iwd": 0.12139
+},
+"Bloom Tender": {
+"gih_n": 835,
+"gih_wr": 0.54251,
+"gns_n": 1214,
+"gns_wr": 0.50577,
+"gp_n": 2049,
+"gp_wr": 0.52074,
+"iwd": 0.03675
+},
+"Blossoming Sands": {
+"gih_n": 22187,
+"gih_wr": 0.53743,
+"gns_n": 28418,
+"gns_wr": 0.53829,
+"gp_n": 50605,
+"gp_wr": 0.53791,
+"iwd": -0.00085
+},
+"Boltwave": {
+"gih_n": 2452,
+"gih_wr": 0.44739,
+"gns_n": 2920,
+"gns_wr": 0.50582,
+"gp_n": 5372,
+"gp_wr": 0.47915,
+"iwd": -0.05843
+},
+"Brass's Bounty": {
+"gih_n": 35,
+"gih_wr": 0.37143,
+"gns_n": 64,
+"gns_wr": 0.3125,
+"gp_n": 99,
+"gp_wr": 0.33333,
+"iwd": 0.05893
+},
+"Brazen Scourge": {
+"gih_n": 18504,
+"gih_wr": 0.52259,
+"gns_n": 24011,
+"gns_wr": 0.54358,
+"gp_n": 42515,
+"gp_wr": 0.53445,
+"iwd": -0.02099
+},
+"Brineborn Cutthroat": {
+"gih_n": 32977,
+"gih_wr": 0.54301,
+"gns_n": 33447,
+"gns_wr": 0.53108,
+"gp_n": 66424,
+"gp_wr": 0.537,
+"iwd": 0.01194
+},
+"Broken Wings": {
+"gih_n": 7484,
+"gih_wr": 0.49172,
+"gns_n": 11199,
+"gns_wr": 0.50326,
+"gp_n": 18683,
+"gp_wr": 0.49864,
+"iwd": -0.01154
+},
+"Bulk Up": {
+"gih_n": 3559,
+"gih_wr": 0.483,
+"gns_n": 5359,
+"gns_wr": 0.51353,
+"gp_n": 8918,
+"gp_wr": 0.50135,
+"iwd": -0.03053
+},
+"Burglar Rat": {
+"gih_n": 103615,
+"gih_wr": 0.56295,
+"gns_n": 90759,
+"gns_wr": 0.53728,
+"gp_n": 194374,
+"gp_wr": 0.55096,
+"iwd": 0.02567
+},
+"Burnished Hart": {
+"gih_n": 10984,
+"gih_wr": 0.48416,
+"gns_n": 13823,
+"gns_wr": 0.49244,
+"gp_n": 24807,
+"gp_wr": 0.48877,
+"iwd": -0.00828
+},
+"Burst Lightning": {
+"gih_n": 90050,
+"gih_wr": 0.57887,
+"gns_n": 86337,
+"gns_wr": 0.5353,
+"gp_n": 176387,
+"gp_wr": 0.55754,
+"iwd": 0.04357
+},
+"Bushwhack": {
+"gih_n": 52968,
+"gih_wr": 0.53757,
+"gns_n": 60227,
+"gns_wr": 0.5332,
+"gp_n": 113195,
+"gp_wr": 0.53524,
+"iwd": 0.00437
+},
+"Cackling Prowler": {
+"gih_n": 36026,
+"gih_wr": 0.54111,
+"gns_n": 43757,
+"gns_wr": 0.53333,
+"gp_n": 79783,
+"gp_wr": 0.53684,
+"iwd": 0.00778
+},
+"Campus Guide": {
+"gih_n": 37663,
+"gih_wr": 0.51387,
+"gns_n": 44002,
+"gns_wr": 0.52629,
+"gp_n": 81665,
+"gp_wr": 0.52057,
+"iwd": -0.01242
+},
+"Cat Collector": {
+"gih_n": 41111,
+"gih_wr": 0.58571,
+"gns_n": 48391,
+"gns_wr": 0.54593,
+"gp_n": 89502,
+"gp_wr": 0.5642,
+"iwd": 0.03978
+},
+"Cathar Commando": {
+"gih_n": 72782,
+"gih_wr": 0.55576,
+"gns_n": 80454,
+"gns_wr": 0.55499,
+"gp_n": 153236,
+"gp_wr": 0.55535,
+"iwd": 0.00077
+},
+"Celestial Armor": {
+"gih_n": 19675,
+"gih_wr": 0.61997,
+"gns_n": 26112,
+"gns_wr": 0.54274,
+"gp_n": 45787,
+"gp_wr": 0.57593,
+"iwd": 0.07724
+},
+"Cephalid Inkmage": {
+"gih_n": 19113,
+"gih_wr": 0.53419,
+"gns_n": 20441,
+"gns_wr": 0.52243,
+"gp_n": 39554,
+"gp_wr": 0.52811,
+"iwd": 0.01176
+},
+"Chandra, Flameshaper": {
+"gih_n": 8377,
+"gih_wr": 0.61609,
+"gns_n": 11627,
+"gns_wr": 0.5243,
+"gp_n": 20004,
+"gp_wr": 0.56274,
+"iwd": 0.09179
+},
+"Claws Out": {
+"gih_n": 19017,
+"gih_wr": 0.53589,
+"gns_n": 26211,
+"gns_wr": 0.5524,
+"gp_n": 45228,
+"gp_wr": 0.54546,
+"iwd": -0.01651
+},
+"Clinquant Skymage": {
+"gih_n": 15302,
+"gih_wr": 0.48726,
+"gns_n": 16942,
+"gns_wr": 0.49115,
+"gp_n": 32244,
+"gp_wr": 0.4893,
+"iwd": -0.00389
+},
+"Condemn": {
+"gih_n": 1192,
+"gih_wr": 0.56628,
+"gns_n": 1666,
+"gns_wr": 0.54682,
+"gp_n": 2858,
+"gp_wr": 0.55493,
+"iwd": 0.01946
+},
+"Consuming Aberration": {
+"gih_n": 11484,
+"gih_wr": 0.51959,
+"gns_n": 12737,
+"gns_wr": 0.49337,
+"gp_n": 24221,
+"gp_wr": 0.5058,
+"iwd": 0.02623
+},
+"Courageous Goblin": {
+"gih_n": 44677,
+"gih_wr": 0.53846,
+"gns_n": 48200,
+"gns_wr": 0.55624,
+"gp_n": 92877,
+"gp_wr": 0.54769,
+"iwd": -0.01778
+},
+"Crackling Cyclops": {
+"gih_n": 7214,
+"gih_wr": 0.48531,
+"gns_n": 7253,
+"gns_wr": 0.51551,
+"gp_n": 14467,
+"gp_wr": 0.50045,
+"iwd": -0.0302
+},
+"Crypt Feaster": {
+"gih_n": 8275,
+"gih_wr": 0.50381,
+"gns_n": 10207,
+"gns_wr": 0.50749,
+"gp_n": 18482,
+"gp_wr": 0.50584,
+"iwd": -0.00369
+},
+"Crystal Barricade": {
+"gih_n": 3565,
+"gih_wr": 0.48696,
+"gns_n": 4729,
+"gns_wr": 0.51047,
+"gp_n": 8294,
+"gp_wr": 0.50036,
+"iwd": -0.02351
+},
+"Curator of Destinies": {
+"gih_n": 21884,
+"gih_wr": 0.62086,
+"gns_n": 25031,
+"gns_wr": 0.5287,
+"gp_n": 46915,
+"gp_wr": 0.57169,
+"iwd": 0.09216
+},
+"Dauntless Veteran": {
+"gih_n": 19355,
+"gih_wr": 0.51935,
+"gns_n": 25682,
+"gns_wr": 0.54404,
+"gp_n": 45037,
+"gp_wr": 0.53343,
+"iwd": -0.02469
+},
+"Day of Judgment": {
+"gih_n": 14772,
+"gih_wr": 0.59112,
+"gns_n": 18721,
+"gns_wr": 0.53752,
+"gp_n": 33493,
+"gp_wr": 0.56116,
+"iwd": 0.05359
+},
+"Dazzling Angel": {
+"gih_n": 90067,
+"gih_wr": 0.57776,
+"gns_n": 85624,
+"gns_wr": 0.54155,
+"gp_n": 175691,
+"gp_wr": 0.56011,
+"iwd": 0.03621
+},
+"Diregraf Ghoul": {
+"gih_n": 19064,
+"gih_wr": 0.5427,
+"gns_n": 23251,
+"gns_wr": 0.52561,
+"gp_n": 42315,
+"gp_wr": 0.53331,
+"iwd": 0.01709
+},
+"Dismal Backwater": {
+"gih_n": 43365,
+"gih_wr": 0.56267,
+"gns_n": 45961,
+"gns_wr": 0.52514,
+"gp_n": 89326,
+"gp_wr": 0.54336,
+"iwd": 0.03752
+},
+"Divine Resilience": {
+"gih_n": 8636,
+"gih_wr": 0.50787,
+"gns_n": 12641,
+"gns_wr": 0.5305,
+"gp_n": 21277,
+"gp_wr": 0.52131,
+"iwd": -0.02262
+},
+"Doubling Season": {
+"gih_n": 1019,
+"gih_wr": 0.3945,
+"gns_n": 1562,
+"gns_wr": 0.49104,
+"gp_n": 2581,
+"gp_wr": 0.45293,
+"iwd": -0.09653
+},
+"Dragon Trainer": {
+"gih_n": 31085,
+"gih_wr": 0.56474,
+"gns_n": 40327,
+"gns_wr": 0.54859,
+"gp_n": 71412,
+"gp_wr": 0.55562,
+"iwd": 0.01615
+},
+"Drake Hatcher": {
+"gih_n": 17961,
+"gih_wr": 0.56734,
+"gns_n": 20804,
+"gns_wr": 0.52538,
+"gp_n": 38765,
+"gp_wr": 0.54482,
+"iwd": 0.04196
+},
+"Drakuseth, Maw of Flames": {
+"gih_n": 9080,
+"gih_wr": 0.54295,
+"gns_n": 13256,
+"gns_wr": 0.52044,
+"gp_n": 22336,
+"gp_wr": 0.52959,
+"iwd": 0.02251
+},
+"Dreadwing Scavenger": {
+"gih_n": 40751,
+"gih_wr": 0.60433,
+"gns_n": 35156,
+"gns_wr": 0.50279,
+"gp_n": 75907,
+"gp_wr": 0.5573,
+"iwd": 0.10154
+},
+"Dwynen's Elite": {
+"gih_n": 38200,
+"gih_wr": 0.53073,
+"gns_n": 33368,
+"gns_wr": 0.52326,
+"gp_n": 71568,
+"gp_wr": 0.52725,
+"iwd": 0.00748
+},
+"Dwynen, Gilt-Leaf Daen": {
+"gih_n": 15680,
+"gih_wr": 0.52934,
+"gns_n": 21102,
+"gns_wr": 0.52052,
+"gp_n": 36782,
+"gp_wr": 0.52428,
+"iwd": 0.00882
+},
+"Eager Trufflesnout": {
+"gih_n": 25119,
+"gih_wr": 0.56471,
+"gns_n": 31976,
+"gns_wr": 0.54134,
+"gp_n": 57095,
+"gp_wr": 0.55162,
+"iwd": 0.02337
+},
+"Eaten Alive": {
+"gih_n": 98928,
+"gih_wr": 0.56128,
+"gns_n": 99303,
+"gns_wr": 0.53155,
+"gp_n": 198231,
+"gp_wr": 0.54639,
+"iwd": 0.02972
+},
+"Electroduplicate": {
+"gih_n": 2154,
+"gih_wr": 0.51439,
+"gns_n": 3043,
+"gns_wr": 0.50871,
+"gp_n": 5197,
+"gp_wr": 0.51106,
+"iwd": 0.00568
+},
+"Elementalist Adept": {
+"gih_n": 44209,
+"gih_wr": 0.52587,
+"gns_n": 42520,
+"gns_wr": 0.52455,
+"gp_n": 86729,
+"gp_wr": 0.52522,
+"iwd": 0.00131
+},
+"Elenda, Saint of Dusk": {
+"gih_n": 17216,
+"gih_wr": 0.61542,
+"gns_n": 21841,
+"gns_wr": 0.51774,
+"gp_n": 39057,
+"gp_wr": 0.5608,
+"iwd": 0.09767
+},
+"Elfsworn Giant": {
+"gih_n": 30792,
+"gih_wr": 0.52608,
+"gns_n": 39277,
+"gns_wr": 0.52598,
+"gp_n": 70069,
+"gp_wr": 0.52602,
+"iwd": 0.0001
+},
+"Elvish Archdruid": {
+"gih_n": 8203,
+"gih_wr": 0.54102,
+"gns_n": 11361,
+"gns_wr": 0.5143,
+"gp_n": 19564,
+"gp_wr": 0.52551,
+"iwd": 0.02672
+},
+"Elvish Regrower": {
+"gih_n": 29490,
+"gih_wr": 0.56477,
+"gns_n": 37738,
+"gns_wr": 0.5394,
+"gp_n": 67228,
+"gp_wr": 0.55053,
+"iwd": 0.02536
+},
+"Embercleave": {
+"gih_n": 1395,
+"gih_wr": 0.63799,
+"gns_n": 2135,
+"gns_wr": 0.55222,
+"gp_n": 3530,
+"gp_wr": 0.58612,
+"iwd": 0.08577
+},
+"Empyrean Eagle": {
+"gih_n": 30136,
+"gih_wr": 0.59102,
+"gns_n": 27238,
+"gns_wr": 0.53657,
+"gp_n": 57374,
+"gp_wr": 0.56517,
+"iwd": 0.05445
+},
+"Erudite Wizard": {
+"gih_n": 32519,
+"gih_wr": 0.51066,
+"gns_n": 29734,
+"gns_wr": 0.50831,
+"gp_n": 62253,
+"gp_wr": 0.50953,
+"iwd": 0.00235
+},
+"Essence Scatter": {
+"gih_n": 45291,
+"gih_wr": 0.58062,
+"gns_n": 46006,
+"gns_wr": 0.52511,
+"gp_n": 91297,
+"gp_wr": 0.55265,
+"iwd": 0.05552
+},
+"Etali, Primal Storm": {
+"gih_n": 11905,
+"gih_wr": 0.53263,
+"gns_n": 17271,
+"gns_wr": 0.53112,
+"gp_n": 29176,
+"gp_wr": 0.53174,
+"iwd": 0.00151
+},
+"Evolving Wilds": {
+"gih_n": 107097,
+"gih_wr": 0.54587,
+"gns_n": 122118,
+"gns_wr": 0.54811,
+"gp_n": 229215,
+"gp_wr": 0.54706,
+"iwd": -0.00224
+},
+"Exemplar of Light": {
+"gih_n": 16561,
+"gih_wr": 0.58994,
+"gns_n": 21923,
+"gns_wr": 0.53661,
+"gp_n": 38484,
+"gp_wr": 0.55956,
+"iwd": 0.05333
+},
+"Exsanguinate": {
+"gih_n": 2584,
+"gih_wr": 0.48181,
+"gns_n": 3493,
+"gns_wr": 0.49413,
+"gp_n": 6077,
+"gp_wr": 0.48889,
+"iwd": -0.01232
+},
+"Extravagant Replication": {
+"gih_n": 10096,
+"gih_wr": 0.5205,
+"gns_n": 12064,
+"gns_wr": 0.50912,
+"gp_n": 22160,
+"gp_wr": 0.51431,
+"iwd": 0.01139
+},
+"Faebloom Trick": {
+"gih_n": 48583,
+"gih_wr": 0.5908,
+"gns_n": 48825,
+"gns_wr": 0.53073,
+"gp_n": 97408,
+"gp_wr": 0.56069,
+"iwd": 0.06007
+},
+"Fake Your Own Death": {
+"gih_n": 57913,
+"gih_wr": 0.55813,
+"gns_n": 69502,
+"gns_wr": 0.53512,
+"gp_n": 127415,
+"gp_wr": 0.54558,
+"iwd": 0.02301
+},
+"Fanatical Firebrand": {
+"gih_n": 30112,
+"gih_wr": 0.53002,
+"gns_n": 35485,
+"gns_wr": 0.55173,
+"gp_n": 65597,
+"gp_wr": 0.54176,
+"iwd": -0.0217
+},
+"Felidar Savior": {
+"gih_n": 86439,
+"gih_wr": 0.57364,
+"gns_n": 88762,
+"gns_wr": 0.54625,
+"gp_n": 175201,
+"gp_wr": 0.55976,
+"iwd": 0.02739
+},
+"Felling Blow": {
+"gih_n": 30186,
+"gih_wr": 0.58709,
+"gns_n": 39036,
+"gns_wr": 0.53105,
+"gp_n": 69222,
+"gp_wr": 0.55549,
+"iwd": 0.05605
+},
+"Fiend Artisan": {
+"gih_n": 1132,
+"gih_wr": 0.55124,
+"gns_n": 1523,
+"gns_wr": 0.53841,
+"gp_n": 2655,
+"gp_wr": 0.54388,
+"iwd": 0.01283
+},
+"Fiendish Panda": {
+"gih_n": 27920,
+"gih_wr": 0.5534,
+"gns_n": 29995,
+"gns_wr": 0.53549,
+"gp_n": 57915,
+"gp_wr": 0.54413,
+"iwd": 0.01791
+},
+"Fiery Annihilation": {
+"gih_n": 37302,
+"gih_wr": 0.58171,
+"gns_n": 46986,
+"gns_wr": 0.54374,
+"gp_n": 84288,
+"gp_wr": 0.56054,
+"iwd": 0.03798
+},
+"Firebrand Archer": {
+"gih_n": 24860,
+"gih_wr": 0.49698,
+"gns_n": 25249,
+"gns_wr": 0.52909,
+"gp_n": 50109,
+"gp_wr": 0.51316,
+"iwd": -0.03211
+},
+"Firespitter Whelp": {
+"gih_n": 16296,
+"gih_wr": 0.51559,
+"gns_n": 20001,
+"gns_wr": 0.52927,
+"gp_n": 36297,
+"gp_wr": 0.52313,
+"iwd": -0.01369
+},
+"Fishing Pole": {
+"gih_n": 1989,
+"gih_wr": 0.42685,
+"gns_n": 2542,
+"gns_wr": 0.50708,
+"gp_n": 4531,
+"gp_wr": 0.47186,
+"iwd": -0.08023
+},
+"Flamewake Phoenix": {
+"gih_n": 10432,
+"gih_wr": 0.51965,
+"gns_n": 15134,
+"gns_wr": 0.54011,
+"gp_n": 25566,
+"gp_wr": 0.53176,
+"iwd": -0.02046
+},
+"Fleeting Distraction": {
+"gih_n": 76215,
+"gih_wr": 0.5483,
+"gns_n": 67673,
+"gns_wr": 0.53558,
+"gp_n": 143888,
+"gp_wr": 0.54232,
+"iwd": 0.01273
+},
+"Fleeting Flight": {
+"gih_n": 58273,
+"gih_wr": 0.56443,
+"gns_n": 71445,
+"gns_wr": 0.55129,
+"gp_n": 129718,
+"gp_wr": 0.55719,
+"iwd": 0.01314
+},
+"Forest": {
+"gih_n": 251702,
+"gih_wr": 0.53933,
+"gns_n": 18039,
+"gns_wr": 0.45562,
+"gp_n": 269741,
+"gp_wr": 0.53373,
+"iwd": 0.08371
+},
+"Frenzied Goblin": {
+"gih_n": 12909,
+"gih_wr": 0.5153,
+"gns_n": 17568,
+"gns_wr": 0.55277,
+"gp_n": 30477,
+"gp_wr": 0.5369,
+"iwd": -0.03747
+},
+"Garruk's Uprising": {
+"gih_n": 13997,
+"gih_wr": 0.52111,
+"gns_n": 20300,
+"gns_wr": 0.54493,
+"gp_n": 34297,
+"gp_wr": 0.53521,
+"iwd": -0.02381
+},
+"Genesis Wave": {
+"gih_n": 2274,
+"gih_wr": 0.48813,
+"gns_n": 3453,
+"gns_wr": 0.52129,
+"gp_n": 5727,
+"gp_wr": 0.50812,
+"iwd": -0.03316
+},
+"Ghalta, Primal Hunger": {
+"gih_n": 10904,
+"gih_wr": 0.55227,
+"gns_n": 16028,
+"gns_wr": 0.52639,
+"gp_n": 26932,
+"gp_wr": 0.53687,
+"iwd": 0.02588
+},
+"Giada, Font of Hope": {
+"gih_n": 17909,
+"gih_wr": 0.60428,
+"gns_n": 22813,
+"gns_wr": 0.54386,
+"gp_n": 40722,
+"gp_wr": 0.57043,
+"iwd": 0.06042
+},
+"Giant Growth": {
+"gih_n": 30706,
+"gih_wr": 0.54191,
+"gns_n": 40584,
+"gns_wr": 0.53797,
+"gp_n": 71290,
+"gp_wr": 0.53967,
+"iwd": 0.00394
+},
+"Gleaming Barrier": {
+"gih_n": 12195,
+"gih_wr": 0.47774,
+"gns_n": 13604,
+"gns_wr": 0.50257,
+"gp_n": 25799,
+"gp_wr": 0.49083,
+"iwd": -0.02484
+},
+"Gnarlid Colony": {
+"gih_n": 50920,
+"gih_wr": 0.53005,
+"gns_n": 54366,
+"gns_wr": 0.53844,
+"gp_n": 105286,
+"gp_wr": 0.53438,
+"iwd": -0.0084
+},
+"Goblin Boarders": {
+"gih_n": 40068,
+"gih_wr": 0.53641,
+"gns_n": 45712,
+"gns_wr": 0.54918,
+"gp_n": 85780,
+"gp_wr": 0.54322,
+"iwd": -0.01276
+},
+"Goblin Bushwhacker": {
+"gih_n": 751,
+"gih_wr": 0.52996,
+"gns_n": 1140,
+"gns_wr": 0.54211,
+"gp_n": 1891,
+"gp_wr": 0.53728,
+"iwd": -0.01215
+},
+"Goblin Negotiation": {
+"gih_n": 8154,
+"gih_wr": 0.5195,
+"gns_n": 11092,
+"gns_wr": 0.52263,
+"gp_n": 19246,
+"gp_wr": 0.5213,
+"iwd": -0.00313
+},
+"Goblin Surprise": {
+"gih_n": 43647,
+"gih_wr": 0.52567,
+"gns_n": 46901,
+"gns_wr": 0.54479,
+"gp_n": 90548,
+"gp_wr": 0.53557,
+"iwd": -0.01911
+},
+"Goldvein Pick": {
+"gih_n": 58002,
+"gih_wr": 0.53567,
+"gns_n": 76914,
+"gns_wr": 0.54155,
+"gp_n": 134916,
+"gp_wr": 0.53902,
+"iwd": -0.00588
+},
+"Good-Fortune Unicorn": {
+"gih_n": 15475,
+"gih_wr": 0.51864,
+"gns_n": 17214,
+"gns_wr": 0.53102,
+"gp_n": 32689,
+"gp_wr": 0.52516,
+"iwd": -0.01238
+},
+"Gorehorn Raider": {
+"gih_n": 49976,
+"gih_wr": 0.56661,
+"gns_n": 59828,
+"gns_wr": 0.551,
+"gp_n": 109804,
+"gp_wr": 0.5581,
+"iwd": 0.01562
+},
+"Grappling Kraken": {
+"gih_n": 13847,
+"gih_wr": 0.53203,
+"gns_n": 16474,
+"gns_wr": 0.50127,
+"gp_n": 30321,
+"gp_wr": 0.51532,
+"iwd": 0.03075
+},
+"Grim Tutor": {
+"gih_n": 188,
+"gih_wr": 0.48404,
+"gns_n": 242,
+"gns_wr": 0.44628,
+"gp_n": 430,
+"gp_wr": 0.46279,
+"iwd": 0.03776
+},
+"Grow from the Ashes": {
+"gih_n": 22592,
+"gih_wr": 0.48092,
+"gns_n": 26403,
+"gns_wr": 0.50309,
+"gp_n": 48995,
+"gp_wr": 0.49287,
+"iwd": -0.02216
+},
+"Guarded Heir": {
+"gih_n": 33728,
+"gih_wr": 0.5676,
+"gns_n": 43583,
+"gns_wr": 0.5462,
+"gp_n": 77311,
+"gp_wr": 0.55554,
+"iwd": 0.0214
+},
+"Gutless Plunderer": {
+"gih_n": 49628,
+"gih_wr": 0.53907,
+"gns_n": 54493,
+"gns_wr": 0.52442,
+"gp_n": 104121,
+"gp_wr": 0.5314,
+"iwd": 0.01465
+},
+"Hare Apparent": {
+"gih_n": 18121,
+"gih_wr": 0.50709,
+"gns_n": 9828,
+"gns_wr": 0.54406,
+"gp_n": 27949,
+"gp_wr": 0.52009,
+"iwd": -0.03697
+},
+"Healer's Hawk": {
+"gih_n": 87748,
+"gih_wr": 0.57515,
+"gns_n": 83990,
+"gns_wr": 0.5436,
+"gp_n": 171738,
+"gp_wr": 0.55972,
+"iwd": 0.03155
+},
+"Heartfire Immolator": {
+"gih_n": 35587,
+"gih_wr": 0.56925,
+"gns_n": 42725,
+"gns_wr": 0.5493,
+"gp_n": 78312,
+"gp_wr": 0.55837,
+"iwd": 0.01995
+},
+"Helpful Hunter": {
+"gih_n": 96500,
+"gih_wr": 0.5745,
+"gns_n": 92178,
+"gns_wr": 0.54765,
+"gp_n": 188678,
+"gp_wr": 0.56138,
+"iwd": 0.02685
+},
+"Herald of Eternal Dawn": {
+"gih_n": 6790,
+"gih_wr": 0.57732,
+"gns_n": 9147,
+"gns_wr": 0.53996,
+"gp_n": 15937,
+"gp_wr": 0.55588,
+"iwd": 0.03736
+},
+"Heraldic Banner": {
+"gih_n": 18585,
+"gih_wr": 0.54791,
+"gns_n": 25462,
+"gns_wr": 0.54646,
+"gp_n": 44047,
+"gp_wr": 0.54707,
+"iwd": 0.00145
+},
+"Hero's Downfall": {
+"gih_n": 40814,
+"gih_wr": 0.57083,
+"gns_n": 47161,
+"gns_wr": 0.52662,
+"gp_n": 87975,
+"gp_wr": 0.54713,
+"iwd": 0.04421
+},
+"Heroic Reinforcements": {
+"gih_n": 21623,
+"gih_wr": 0.55779,
+"gns_n": 23637,
+"gns_wr": 0.54106,
+"gp_n": 45260,
+"gp_wr": 0.54905,
+"iwd": 0.01673
+},
+"Hidetsugu's Second Rite": {
+"gih_n": 3215,
+"gih_wr": 0.56236,
+"gns_n": 4632,
+"gns_wr": 0.53389,
+"gp_n": 7847,
+"gp_wr": 0.54556,
+"iwd": 0.02847
+},
+"High Fae Trickster": {
+"gih_n": 16314,
+"gih_wr": 0.54983,
+"gns_n": 19176,
+"gns_wr": 0.52487,
+"gp_n": 35490,
+"gp_wr": 0.53635,
+"iwd": 0.02496
+},
+"High-Society Hunter": {
+"gih_n": 20029,
+"gih_wr": 0.5862,
+"gns_n": 24845,
+"gns_wr": 0.52671,
+"gp_n": 44874,
+"gp_wr": 0.55326,
+"iwd": 0.05949
+},
+"Homunculus Horde": {
+"gih_n": 11285,
+"gih_wr": 0.51041,
+"gns_n": 12405,
+"gns_wr": 0.50746,
+"gp_n": 23690,
+"gp_wr": 0.50886,
+"iwd": 0.00296
+},
+"Hungry Ghoul": {
+"gih_n": 89986,
+"gih_wr": 0.55618,
+"gns_n": 83545,
+"gns_wr": 0.52988,
+"gp_n": 173531,
+"gp_wr": 0.54352,
+"iwd": 0.02629
+},
+"Icewind Elemental": {
+"gih_n": 48529,
+"gih_wr": 0.53811,
+"gns_n": 51804,
+"gns_wr": 0.52841,
+"gp_n": 100333,
+"gp_wr": 0.5331,
+"iwd": 0.0097
+},
+"Imprisoned in the Moon": {
+"gih_n": 13620,
+"gih_wr": 0.50051,
+"gns_n": 15838,
+"gns_wr": 0.49855,
+"gp_n": 29458,
+"gp_wr": 0.49946,
+"iwd": 0.00197
+},
+"Incinerating Blast": {
+"gih_n": 29689,
+"gih_wr": 0.5238,
+"gns_n": 39520,
+"gns_wr": 0.53264,
+"gp_n": 69209,
+"gp_wr": 0.52885,
+"iwd": -0.00885
+},
+"Infernal Vessel": {
+"gih_n": 43948,
+"gih_wr": 0.58235,
+"gns_n": 48776,
+"gns_wr": 0.53473,
+"gp_n": 92724,
+"gp_wr": 0.5573,
+"iwd": 0.04762
+},
+"Infestation Sage": {
+"gih_n": 89843,
+"gih_wr": 0.56686,
+"gns_n": 82720,
+"gns_wr": 0.53004,
+"gp_n": 172563,
+"gp_wr": 0.54921,
+"iwd": 0.03681
+},
+"Inspiration from Beyond": {
+"gih_n": 10544,
+"gih_wr": 0.53291,
+"gns_n": 12319,
+"gns_wr": 0.51157,
+"gp_n": 22863,
+"gp_wr": 0.52141,
+"iwd": 0.02134
+},
+"Inspiring Call": {
+"gih_n": 3632,
+"gih_wr": 0.46063,
+"gns_n": 5547,
+"gns_wr": 0.51469,
+"gp_n": 9179,
+"gp_wr": 0.4933,
+"iwd": -0.05406
+},
+"Inspiring Paladin": {
+"gih_n": 50211,
+"gih_wr": 0.53871,
+"gns_n": 57722,
+"gns_wr": 0.54598,
+"gp_n": 107933,
+"gp_wr": 0.5426,
+"iwd": -0.00727
+},
+"Involuntary Employment": {
+"gih_n": 30938,
+"gih_wr": 0.55569,
+"gns_n": 30299,
+"gns_wr": 0.5348,
+"gp_n": 61237,
+"gp_wr": 0.54536,
+"iwd": 0.02089
+},
+"Island": {
+"gih_n": 341013,
+"gih_wr": 0.54504,
+"gns_n": 26611,
+"gns_wr": 0.46394,
+"gp_n": 367624,
+"gp_wr": 0.53917,
+"iwd": 0.08109
+},
+"Joust Through": {
+"gih_n": 31321,
+"gih_wr": 0.56371,
+"gns_n": 39779,
+"gns_wr": 0.55014,
+"gp_n": 71100,
+"gp_wr": 0.55612,
+"iwd": 0.01357
+},
+"Juggernaut": {
+"gih_n": 5966,
+"gih_wr": 0.48626,
+"gns_n": 8172,
+"gns_wr": 0.52925,
+"gp_n": 14138,
+"gp_wr": 0.5111,
+"iwd": -0.04299
+},
+"Jungle Hollow": {
+"gih_n": 23496,
+"gih_wr": 0.52771,
+"gns_n": 28869,
+"gns_wr": 0.50279,
+"gp_n": 52365,
+"gp_wr": 0.51397,
+"iwd": 0.02492
+},
+"Kaito, Cunning Infiltrator": {
+"gih_n": 8593,
+"gih_wr": 0.58268,
+"gns_n": 10292,
+"gns_wr": 0.52002,
+"gp_n": 18885,
+"gp_wr": 0.54853,
+"iwd": 0.06267
+},
+"Kellan, Planar Trailblazer": {
+"gih_n": 15818,
+"gih_wr": 0.59021,
+"gns_n": 22266,
+"gns_wr": 0.54635,
+"gp_n": 38084,
+"gp_wr": 0.56457,
+"iwd": 0.04386
+},
+"Kiora, the Rising Tide": {
+"gih_n": 20176,
+"gih_wr": 0.60379,
+"gns_n": 22913,
+"gns_wr": 0.52437,
+"gp_n": 43089,
+"gp_wr": 0.56156,
+"iwd": 0.07941
+},
+"Koma, World-Eater": {
+"gih_n": 11705,
+"gih_wr": 0.56933,
+"gns_n": 13829,
+"gns_wr": 0.47531,
+"gp_n": 25534,
+"gp_wr": 0.51841,
+"iwd": 0.09402
+},
+"Krenko, Mob Boss": {
+"gih_n": 14578,
+"gih_wr": 0.5533,
+"gns_n": 20400,
+"gns_wr": 0.53343,
+"gp_n": 34978,
+"gp_wr": 0.54171,
+"iwd": 0.01987
+},
+"Kykar, Zephyr Awakener": {
+"gih_n": 15826,
+"gih_wr": 0.57437,
+"gns_n": 18124,
+"gns_wr": 0.52185,
+"gp_n": 33950,
+"gp_wr": 0.54633,
+"iwd": 0.05252
+},
+"Lathril, Blade of the Elves": {
+"gih_n": 6112,
+"gih_wr": 0.49166,
+"gns_n": 7979,
+"gns_wr": 0.48252,
+"gp_n": 14091,
+"gp_wr": 0.48648,
+"iwd": 0.00914
+},
+"Leyline Axe": {
+"gih_n": 18540,
+"gih_wr": 0.61181,
+"gns_n": 24210,
+"gns_wr": 0.53907,
+"gp_n": 42750,
+"gp_wr": 0.57062,
+"iwd": 0.07274
+},
+"Lightshell Duo": {
+"gih_n": 46716,
+"gih_wr": 0.55715,
+"gns_n": 46365,
+"gns_wr": 0.5274,
+"gp_n": 93081,
+"gp_wr": 0.54233,
+"iwd": 0.02975
+},
+"Liliana, Dreadhorde General": {
+"gih_n": 9890,
+"gih_wr": 0.64115,
+"gns_n": 12573,
+"gns_wr": 0.51261,
+"gp_n": 22463,
+"gp_wr": 0.5692,
+"iwd": 0.12855
+},
+"Llanowar Elves": {
+"gih_n": 62210,
+"gih_wr": 0.57052,
+"gns_n": 62508,
+"gns_wr": 0.52024,
+"gp_n": 124718,
+"gp_wr": 0.54532,
+"iwd": 0.05028
+},
+"Loot, Exuberant Explorer": {
+"gih_n": 11620,
+"gih_wr": 0.55835,
+"gns_n": 15646,
+"gns_wr": 0.52237,
+"gp_n": 27266,
+"gp_wr": 0.5377,
+"iwd": 0.03598
+},
+"Luminous Rebuke": {
+"gih_n": 83740,
+"gih_wr": 0.57712,
+"gns_n": 86394,
+"gns_wr": 0.54401,
+"gp_n": 170134,
+"gp_wr": 0.56031,
+"iwd": 0.03311
+},
+"Lunar Insight": {
+"gih_n": 5042,
+"gih_wr": 0.52797,
+"gns_n": 6313,
+"gns_wr": 0.51006,
+"gp_n": 11355,
+"gp_wr": 0.51801,
+"iwd": 0.01791
+},
+"Macabre Waltz": {
+"gih_n": 41844,
+"gih_wr": 0.51855,
+"gns_n": 55024,
+"gns_wr": 0.53458,
+"gp_n": 96868,
+"gp_wr": 0.52766,
+"iwd": -0.01604
+},
+"Make Your Move": {
+"gih_n": 48775,
+"gih_wr": 0.55262,
+"gns_n": 61132,
+"gns_wr": 0.54134,
+"gp_n": 109907,
+"gp_wr": 0.54634,
+"iwd": 0.01128
+},
+"Marauding Blight-Priest": {
+"gih_n": 30300,
+"gih_wr": 0.52723,
+"gns_n": 30593,
+"gns_wr": 0.52937,
+"gp_n": 60893,
+"gp_wr": 0.5283,
+"iwd": -0.00214
+},
+"Meteor Golem": {
+"gih_n": 19494,
+"gih_wr": 0.54535,
+"gns_n": 25019,
+"gns_wr": 0.52668,
+"gp_n": 44513,
+"gp_wr": 0.53485,
+"iwd": 0.01867
+},
+"Micromancer": {
+"gih_n": 39893,
+"gih_wr": 0.59106,
+"gns_n": 41991,
+"gns_wr": 0.53571,
+"gp_n": 81884,
+"gp_wr": 0.56267,
+"iwd": 0.05535
+},
+"Midnight Snack": {
+"gih_n": 3847,
+"gih_wr": 0.48635,
+"gns_n": 5198,
+"gns_wr": 0.50404,
+"gp_n": 9045,
+"gp_wr": 0.49652,
+"iwd": -0.01769
+},
+"Mild-Mannered Librarian": {
+"gih_n": 27049,
+"gih_wr": 0.56771,
+"gns_n": 33807,
+"gns_wr": 0.53687,
+"gp_n": 60856,
+"gp_wr": 0.55058,
+"iwd": 0.03084
+},
+"Mischievous Mystic": {
+"gih_n": 49923,
+"gih_wr": 0.59574,
+"gns_n": 48242,
+"gns_wr": 0.52415,
+"gp_n": 98165,
+"gp_wr": 0.56056,
+"iwd": 0.07159
+},
+"Mischievous Pup": {
+"gih_n": 18204,
+"gih_wr": 0.51588,
+"gns_n": 23407,
+"gns_wr": 0.54907,
+"gp_n": 41611,
+"gp_wr": 0.53455,
+"iwd": -0.03319
+},
+"Mocking Sprite": {
+"gih_n": 28201,
+"gih_wr": 0.49977,
+"gns_n": 29371,
+"gns_wr": 0.51551,
+"gp_n": 57572,
+"gp_wr": 0.5078,
+"iwd": -0.01574
+},
+"Mossborn Hydra": {
+"gih_n": 11036,
+"gih_wr": 0.55029,
+"gns_n": 14990,
+"gns_wr": 0.51288,
+"gp_n": 26026,
+"gp_wr": 0.52874,
+"iwd": 0.03741
+},
+"Mountain": {
+"gih_n": 289257,
+"gih_wr": 0.55057,
+"gns_n": 24071,
+"gns_wr": 0.47198,
+"gp_n": 313328,
+"gp_wr": 0.54453,
+"iwd": 0.07859
+},
+"Muldrotha, the Gravetide": {
+"gih_n": 5305,
+"gih_wr": 0.54175,
+"gns_n": 6464,
+"gns_wr": 0.46829,
+"gp_n": 11769,
+"gp_wr": 0.5014,
+"iwd": 0.07347
+},
+"Needletooth Pack": {
+"gih_n": 20776,
+"gih_wr": 0.53417,
+"gns_n": 28679,
+"gns_wr": 0.53178,
+"gp_n": 49455,
+"gp_wr": 0.53279,
+"iwd": 0.00239
+},
+"Nessian Hornbeetle": {
+"gih_n": 27128,
+"gih_wr": 0.5641,
+"gns_n": 34082,
+"gns_wr": 0.54345,
+"gp_n": 61210,
+"gp_wr": 0.55261,
+"iwd": 0.02065
+},
+"Nine-Lives Familiar": {
+"gih_n": 12345,
+"gih_wr": 0.53665,
+"gns_n": 15517,
+"gns_wr": 0.5184,
+"gp_n": 27862,
+"gp_wr": 0.52649,
+"iwd": 0.01826
+},
+"Niv-Mizzet, Visionary": {
+"gih_n": 2406,
+"gih_wr": 0.468,
+"gns_n": 3207,
+"gns_wr": 0.48114,
+"gp_n": 5613,
+"gp_wr": 0.4755,
+"iwd": -0.01314
+},
+"Omniscience": {
+"gih_n": 27,
+"gih_wr": 0.37037,
+"gns_n": 49,
+"gns_wr": 0.32653,
+"gp_n": 76,
+"gp_wr": 0.34211,
+"iwd": 0.04384
+},
+"Overrun": {
+"gih_n": 21347,
+"gih_wr": 0.54987,
+"gns_n": 30464,
+"gns_wr": 0.53785,
+"gp_n": 51811,
+"gp_wr": 0.5428,
+"iwd": 0.01202
+},
+"Painful Quandary": {
+"gih_n": 2422,
+"gih_wr": 0.44798,
+"gns_n": 3194,
+"gns_wr": 0.49311,
+"gp_n": 5616,
+"gp_wr": 0.47365,
+"iwd": -0.04514
+},
+"Paradise Druid": {
+"gih_n": 1063,
+"gih_wr": 0.5381,
+"gns_n": 1526,
+"gns_wr": 0.52228,
+"gp_n": 2589,
+"gp_wr": 0.52878,
+"iwd": 0.01582
+},
+"Perforating Artist": {
+"gih_n": 25534,
+"gih_wr": 0.5748,
+"gns_n": 26707,
+"gns_wr": 0.52619,
+"gp_n": 52241,
+"gp_wr": 0.54995,
+"iwd": 0.04861
+},
+"Phyrexian Arena": {
+"gih_n": 13804,
+"gih_wr": 0.54368,
+"gns_n": 17945,
+"gns_wr": 0.52014,
+"gp_n": 31749,
+"gp_wr": 0.53038,
+"iwd": 0.02354
+},
+"Pilfer": {
+"gih_n": 41835,
+"gih_wr": 0.55652,
+"gns_n": 46877,
+"gns_wr": 0.53165,
+"gp_n": 88712,
+"gp_wr": 0.54338,
+"iwd": 0.02487
+},
+"Plains": {
+"gih_n": 370801,
+"gih_wr": 0.55476,
+"gns_n": 22842,
+"gns_wr": 0.44366,
+"gp_n": 393643,
+"gp_wr": 0.54832,
+"iwd": 0.11111
+},
+"Preposterous Proportions": {
+"gih_n": 5237,
+"gih_wr": 0.54019,
+"gns_n": 7925,
+"gns_wr": 0.52959,
+"gp_n": 13162,
+"gp_wr": 0.53381,
+"iwd": 0.0106
+},
+"Prideful Parent": {
+"gih_n": 75132,
+"gih_wr": 0.54812,
+"gns_n": 75488,
+"gns_wr": 0.55443,
+"gp_n": 150620,
+"gp_wr": 0.55128,
+"iwd": -0.00632
+},
+"Progenitus": {
+"gih_n": 105,
+"gih_wr": 0.3619,
+"gns_n": 121,
+"gns_wr": 0.42149,
+"gp_n": 226,
+"gp_wr": 0.39381,
+"iwd": -0.05958
+},
+"Quakestrider Ceratops": {
+"gih_n": 8521,
+"gih_wr": 0.52517,
+"gns_n": 12724,
+"gns_wr": 0.52656,
+"gp_n": 21245,
+"gp_wr": 0.52601,
+"iwd": -0.00139
+},
+"Quick-Draw Katana": {
+"gih_n": 9778,
+"gih_wr": 0.5091,
+"gns_n": 14470,
+"gns_wr": 0.53573,
+"gp_n": 24248,
+"gp_wr": 0.52499,
+"iwd": -0.02663
+},
+"Quilled Greatwurm": {
+"gih_n": 6298,
+"gih_wr": 0.55002,
+"gns_n": 9112,
+"gns_wr": 0.5191,
+"gp_n": 15410,
+"gp_wr": 0.53173,
+"iwd": 0.03092
+},
+"Raise the Past": {
+"gih_n": 3406,
+"gih_wr": 0.5094,
+"gns_n": 4884,
+"gns_wr": 0.52232,
+"gp_n": 8290,
+"gp_wr": 0.51701,
+"iwd": -0.01292
+},
+"Ravenous Amulet": {
+"gih_n": 12165,
+"gih_wr": 0.51714,
+"gns_n": 15603,
+"gns_wr": 0.53458,
+"gp_n": 27768,
+"gp_wr": 0.52694,
+"iwd": -0.01744
+},
+"Reassembling Skeleton": {
+"gih_n": 29698,
+"gih_wr": 0.52357,
+"gns_n": 35947,
+"gns_wr": 0.53621,
+"gp_n": 65645,
+"gp_wr": 0.53049,
+"iwd": -0.01264
+},
+"Reclamation Sage": {
+"gih_n": 13785,
+"gih_wr": 0.49561,
+"gns_n": 19510,
+"gns_wr": 0.53004,
+"gp_n": 33295,
+"gp_wr": 0.51578,
+"iwd": -0.03442
+},
+"Refute": {
+"gih_n": 91672,
+"gih_wr": 0.57554,
+"gns_n": 74768,
+"gns_wr": 0.52353,
+"gp_n": 166440,
+"gp_wr": 0.55217,
+"iwd": 0.05201
+},
+"Resolute Reinforcements": {
+"gih_n": 30377,
+"gih_wr": 0.53949,
+"gns_n": 36865,
+"gns_wr": 0.55323,
+"gp_n": 67242,
+"gp_wr": 0.54702,
+"iwd": -0.01375
+},
+"Revenge of the Rats": {
+"gih_n": 9067,
+"gih_wr": 0.51395,
+"gns_n": 11549,
+"gns_wr": 0.51979,
+"gp_n": 20616,
+"gp_wr": 0.51722,
+"iwd": -0.00583
+},
+"Rise of the Dark Realms": {
+"gih_n": 3232,
+"gih_wr": 0.5396,
+"gns_n": 4073,
+"gns_wr": 0.49865,
+"gp_n": 7305,
+"gp_wr": 0.51677,
+"iwd": 0.04095
+},
+"Rite of the Dragoncaller": {
+"gih_n": 3407,
+"gih_wr": 0.51629,
+"gns_n": 4434,
+"gns_wr": 0.50586,
+"gp_n": 7841,
+"gp_wr": 0.51039,
+"iwd": 0.01043
+},
+"Rogue's Passage": {
+"gih_n": 13737,
+"gih_wr": 0.5558,
+"gns_n": 20248,
+"gns_wr": 0.55141,
+"gp_n": 33985,
+"gp_wr": 0.55319,
+"iwd": 0.00439
+},
+"Ruby, Daring Tracker": {
+"gih_n": 16871,
+"gih_wr": 0.56991,
+"gns_n": 19562,
+"gns_wr": 0.54647,
+"gp_n": 36433,
+"gp_wr": 0.55732,
+"iwd": 0.02345
+},
+"Rugged Highlands": {
+"gih_n": 20668,
+"gih_wr": 0.53914,
+"gns_n": 27196,
+"gns_wr": 0.54732,
+"gp_n": 47864,
+"gp_wr": 0.54379,
+"iwd": -0.00818
+},
+"Run Away Together": {
+"gih_n": 32216,
+"gih_wr": 0.51496,
+"gns_n": 36260,
+"gns_wr": 0.51089,
+"gp_n": 68476,
+"gp_wr": 0.51281,
+"iwd": 0.00407
+},
+"Rune-Scarred Demon": {
+"gih_n": 16426,
+"gih_wr": 0.57531,
+"gns_n": 21028,
+"gns_wr": 0.51802,
+"gp_n": 37454,
+"gp_wr": 0.54315,
+"iwd": 0.05728
+},
+"Rune-Sealed Wall": {
+"gih_n": 20216,
+"gih_wr": 0.51771,
+"gns_n": 22602,
+"gns_wr": 0.51354,
+"gp_n": 42818,
+"gp_wr": 0.51551,
+"iwd": 0.00417
+},
+"Sanguine Syphoner": {
+"gih_n": 36438,
+"gih_wr": 0.53258,
+"gns_n": 37423,
+"gns_wr": 0.52452,
+"gp_n": 73861,
+"gp_wr": 0.52849,
+"iwd": 0.00806
+},
+"Savannah Lions": {
+"gih_n": 16875,
+"gih_wr": 0.5328,
+"gns_n": 20859,
+"gns_wr": 0.54979,
+"gp_n": 37734,
+"gp_wr": 0.54219,
+"iwd": -0.01699
+},
+"Scavenging Ooze": {
+"gih_n": 14819,
+"gih_wr": 0.61732,
+"gns_n": 19538,
+"gns_wr": 0.52687,
+"gp_n": 34357,
+"gp_wr": 0.56588,
+"iwd": 0.09044
+},
+"Scoured Barrens": {
+"gih_n": 38114,
+"gih_wr": 0.54859,
+"gns_n": 44741,
+"gns_wr": 0.54773,
+"gp_n": 82855,
+"gp_wr": 0.54813,
+"iwd": 0.00086
+},
+"Scrawling Crawler": {
+"gih_n": 18747,
+"gih_wr": 0.57551,
+"gns_n": 24081,
+"gns_wr": 0.53578,
+"gp_n": 42828,
+"gp_wr": 0.55317,
+"iwd": 0.03973
+},
+"Searslicer Goblin": {
+"gih_n": 17141,
+"gih_wr": 0.60294,
+"gns_n": 23558,
+"gns_wr": 0.54606,
+"gp_n": 40699,
+"gp_wr": 0.57001,
+"iwd": 0.05688
+},
+"Secluded Courtyard": {
+"gih_n": 1683,
+"gih_wr": 0.46762,
+"gns_n": 2150,
+"gns_wr": 0.51209,
+"gp_n": 3833,
+"gp_wr": 0.49256,
+"iwd": -0.04448
+},
+"Seeker's Folly": {
+"gih_n": 26840,
+"gih_wr": 0.56624,
+"gns_n": 32587,
+"gns_wr": 0.52935,
+"gp_n": 59427,
+"gp_wr": 0.54601,
+"iwd": 0.03689
+},
+"Seismic Rupture": {
+"gih_n": 4357,
+"gih_wr": 0.50126,
+"gns_n": 5323,
+"gns_wr": 0.51794,
+"gp_n": 9680,
+"gp_wr": 0.51043,
+"iwd": -0.01668
+},
+"Self-Reflection": {
+"gih_n": 9067,
+"gih_wr": 0.54505,
+"gns_n": 11300,
+"gns_wr": 0.51823,
+"gp_n": 20367,
+"gp_wr": 0.53017,
+"iwd": 0.02682
+},
+"Serra Angel": {
+"gih_n": 27660,
+"gih_wr": 0.54765,
+"gns_n": 35434,
+"gns_wr": 0.54611,
+"gp_n": 63094,
+"gp_wr": 0.54679,
+"iwd": 0.00154
+},
+"Shivan Dragon": {
+"gih_n": 11533,
+"gih_wr": 0.51184,
+"gns_n": 16958,
+"gns_wr": 0.52371,
+"gp_n": 28491,
+"gp_wr": 0.5189,
+"iwd": -0.01187
+},
+"Sire of Seven Deaths": {
+"gih_n": 9975,
+"gih_wr": 0.62025,
+"gns_n": 12918,
+"gns_wr": 0.52299,
+"gp_n": 22893,
+"gp_wr": 0.56537,
+"iwd": 0.09726
+},
+"Skyknight Squire": {
+"gih_n": 17195,
+"gih_wr": 0.58854,
+"gns_n": 22459,
+"gns_wr": 0.53885,
+"gp_n": 39654,
+"gp_wr": 0.5604,
+"iwd": 0.04969
+},
+"Skyship Buccaneer": {
+"gih_n": 37008,
+"gih_wr": 0.56485,
+"gns_n": 40397,
+"gns_wr": 0.53655,
+"gp_n": 77405,
+"gp_wr": 0.55008,
+"iwd": 0.0283
+},
+"Slagstorm": {
+"gih_n": 8269,
+"gih_wr": 0.55581,
+"gns_n": 11200,
+"gns_wr": 0.52661,
+"gp_n": 19469,
+"gp_wr": 0.53901,
+"iwd": 0.0292
+},
+"Slumbering Cerberus": {
+"gih_n": 29907,
+"gih_wr": 0.55753,
+"gns_n": 37486,
+"gns_wr": 0.55818,
+"gp_n": 67393,
+"gp_wr": 0.55789,
+"iwd": -0.00065
+},
+"Snakeskin Veil": {
+"gih_n": 22863,
+"gih_wr": 0.54538,
+"gns_n": 32715,
+"gns_wr": 0.53532,
+"gp_n": 55578,
+"gp_wr": 0.53946,
+"iwd": 0.01006
+},
+"Solemn Simulacrum": {
+"gih_n": 16979,
+"gih_wr": 0.56576,
+"gns_n": 22122,
+"gns_wr": 0.5226,
+"gp_n": 39101,
+"gp_wr": 0.54134,
+"iwd": 0.04316
+},
+"Soul-Shackled Zombie": {
+"gih_n": 48392,
+"gih_wr": 0.55055,
+"gns_n": 52565,
+"gns_wr": 0.53374,
+"gp_n": 100957,
+"gp_wr": 0.5418,
+"iwd": 0.01681
+},
+"Soulstone Sanctuary": {
+"gih_n": 13712,
+"gih_wr": 0.56753,
+"gns_n": 19294,
+"gns_wr": 0.54836,
+"gp_n": 33006,
+"gp_wr": 0.55632,
+"iwd": 0.01918
+},
+"Sower of Chaos": {
+"gih_n": 13002,
+"gih_wr": 0.54246,
+"gns_n": 18606,
+"gns_wr": 0.55315,
+"gp_n": 31608,
+"gp_wr": 0.54875,
+"iwd": -0.0107
+},
+"Spectral Sailor": {
+"gih_n": 46061,
+"gih_wr": 0.58622,
+"gns_n": 47969,
+"gns_wr": 0.53118,
+"gp_n": 94030,
+"gp_wr": 0.55814,
+"iwd": 0.05505
+},
+"Sphinx of Forgotten Lore": {
+"gih_n": 8960,
+"gih_wr": 0.57712,
+"gns_n": 10828,
+"gns_wr": 0.5217,
+"gp_n": 19788,
+"gp_wr": 0.5468,
+"iwd": 0.05542
+},
+"Sphinx's Tutelage": {
+"gih_n": 760,
+"gih_wr": 0.50395,
+"gns_n": 884,
+"gns_wr": 0.47738,
+"gp_n": 1644,
+"gp_wr": 0.48966,
+"iwd": 0.02657
+},
+"Spinner of Souls": {
+"gih_n": 16634,
+"gih_wr": 0.62108,
+"gns_n": 22027,
+"gns_wr": 0.52581,
+"gp_n": 38661,
+"gp_wr": 0.5668,
+"iwd": 0.09527
+},
+"Spitfire Lagac": {
+"gih_n": 4484,
+"gih_wr": 0.48707,
+"gns_n": 5910,
+"gns_wr": 0.51083,
+"gp_n": 10394,
+"gp_wr": 0.50058,
+"iwd": -0.02376
+},
+"Squad Rallier": {
+"gih_n": 42029,
+"gih_wr": 0.55595,
+"gns_n": 52590,
+"gns_wr": 0.55556,
+"gp_n": 94619,
+"gp_wr": 0.55573,
+"iwd": 0.00039
+},
+"Stab": {
+"gih_n": 110637,
+"gih_wr": 0.57859,
+"gns_n": 102124,
+"gns_wr": 0.52555,
+"gp_n": 212761,
+"gp_wr": 0.55313,
+"iwd": 0.05304
+},
+"Strix Lookout": {
+"gih_n": 79428,
+"gih_wr": 0.54955,
+"gns_n": 73294,
+"gns_wr": 0.53234,
+"gp_n": 152722,
+"gp_wr": 0.54129,
+"iwd": 0.01722
+},
+"Stroke of Midnight": {
+"gih_n": 9819,
+"gih_wr": 0.51136,
+"gns_n": 12920,
+"gns_wr": 0.51896,
+"gp_n": 22739,
+"gp_wr": 0.51568,
+"iwd": -0.00761
+},
+"Stromkirk Bloodthief": {
+"gih_n": 17878,
+"gih_wr": 0.52534,
+"gns_n": 21688,
+"gns_wr": 0.52079,
+"gp_n": 39566,
+"gp_wr": 0.52285,
+"iwd": 0.00454
+},
+"Strongbox Raider": {
+"gih_n": 24677,
+"gih_wr": 0.55254,
+"gns_n": 33536,
+"gns_wr": 0.5478,
+"gp_n": 58213,
+"gp_wr": 0.54981,
+"iwd": 0.00474
+},
+"Sun-Blessed Healer": {
+"gih_n": 41840,
+"gih_wr": 0.58485,
+"gns_n": 49678,
+"gns_wr": 0.5501,
+"gp_n": 91518,
+"gp_wr": 0.56599,
+"iwd": 0.03474
+},
+"Sure Strike": {
+"gih_n": 25074,
+"gih_wr": 0.52413,
+"gns_n": 33771,
+"gns_wr": 0.54165,
+"gp_n": 58845,
+"gp_wr": 0.53418,
+"iwd": -0.01752
+},
+"Swamp": {
+"gih_n": 395307,
+"gih_wr": 0.54739,
+"gns_n": 25153,
+"gns_wr": 0.445,
+"gp_n": 420460,
+"gp_wr": 0.54127,
+"iwd": 0.1024
+},
+"Swiftblade Vindicator": {
+"gih_n": 6541,
+"gih_wr": 0.53325,
+"gns_n": 9365,
+"gns_wr": 0.55547,
+"gp_n": 15906,
+"gp_wr": 0.54633,
+"iwd": -0.02222
+},
+"Swiftfoot Boots": {
+"gih_n": 4240,
+"gih_wr": 0.43844,
+"gns_n": 6163,
+"gns_wr": 0.51436,
+"gp_n": 10403,
+"gp_wr": 0.48342,
+"iwd": -0.07592
+},
+"Swiftwater Cliffs": {
+"gih_n": 25493,
+"gih_wr": 0.54207,
+"gns_n": 28600,
+"gns_wr": 0.52878,
+"gp_n": 54093,
+"gp_wr": 0.53504,
+"iwd": 0.01329
+},
+"Sylvan Scavenging": {
+"gih_n": 14483,
+"gih_wr": 0.61831,
+"gns_n": 20240,
+"gns_wr": 0.52831,
+"gp_n": 34723,
+"gp_wr": 0.56585,
+"iwd": 0.09
+},
+"Tatyova, Benthic Druid": {
+"gih_n": 21624,
+"gih_wr": 0.52377,
+"gns_n": 25189,
+"gns_wr": 0.50455,
+"gp_n": 46813,
+"gp_wr": 0.51343,
+"iwd": 0.01922
+},
+"Temporal Manipulation": {
+"gih_n": 1187,
+"gih_wr": 0.53833,
+"gns_n": 1401,
+"gns_wr": 0.49536,
+"gp_n": 2588,
+"gp_wr": 0.51507,
+"iwd": 0.04297
+},
+"Think Twice": {
+"gih_n": 90931,
+"gih_wr": 0.56585,
+"gns_n": 80337,
+"gns_wr": 0.52761,
+"gp_n": 171268,
+"gp_wr": 0.54791,
+"iwd": 0.03823
+},
+"Thornwood Falls": {
+"gih_n": 25862,
+"gih_wr": 0.53778,
+"gns_n": 29785,
+"gns_wr": 0.51314,
+"gp_n": 55647,
+"gp_wr": 0.52459,
+"iwd": 0.02463
+},
+"Thousand-Year Storm": {
+"gih_n": 710,
+"gih_wr": 0.34789,
+"gns_n": 797,
+"gns_wr": 0.48557,
+"gp_n": 1507,
+"gp_wr": 0.4207,
+"iwd": -0.13768
+},
+"Thrill of Possibility": {
+"gih_n": 28441,
+"gih_wr": 0.51489,
+"gns_n": 32688,
+"gns_wr": 0.53331,
+"gp_n": 61129,
+"gp_wr": 0.52474,
+"iwd": -0.01842
+},
+"Time Stop": {
+"gih_n": 4873,
+"gih_wr": 0.47507,
+"gns_n": 6060,
+"gns_wr": 0.49868,
+"gp_n": 10933,
+"gp_wr": 0.48816,
+"iwd": -0.02361
+},
+"Tinybones, Bauble Burglar": {
+"gih_n": 17035,
+"gih_wr": 0.57112,
+"gns_n": 20914,
+"gns_wr": 0.53008,
+"gp_n": 37949,
+"gp_wr": 0.5485,
+"iwd": 0.04104
+},
+"Tolarian Terror": {
+"gih_n": 54456,
+"gih_wr": 0.52198,
+"gns_n": 43615,
+"gns_wr": 0.52794,
+"gp_n": 98071,
+"gp_wr": 0.52463,
+"iwd": -0.00596
+},
+"Tragic Banshee": {
+"gih_n": 45920,
+"gih_wr": 0.58173,
+"gns_n": 53863,
+"gns_wr": 0.53222,
+"gp_n": 99783,
+"gp_wr": 0.555,
+"iwd": 0.04951
+},
+"Tranquil Cove": {
+"gih_n": 35943,
+"gih_wr": 0.5563,
+"gns_n": 40594,
+"gns_wr": 0.54799,
+"gp_n": 76537,
+"gp_wr": 0.55189,
+"iwd": 0.00831
+},
+"Treetop Snarespinner": {
+"gih_n": 48558,
+"gih_wr": 0.54621,
+"gns_n": 55742,
+"gns_wr": 0.52745,
+"gp_n": 104300,
+"gp_wr": 0.53618,
+"iwd": 0.01876
+},
+"Twinblade Blessing": {
+"gih_n": 3908,
+"gih_wr": 0.46827,
+"gns_n": 5596,
+"gns_wr": 0.51394,
+"gp_n": 9504,
+"gp_wr": 0.49516,
+"iwd": -0.04567
+},
+"Twinflame Tyrant": {
+"gih_n": 7386,
+"gih_wr": 0.60479,
+"gns_n": 10768,
+"gns_wr": 0.53548,
+"gp_n": 18154,
+"gp_wr": 0.56368,
+"iwd": 0.06932
+},
+"Uncharted Voyage": {
+"gih_n": 79721,
+"gih_wr": 0.56321,
+"gns_n": 76211,
+"gns_wr": 0.53479,
+"gp_n": 155932,
+"gp_wr": 0.54932,
+"iwd": 0.02842
+},
+"Valkyrie's Call": {
+"gih_n": 7440,
+"gih_wr": 0.57903,
+"gns_n": 10411,
+"gns_wr": 0.53386,
+"gp_n": 17851,
+"gp_wr": 0.55269,
+"iwd": 0.04517
+},
+"Vampire Gourmand": {
+"gih_n": 50062,
+"gih_wr": 0.58382,
+"gns_n": 54430,
+"gns_wr": 0.5336,
+"gp_n": 104492,
+"gp_wr": 0.55766,
+"iwd": 0.05021
+},
+"Vampire Nighthawk": {
+"gih_n": 41833,
+"gih_wr": 0.58227,
+"gns_n": 47434,
+"gns_wr": 0.52665,
+"gp_n": 89267,
+"gp_wr": 0.55271,
+"iwd": 0.05562
+},
+"Vampire Soulcaller": {
+"gih_n": 52531,
+"gih_wr": 0.53976,
+"gns_n": 62859,
+"gns_wr": 0.53289,
+"gp_n": 115390,
+"gp_wr": 0.53602,
+"iwd": 0.00687
+},
+"Vanguard Seraph": {
+"gih_n": 50345,
+"gih_wr": 0.5449,
+"gns_n": 57233,
+"gns_wr": 0.54783,
+"gp_n": 107578,
+"gp_wr": 0.54646,
+"iwd": -0.00293
+},
+"Vengeful Bloodwitch": {
+"gih_n": 29182,
+"gih_wr": 0.53581,
+"gns_n": 33907,
+"gns_wr": 0.5301,
+"gp_n": 63089,
+"gp_wr": 0.53274,
+"iwd": 0.00571
+},
+"Vivien Reid": {
+"gih_n": 6939,
+"gih_wr": 0.61392,
+"gns_n": 9913,
+"gns_wr": 0.52083,
+"gp_n": 16852,
+"gp_wr": 0.55916,
+"iwd": 0.09309
+},
+"Wardens of the Cycle": {
+"gih_n": 15094,
+"gih_wr": 0.51153,
+"gns_n": 16990,
+"gns_wr": 0.49865,
+"gp_n": 32084,
+"gp_wr": 0.50471,
+"iwd": 0.01288
+},
+"Wary Thespian": {
+"gih_n": 55670,
+"gih_wr": 0.55401,
+"gns_n": 57924,
+"gns_wr": 0.53149,
+"gp_n": 113594,
+"gp_wr": 0.54253,
+"iwd": 0.02253
+},
+"Wildwood Scourge": {
+"gih_n": 14605,
+"gih_wr": 0.51208,
+"gns_n": 18962,
+"gns_wr": 0.53291,
+"gp_n": 33567,
+"gp_wr": 0.52385,
+"iwd": -0.02082
+},
+"Wind-Scarred Crag": {
+"gih_n": 24572,
+"gih_wr": 0.53659,
+"gns_n": 31865,
+"gns_wr": 0.54797,
+"gp_n": 56437,
+"gp_wr": 0.54301,
+"iwd": -0.01138
+},
+"Witness Protection": {
+"gih_n": 43883,
+"gih_wr": 0.52815,
+"gns_n": 43887,
+"gns_wr": 0.51585,
+"gp_n": 87770,
+"gp_wr": 0.522,
+"iwd": 0.01231
+},
+"Youthful Valkyrie": {
+"gih_n": 30274,
+"gih_wr": 0.55691,
+"gns_n": 33963,
+"gns_wr": 0.55502,
+"gp_n": 64237,
+"gp_wr": 0.55591,
+"iwd": 0.0019
+},
+"Zimone, Paradox Sculptor": {
+"gih_n": 8661,
+"gih_wr": 0.62626,
+"gns_n": 10825,
+"gns_wr": 0.49441,
+"gp_n": 19486,
+"gp_wr": 0.55301,
+"iwd": 0.13184
+},
+"Zombify": {
+"gih_n": 15509,
+"gih_wr": 0.53143,
+"gns_n": 19119,
+"gns_wr": 0.50866,
+"gp_n": 34628,
+"gp_wr": 0.51886,
+"iwd": 0.02278
+},
+"Zul Ashur, Lich Lord": {
+"gih_n": 11488,
+"gih_wr": 0.54579,
+"gns_n": 14706,
+"gns_wr": 0.52727,
+"gp_n": 26194,
+"gp_wr": 0.53539,
+"iwd": 0.01852
+}
+},
+"games": 791159,
+"source": "game_data_public.FDN.PremierDraft.csv.gz (17lands, CC BY 4.0)"
+}

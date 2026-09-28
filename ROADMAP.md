@@ -336,6 +336,13 @@ generation, training batch 64. Weights go to HF `danbrooks/draftzero-checkpoints
 `2026-09-27_01-59-54/`. The session "Experiment 2 and performance - RUN 1" launched it and
 owns it. **Other sessions: don't touch this pod or that HF prefix.**
 
+**Run 2: stopped early on 2026-09-28 at 05:15 UTC, after gen 12 (about $14 of $28.20). Report:
+[docs/013](docs/013-exp2-imitation-report.md).** The imitation start matched run 1 against raw search
+at gen 0 (47%), but its network stopped learning within three generations: league 49% against run 1's
+58%, flat training losses. A fresh network trained for two epochs on run 2's own games predicted the
+next generation as well as run 2's network did after twelve. The 17lands agreement on commons rose to
+0.46 early and fell back to 0.30. Next steps are in docs/013 §4. As launched:
+
 **Run 2** (2026-09-27, [docs/011](docs/011-exp2-run2-imitation.md)): `dz-exp2-run2`, RunPod pod
 `xdslbqu0imovu0`, a Secure RTX 3090 (31.1 cores, 116 GB) at $0.50/hr, from a network pretrained on human
 decisions. On clean held-out decisions it scores 73.0% top-1 and value AUC 0.70, and its games look
@@ -409,7 +416,7 @@ branch, never the shared `~/Desktop/Code/draft-zero` checkout.
 | D4 | **Kaggle** | Sticking with RunPod. Kaggle results abandoned; summarized in report Appendix A. | Decided 2026-09-25 |
 | D6 | **Will's answer on the action vocabulary** ([WillWroble/MageZero#7](https://github.com/WillWroble/MageZero/issues/7)) | This decides whether our FDN agents can run in the normal MageZero flow (`mz import`, add a deck, play). The proposal is two opt-in pieces: a configurable policy width (default 128), and an optional exact action vocabulary stored inside the checkpoint and set per player. MageZero gets only that generic mechanism. The FDN vocab, the `VocabDump` builder, deck pools, 17lands stats and logging stay in draft-zero and ship with our models. If Will says no, our agents stay runnable only through draft-zero. Implementation proceeds in our forks, PR-shaped, which is useful either way. No PRs to Will until he answers. | Waiting on Will (posted 2026-09-25) |
 | D7 | **Does exp #2's network see the opponent's hand?** | Exp #1's did: `configs/game.yml` writes `hidden_info:` but the fork reads `hiddenInfo` (`Config.java:79`), so the key is ignored and the default (true) wins. Human data (17lands, Arena) never has the opponent's hand, and coaching must not assume it, so both gameplay-data goals want a hidden-information network ([docs/008](docs/008-gameplay-data.md) §6, §11). Fix the key either way. Fixing the key is not enough: the search itself is clairvoyant, and it flips a decision on a card the player can't see even with the network's input masked. v0.2.0 changes neither. Staged plan: [docs/009](docs/009-hidden-information.md) §5.4. Fair baselines and the order of work, where the first three steps need no GPU: §8.5. | **Decided 2026-09-26:** the key is fixed and the network doesn't see the opponent's hand. The search's leak is accepted for exp #2, and exp #3 should fix it (see Phase 3 and the decision log). |
-| D8 | **A human-prior arm in exp #2?** | Gen 33's priority head ranks a human action first 44% of the time (chance on 4+ options); heads retrained on 30k human decisions reach 73%, and its attack (binary) head, the one prior exp #1 used, loses to a power/toughness rule (docs/008 §7.3). A human prior only matters with the prior switched on; the A/B protocol is in docs/008 §7.5 (≥ 400 games per arm). | Open |
+| D8 | **A human-prior arm in exp #2?** | Gen 33's priority head ranks a human action first 44% of the time (chance on 4+ options); heads retrained on 30k human decisions reach 73%, and its attack (binary) head, the one prior exp #1 used, loses to a power/toughness rule (docs/008 §7.3). A human prior only matters with the prior switched on; the A/B protocol is in docs/008 §7.5 (≥ 400 games per arm). | **Tested with priors off (exp #2 run 2, docs/013):** a warm start from the human-trained network didn't help and stopped learning. Still open: the human policy as the search prior, or human data mixed into training from a fresh network (docs/013 §4.3). |
 | D5 | **Public or private draft-zero** | **Public, MIT**, since 2026-09-25. Deck data stays CC BY 4.0. Because everything pushed is now public, any experiment that should stay private needs a separate private repo. | Decided 2026-09-25 |
 
 ## Side tracks
