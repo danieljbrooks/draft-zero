@@ -18,7 +18,10 @@ its RL framework, XMage bridge, trainer and evaluator — and adds the format-le
 Exp #2 is under way ([ROADMAP](ROADMAP.md), Phase 4). Its imitation arm has a report:
 **[does an imitation start help?](docs/013-exp2-imitation-report.md)** Starting self-play from a network
 pretrained on 17lands decisions (73% agreement with humans) did not help: the network stopped learning
-within three generations, while the heuristic start kept improving.
+within three generations, while the heuristic start kept improving. The heuristic-start arm has its own
+report: **[run 1, final](docs/014-exp2-run1-report.md)**. It learned for about eight generations (league
+59%), then plateaued at 50% against raw search as its value head overfit; 17lands agreement on
+commons ended at ρ +0.20.
 
 Studies: **[human gameplay data](docs/008-gameplay-data.md)**. 17lands and Arena logs mapped onto XMage
 states (a recorded turn replays to the same next state ~89% of the time), human-trained heads versus

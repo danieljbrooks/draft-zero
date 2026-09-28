@@ -329,12 +329,15 @@ self-destruct fires at the budget whatever happens). Run 1 uses Will's settings
 (`configs/exp2.yml`). Run 2, if affordable, uses the same settings from a network pretrained
 on human decisions, so the only difference is the starting point (imitation, D8).
 
-**Run 1** (2026-09-27): `dz-exp2-run1`, RunPod pod `206haai9na81zy`, a Secure RTX 3090 (31.1 cores,
-116 GB, 24 GB GPU) at $0.50/hr. It runs `deploy/exp2.sh` with a $28.90 cap: a graceful stop at 57.05 h
-and hard removal at 57.8 h (about 2026-09-29 11:50 UTC). The layout is 7 × 4 threads, 112 games per
-generation, training batch 64. Weights go to HF `danbrooks/draftzero-checkpoints` under
-`2026-09-27_01-59-54/`. The session "Experiment 2 and performance - RUN 1" launched it and
-owns it. **Other sessions: don't touch this pod or that HF prefix.**
+**Run 1: stopped early on 2026-09-28 at 21:36 UTC, after gen 18 (about $22 of $28.90). Report:
+[docs/014](docs/014-exp2-run1-report.md).** Against raw search it went 47% → 50% → 50% (gens 0, 8, 16;
+about 195 games each). Its league showed learning through gen 8 (58.7%, n = 608), then 51.7%
+(n = 869). The policy heads kept improving while the value head, the only part the search reads
+with priors off, overfit. 17lands GIH ρ on commons ended at +0.20 (+0.22 in gens 1–9, +0.06 in
+gens 10–18), mostly deck-level agreement (IWD +0.04). The pod is removed; every checkpoint, all
+logs and the replay shards are on HF under `2026-09-27_01-59-54/`. As launched: a Secure RTX 3090
+(31.1 cores, 116 GB, 24 GB GPU) at $0.50/hr, `deploy/exp2.sh` with a graceful stop at 57.05 h,
+7 × 4 threads, 112 games per generation, training batch 64.
 
 **Run 2: stopped early on 2026-09-28 at 05:15 UTC, after gen 12 (about $14 of $28.20). Report:
 [docs/013](docs/013-exp2-imitation-report.md).** The imitation start matched run 1 against raw search
