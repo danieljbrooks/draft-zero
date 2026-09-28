@@ -34,8 +34,8 @@ It builds on two earlier docs:
 | **Decision quality** | agreement with top 17lands players on 1,000 held-out decisions |
 | **Hidden information** | a pass/fail leak test on about two dozen probe scenarios; it colors the plot |
 | **Compute** | pod-seconds per decision on the RTX 3090 pod at full load |
-| **Runs** | 4 methods × 4 budgets × 2 evaluators = 32, plus the references |
-| **Cost** | about 32 pod-hours (~$16) for the network runs; offline search runs on the laptop. IS-MCTS needs about a week of engine work first |
+| **Runs** | 4 methods × 4 budgets × 2 evaluators = 32; a backprop-discount sweep, 12 more; the references |
+| **Cost** | about 39 pod-hours (~$19.50) for the network runs; offline search runs on the laptop. IS-MCTS needs about a week of engine work first |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/012-frontier-dummy-dark.png">
@@ -53,6 +53,8 @@ It builds on two earlier docs:
 - **Whether one information-set tree beats separate trees:** IS-MCTS against PIMC, at the same
   budget and at the same compute.
 - **Whether offline search and a trained network tell the same story.**
+- **Whether a backprop discount helps,** and whether it helps fair search as much as it helps the
+  clairvoyant search.
 
 **The main risk is the proxy.** In chess, adding search to a human-like network gained about 390
 Elo against strong players while its move-matching rose 0.2 points. Stockfish at depths 11–15
@@ -180,8 +182,28 @@ across the worlds. The best method optionally also runs at 10,000.
   Priors stay off, as in experiment #2, so the search uses only the network's value head.
 
 **Held fixed at today's defaults.** Exploration constant c = 1; unvisited options valued at 0;
-final choice by most visits; backprop discount 0.99; duplicate-state pruning off (draft-zero's
-default). Tree reuse and exploration noise are off. Tuning any of these is a follow-up (§3.5).
+final choice by most visits; backprop discount 0.99, except in the sweep below; duplicate-state
+pruning off (draft-zero's default). Tree reuse and exploration noise are off. Tuning any of the
+others is a follow-up (§3.5).
+
+**One setting is swept: the backprop discount (E2b).** MageZero backs a leaf's value up the tree
+with a factor of 0.99 per ply, so a result k plies away counts as 0.99^k of itself. The sweep was
+suggested in review: MuZero used a discount, and in MageZero it smoothed out degenerate play, such
+as skipping through combat to reach a good top card, or stalling with pointless activations when
+the opponent plays something strong. (MuZero discounted by 0.997 per step in Atari, though not in
+its board games: Schrittwieser et al. 2020.)
+
+- **Arms:** 1.0 (no discount), 0.95 and 0.9, next to E2's 0.99. At 1,000 simulations, for
+  clairvoyant MCTS and PIMC with 4 worlds, with both evaluators. IS-MCTS is left out: at its cost
+  per simulation, the sweep would add about 10 pod-hours.
+- **The prediction to test:** the discount helps clairvoyant MCTS more than PIMC. Skipping combat
+  to reach a good top card needs the search to know the top card, and only the clairvoyant search
+  does. A comment in MageZero's search points the same way: "make true stochastic MCTS (hidden
+  feature set + MCTS discount works for now)". If the discount helps PIMC just as much, it's a
+  genuine improvement for every method.
+- **What to watch:** a per-ply discount also shrinks a distant loss. A loss 20 plies away counts as
+  −0.82 at 0.99 and −0.36 at 0.95, which in principle rewards delaying it. The per-type results on
+  holds and attacks show whether the discount trades one kind of stalling for another.
 
 **References.** Chance (uniform over the options). The rule heuristic ("play a land, else the
 biggest spell; attack when power is at least the best blocker's toughness") and the network's
@@ -418,22 +440,23 @@ re-measures them. On the laptop, the coach ran about 600 offline simulations/s p
 | **E0** References and calibration | chance, the rule heuristic, MAD AI; a second seed for PIMC with 4 worlds at 1,000, for test–retest noise; throughput per method, including IS-MCTS's cost per simulation | the network's policy with no search; the same for run 2's starting network, pretrained on human decisions (the ceiling's floor); the same second seed; throughput | ~2 |
 | **E1** The hidden-information test | the full probe set for all four methods and MAD AI | the counterspell and cantrip pairs | ~1 |
 | **E2** Method × budget | 4 methods × 4 budgets = 16 runs | the same 16 runs | ~29 |
-| | | **Total** | **~32 (~$16)** |
+| **E2b** Backprop discount | 1.0, 0.95 and 0.9 at 1,000 simulations, for clairvoyant MCTS and PIMC with 4 worlds: 6 runs | the same 6 runs | ~7 |
+| | | **Total** | **~39 (~$19.50)** |
 
 IS-MCTS's pod-hours assume a simulation costs about three times today's, since it replays its
 path from the root. That's a guess, and E0 measures it. The optional 10,000-simulation runs for the
 best method add about 11 pod-hours (~$5.50), or about 33 if the best method is IS-MCTS. The offline
-runs total about 28M simulations: hours to a day on the laptop, or about 21 pod-hours if moved to
+runs total about 34M simulations: hours to a day on the laptop, or about 24 pod-hours if moved to
 the pod.
 
 **Order:**
 
 1. **Build** the pieces in §2.9. No pod is needed. IS-MCTS is the long pole, at about a week, and
    everything else can run while it's built.
-2. **Laptop:** E0's and E1's offline parts, then E2's offline runs, as soon as the harness works,
-   and IS-MCTS's as soon as it's built.
+2. **Laptop:** E0's and E1's offline parts, then E2's and E2b's offline runs, as soon as the
+   harness works, and IS-MCTS's as soon as it's built.
 3. **Pod, after experiment #2's runs end around Sept 29:** E0's and E1's network parts, then E2's
-   network runs.
+   and E2b's network runs.
 4. **Write-up:** the plot, per-type breakdowns, and a short report.
 
 ### 2.8 The plot
@@ -448,7 +471,8 @@ The plot at the top of this doc is a dummy with made-up numbers.
 - **References** sit at the far left: the rule heuristic and the policy network, with no search.
 - **The shaded band** stands in for the unknown ceiling (§2.3).
 
-A companion plot shows the same runs by decision type. The script that draws the dummy is
+Two companion plots use the same rows: agreement by decision type, and E2b's agreement against the
+discount for each method and evaluator. The script that draws the dummy is
 `tools/search_bench/dummy_frontier_plot.py`.
 
 <details>
@@ -478,7 +502,7 @@ clairvoyant MCTS, PIMC with 1 and 4 worlds, and IS-MCTS.
 | Piece | Where | Builds on |
 |---|---|---|
 | Item builder: sample, rebuild, label, canonicalize, filter, split, freeze | `src/draftzero/gameplay/`, a new `search_bench` module | `seventeenlands.py`, `reconstruct.py`, `labels.py`, `turnreplay.py` |
-| A benchmark mode for the coach op: method (IS-MCTS included), budget and seeds per request; summed visits for PIMC; the whole root back; per-search counters and timers | `java/mzbridge` | the `coach` op |
+| A benchmark mode for the coach op: method (IS-MCTS included), budget, backprop discount and seeds per request; summed visits for PIMC; the whole root back; per-search counters and timers | `java/mzbridge` | the `coach` op, which can't set the discount today |
 | **IS-MCTS,** behind a flag: world-independent action keys, a world dealt every iteration with its path replayed from the root, availability counts in the selection rule. The long pole: about a week | the XMage fork | `ComputerPlayerMCTS2`, `MCTSNode`; the replay reuses `validateState`'s scripted path; design in docs/009 §6.4 |
 | The bridge built against the v0.2.0 bundle (the local build links exp #1's v0.1 jars) | `java/mzbridge` | run 2's handoff did the same |
 | The leak test: pairs, extreme versions, controls, canaries | `tools/gameplay/` | `hidden_info_leak.py`, `MadProbe.java` |
@@ -540,6 +564,8 @@ starts every decision with a fresh tree.
   but their training targets came from a search that did (docs/009 §3.5). Their values may suit
   clairvoyant trees, which could flatter clairvoyant MCTS in the network panel.
 - **Offline search is weak at combat** at small budgets (§2.1). Per-type results will show it.
+- **The discount sweep is small:** two methods at one budget. A discount that helps at 1,000
+  simulations may not help at 100 or at 3,000.
 - **Labels are imperfect.** Set labels are lenient, the orders of replayed turns are imputed, block
   pairings are unique only 88% of the time, and states are reconstructions.
 - **The data is early-format.** The FDN file covers the set's first five weeks (docs/008 §3.1).
@@ -560,13 +586,15 @@ starts every decision with a fresh tree.
    opponent's branching, actions across worlds, and the cost of re-dealing and replaying every
    iteration?
 4. **The budgets.** Is 100 to 3,000 simulations the right range? Is 10,000 worth adding?
-5. **The evaluators.** Are offline search and one trained network the right pair, and which
+5. **The discount.** Are 1.0, 0.99, 0.95 and 0.9 the right values, and is 1,000 simulations the
+   right budget to test them at?
+6. **The evaluators.** Are offline search and one trained network the right pair, and which
    experiment #2 network?
-6. **The decisions.** Is the mix in §2.2 right? Is a decision type missing, or not worth its
+7. **The decisions.** Is the mix in §2.2 right? Is a decision type missing, or not worth its
    place?
-7. **Order and timing.** Are the four ways of handling them in §2.3 enough?
-8. **The leak test.** What would you add to the probes in §2.5? Is the pass rule strict enough?
-9. **Compute.** Pod-seconds at full load, or latency: which matters more to you?
+8. **Order and timing.** Are the four ways of handling them in §2.3 enough?
+9. **The leak test.** What would you add to the probes in §2.5? Is the pass rule strict enough?
+10. **Compute.** Pod-seconds at full load, or latency: which matters more to you?
 
 ---
 
@@ -728,7 +756,7 @@ opponent's nodes.
 | PIMC aggregation | the coach averages each option's Q over worlds and ranks by it; the first experiment uses summed visits | summed visits; mean Q | docs/009 §5.4 proposes summed visits |
 | Duplicate actions | copies of a card are separate root children with one prior, and split their visits (15.2% of decisions, docs/008 §6) | merged in the search; not | spends visits on real alternatives |
 | `prune_duplicate_states` | off: draft-zero's `game.yml` omits the key (MageZero's own sets it on) | on; off | transpositions: two orders of the same plays reach one state |
-| `backprop_discount` | 0.99 per ply | 1.0, 0.99, 0.95 | prefers faster wins; changes long-horizon values |
+| `backprop_discount` | 0.99 per ply | swept in the first experiment (E2b); extend it to IS-MCTS and to other budgets | prefers faster wins; changes long-horizon values |
 | Leaf evaluator | the network's value, or the offline heuristic | network; heuristic; a blend | AlphaGo blended its value network with rollouts |
 | Opponent responses | a node whenever the opponent has something to play, and at combat checkpoints | as today; only instant-speed plays that could matter; none (MAD-style, blind) | fewer irrelevant opponent nodes deepen the tree |
 | Evaluations in flight per search | one thread, up to 4 pending network calls, with a virtual loss of −1 | 1, 4, 8, 16 | latency against quality |
@@ -944,6 +972,8 @@ with full references there. Cited here directly:
 
 - Silver et al. (2018). A general reinforcement learning algorithm that masters chess, shogi, and Go
   through self-play (AlphaZero). *Science* 362. https://doi.org/10.1126/science.aar6404
+- Schrittwieser et al. (2020). Mastering Atari, Go, chess and shogi by planning with a learned model
+  (MuZero). *Nature* 588. https://arxiv.org/abs/1911.08265
 - Rosin (2011). Multi-armed bandits with episode context. *Annals of Mathematics and Artificial
   Intelligence* 61(3). https://doi.org/10.1007/s10472-011-9258-6
 - Wu (2019). Accelerating self-play learning in Go (KataGo). AAAI-20 RLG workshop.

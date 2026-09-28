@@ -461,10 +461,12 @@ proposal out for comment (2026-09-27), nothing built or run. Its first experimen
   for Magic called it the big one.
 - **Budgets:** 100 to 3,000 simulations.
 - **Evaluators:** offline search, and a trained exp #2 network.
+- **Also swept:** the backprop discount (1.0, 0.99, 0.95, 0.9) for clairvoyant MCTS and PIMC at
+  1,000 simulations. It was suggested in review; does it help fair search as much as clairvoyant?
 - **Measures:** agreement with top 17lands players on 1,000 decisions, and a pass/fail leak test
   that colors the plot.
 
-It costs ~32 pod-hours (~$16), with the offline runs on the laptop. The follow-ups (E3–E9, first
+It costs ~39 pod-hours (~$19.50), with the offline runs on the laptop. The follow-ups (E3–E9, first
 among them validation by play) are ideas for now.
 - [ ] Collect reviewers' comments on the first experiment (its §2.11) and revise.
 - [ ] Build IS-MCTS in the fork behind a flag (docs/009 §6.4), about a week: the first
