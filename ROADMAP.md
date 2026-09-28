@@ -474,6 +474,17 @@ among them validation by play) are ideas for now.
 - [ ] Dan: decide whether to raise the virtual-loss issue, and the race that can reset priors to
       uniform, with Will.
 
+**Faster engines.** Explore Jack Maiorino's [mtg-kernel](https://github.com/jackmaiorino/mtg-kernel),
+the engine behind Spellbench's first benchmark. It's reportedly about 40× faster than XMage
+overall, and 1,000× for training (unverified). Not started: this is a backlog item.
+- Why it matters: XMage's speed caps the search budget and the cost of every run. docs/012 records
+  engine-independent counts so its results can be re-costed on a faster engine.
+- [ ] Explore:
+  - its card and rules coverage (FDN?);
+  - what the 40× and 1,000× figures measure;
+  - whether its search can be kept to one seat's view (Spellbench v2's contract);
+  - what running MageZero's search and networks on it would take.
+
 **Study.** Read with a specific question in mind.
 - [ ] KataGo paper (Wu, 2019): AlphaZero on a small compute budget. Its "playout cap
       randomization" (full search on a random fraction of moves, cheap search on the rest)
