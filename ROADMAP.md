@@ -329,7 +329,11 @@ self-destruct fires at the budget whatever happens). Run 1 uses Will's settings
 (`configs/exp2.yml`). Run 2, if affordable, uses the same settings from a network pretrained
 on human decisions, so the only difference is the starting point (imitation, D8).
 
-**Run 1: stopped early on 2026-09-28 at 21:36 UTC, after gen 18 (about $22 of $28.90). Report:
+**Names:** the two runs are the two components of experiment #2. **Experiment #2a** is run 1, the
+heuristic start. **Experiment #2b – Imitation** is run 2, the pretrained start. "Run 1" and
+"run 2" remain in configs, logs and HF paths.
+
+**Experiment #2a (run 1): stopped early on 2026-09-28 at 21:36 UTC, after gen 18 (about $22 of $28.90). Report:
 [docs/014](docs/014-exp2-run1-report.md).** Against raw search it went 47% → 50% → 50% (gens 0, 8, 16;
 about 195 games each). Its league showed learning through gen 8 (58.7%, n = 608), then 51.7%
 (n = 869). The policy heads kept improving. The value head, the only part the search reads with
@@ -340,7 +344,7 @@ logs and the replay shards are on HF under `2026-09-27_01-59-54/`. As launched: 
 (31.1 cores, 116 GB, 24 GB GPU) at $0.50/hr, `deploy/exp2.sh` with a graceful stop at 57.05 h,
 7 × 4 threads, 112 games per generation, training batch 64.
 
-**Run 2: stopped early on 2026-09-28 at 05:15 UTC, after gen 12 (about $14 of $28.20). Report:
+**Experiment #2b – Imitation (run 2): stopped early on 2026-09-28 at 05:15 UTC, after gen 12 (about $14 of $28.20). Report:
 [docs/013](docs/013-exp2-imitation-report.md).** The imitation start matched run 1 against raw search
 at gen 0 (47%), but its network stopped learning within three generations: league 49% against run 1's
 58%, flat training losses. A fresh network trained for two epochs on run 2's own games predicted the

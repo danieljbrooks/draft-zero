@@ -1,11 +1,22 @@
-# Experiment #2, run 1: final report
+# Experiment #2a: self-play from a heuristic start (final report)
 
-Run 1 is experiment #2's baseline arm: MageZero v0.2 self-play on FDN from a heuristic-search start
-(gen 0 plays raw search; the first network trains on those games). Run 2, the imitation-start arm,
-and the comparison between the two through gen 10 are in [docs/013](013-exp2-imitation-report.md).
-This report covers run 1 to the end: gens 0–18, stopped on 2026-09-28 at 21:36 UTC.
+> **Experiment #2 has two components.** They share the settings (`configs/exp2.yml`; #2b's
+> `configs/exp2_run2.yml` differs only in the start), the code, the pod type and the budget, and
+> differ only in the starting network:
+> - **Experiment #2a** (this report): self-play from a heuristic-search start. Its logs, configs and
+>   HF paths call it "run 1".
+> - **Experiment #2b – Imitation** ([docs/013](013-exp2-imitation-report.md), setup in
+>   [docs/011](011-exp2-run2-imitation.md)): self-play from a network pretrained on 17lands human
+>   decisions, called "run 2".
+>
+> docs/013 compares #2a and #2b at equal spend (#2a through gen 10). This report covers #2a to its
+> end.
 
-Experiment #2 had three goals:
+Experiment #2a ("run 1" below) is MageZero v0.2 self-play on FDN from a heuristic-search start:
+gen 0 plays raw search, and the first network trains on those games. This report covers it to the
+end: gens 0–18, stopped on 2026-09-28 at 21:36 UTC. "Run 2" below means experiment #2b.
+
+Experiment #2 (both components) had three goals:
 1. a high win rate against the baseline (raw search at the same budget);
 2. high throughput;
 3. good agreement with 17lands on commons.

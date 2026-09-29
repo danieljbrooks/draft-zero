@@ -14,12 +14,17 @@ its RL framework, XMage bridge, trainer and evaluator — and adds the format-le
 | # | What | Result | Code | Artifacts |
 |---|---|---|---|---|
 | 1 | One agent for all of FDN: 2,507 games, 34 generations, one L40S, ~$28 | Beats raw search 110/197 (55.8%); plateaued by gen 10 | tag [`exp1-fdn-generalist`](https://github.com/danieljbrooks/draft-zero/tree/exp1-fdn-generalist) | [report](docs/003-fdn-generalist-report.md) · [Hugging Face](https://huggingface.co/danbrooks/draftzero-fdn-exp1) |
+| 2a | Exp #2, heuristic start, on MageZero v0.2 ("run 1"): 2,673 games, 18 generations, one RTX 3090, ~$22 | 50% against raw search at gen 16 (95/191), no gain on gen 0; league learning through gen 8; 17lands commons ρ +0.20 | `configs/exp2.yml` on `main` | [report](docs/014-exp2-run1-report.md) · HF `danbrooks/draftzero-checkpoints` (private), `2026-09-27_01-59-54/` |
+| 2b | Exp #2 – Imitation: the same settings from a start pretrained on 17lands decisions ("run 2"): 12 generations, ~$14 | 45% against raw search at gen 8 (88/195); stopped learning within three generations | `configs/exp2_run2.yml` on `main` | [report](docs/013-exp2-imitation-report.md) · [setup](docs/011-exp2-run2-imitation.md) · HF prefix `2026-09-27_03-42-21/` |
 
-Exp #2 is under way ([ROADMAP](ROADMAP.md), Phase 4). Its imitation arm has a report:
-**[does an imitation start help?](docs/013-exp2-imitation-report.md)** Starting self-play from a network
-pretrained on 17lands decisions (73% agreement with humans) did not help: the network stopped learning
-within three generations, while the heuristic start kept improving. The heuristic-start arm has its own
-report: **[run 1, final](docs/014-exp2-run1-report.md)**. It learned for about eight generations (league
+Exp #2 is done ([ROADMAP](ROADMAP.md), Phase 4). It has two components with the same settings,
+differing only in the starting network:
+- **[Experiment #2a](docs/014-exp2-run1-report.md)** starts from heuristic search ("run 1").
+- **[Experiment #2b – Imitation](docs/013-exp2-imitation-report.md)** starts from a network pretrained
+  on 17lands decisions ("run 2").
+
+The imitation start (73% agreement with humans) did not help: its network stopped learning within three
+generations, while the heuristic start kept improving. #2a learned for about eight generations (league
 59%), then plateaued at 50% against raw search. Its value head, the only part the search reads,
 memorised its training positions and improved only slowly on new games. 17lands agreement on
 commons ended at ρ +0.20.

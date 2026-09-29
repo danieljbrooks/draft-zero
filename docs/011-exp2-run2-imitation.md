@@ -1,4 +1,8 @@
-# Experiment #2, run 2: starting self-play from human decisions
+# Experiment #2b – Imitation (run 2): starting self-play from human decisions
+
+> Experiment #2 has two components: **#2a**, the heuristic start ("run 1",
+> [docs/014](014-exp2-run1-report.md)), and **#2b – Imitation**, this run ("run 2"). Results for #2b
+> are in [docs/013](013-exp2-imitation-report.md).
 
 Run 2 is the imitation half of experiment #2's A/B (ROADMAP, "Run 2 handoff"; decision D8). It
 uses run 1's settings exactly (`configs/exp2.yml` through `deploy/exp2.sh`, same pod type) except

@@ -1,4 +1,15 @@
-# Experiment #2: does an imitation start help? (run 1 against run 2)
+# Experiment #2b – Imitation: does an imitation start help? (#2a against #2b)
+
+> **Experiment #2 has two components.** They share the settings (`configs/exp2.yml`; #2b's
+> `configs/exp2_run2.yml` differs only in the start), the code, the pod type and the budget, and
+> differ only in the starting network:
+> - **Experiment #2a** ([docs/014](014-exp2-run1-report.md)): self-play from a heuristic-search
+>   start, called "run 1" in this report, its logs and HF paths.
+> - **Experiment #2b – Imitation** (this report; setup in [docs/011](011-exp2-run2-imitation.md)):
+>   self-play from a network pretrained on 17lands human decisions, called "run 2".
+>
+> This report compares the two at equal spend, with #2a's numbers taken through gen 10 while it was
+> still running. #2a's final results, through gen 18, are in docs/014.
 
 Experiment #2 ran two self-play runs with identical settings except for the starting network:
 
