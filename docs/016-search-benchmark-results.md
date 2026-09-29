@@ -441,6 +441,10 @@ The per-turn discount is 0.435 offline and 0.446 with the network, each matched 
 
 ## 7. Follow-ups with the extra budget
 
+About $7 of the extra $5–10, on four questions. Priors use MageZero's setPriors: a softmax at
+temperature 1.5, plus 0.1 for anything but Pass. They are served by MageZero's own server, which
+returns the policy heads.
+
 - **IS-MCTS offline at 10,000 simulations,** on a third pod. It was the only method still gaining at
   3,000 (+2.0 points from 1,000).
 
@@ -496,13 +500,9 @@ The per-turn discount is 0.435 offline and 0.446 with the network, each matched 
     the search pass more, the same habit that gives #2a's policy its 68.6% (§8.1). The *human*
     prior is the one that improves the balanced score: 0.645 against 0.573 for PIMC with 1 world at
     300. A_set alone would have picked the wrong prior.
-
-- **The network's policy as priors** (MageZero's setPriors: softmax at temperature 1.5, plus 0.1 for
-  anything but Pass), for all four methods at 300 and 1,000 simulations, on MageZero's own server,
-  which returns the policy heads. A 40-decision dev test moved PIMC with 4 worlds at 100
-  simulations from 39% to 57%. Too small to trust, but the strongest lead. About $1.75.
-- **PIMC with 1 world, offline, at 10,000 simulations:** docs/012's optional top budget, to see
-  where the curve flattens. About $0.65.
+- **PIMC with 1 world, offline, at 10,000 simulations,** the cheapest fair method at docs/012's
+  optional top budget: *finishing at the time of writing*. It runs 25 workers with 4 GB heaps; two
+  of its largest trees ran out of memory and are being rerun with 16 GB.
 
 ## 8. Why agreement is only about 50%
 
