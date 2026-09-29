@@ -5,6 +5,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 export MZ_ACTION_VOCAB=$PWD/assets/vocab/FDN_SPG.tsv
+# re-time clairvoyant offline at 100, the first run of its batch (cold JVMs): PIMC-1 warms the pool
+python tools/search_bench/run.py --items data/search_bench/sb-v1 --split test --evaluator offline --workers 30 \
+  --out runs/search_bench/retime_offline --grid e2 --budgets 100 --methods pimc1,clairvoyant
 bash tools/search_bench/start_servers.sh models/FDN_exp2/ver1/gen18.pt.gz 4
 P=50052,50152,50252,50352
 R="python tools/search_bench/run.py --items data/search_bench/sb-v1 --split test --evaluator remote --ports $P --workers 32 --heap 2g"
