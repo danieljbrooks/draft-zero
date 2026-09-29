@@ -111,7 +111,41 @@ own server.
 
 ## 3. E1: the hidden-information test
 
-*(pending)*
+**Clairvoyant MCTS fails. PIMC with 1 and 4 worlds and IS-MCTS pass, with every difference exactly
+zero.** `tools/search_bench/leak.py`, offline search, 3,000 simulations, 16 seeds per world, seeds
+paired across the two worlds of a pair.
+
+Each pair is two positions that look the same to the deciding player and differ only in cards it
+can't see. They are docs/009's two positions plus extreme versions, a decklist pair and a canary:
+
+| Pair | World X / world Y | Clairvoyant MCTS: worst option's ΔQ (X − Y), 95% CI | Its choices, X / Y | Verdict |
+|---|---|---|---|---|
+| counterspell | the opponent holds Refute + Island / Island + Island | Cast Serra Angel −0.37 [−0.45, −0.29] | Pass 10 of 16 / Cast 16 of 16 | fails |
+| counterspell, extreme | Refute ×3 / Island ×3 | −0.39 [−0.44, −0.34] | Pass 16 / Cast 16 | fails |
+| cantrip | the searcher's own next draw is Llanowar Elves / a Plains | Cast Helpful Hunter +0.073 [+0.067, +0.079] | Cast 16 / Cast 15 | passes the rule |
+| cantrip, extreme | its next five draws are Elves / Plains | +0.086 [+0.070, +0.102] | Cast 16 / Cast 14 | fails |
+| decklist | the opponent's hidden hand is dealt from a list with four counterspells / none | −0.10 [−0.20, −0.00] | Pass 3 / Pass 2 | fails |
+| canary | the opponent holds Counterspell ×2, a card outside FDN that no belief can deal / Island ×2 | −0.31 [−0.41, −0.21]; the canary reached all 16 of its searches | Pass 14 / Cast 16 | fails |
+
+The rule (docs/012 §2.5): a pair passes when every option's paired ΔQ has a 95% CI inside ±0.1 and
+the chosen actions don't differ (a permutation test, p > 0.01).
+
+- **Clairvoyant MCTS fails five of the six pairs.** It fails as docs/009 found: it plays around a
+  counterspell only when one is really there, and values a cantrip by the card it will draw. The
+  realistic cantrip pair shows a real leak (+0.073, far from zero) that is inside the ±0.1 window,
+  so it passes the rule. Its extreme version fails, which is what the extreme versions are for.
+- **The fair methods give identical searches in both worlds of every pair,** ΔQ 0.000 and the same
+  choice in all 16 seeds. That is by construction, and it is what the test checks: their worlds are
+  drawn from a public view of the position (the opponent's hand as a count, its decklist unknown,
+  the searcher's library top unknown), so the same seed gives the same worlds, and offline search is
+  deterministic given its seed. No canary reached any of their worlds.
+- **What it doesn't test.** There are no known-card controls. The public view drops *every*
+  hidden card, including ones the player legitimately knows, such as a card it saw bounced to the
+  opponent's hand or a card it scried to the top. So the fair methods also ignore information they
+  are entitled to. That costs quality, not fairness. Nothing reuses trees, so docs/012's tree-reuse
+  probe doesn't apply.
+- **The network spot check** runs the counterspell and cantrip pairs with the network
+  *(pending)*.
 
 ## 4. E2: method × budget
 

@@ -488,6 +488,7 @@ def main(argv=None) -> int:
     ap.add_argument("--plot", default=None)
     ap.add_argument("--title", default="Agreement with top 17lands players against compute")
     ap.add_argument("--partial", action="store_true", help="include runs that have not finished")
+    ap.add_argument("--retime", nargs="*", default=None, help="dirs of warm re-timings (their first run is the warm-up)")
     a = ap.parse_args(argv)
     items = load_items(Path(a.items))
     if a.split:
@@ -504,6 +505,15 @@ def main(argv=None) -> int:
     summary = summarize(rows, runs, items, leak)
     if not a.partial:
         summary = [x for x in summary if x["n"] >= len(items)]
+    # warm re-timings: every batch's first run includes JVM start-up and JIT warm-up (about 45
+    # pod-seconds); a retime dir re-runs such runs after a warm-up run, its first record
+    for d in a.retime or []:
+        recs = [json.loads(line) for line in open(Path(d) / "runs.jsonl") if line.strip()][1:]
+        for rec in recs:
+            for x in summary:
+                if x["run_id"] == rec["run_id"]:
+                    x["pod_s_cold"] = x["pod_s"]
+                    x["pod_s"] = rec["pod_s_per_decision"]
     done = {x["run_id"] for x in summary}
     refs = references(items, None)
     out = Path(a.out)
@@ -526,6 +536,13 @@ def main(argv=None) -> int:
             x, y = f"{m}-b{b}-remote-d0.99", f"{m}-b{b}-offline-d0.99"
             if x in done and y in done:
                 contrasts.append(paired(rows, items, x, y))
+    for x in sorted(done):
+        # E2b: every discount arm against the default 0.99 per ply, same method and evaluator
+        for ev in ("offline", "remote"):
+            for m in ("clairvoyant", "pimc4"):
+                base = f"{m}-b1000-{ev}-d0.99"
+                if x.startswith(f"{m}-b1000-{ev}-d") and x != base and base in done and "-s" not in x and "-pri" not in x:
+                    contrasts.append(paired(rows, items, x, base))
     for x in done:
         if "-s1" in x:
             base = x.replace("-s1", "")
