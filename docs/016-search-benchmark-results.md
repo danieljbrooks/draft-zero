@@ -16,6 +16,18 @@ Numbers may move by a point or two, and conclusions marked *tentative* may chang
   <img alt="Two panels, offline search and the trained network, each plotting agreement with top 17lands players (A_set, 35 to 75 percent) against pod-seconds per decision on a log axis. Every search method lies between 47 and 54 percent, a few points above the rule heuristic (47 percent) and chance (44 percent). The fair methods (PIMC with 1 and 4 worlds, IS-MCTS; colored) sit at or above the clairvoyant search (gray, hollow). Lines rise a few points from 100 to 1,000 simulations and flatten after. On the network panel, the network's policy with no search sits far above everything at 69 percent." src="img/016-frontier-light.png">
 </picture>
 
+- **Why agreement is only about 50%: the searches are far more active than top players, and the
+  headline metric mostly measures passivity** (§8).
+  - Top players attacked with the creature in 46% of attack decisions and blocked in 20% of block
+    decisions. The searches attack 55–67% of the time and block about 50%. On holds they cast
+    something 48–57% of the time.
+  - "Always do nothing" (pass, don't attack, don't block) scores **73.8%**, above every search and
+    above the network's policy.
+  - On balanced measures, offline search roughly matches a network trained to imitate these
+    players on spells, and trails it on attacks.
+  - The searches' disagreements with humans are mostly near-ties in their own values, and even
+    at 3,000 simulations they look less than one turn ahead. The limit is the evaluator and the
+    horizon, not the search method.
 - **Every search agrees with top players about equally, and not much more than a simple
   heuristic.** Across four methods, four budgets and both evaluators, A_set ranges from 47% to 54%,
   macro-averaged over the four decision types. The references: chance 43.7%, the rule heuristic
@@ -363,12 +375,206 @@ network's PIMC arms and per-action and per-turn arms are still running.
 
 ## 7. Follow-ups with the extra budget *(running)*
 
+- **IS-MCTS offline at 10,000 simulations** (on a third pod): it was the only method still gaining
+  at 3,000 (+2.0 points from 1,000). About 12–14 pod-seconds per decision, about $2.
+- **#2b's human-pretrained network inside the search** (§9, step 0): its policy as priors and its
+  human-outcome value head at the leaves, PIMC with 1 world at 100, 300 and 1,000 simulations,
+  plus the same network with priors off at 1,000. About $1.
+
 - **The network's policy as priors** (MageZero's setPriors: softmax at temperature 1.5, plus 0.1 for
   anything but Pass), for all four methods at 300 and 1,000 simulations, on MageZero's own server,
   which returns the policy heads. A 40-decision dev test moved PIMC with 4 worlds at 100
   simulations from 39% to 57%. Too small to trust, but the strongest lead. About $1.75.
 - **PIMC with 1 world, offline, at 10,000 simulations:** docs/012's optional top budget, to see
   where the curve flattens. About $0.65.
+
+## 8. Why agreement is only about 50%
+
+`tools/search_bench/diagnose.py`, on the 1,000 test decisions.
+
+### 8.1 The labels reward doing nothing
+
+| Decision | What the top players did |
+|---|---|
+| Attack | attacked with the creature in 46% |
+| Block | didn't block with it in 80% |
+| Hold | passed, by definition |
+| Spell | Pass counts as a match in 61%, the turns in which the human attacked |
+
+So the *passive* answer is right most of the time, and macro-averaging the four types amplifies
+that:
+
+| Fixed answer | A_set | Strict | Spell | Hold | Attack | Block |
+|---|---|---|---|---|---|---|
+| Always passive: pass, don't attack, don't block | **73.8%** | 58.6% | 61% | 100% | 54% | 80% |
+| Always act: cast, attack, block | 27.8% | | 51% | 0% | 46% | 14% |
+
+"Do nothing" beats every search in this report and the network's policy. The policy's 68.6%
+(§2) is mostly this: it passes on 95% of spell and hold decisions.
+
+### 8.2 The searches are much more active than top players
+
+PIMC with 1 world, offline, 3,000 simulations. The other methods and the network are within a
+few points of it.
+
+| Decision | Top players | The search |
+|---|---|---|
+| Attack: attacks with the creature | 46% | 66% (55% with the network) |
+| Block: blocks with it | 20% | about 50% |
+| Hold: casts or activates something | 0% | 64% |
+| Spell: casts one of the human's spells / another spell / passes | 100% cast | 60% / 30% / 9% |
+
+When the human didn't attack, the search attacked 54% of the time. When the human didn't block,
+it blocked 48% of the time. Humans were no more likely to cast a cheaper spell than a dearer one
+when they differed from the search: the wrong spell splits evenly across cheaper, dearer and
+equal mana value (10% each).
+
+### 8.3 A fairer scoreboard: act or not, then which
+
+Split each decision into *whether* to act, scored by balanced accuracy (the mean of the two
+recalls, so a constant answer scores 0.50), and *which*, given that both acted:
+
+| Agent | Cast or pass (bal. acc.) | Which spell, both cast | Attack or not (bal. acc.) | Block or not (bal. acc.) | Which attacker, both block |
+|---|---|---|---|---|---|
+| Always passive | 0.50 | — | 0.50 | 0.50 | — |
+| #2a gen 18 policy, no search | **0.45** | (8 decisions) | 0.61 | 0.58 | 71% |
+| #2b human-pretrained policy, no search | **0.66** | **67.5%** | **0.73** | 0.54 | 74% |
+| PIMC 1, offline, 100 | 0.57 | 67.6% | 0.60 | 0.56 | 81% |
+| PIMC 1, offline, 3,000 | 0.63 | 66.4% | 0.64 | 0.59 | 81% |
+| IS-MCTS, offline, 3,000 | 0.64 | 66.4% | 0.65 | 0.58 | 84% |
+| Clairvoyant, offline, 3,000 | 0.64 | 64.3% | 0.63 | 0.61 | 78% |
+| PIMC 1, network, 3,000 | 0.65 | 66.5% | 0.60 | 0.57 | 70% |
+
+- **On these measures, search is roughly as good a model of top players as the network trained
+  to imitate them.** It is about equal on whether and which spell, 0.09 behind on attacks and
+  slightly ahead on blocks. The human-pretrained network's block head was never trained on
+  blocks.
+- **More budget helps mostly on whether to act,** 0.57 to 0.63 on cast or pass, not on which
+  spell.
+- **#2a's policy is worse than a constant on cast or pass.** Its 68.6% A_set is all passivity.
+- The "which" columns are small samples: about 340 spell decisions, and 25 blocks.
+
+### 8.4 The disagreements are mostly near-ties
+
+When the search disagrees with the human, the human's best option is usually close behind in the
+search's own values. For PIMC with 1 world at 3,000, offline: the median Q gap is 0.043, 32% of
+gaps are under 0.02, 54% are under 0.05, and 19% are over 0.15. The human's options get about 20%
+of the root's visits. The other methods and the network look the same.
+
+The search usually can't tell the human's play from its own. Ties go to the more active option,
+which suggests the evaluator (the heuristic's life, hand and board terms, or #2a's value head)
+slightly favours immediate board changes.
+
+### 8.5 The search looks less than a turn ahead
+
+| Simulations | Mean leaf depth, in decisions | Mean turns crossed per simulation |
+|---|---|---|
+| 100 | 5.7 | 0.26 |
+| 1,000 | 11.1 | 0.69 |
+| 3,000 | 14.4 | 0.95 |
+
+PIMC with 1 world, offline; the network's trees are the same shape. A Magic turn is about 16
+decisions deep in these trees (§2). So even at 3,000 simulations the typical leaf is within the
+current turn or early in the opponent's next one, and the static evaluator judges it there.
+Holding a spell pays off in *later* turns: at instant speed, or by not over-extending into a
+sweeper. That value lies past the horizon. This is the likeliest reason budget helps holds most.
+
+### 8.6 It's the evaluator, not the method
+
+| Pair of runs | Same choice |
+|---|---|
+| Same method and settings, second seed (PIMC 4, 1,000) | 97% offline, 94% network |
+| PIMC 1 against clairvoyant, or against IS-MCTS, offline, 3,000 | 78% |
+| PIMC 1 at 1,000 against 3,000, offline | 83% |
+| PIMC 1 offline against PIMC 1 network, 3,000 | **64%** |
+| PIMC 1 offline, 3,000, against the human-pretrained policy | 50% |
+| #2a's policy against the human-pretrained policy | 37% |
+
+Search methods sharing an evaluator agree with each other 78–83% of the time. Changing the
+evaluator changes a third of the choices, yet agreement with humans stays about the same. The
+method matters little; what scores the leaves matters a lot, and neither evaluator scores like a
+top player.
+
+### 8.7 What the ceiling might be
+
+Nothing here measures it directly. The best predictor of these players available is #2b's
+network, trained on their decisions: it reaches 73% top-1 on its own held-out turn-start set
+(docs/013) and the balanced scores above. docs/008 found no skill signal among humans, so their
+choices are partly style. A fair guess for the ceiling on these four types is 0.70–0.80 balanced
+accuracy on whether to act and 70–80% on which.
+
+### 8.8 What this means for the benchmark
+
+- **Change the headline.** Macro A_set over these four types mostly measures passivity. Replace it
+  with the act/which split of §8.3, or with per-type balanced accuracy, before using the benchmark
+  for decisions.
+- **Holds need a fairer label.** "Pass" is the label only because the human cast nothing all
+  turn; some of those turns may have held for instant-speed plays that 17lands doesn't time.
+
+## 9. A plan: imitation learning as the starting point
+
+**Principle.** Human play is a better starting point than the search's own evaluator. The best
+human model agrees with top players at least as well as any search here, and knows *when to do
+nothing*. docs/013 found two failure modes to design around:
+- with priors off, the search never reads the human policy;
+- heavy pretraining destroyed the network's plasticity, and self-play overwrote the human policy
+  within one epoch.
+
+So deliver human knowledge **through the search's prior and value**, pretrain **lightly**, and
+**keep it anchored** during self-play.
+
+**Step 0 — test the idea with what exists (running now, ~$1).**
+- Put #2b's starting network inside PIMC with 1 world: its human policy as PUCT priors
+  (MageZero's setPriors), and its value head, trained on human game results, at the leaves. Budgets
+  100, 300 and 1,000, plus the same network with priors off.
+- The same with #2a's gen 18 policy as priors (§7) says whether any policy prior helps, or only a
+  human one.
+- **Go on if** the human-prior search beats both the human policy alone and the priors-off search on
+  the balanced measures of §8.3.
+
+**Step 1 — a human network for all four decision types (2–3 days, ~$3).**
+- **Rebuild the imitation tables** from 1 game in 8 instead of 1 in 48: about 100k games, 6× the
+  data. Add block decisions (`state_after_user_turn` with block labels) and mid-turn priority.
+  Hold out sb-v1's games and their mirrored partners; this time the pairs file exists.
+- **Train lightly:** policy heads for priority, attack, block and target, and the value head on
+  game results. Stop early, well before the 73%-top-1 point of docs/011, then shrink and perturb
+  (docs/013 §2.3).
+- **Screen offline before any run:**
+  - sb-v1's balanced scores, policy only;
+  - the plasticity test of docs/013 §2.3, which must match a fresh network's held-out loss
+    (≤ 0.83).
+
+**Step 2 — tune the human-prior search (1 day, ~$3).**
+- On sb-v1's dev split: prior temperature 1, 1.5 and 3; c_puct 0.5, 1 and 2; the value from the
+  human-outcome head, from #2a gen 18, or offline. PIMC with 1 world at 300 and 1,000.
+- **Then a small play test,** docs/012's E9 at reduced size: 200 games of the best setting against
+  PIMC with 1 world offline at 300. Agreement alone can't say whether the search improves on the
+  human policy or just copies it (piKL, docs/012 §2.10).
+
+**Step 3 — self-play from the human start (1–2 weeks, about $25–30, like #2a).**
+- **Start:** step 1's network, shrunk and perturbed.
+- **Search:** PIMC with 1 world. It costs the same as today's search and passes the leak test
+  (§3), so self-play stops training on the opponent's real hand. Priors on, at step 2's
+  temperature.
+- **Keep the human anchor:**
+  - add a KL penalty from the frozen human policy to the policy loss, piKL-style, at weight λ,
+    annealed from 1 toward 0.1 over the run;
+  - mix 10–20% human decisions into every training batch;
+  - blend each value target with the human-outcome head's prediction for the first few
+    generations.
+- **Guardrails each generation:**
+  - sb-v1's balanced scores;
+  - win rate against gen 0 and against raw search;
+  - 17lands GIH ρ;
+  - the plasticity test every five generations.
+- **Stop** if balanced agreement falls below the human policy's for two generations while win
+  rate is flat. That is the #2b failure mode.
+
+**Step 4 — decide.** Compare with #2a at equal spend, in play: win rate against raw search, and
+the league.
+
+**Not in this plan, but next.** The search looks less than a turn ahead (§8.5). A faster engine
+(docs/015) or an end-of-turn evaluator would let it see the turns where holding a card pays off.
 
 ## Appendix: reproducing
 

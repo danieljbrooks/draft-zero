@@ -51,6 +51,8 @@ def run_id(r: dict) -> str:
         rid += f"-d{r['discount']:g}{'' if r['unit'] == 'ply' else '-' + r['unit']}"
     if r.get("priors"):
         rid += "-pri"
+    if r.get("net"):
+        rid += f"-net{r['net']}"
     if r.get("seed", 0):
         rid += f"-s{r['seed']}"
     return rid
@@ -181,12 +183,16 @@ def main(argv=None) -> int:
     ap.add_argument("--d-action", type=float, default=0.9, help="E2b per-action discount (from E0)")
     ap.add_argument("--d-turn", type=float, default=0.7, help="E2b per-turn discount (from E0)")
     ap.add_argument("--only", default=None, help="run ids to run, comma-separated")
+    ap.add_argument("--net", default=None, help="tag for a network other than #2a gen 18 (run ids get -net<tag>)")
     a = ap.parse_args(argv)
 
     out = Path(a.out)
     (out / "decisions").mkdir(parents=True, exist_ok=True)
     items = load_items(Path(a.items), a.split or None, a.limit, a.types)
     runs = grid(a.grid, a.evaluator, a)
+    if a.net:
+        for r in runs:
+            r["net"] = a.net
     if a.only:
         keep = set(a.only.split(","))
         runs = [r for r in runs if run_id(r) in keep]
