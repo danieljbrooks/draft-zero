@@ -790,7 +790,7 @@ the league.
 
 ## Appendix: reproducing
 
-The code is on branch `search-benchmark`:
+The code is on `main`:
 
 - `java/mzbridge/src/mage/player/ai/BenchSearch.java`: the search driver.
 - `java/mzbridge/src/org/draftzero/mzbridge/Bench.java`: the `bench` op.
