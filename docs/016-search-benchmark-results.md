@@ -588,7 +588,8 @@ roughly:
     about 88% of blocks (docs/008 §3.3).
   - *Targets and modes:* no label resolver yet.
   - *Mid-turn priority:* the table exists but was never used. Its orders are imputed.
-  - *Fidelity:* about a third of turn states fall outside tiers T0 and T1 and are dropped.
+  - *Fidelity:* about a quarter of turn states (26% in docs/011's build) fall outside tiers T0 and T1
+    and are dropped.
 - **Holding out the benchmark at scale.** A 1-in-1 build would include sb-v1's games' drafts. Hold
   out every draft of sb-v1's 1,874 games and their mirrored partners (about 11k rows) at the draft
   level, not the row level.
