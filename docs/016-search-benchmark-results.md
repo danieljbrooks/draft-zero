@@ -295,18 +295,37 @@ the chosen actions don't differ (a permutation test, p > 0.01).
 A_set, macro-averaged over the four types (95% CI about ±3.3 points; paired differences are much
 tighter). Pod-seconds per decision in brackets. † still running.
 
-| | 100 | 300 | 1,000 | 3,000 |
-|---|---|---|---|---|
-| **Offline search** | | | | |
-| Clairvoyant MCTS (fails E1) | 46.9% (0.027) | 50.5% (0.08) | 52.7% (0.34) | 53.5% (1.42) |
-| PIMC, 1 world | 48.1% (0.026) | 50.9% (0.08) | 52.7% (0.34) | **54.2%** (1.27) |
-| PIMC, 4 worlds | 50.3% (0.023) | 50.4% (0.07) | 50.2% (0.32) | 52.9% (1.18) |
-| IS-MCTS | 49.5% (0.09) | 49.1% (0.28) | 52.1% (1.04) | **54.2%** (3.59) |
-| **Network (#2a gen 18, priors off)** | | | | |
-| Clairvoyant MCTS (fails E1) | 48.1% (0.15) | 47.6% (0.42) | 49.7% (1.40) | 50.9% (4.27) |
-| PIMC, 1 world | 48.7% (0.14) | 49.2% (0.41) | 52.8% (1.39) | **53.3%** (4.21) |
-| PIMC, 4 worlds | 51.4% (0.14) | 50.0% (0.41) | 50.4% (1.38) | 51.5% (4.16) |
-| IS-MCTS | 47.4% (0.18) | 47.3% (0.49) | 48.1% (1.66) | 50.7% (5.26) |
+| | 100 | 300 | 1,000 | 3,000 | 10,000 (§7) |
+|---|---|---|---|---|---|
+| **Offline search** | | | | | |
+| Clairvoyant MCTS (fails E1) | 46.9% (0.027) | 50.5% (0.08) | 52.7% (0.34) | 53.5% (1.42) | |
+| PIMC, 1 world | 48.1% (0.026) | 50.9% (0.08) | 52.7% (0.34) | **54.2%** (1.27) | † |
+| PIMC, 4 worlds | 50.3% (0.023) | 50.4% (0.07) | 50.2% (0.32) | 52.9% (1.18) | |
+| IS-MCTS | 49.5% (0.09) | 49.1% (0.28) | 52.1% (1.04) | **54.2%** (3.59) | **55.4%** (14.75) |
+| **Network (#2a gen 18, priors off)** | | | | | |
+| Clairvoyant MCTS (fails E1) | 48.1% (0.15) | 47.6% (0.42) | 49.7% (1.40) | 50.9% (4.27) | |
+| PIMC, 1 world | 48.7% (0.14) | 49.2% (0.41) | 52.8% (1.39) | **53.3%** (4.21) | |
+| PIMC, 4 worlds | 51.4% (0.14) | 50.0% (0.41) | 50.4% (1.38) | 51.5% (4.16) | |
+| IS-MCTS | 47.4% (0.18) | 47.3% (0.49) | 48.1% (1.66) | 50.7% (5.26) | |
+
+Balanced score (§8.3), same runs:
+
+| | 100 | 300 | 1,000 | 3,000 | 10,000 |
+|---|---|---|---|---|---|
+| **Offline search** | | | | | |
+| Clairvoyant MCTS (fails E1) | 0.567 | 0.591 | 0.613 | 0.627 | |
+| PIMC, 1 world | 0.578 | 0.589 | 0.597 | 0.620 | † |
+| PIMC, 4 worlds | 0.576 | 0.602 | 0.603 | 0.622 | |
+| IS-MCTS | 0.591 | 0.585 | 0.614 | 0.623 | **0.636** |
+| **Network (#2a gen 18, priors off)** | | | | | |
+| Clairvoyant MCTS (fails E1) | 0.568 | 0.550 | 0.559 | 0.575 | |
+| PIMC, 1 world | 0.581 | 0.573 | 0.604 | 0.607 | |
+| PIMC, 4 worlds | 0.587 | 0.592 | 0.588 | 0.590 | |
+| IS-MCTS | 0.581 | 0.572 | 0.575 | 0.591 | |
+
+On the balanced score, offline search improves steadily with budget for every method, and the
+four methods at 3,000 lie within 0.007 of each other. The network's searches are flatter and lower,
+and only PIMC with 1 world reaches 0.60. The one clear gain from more search is IS-MCTS at 10,000.
 
 Paired differences (A − B, points, 95% CI over games):
 
@@ -321,7 +340,8 @@ Paired differences (A − B, points, 95% CI over games):
 | PIMC 1: 3,000 − 100 | **+6.1 (+2.3, +9.6)** | **+4.6 (+0.9, +8.2)** |
 | PIMC 1: 3,000 − 1,000 | +1.4 (−1.1, +4.2) | +0.4 (−2.2, +3.2) |
 | Clairvoyant: 3,000 − 100 | **+6.7 (+3.1, +10.6)** | +2.7 (−0.8, +6.4) |
-| IS-MCTS: 3,000 − 1,000 | +2.0 (0.0, +4.1) | † |
+| IS-MCTS: 3,000 − 1,000 | +2.0 (0.0, +4.1) | **+2.7 (+0.4, +5.2)** |
+| IS-MCTS: 10,000 − 3,000 | +1.2 (−0.6, +3.2) | |
 
 ### 4.2 By decision type
 
@@ -356,29 +376,38 @@ search in play and its value head improved slowly.
   <img alt="A_set at 1,000 simulations for six discount arms (1.0, 0.99, 0.95, 0.9 per ply; 0.95-matched per action; 0.95-matched per turn), for clairvoyant MCTS and PIMC with 4 worlds, offline (filled) and network (hollow). Everything lies between 49 and 53 percent with overlapping CIs; 0.9 per ply is lowest." src="img/016-discount-light.png">
 </picture>
 
-Paired differences from the default 0.99 per ply, at 1,000 simulations (points, 95% CI). The
-network's PIMC arms and per-action and per-turn arms are still running.
+Paired differences from the default 0.99 per ply, at 1,000 simulations (points, 95% CI):
 
-| Arm | Clairvoyant, offline | PIMC 4, offline | Clairvoyant, network |
-|---|---|---|---|
-| 1.0 per ply (no discount) | −0.3 (−1.5, +0.9) | −0.1 (−1.1, +0.7) | +0.8 (−0.6, +2.4) |
-| 0.95 per ply | −0.8 (−2.8, +1.3) | −0.5 (−2.3, +1.3) | 0.0 (−2.3, +2.3) |
-| 0.9 per ply | **−3.2 (−5.6, −0.5)** | −1.2 (−3.5, +0.8) | −1.0 (−3.9, +1.9) |
-| 0.930 per action (matches 0.95 per ply) | +0.3 (−2.0, +2.9) | +1.3 (−0.8, +3.3) | † |
-| 0.435 per turn (matches 0.95 per ply) | −0.2 (−3.0, +2.6) | +2.0 (−0.4, +4.3) | † |
+| Arm | Clairvoyant, offline | PIMC 4, offline | Clairvoyant, network | PIMC 4, network |
+|---|---|---|---|---|
+| 1.0 per ply (no discount) | −0.3 (−1.5, +0.9) | −0.1 (−1.1, +0.7) | +0.8 (−0.6, +2.4) | 0.0 (−1.3, +1.2) |
+| 0.95 per ply | −0.8 (−2.8, +1.3) | −0.5 (−2.3, +1.3) | 0.0 (−2.3, +2.3) | −0.8 (−2.7, +1.0) |
+| 0.9 per ply | **−3.2 (−5.6, −0.5)** | −1.2 (−3.5, +0.8) | −1.0 (−3.9, +1.9) | −2.2 (−4.5, +0.1) |
+| 0.930 per action (matches 0.95 per ply) | +0.3 (−2.0, +2.9) | +1.3 (−0.8, +3.3) | +0.2 (−2.4, +2.8) | −0.2 (−2.2, +2.0) |
+| 0.44 per turn (matches 0.95 per ply) | −0.2 (−3.0, +2.6) | +2.0 (−0.4, +4.3) | +1.4 (−1.6, +4.4) | +0.6 (−1.8, +3.3) |
 
-- **No arm improves agreement.** The only significant effect is a loss: 0.9 per ply costs
-  clairvoyant MCTS 3.2 points offline, mostly on attacks (61% → 53%).
+The per-turn discount is 0.435 offline and 0.446 with the network, each matched to its own trees
+(§2).
+
+- **No arm improves agreement, with either evaluator.** The only significant effect is a loss: 0.9
+  per ply costs clairvoyant MCTS 3.2 points offline, mostly on attacks (61% → 53%). It is the lowest
+  arm in all four columns.
 - **The prediction isn't borne out in agreement.** docs/012 predicted that the discount would help
   clairvoyant MCTS more than PIMC, because the stalling it fixes needs knowledge of the top card.
   Agreement can't see that kind of stalling (§6).
 - **The unit barely matters.** Per action and per turn are within noise of per ply at matched
   strength. The per-turn discount lifts PIMC with 4 worlds on attacks (60% → 70%) but not overall.
-- **The free check:** a stronger per-ply discount shifts little search away from options that take
-  sub-decisions (a spell's target, the next attacker's question). Among decisions offering both
-  kinds, the visit share on multi-step options is 0.394 at 1.0 per ply and 0.388 at 0.9 per ply for
-  clairvoyant MCTS, and 0.399 to 0.386 for PIMC with 4 worlds. The per-turn discount moves it most
-  (0.383 and 0.380).
+- **The free check:** does a stronger per-ply discount move search away from options that take
+  sub-decisions (a spell's target, the next attacker's question)? Look at the decisions offering
+  both kinds, and the visit share on the multi-step options:
+  - **Offline, barely:** 0.394 at 1.0 per ply and 0.388 at 0.9 for clairvoyant MCTS; 0.399 to 0.386
+    for PIMC with 4 worlds.
+  - **With the network, clearly:** 0.392, 0.388, 0.380 and 0.356 at 1.0, 0.99, 0.95 and 0.9 per ply
+    for clairvoyant MCTS.
+  - **Per unit:** the per-action and per-turn arms sit between (0.372 and 0.377).
+
+  So the per-ply unit does tax multi-step options, as the review comment suspected, by about 4
+  points of visit share at 0.9. It doesn't show in agreement.
 
 ## 6. Discussion (tentative)
 
