@@ -1,7 +1,6 @@
 # Search benchmark, first experiment: results
 
-**Status: final, 2026-09-29 10:30 PDT,** except one run still going: PIMC with 1 world, offline, at
-10,000 simulations (§7). The plan is [docs/012](012-search-benchmark.md) §2, and this report
+**Status: final, 2026-09-29 11:50 PDT.** The plan is [docs/012](012-search-benchmark.md) §2, and this report
 follows its order. It covers:
 
 - **the first experiment:** E0, E1, E2 and E2b, 16 offline and 16 network runs of E2 and 20 runs of
@@ -28,7 +27,8 @@ of §8.3, where any constant answer scores 0.50. Three panels: offline search, #
 - **Every search agrees with top players about equally, and not much more than a simple
   heuristic,** by the planned headline. A_set, macro-averaged over four decision types, is 47–55%
   for every method, budget and evaluator. Chance is 43.7% and the rule heuristic 46.9%. The best
-  priors-off search is IS-MCTS offline at 10,000 simulations (55.4%).
+  priors-off searches are offline at 10,000 simulations: IS-MCTS (55.4%) and PIMC with 1 world
+  (55.3%).
 - **Why so low: the searches are far more active than top players, and A_set mostly measures
   passivity** (§8).
   - Top players attacked with the creature in 46% of attack decisions and blocked in 20% of
@@ -40,8 +40,8 @@ of §8.3, where any constant answer scores 0.50. Three panels: offline search, #
   - Methods that share an evaluator agree with each other 78–83% of the time. The limit is what
     scores the leaves, and the horizon, not the search method.
 - **On a balanced score, where any constant answer gets 0.50** (§8.3), the picture is clearer:
-  - offline search climbs steadily with budget, from 0.57 at 100 simulations to 0.64 for
-    IS-MCTS at 10,000;
+  - offline search climbs steadily with budget, from 0.57 at 100 simulations to 0.63–0.64 at
+    10,000;
   - #2a's network searches sit lower, 0.55–0.62;
   - #2b's human-pretrained policy alone scores 0.646, and search with it as priors 0.64–0.65, the
     best of anything;
@@ -56,14 +56,15 @@ of §8.3, where any constant answer scores 0.50. Three panels: offline search, #
 - **More search helps slowly.**
   - From 100 to 3,000 simulations, clairvoyant MCTS and PIMC with 1 world gain 6–7 points offline.
     From 1,000 to 3,000 they gain 1–3.
-  - IS-MCTS is still gaining at 10,000: +1.2 points over 3,000, +3.3 over 1,000.
+  - At 10,000 they still gain about a point: IS-MCTS reaches 55.4% and PIMC with 1 world 55.3%,
+    level with each other, at 14.8 and 6.5 pod-seconds per decision.
   - Most of the gain is on holds, where more search learns to wait (§4.2).
 - **Of the methods:**
   - **PIMC with 1 world is the practical choice.** It costs the same as today's search, is fair,
     and is never significantly beaten at equal budget.
   - **Four worlds don't help:** each tree gets a quarter of the budget.
-  - **IS-MCTS** ties PIMC offline at about 3× the cost, trails it with the network at 1,000
-    (−4.8 points), and is best only at 10,000, at 14.8 pod-seconds per decision.
+  - **IS-MCTS** ties PIMC offline at about 2–3× the cost, from 3,000 to 10,000 simulations, and
+    trails it with the network at 1,000 (−4.8 points).
 - **The networks:**
   - **#2a's value head** adds nothing over the offline heuristic: network and offline searches
     agree within ±3 points at every setting.
@@ -77,7 +78,7 @@ of §8.3, where any constant answer scores 0.50. Three panels: offline search, #
 - **Compute and cost:**
   - Offline search costs 0.02–3.6 pod-seconds per decision (14.8 for IS-MCTS at 10,000). Network
     search costs 0.14–5.3, GPU-bound at about 550–700 evaluations per second across the pod.
-  - The whole study used about $14 of pods: three RTX 3090 pods for about 28 pod-hours, calibration
+  - The whole study used **$14.35 of pods**: three RTX 3090 pods for about 28 pod-hours, calibration
     and follow-ups included.
 - **Next** (§8.8, §9):
   - replace A_set with the balanced score;
@@ -186,7 +187,7 @@ own server.
   - Pod 1 (10.6 h): the network runs of E2, E0's references and the human-prior follow-up.
   - Pod 2 (11.4 h): E1, the offline runs of E0, E2 and E2b, E2b's network runs, E1's network check
     and #2a's priors.
-  - Pod 3 (about 5.8 h): the two 10,000-simulation runs.
+  - Pod 3 (5.7 h): the two 10,000-simulation runs.
 - **Load:** 30 bridge workers (one JVM, one search each) for offline search. 32 workers and four
   value-server replicas sharing the GPU for network search. Every search is fresh, so the pod-seconds
   per decision are a batch's wall-clock at full load divided by its 1,000 decisions.
@@ -293,13 +294,13 @@ the chosen actions don't differ (a permutation test, p > 0.01).
 ### 4.1 The grid
 
 A_set, macro-averaged over the four types (95% CI about ±3.3 points; paired differences are much
-tighter). Pod-seconds per decision in brackets. † still running.
+tighter). Pod-seconds per decision in brackets.
 
 | | 100 | 300 | 1,000 | 3,000 | 10,000 (§7) |
 |---|---|---|---|---|---|
 | **Offline search** | | | | | |
 | Clairvoyant MCTS (fails E1) | 46.9% (0.027) | 50.5% (0.08) | 52.7% (0.34) | 53.5% (1.42) | |
-| PIMC, 1 world | 48.1% (0.026) | 50.9% (0.08) | 52.7% (0.34) | **54.2%** (1.27) | † |
+| PIMC, 1 world | 48.1% (0.026) | 50.9% (0.08) | 52.7% (0.34) | **54.2%** (1.27) | 55.3% (6.53) |
 | PIMC, 4 worlds | 50.3% (0.023) | 50.4% (0.07) | 50.2% (0.32) | 52.9% (1.18) | |
 | IS-MCTS | 49.5% (0.09) | 49.1% (0.28) | 52.1% (1.04) | **54.2%** (3.59) | **55.4%** (14.75) |
 | **Network (#2a gen 18, priors off)** | | | | | |
@@ -314,7 +315,7 @@ Balanced score (§8.3), same runs:
 |---|---|---|---|---|---|
 | **Offline search** | | | | | |
 | Clairvoyant MCTS (fails E1) | 0.567 | 0.591 | 0.613 | 0.627 | |
-| PIMC, 1 world | 0.578 | 0.589 | 0.597 | 0.620 | † |
+| PIMC, 1 world | 0.578 | 0.589 | 0.597 | 0.620 | 0.631 |
 | PIMC, 4 worlds | 0.576 | 0.602 | 0.603 | 0.622 | |
 | IS-MCTS | 0.591 | 0.585 | 0.614 | 0.623 | **0.636** |
 | **Network (#2a gen 18, priors off)** | | | | | |
@@ -325,7 +326,7 @@ Balanced score (§8.3), same runs:
 
 On the balanced score, offline search improves steadily with budget for every method, and the
 four methods at 3,000 lie within 0.007 of each other. The network's searches are flatter and lower,
-and only PIMC with 1 world reaches 0.60. The one clear gain from more search is IS-MCTS at 10,000.
+and only PIMC with 1 world reaches 0.60. At 10,000 simulations, IS-MCTS (0.636) and PIMC with 1 world (0.631) gain a little more.
 
 Paired differences (A − B, points, 95% CI over games):
 
@@ -342,6 +343,8 @@ Paired differences (A − B, points, 95% CI over games):
 | Clairvoyant: 3,000 − 100 | **+6.7 (+3.1, +10.6)** | +2.7 (−0.8, +6.4) |
 | IS-MCTS: 3,000 − 1,000 | +2.0 (0.0, +4.1) | **+2.7 (+0.4, +5.2)** |
 | IS-MCTS: 10,000 − 3,000 | +1.2 (−0.6, +3.2) | |
+| PIMC 1: 10,000 − 3,000 | +1.1 (−1.2, +3.6) | |
+| IS-MCTS − PIMC 1, 10,000 | +0.1 (−3.1, +2.9) | |
 
 ### 4.2 By decision type
 
@@ -501,8 +504,15 @@ returns the policy heads.
     prior is the one that improves the balanced score: 0.645 against 0.573 for PIMC with 1 world at
     300. A_set alone would have picked the wrong prior.
 - **PIMC with 1 world, offline, at 10,000 simulations,** the cheapest fair method at docs/012's
-  optional top budget: *finishing at the time of writing*. It runs 25 workers with 4 GB heaps; two
-  of its largest trees ran out of memory and are being rerun with 16 GB.
+  optional top budget.
+  - **55.3% A_set, 0.631 balanced:** level with IS-MCTS at 10,000 (+0.1 points the other way, 95%
+    CI −3.1 to +2.9), and +1.1 over its own 3,000 run (−1.2 to +3.6).
+  - **Cost:** 6.53 pod-seconds per decision, 44% of IS-MCTS's 14.75.
+  - **The two 10,000-simulation runs agree:** past 3,000 the curves gain about a point per tripling,
+    and one world searched deeply does as well as IS-MCTS.
+  - **Memory:** a 10,000-simulation tree caches a game state at every priority node. Three of the
+    1,000 searches ran out of memory in 4 GB heaps (each took down one more search in the same JVM)
+    and were rerun with 16 GB. The pod-seconds include the failed attempts.
 
 ## 8. Why agreement is only about 50%
 
