@@ -34,8 +34,8 @@ It builds on two earlier docs:
 | **Decision quality** | agreement with top 17lands players on 1,000 held-out decisions |
 | **Hidden information** | a pass/fail leak test on about two dozen probe scenarios; it colors the plot |
 | **Compute** | pod-seconds per decision on the RTX 3090 pod at full load |
-| **Runs** | 4 methods × 4 budgets × 2 evaluators = 32; a backprop-discount sweep, 12 more; the references |
-| **Cost** | about 39 pod-hours (~$19.50) for the network runs; offline search runs on the laptop. IS-MCTS needs about a week of engine work first |
+| **Runs** | 4 methods × 4 budgets × 2 evaluators = 32; a backprop-discount sweep, 20 more; the references |
+| **Cost** | about 43 pod-hours (~$21.50) for the network runs; offline search runs on the laptop. IS-MCTS needs about a week of engine work first |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/012-frontier-dummy-dark.png">
@@ -53,8 +53,9 @@ It builds on two earlier docs:
 - **Whether one information-set tree beats separate trees:** IS-MCTS against PIMC, at the same
   budget and at the same compute.
 - **Whether offline search and a trained network tell the same story.**
-- **Whether a backprop discount helps,** and whether it helps fair search as much as it helps the
-  clairvoyant search.
+- **Whether a backprop discount helps,** whether it helps fair search as much as it helps the
+  clairvoyant search, and whether it matters that it's counted per decision rather than per action
+  or per turn.
 
 **The main risk is the proxy.** In chess, adding search to a human-like network gained about 390
 Elo against strong players while its move-matching rose 0.2 points. Stockfish at depths 11–15
@@ -71,7 +72,7 @@ follow-up (§3.1).
 
 ### 1.1 Where search stands in this project
 
-| | Experiment #1 | Experiment #2 (running) | For comparison |
+| | Experiment #1 | Experiment #2 (ended 2026-09-28) | For comparison |
 |---|---|---|---|
 | Simulations per decision | 96, with tree reuse | 300, with tree reuse | AlphaZero: 800 per move in self-play (Silver et al. 2018) |
 | Fresh simulations actually run | median 32 at a budget of 100, in 12 offline games on its engine (docs/008 §6) | not measured | — |
@@ -175,11 +176,13 @@ across the worlds. The best method optionally also runs at 10,000.
   It runs on CPU and is deterministic given a seed. Its weak spot is combat: yes/no and target
   decisions inherit their parent's score until a priority decision lies below them, so attacks and
   blocks need larger budgets (docs/008 §6).
-- **A trained network** from experiment #2, trained on MageZero v0.2.0. The default is run 1's
-  final checkpoint, which learned from self-play only. Run 2 started from a network pretrained on
-  human decisions, which raises agreement for reasons that have nothing to do with search (§2.10).
-  So its starting network appears only as a no-search reference. Both runs end around Sept 29.
-  Priors stay off, as in experiment #2, so the search uses only the network's value head.
+- **A trained network** from experiment #2, trained on MageZero v0.2.0. The default is the final
+  checkpoint of experiment #2a ("run 1"), which learned from self-play only. It didn't beat raw
+  search in play: 47% at gen 0, 50% at gens 8 and 16 (docs/014). Experiment #2b ("run 2") started
+  from a network pretrained on human decisions, which raises agreement for reasons that have
+  nothing to do with search (§2.10). So #2b's starting network appears only as a no-search
+  reference. Both have ended (docs/013, docs/014). Priors stay off, as in experiment #2, so the
+  search uses only the network's value head.
 
 **Held fixed at today's defaults.** Exploration constant c = 1; unvisited options valued at 0;
 final choice by most visits; backprop discount 0.99, except in the sweep below; duplicate-state
@@ -204,6 +207,27 @@ its board games: Schrittwieser et al. 2020.)
 - **What to watch:** a per-ply discount also shrinks a distant loss. A loss 20 plies away counts as
   −0.82 at 0.99 and −0.36 at 0.95, which in principle rewards delaying it. The per-type results on
   holds and attacks show whether the discount trades one kind of stalling for another.
+- **Decision granularity,** also suggested in review. The discount is applied per decision ply,
+  and Magic splits one logical action into a varying number of decisions. A spell with a target is
+  at least two plies (cast, then the target pick); a creature spell is one. At 0.9 per ply, the
+  removal spell's value is discounted to 0.81 by the time its action completes, the creature's to
+  0.9, though no game time has passed. So part of what looks like less stalling could be the
+  search avoiding actions with more sub-choices. Two additions separate the effects:
+  1. **A free check.** Each root option records how many sub-decisions it takes before its action
+     completes. Across the per-ply arms, does a stronger discount shift value away from options
+     with more of them?
+  2. **Two more arms, discounting per unit of game time instead of per ply:**
+     - **per logical action:** only edges out of priority decisions are discounted. Targets, modes,
+       X values and yes/no questions pass their value up undiscounted, and a whole attack or block
+       declaration counts as one action, since it starts at a priority checkpoint;
+     - **per turn:** the discount applies once for each turn between a node and its parent.
+
+     Each is set to the same average strength as 0.95 per ply, using E0's measured plies per action
+     and per turn, so the three arms differ only in where the discount lands. They use E2b's
+     methods, budget and evaluators.
+
+  A discount counted per action or per turn also carries across engines, which split an action
+  into different numbers of decisions.
 
 **References.** Chance (uniform over the options). The rule heuristic ("play a land, else the
 biggest spell; attack when power is at least the best blocker's toughness") and the network's
@@ -218,7 +242,7 @@ docs/008's pipeline.
 docs/008's "top" group (90,719 games). The bucket includes the game itself, so without the
 100-game floor the filter selects on the outcome (docs/008 §3.5).
 
-**Held out.** Only games outside every imitation table, docs/008 §7.3's and experiment #2 run 2's,
+**Held out.** Only games outside every imitation table, docs/008 §7.3's and experiment #2b's,
 with both sides of a mirrored game excluded together. A network trained on a decision mustn't be
 scored on it.
 
@@ -284,8 +308,8 @@ paired differences of about 3 points are detectable.
 
 **The ceiling.** Top players aren't consistent with each other, or with themselves, so no agent
 reaches 100%. The ceiling can't be measured directly, because meaningful positions almost never
-recur. E0 puts a floor under it: the agreement, with no search, of run 2's starting network, which
-was pretrained on human decisions. The plot's band is a placeholder.
+recur. E0 puts a floor under it: the agreement, with no search, of experiment #2b's starting
+network, which was pretrained on human decisions. The plot's band is a placeholder.
 
 ### 2.4 Hidden cards in the test positions
 
@@ -440,13 +464,13 @@ re-measures them. On the laptop, the coach ran about 600 offline simulations/s p
 | **E0** References and calibration | chance, the rule heuristic, MAD AI; a second seed for PIMC with 4 worlds at 1,000, for test–retest noise; throughput per method, including IS-MCTS's cost per simulation | the network's policy with no search; the same for run 2's starting network, pretrained on human decisions (the ceiling's floor); the same second seed; throughput | ~2 |
 | **E1** The hidden-information test | the full probe set for all four methods and MAD AI | the counterspell and cantrip pairs | ~1 |
 | **E2** Method × budget | 4 methods × 4 budgets = 16 runs | the same 16 runs | ~29 |
-| **E2b** Backprop discount | 1.0, 0.95 and 0.9 at 1,000 simulations, for clairvoyant MCTS and PIMC with 4 worlds: 6 runs | the same 6 runs | ~7 |
-| | | **Total** | **~39 (~$19.50)** |
+| **E2b** Backprop discount | 1.0, 0.95 and 0.9 per ply, and 0.95-equivalent per action and per turn, at 1,000 simulations, for clairvoyant MCTS and PIMC with 4 worlds: 10 runs | the same 10 runs | ~11 |
+| | | **Total** | **~43 (~$21.50)** |
 
 IS-MCTS's pod-hours assume a simulation costs about three times today's, since it replays its
 path from the root. That's a guess, and E0 measures it. The optional 10,000-simulation runs for the
 best method add about 11 pod-hours (~$5.50), or about 33 if the best method is IS-MCTS. The offline
-runs total about 34M simulations: hours to a day on the laptop, or about 24 pod-hours if moved to
+runs total about 38M simulations: hours to a day on the laptop, or about 26 pod-hours if moved to
 the pod.
 
 **Order:**
@@ -455,8 +479,8 @@ the pod.
    everything else can run while it's built.
 2. **Laptop:** E0's and E1's offline parts, then E2's and E2b's offline runs, as soon as the
    harness works, and IS-MCTS's as soon as it's built.
-3. **Pod, after experiment #2's runs end around Sept 29:** E0's and E1's network parts, then E2's
-   and E2b's network runs.
+3. **Pod** (experiment #2 has ended, so its networks are ready): E0's and E1's network parts, then
+   E2's and E2b's network runs.
 4. **Write-up:** the plot, per-type breakdowns, and a short report.
 
 ### 2.8 The plot
@@ -472,7 +496,7 @@ The plot at the top of this doc is a dummy with made-up numbers.
 - **The shaded band** stands in for the unknown ceiling (§2.3).
 
 Two companion plots use the same rows: agreement by decision type, and E2b's agreement against the
-discount for each method and evaluator. The script that draws the dummy is
+discount, by unit, for each method and evaluator. The script that draws the dummy is
 `tools/search_bench/dummy_frontier_plot.py`.
 
 <details>
@@ -502,9 +526,10 @@ clairvoyant MCTS, PIMC with 1 and 4 worlds, and IS-MCTS.
 | Piece | Where | Builds on |
 |---|---|---|
 | Item builder: sample, rebuild, label, canonicalize, filter, split, freeze | `src/draftzero/gameplay/`, a new `search_bench` module | `seventeenlands.py`, `reconstruct.py`, `labels.py`, `turnreplay.py` |
-| A benchmark mode for the coach op: method (IS-MCTS included), budget, backprop discount and seeds per request; summed visits for PIMC; the whole root back; per-search counters and timers | `java/mzbridge` | the `coach` op, which can't set the discount today |
+| A benchmark mode for the coach op: method (IS-MCTS included), budget, backprop discount and its unit, and seeds per request; summed visits for PIMC; the whole root back, with each option's sub-decisions; per-search counters and timers | `java/mzbridge` | the `coach` op, which can't set the discount today |
+| **The discount's unit,** behind a config switch: per ply (today), per logical action (only edges out of priority decisions), or per turn. A few lines | the XMage fork | `MCTSNode.backpropagate` |
 | **IS-MCTS,** behind a flag: world-independent action keys, a world dealt every iteration with its path replayed from the root, availability counts in the selection rule. The long pole: about a week | the XMage fork | `ComputerPlayerMCTS2`, `MCTSNode`; the replay reuses `validateState`'s scripted path; design in docs/009 §6.4 |
-| The bridge built against the v0.2.0 bundle (the local build links exp #1's v0.1 jars) | `java/mzbridge` | run 2's handoff did the same |
+| The bridge built against the v0.2.0 bundle (the local build links exp #1's v0.1 jars) | `java/mzbridge` | experiment #2b's setup did the same (docs/011) |
 | The leak test: pairs, extreme versions, controls, canaries | `tools/gameplay/` | `hidden_info_leak.py`, `MadProbe.java` |
 | A pod runner: bridge workers plus the inference server, a queue that keeps the pod full, cgroup-based load sampling | `deploy/`, `src/draftzero/` | `tools/throughput_bench.py` |
 | Analysis: scores, cluster bootstrap, paired tests, the plot | `tools/search_bench/` | the dummy script |
@@ -546,7 +571,7 @@ starts every decision with a fresh tree.
     bands, and the coach's grades didn't track player skill (docs/008 §7.3, §8.3).
   - **Human choices are noisy and carry style,** so a few points of agreement may be style, not
     skill.
-  - **A human-trained network agrees with humans by construction.** That's why run 2's starting
+  - **A human-trained network agrees with humans by construction.** That's why #2b's starting
     network is only a reference here.
 
   So the first experiment claims agreement only. If the curves stay flat as budgets grow, the
@@ -566,6 +591,12 @@ starts every decision with a fresh tree.
 - **Offline search is weak at combat** at small budgets (§2.1). Per-type results will show it.
 - **The discount sweep is small:** two methods at one budget. A discount that helps at 1,000
   simulations may not help at 100 or at 3,000.
+- **The per-action and per-turn strengths are matched on average.** They rest on E0's measured plies
+  per action and per turn. Where those vary a lot between positions, matching the average won't
+  match every tree.
+- **#2a's network didn't beat raw search in play** (docs/014), so the network panel may look much
+  like the offline one. That would itself be worth knowing: with priors off the search reads only
+  the value head, which improved slowly (docs/014 §2.8).
 - **Labels are imperfect.** Set labels are lenient, the orders of replayed turns are imputed, block
   pairings are unique only 88% of the time, and states are reconstructions.
 - **The data is early-format.** The FDN file covers the set's first five weeks (docs/008 §3.1).
@@ -587,7 +618,8 @@ starts every decision with a fresh tree.
    iteration?
 4. **The budgets.** Is 100 to 3,000 simulations the right range? Is 10,000 worth adding?
 5. **The discount.** Are 1.0, 0.99, 0.95 and 0.9 the right values, and is 1,000 simulations the
-   right budget to test them at?
+   right budget to test them at? Are per ply, per logical action and per turn the right units to
+   compare?
 6. **The evaluators.** Are offline search and one trained network the right pair, and which
    experiment #2 network?
 7. **The decisions.** Is the mix in §2.2 right? Is a decision type missing, or not worth its
@@ -756,7 +788,7 @@ opponent's nodes.
 | PIMC aggregation | the coach averages each option's Q over worlds and ranks by it; the first experiment uses summed visits | summed visits; mean Q | docs/009 §5.4 proposes summed visits |
 | Duplicate actions | copies of a card are separate root children with one prior, and split their visits (15.2% of decisions, docs/008 §6) | merged in the search; not | spends visits on real alternatives |
 | `prune_duplicate_states` | off: draft-zero's `game.yml` omits the key (MageZero's own sets it on) | on; off | transpositions: two orders of the same plays reach one state |
-| `backprop_discount` | 0.99 per ply | swept in the first experiment (E2b); extend it to IS-MCTS and to other budgets | prefers faster wins; changes long-horizon values |
+| `backprop_discount` | 0.99 per ply | swept in the first experiment (E2b), per ply, per action and per turn; extend it to IS-MCTS and to other budgets | prefers faster wins; changes long-horizon values |
 | Leaf evaluator | the network's value, or the offline heuristic | network; heuristic; a blend | AlphaGo blended its value network with rollouts |
 | Opponent responses | a node whenever the opponent has something to play, and at combat checkpoints | as today; only instant-speed plays that could matter; none (MAD-style, blind) | fewer irrelevant opponent nodes deepen the tree |
 | Evaluations in flight per search | one thread, up to 4 pending network calls, with a virtual loss of −1 | 1, 4, 8, 16 | latency against quality |
@@ -798,7 +830,7 @@ Pod-hours at the first experiment's throughput assumptions.
 | **E3** | Depth and horizon (§3.3) | the best method at 3,000 with ply caps 1, 2, 4, 8 and horizons (end of step, turn, opponent's turn) | dev | ~7 |
 | **E4** | Worlds and beliefs (§3.4) | PIMC with K = 1–32; particle IS-MCTS with 4, 16 and 64 worlds; IS-MCTS with the opponent's nodes keyed by its own information; all at a fixed 1,000; beliefs B1–B3 | dev, then test | ~7 |
 | **E5** | Other settings (§3.5), plus Gumbel root and human anchoring | about 24 single-setting arms on the best method at 1,000; the 3 best combinations confirmed at 1,000 and 3,000 | dev, then test | ~21 |
-| **E6** | Network × search | more networks (run 2's, then the first one trained on fair self-play) × 100, 1,000 and 3,000 | test | ~9 |
+| **E6** | Network × search | more networks (#2b's, then the first one trained on fair self-play) × 100, 1,000 and 3,000 | test | ~9 |
 | **E7** | The simulated opponent | the best method with a policy opponent at 1,000 and 3,000, plus the holder-side scenarios | test, probes | ~7 |
 | **E8** | Latency and layout | JVM splits and threads per search, 100 items at 1,000 | subset | ~2 |
 | | **Total** | | | **about 107 (~$54)** |
@@ -897,6 +929,7 @@ search:
   noise: false
   prune_duplicate_states: false
   backprop_discount: 0.99
+  discount_unit: ply          # ply | action | turn
 seeds: [1]
 network: {checkpoint: exp2-run1-final, sha256: "<sha256>", engine: MageZero v0.2.0, trained_on: self-play}
 engine: {xmage: "danieljbrooks/mage@<commit>", magezero: "danieljbrooks/MageZero@<commit>", draftzero: "<commit>"}
@@ -913,7 +946,7 @@ system: {pod: runpod-secure-rtx3090, vcpu_quota: 31.1, ram_gb: 116, usd_per_hr: 
 | `match_set`, `match_strict` | bool (or null) | the scores of §2.3 |
 | `p_set` | float | the visit share on the human's set (A_soft) |
 | `human_rank` | int | the rank of the best-ranked human option |
-| `options` | list of {key, visits, q, prior} | the whole root, per world for PIMC, so any score can be recomputed |
+| `options` | list of {key, visits, q, prior, sub_decisions} | the whole root, per world for PIMC, so any score can be recomputed; `sub_decisions` counts the decisions an option takes before its action completes (E2b) |
 | `root_value` | float | |
 | `sims_fresh`, `nn_evals`, `nn_batch_mean` | int, int, float | |
 | `engine_steps`, `game_copies`, `tree_nodes` | int | |
