@@ -409,11 +409,14 @@ The per-turn discount is 0.435 offline and 0.446 with the network, each matched 
   So the per-ply unit does tax multi-step options, as the review comment suspected, by about 4
   points of visit share at 0.9. It doesn't show in agreement.
 
-## 6. Discussion (tentative)
+## 6. Discussion
 
-- **Is agreement measuring anything here?** Partly. Search beats chance by 5–10 points and the rule
-  heuristic by up to 7, and more budget helps where it should (holds). But the spread between
-  sensible methods, 1–5 points, is close to the benchmark's resolution. As in Allie's chess
+- **Is agreement measuring anything here?** Partly.
+  - On the balanced score, search beats a constant answer by 0.07–0.14 and the rule heuristic
+    (0.557) by up to 0.08, and more budget helps where it should (holds).
+  - The planned headline, A_set, mostly measures passivity (§8.1). It would have ranked #2a's
+    policy first and picked the wrong prior (§7).
+  - The spread between sensible methods, 1–5 points, is close to the benchmark's resolution. As in Allie's chess
   results (docs/012 §2.10), agreement may be separating broken from decent without separating
   decent from good. docs/012's first follow-up, validation by play (E9), is what would settle
   which of these differences matter.
@@ -423,10 +426,12 @@ The per-turn discount is 0.435 offline and 0.446 with the network, each matched 
   - PIMC with 4 worlds buys nothing at these budgets.
   - IS-MCTS isn't worth its 3× cost on agreement. Its value would have to show in play, for
     example in bluffs and in playing around tricks, which agreement doesn't test.
-- **The network's policy is the strongest single signal.** With priors off, the search ignores it.
-  Whether it helps as priors is the most useful follow-up (§7). Priors raise human agreement for
-  reasons that are partly style, though. The policy's Pass habit shows how far style alone can move
-  the score.
+- **A human policy is the strongest single signal, and search keeps it but doesn't add to it.**
+  - #2b's human-pretrained policy scores 0.646 balanced with no search. PIMC with 1 world and that
+    policy as priors scores 0.617–0.645 at every budget from 100 to 3,000.
+  - #2a's self-play policy as priors mostly adds passivity.
+  - What search would add is limited by the value at the leaves (§8.4–8.6), which neither
+    network's value head gets right. That, not the search method, is the next thing to fix (§9).
 - **The benchmark's own limits:**
   - two of the six planned decision types are missing;
   - the hold type is small (125) and depends on the human's timing, which 17lands records only per
@@ -434,7 +439,7 @@ The per-turn discount is 0.435 offline and 0.446 with the network, each matched 
   - the lenient Pass on spell decisions rewards passive play. The strict score is 0.5–2 points
     lower for the searches, but 15 points lower for the policy.
 
-## 7. Follow-ups with the extra budget *(running)*
+## 7. Follow-ups with the extra budget
 
 - **IS-MCTS offline at 10,000 simulations,** on a third pod. It was the only method still gaining at
   3,000 (+2.0 points from 1,000).
@@ -710,7 +715,7 @@ roughly:
 - **Plasticity is the real risk** (docs/013): more data means more pretraining. Keep it short, apply
   shrink and perturb, and screen with docs/013 §2.3's test.
 
-**Step 0 — test the idea with what exists (running now, ~$1).**
+**Step 0 — test the idea with what exists (done, about $2).**
 - Put #2b's starting network inside PIMC with 1 world: its human policy as PUCT priors
   (MageZero's setPriors), and its value head, trained on human game results, at the leaves. Budgets
   100, 300 and 1,000, plus the same network with priors off.
