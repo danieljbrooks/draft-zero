@@ -1,17 +1,13 @@
 # Search benchmark, first experiment: results
 
-**Status: partial draft, 2026-09-29 09:50 PDT.** The plan is [docs/012](012-search-benchmark.md) §2,
-and this report follows its order.
+**Status: final, 2026-09-29 10:30 PDT,** except one run still going: PIMC with 1 world, offline, at
+10,000 simulations (§7). The plan is [docs/012](012-search-benchmark.md) §2, and this report
+follows its order. It covers:
 
-- **Done:** all 32 E2 runs, E0, E1 offline, E2b offline, 8 of E2b's 10 network runs, and the
-  human-prior search at 100, 300 and 1,000 simulations.
-- **Still running:**
-  - E2b's last two network runs and E1's network spot check;
-  - #2a's policy as priors;
-  - the human-prior search at 3,000, and its priors-off control;
-  - IS-MCTS and PIMC with 1 world offline at 10,000 (§7).
-
-Numbers may move by a point or two, and conclusions marked *tentative* may change.
+- **the first experiment:** E0, E1, E2 and E2b, 16 offline and 16 network runs of E2 and 20 runs of
+  E2b on 1,000 held-out decisions;
+- **follow-ups on the extra budget:** policy priors from two networks, and 10,000 simulations;
+- **a diagnosis** of why agreement is low (§8), and an imitation-learning plan (§9).
 
 ## Summary
 
@@ -22,64 +18,72 @@ Numbers may move by a point or two, and conclusions marked *tentative* may chang
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/016-frontier-balanced-dark.png">
-  <img alt="The same three panels on the balanced score (§8.3), where any constant answer scores 0.50. Offline search rises steadily with budget, from 0.57 at 100 simulations to 0.62-0.63 at 3,000. The #2a network's searches sit lower, 0.55-0.61. #2b's human-pretrained policy alone scores 0.65, and searching with it as priors keeps that at 100 and 300 simulations, then falls to 0.62 at 1,000." src="img/016-frontier-balanced-light.png">
+  <img alt="The same three panels on the balanced score (§8.3), where any constant answer scores 0.50. Offline search rises steadily with budget, from 0.57 at 100 simulations to 0.64 for IS-MCTS at 10,000. The #2a network's searches sit lower, 0.55 to 0.62, with its policy as priors (dashed) barely higher. #2b's human-pretrained policy alone scores 0.65, and searching with it as priors stays at 0.62 to 0.65 at every budget." src="img/016-frontier-balanced-light.png">
 </picture>
 
 *Top: the planned headline, A_set, which passivity inflates (§8.1). Bottom: the balanced score
 of §8.3, where any constant answer scores 0.50. Three panels: offline search, #2a's network, and
 #2b's human-pretrained network (§7).*
 
-- **Why agreement is only about 50%: the searches are far more active than top players, and the
-  headline metric mostly measures passivity** (§8).
-  - Top players attacked with the creature in 46% of attack decisions and blocked in 20% of block
-    decisions. The searches attack 55–67% of the time and block about 50%. On holds they cast
-    something 48–57% of the time.
-  - "Always do nothing" (pass, don't attack, don't block) scores **73.8%**, above every search and
-    above the network's policy.
-  - On balanced measures, offline search roughly matches a network trained to imitate these
-    players on spells, and trails it on attacks.
-  - The searches' disagreements with humans are mostly near-ties in their own values, and even
-    at 3,000 simulations they look less than one turn ahead. The limit is the evaluator and the
-    horizon, not the search method.
 - **Every search agrees with top players about equally, and not much more than a simple
-  heuristic.** Across four methods, four budgets and both evaluators, A_set ranges from 47% to 54%,
-  macro-averaged over the four decision types. The references: chance 43.7%, the rule heuristic
-  46.9%. The best configurations are offline PIMC with 1 world and offline IS-MCTS at 3,000
-  simulations (both 54.2%), and PIMC with 1 world on the network at 3,000 (53.3%).
-- **Fairness costs nothing on this benchmark.** No fair method is significantly behind today's
-  clairvoyant search at any budget, and PIMC with 1 world is ahead by 2–3 points with the network
-  (not significant). This is expected: on 17lands positions the clairvoyant search reads a
-  *guessed* opponent hand (docs/012 §2.4), so peeking buys nothing here. The leak test shows it
-  peeks where it can (next point).
-- **The hidden-information test separates the methods cleanly.** Clairvoyant MCTS fails five of
-  six probe pairs. On the counterspell pair it drops Serra Angel's value by 0.37 when the opponent
-  really holds Refute. PIMC with 1 and 4 worlds and IS-MCTS pass all six, with identical searches in
-  both worlds of every pair (§3).
-- **More search helps a little, then flattens.** From 100 to 3,000 simulations, clairvoyant MCTS and
-  PIMC with 1 world gain 6–7 points offline (significant). From 1,000 to 3,000 they gain 1–3, mostly not
-  significant. Almost all of the gain is on holds: searches cast spells where top players held back,
-  and do so less with more budget (§4.2).
-- **One world is enough; four don't help.** PIMC with 4 worlds is never better than with 1, and
-  offline at 1,000 it is 2.5 points worse (CI −5.2 to +0.5). Each of its trees gets a quarter of
-  the budget.
-- **IS-MCTS matches PIMC offline at about 3× the cost, and trails it with the network.** Offline at
-  3,000 it ties PIMC with 1 world (54.2% each) at 3.6 against 1.3 pod-seconds per decision. With
-  the network at 1,000 it is 4.8 points behind PIMC with 1 world (CI −7.7 to −1.7).
-- **The trained network adds nothing to search, but its policy alone beats every search.** Network
-  and offline search agree within ±3 points at every setting (§4.3). With priors off, the search
-  reads only #2a's value head, which docs/014 found weak. The network's *policy* with no search
-  scores 68.6%. That is inflated by passing, since it holds 88% of the time; its strict score is
-  53.9%. Using the policy as priors inside the search is the obvious next step, and it is running
-  (§7).
-- **The backprop discount doesn't matter for agreement.** No arm beats the default 0.99 per ply.
-  0.9 per ply costs clairvoyant MCTS 3.2 points offline (significant). Per-action and per-turn
-  discounts are within noise (§5).
-- **Compute:** offline search costs 0.02–3.6 pod-seconds per decision, network search 0.14–4.3. The
-  network runs are GPU-bound at about 550–700 evaluations per second across the pod. The
-  experiment has cost about $7 in pods so far, including calibration.
-- **The proxy's weak spot showed up.** Differences between search methods are 1–5 points,
-  comparable to the benchmark's resolution. The one large effect in the data, the policy's 68.6%,
-  comes from a style of play (passing), not from strength. docs/012 §2.10 warned about both.
+  heuristic,** by the planned headline. A_set, macro-averaged over four decision types, is 47–55%
+  for every method, budget and evaluator. Chance is 43.7% and the rule heuristic 46.9%. The best
+  priors-off search is IS-MCTS offline at 10,000 simulations (55.4%).
+- **Why so low: the searches are far more active than top players, and A_set mostly measures
+  passivity** (§8).
+  - Top players attacked with the creature in 46% of attack decisions and blocked in 20% of
+    block decisions. The searches attack 55–67% of the time, block about 50%, and on holds cast
+    something 48–57% of the time.
+  - "Always do nothing" scores **73.8%**, above every search and every policy.
+  - The searches' disagreements are mostly near-ties in their own values. Even at 3,000
+    simulations they look less than one turn ahead.
+  - Methods that share an evaluator agree with each other 78–83% of the time. The limit is what
+    scores the leaves, and the horizon, not the search method.
+- **On a balanced score, where any constant answer gets 0.50** (§8.3), the picture is clearer:
+  - offline search climbs steadily with budget, from 0.57 at 100 simulations to 0.64 for
+    IS-MCTS at 10,000;
+  - #2a's network searches sit lower, 0.55–0.62;
+  - #2b's human-pretrained policy alone scores 0.646, and search with it as priors 0.64–0.65, the
+    best of anything;
+  - #2a's policy alone scores 0.54 (its 68.6% A_set is passing).
+- **Fairness costs nothing here, and the leak test separates the methods cleanly.**
+  - No fair method is significantly behind today's clairvoyant search at any budget. On 17lands
+    positions the clairvoyant search reads a *guessed* hand, so peeking buys nothing.
+  - On the probes it peeks wherever it can. It fails five of six pairs offline and three of four
+    with the network; on the counterspell pair it drops Serra Angel's value by 0.37 offline and
+    0.58 with the network.
+  - PIMC with 1 and 4 worlds and IS-MCTS pass every pair (§3).
+- **More search helps slowly.**
+  - From 100 to 3,000 simulations, clairvoyant MCTS and PIMC with 1 world gain 6–7 points offline.
+    From 1,000 to 3,000 they gain 1–3.
+  - IS-MCTS is still gaining at 10,000: +1.2 points over 3,000, +3.3 over 1,000.
+  - Most of the gain is on holds, where more search learns to wait (§4.2).
+- **Of the methods:**
+  - **PIMC with 1 world is the practical choice.** It costs the same as today's search, is fair,
+    and is never significantly beaten at equal budget.
+  - **Four worlds don't help:** each tree gets a quarter of the budget.
+  - **IS-MCTS** ties PIMC offline at about 3× the cost, trails it with the network at 1,000
+    (−4.8 points), and is best only at 10,000, at 14.8 pod-seconds per decision.
+- **The networks:**
+  - **#2a's value head** adds nothing over the offline heuristic: network and offline searches
+    agree within ±3 points at every setting.
+  - **#2a's policy as priors** raises A_set by 4–12 points, mostly by passing more, and the balanced
+    score by only 0.00–0.04.
+  - **#2b's human policy as priors** keeps the human policy's quality at every budget, but doesn't
+    improve on it.
+  - **#2b's human-outcome value head alone** is no better than #2a's (§7).
+- **The backprop discount doesn't matter for agreement.** No arm beats the default 0.99 per ply,
+  0.9 per ply costs 3.2 points (clairvoyant, offline), and the unit is within noise (§5).
+- **Compute and cost:**
+  - Offline search costs 0.02–3.6 pod-seconds per decision (14.8 for IS-MCTS at 10,000). Network
+    search costs 0.14–5.3, GPU-bound at about 550–700 evaluations per second across the pod.
+  - The whole study used about $14 of pods: three RTX 3090 pods for about 28 pod-hours, calibration
+    and follow-ups included.
+- **Next** (§8.8, §9):
+  - replace A_set with the balanced score;
+  - the value at the leaves is the bottleneck, so improving it matters more than the search
+    method;
+  - start self-play from a lightly trained human network, with human priors in a fair PIMC search.
 
 ---
 
@@ -441,16 +445,16 @@ network's PIMC arms and per-action and per-turn arms are still running.
   - **The best balanced score of any search in the experiment is this one** (0.64–0.65), against
     0.62–0.63 for the best priors-off offline searches. Its A_set, 55–57%, is the best among searches
     that don't gain by passing (next point).
-- **#2a's gen 18 policy as priors,** all four methods at 300 simulations (1,000 still running):
+- **#2a's gen 18 policy as priors,** all four methods at 300 and 1,000 simulations:
 
-  | 300 simulations, #2a network | A_set, priors off → on | Balanced, priors off → on |
-  |---|---|---|
-  | PIMC, 1 world | 49.2% → 57.8% | 0.573 → 0.594 |
-  | PIMC, 4 worlds | 50.0% → **62.3%** | 0.592 → 0.578 |
-  | IS-MCTS | 47.3% → 56.7% | 0.572 → 0.577 |
-  | Clairvoyant MCTS | 47.6% → 56.1% | 0.550 → 0.571 |
+  | #2a network | A_set at 300, priors off → on | at 1,000 | Balanced at 300, off → on | at 1,000 |
+  |---|---|---|---|---|
+  | PIMC, 1 world | 49.2% → 57.8% | 52.8% → 57.2% | 0.573 → 0.594 | 0.604 → 0.619 |
+  | PIMC, 4 worlds | 50.0% → **62.3%** | 50.4% → 57.1% | 0.592 → 0.578 | 0.588 → 0.583 |
+  | IS-MCTS | 47.3% → 56.7% | 48.1% → 55.5% | 0.572 → 0.577 | 0.575 → 0.592 |
+  | Clairvoyant MCTS | 47.6% → 56.1% | 49.7% → 56.4% | 0.550 → 0.571 | 0.559 → 0.598 |
 
-  - **#2a's prior raises A_set by 8–12 points and the balanced score by almost nothing.** It makes
+  - **#2a's prior raises A_set by 4–12 points and the balanced score by −0.01 to +0.04.** It makes
     the search pass more, the same habit that gives #2a's policy its 68.6% (§8.1). The *human*
     prior is the one that improves the balanced score: 0.645 against 0.573 for PIMC with 1 world at
     300. A_set alone would have picked the wrong prior.
