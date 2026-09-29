@@ -256,7 +256,8 @@ def plot(summary: list[dict], refs: dict, out_prefix: Path, title: str) -> list[
     paths = []
     main = [s for s in summary if s["method"] in METHOD_ORDER and s["discount"] == 0.99 and s["unit"] == "ply"
             and not s["seed"] and s["pod_s"]]
-    ys = [s["A_set"] for s in main] + [refs["chance"]] + ([refs["heuristic"]] if refs.get("heuristic") else [])
+    ys = [s["A_set"] for s in main] + [refs["chance"]] + ([refs["heuristic"]] if refs.get("heuristic") else []) \
+        + [s["A_set"] for s in summary if s["method"] == "policy" or s.get("priors")]
     lo_y = math.floor(min(ys) * 100 / 5) * 5 - 5
     hi_y = math.ceil(max(ys) * 100 / 5) * 5 + 5
     xs = [s["pod_s"] for s in main] or [0.1, 10]
@@ -288,6 +289,7 @@ def plot(summary: list[dict], refs: dict, out_prefix: Path, title: str) -> list[
                 ax.axhline(refs["heuristic"] * 100, color=t["muted"], linewidth=1, linestyle=(0, (1, 2)))
                 ax.text(ax.get_xlim()[1] / 1.1, refs["heuristic"] * 100 + 0.4, "rule heuristic, no search",
                         color=t["ink2"], fontsize=8.5, ha="right", va="bottom")
+            ends = []
             for m in METHOD_ORDER:
                 pts = sorted([s for s in main if s["method"] == m and s["evaluator"] == ev], key=lambda s: s["budget"])
                 if not pts:
@@ -302,12 +304,21 @@ def plot(summary: list[dict], refs: dict, out_prefix: Path, title: str) -> list[
                 ax.plot(px, py, linestyle="none", marker="o", markersize=7,
                         markerfacecolor=c if fair else t["surface"], markeredgecolor=c if not fair else t["surface"],
                         markeredgewidth=2 if not fair else 1.5, zorder=4)
-                ax.annotate(LABEL[m], (px[-1], py[-1]), xytext=(8, 0), textcoords="offset points",
-                            color=t["ink"] if fair else t["ink2"], fontsize=9, va="center")
+                ends.append([py[-1], px[-1], LABEL[m], t["ink"] if fair else t["ink2"]])
                 if m == "pimc4":
                     for s, x_, y_ in zip(pts, px, py):
                         ax.annotate(f"{s['budget']:,}", (x_, y_), xytext=(0, -13), textcoords="offset points",
                                     color=t["ink2"], fontsize=7.5, ha="center")
+            # end labels, pushed apart so none overlap (at least 1.3 points of agreement between them)
+            ends.sort()
+            for i in range(1, len(ends)):
+                ends[i].append(None)
+            ys_ = [e[0] for e in ends]
+            for i in range(1, len(ys_)):
+                ys_[i] = max(ys_[i], ys_[i - 1] + 1.3)
+            for e, y_ in zip(ends, ys_):
+                ax.annotate(e[2], (e[1], e[0]), xytext=(e[1] * 1.25, y_), textcoords="data", color=e[3], fontsize=9,
+                            va="center", arrowprops=None)
             pol = [s for s in summary if s["method"] == "policy" and s["evaluator"] == ev and s["pod_s"]]
             for s in pol:
                 ax.plot([s["pod_s"]], [s["A_set"] * 100], marker="s", markersize=8, color=t["ink2"], linestyle="none")
@@ -333,6 +344,113 @@ def plot(summary: list[dict], refs: dict, out_prefix: Path, title: str) -> list[
     return paths
 
 
+def _style(ax, t):
+    ax.set_facecolor(t["surface"])
+    ax.grid(True, which="major", color=t["grid"], linewidth=0.8)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(t["axis"])
+    ax.tick_params(which="minor", length=0)
+
+
+def plot_types(summary, refs, items, out_prefix: Path) -> list[Path]:
+    """Agreement by decision type against the budget: one panel per type, both evaluators."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    paths = []
+    main = [s for s in summary if s["method"] in METHOD_ORDER and s["discount"] == 0.99 and s["unit"] == "ply"
+            and not s["seed"] and not s.get("priors")]
+    for mode, t in THEMES.items():
+        fig, axes = plt.subplots(1, 4, figsize=(15, 4.6), dpi=150, sharey=True)
+        fig.patch.set_facecolor(t["surface"])
+        for ax, ty in zip(axes, TYPES):
+            _style(ax, t)
+            ax.set_xscale("log")
+            ax.set_title(f"{ty} (n = {sum(1 for it in items.values() if it['type'] == ty)})", color=t["ink"],
+                         fontsize=11, loc="left")
+            ax.axhline(refs["chance_per_type"][ty] * 100, color=t["muted"], linewidth=1, linestyle=(0, (4, 3)))
+            for m in METHOD_ORDER:
+                c = t["series"].get(m, t["muted"])
+                for ev, ls in (("offline", "-"), ("remote", (0, (5, 2)))):
+                    pts = sorted([s for s in main if s["method"] == m and s["evaluator"] == ev and ty in s["per_type"]],
+                                 key=lambda s: s["budget"])
+                    if pts:
+                        ax.plot([s["budget"] for s in pts], [s["per_type"][ty]["A_set"] * 100 for s in pts], color=c,
+                                linestyle=ls, marker="o", markersize=4, linewidth=1.6,
+                                label=f"{LABEL[m]}, {'offline' if ev == 'offline' else 'network'}")
+            ax.set_xticks([100, 300, 1000, 3000])
+            ax.set_xticklabels(["100", "300", "1k", "3k"])
+            ax.tick_params(colors=t["ink2"])
+            ax.set_xlabel("Simulations per decision", color=t["ink2"])
+        axes[0].set_ylabel("A_set (%)", color=t["ink2"])
+        h, lab = axes[0].get_legend_handles_labels()
+        leg = fig.legend(h, lab, loc="lower center", ncol=4, frameon=False, fontsize=8.5)
+        for tx in leg.get_texts():
+            tx.set_color(t["ink2"])
+        fig.text(0.05, 0.94, "Agreement by decision type (solid: offline search; dashed: network; gray dashes: chance)",
+                 color=t["ink"], fontsize=12, fontweight="bold")
+        fig.subplots_adjust(left=0.05, right=0.98, top=0.84, bottom=0.27, wspace=0.08)
+        p = Path(f"{out_prefix}-{mode}.png")
+        fig.savefig(p, facecolor=t["surface"])
+        plt.close(fig)
+        paths.append(p)
+    return paths
+
+
+def plot_discount(summary, out_prefix: Path) -> list[Path]:
+    """E2b: agreement against the backprop discount and its unit, at 1,000 simulations."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    arms = [("1.0 / ply", 1.0, "ply"), ("0.99 / ply", 0.99, "ply"), ("0.95 / ply", 0.95, "ply"),
+            ("0.9 / ply", 0.9, "ply"), ("0.95-matched\n/ action", None, "action"), ("0.95-matched\n/ turn", None, "turn")]
+    rows = [s for s in summary if s["budget"] == 1000 and s["method"] in ("clairvoyant", "pimc4") and not s["seed"]
+            and not s.get("priors")]
+    if not any(s["discount"] != 0.99 for s in rows):
+        return []
+    paths = []
+    for mode, t in THEMES.items():
+        fig, ax = plt.subplots(figsize=(9, 5), dpi=150)
+        fig.patch.set_facecolor(t["surface"])
+        _style(ax, t)
+        k = 0
+        for m in ("clairvoyant", "pimc4"):
+            for ev, mk in (("offline", "o"), ("remote", "s")):
+                xs, ys, lo, hi = [], [], [], []
+                for i, (_, d, u) in enumerate(arms):
+                    hit = [s for s in rows if s["method"] == m and s["evaluator"] == ev and s["unit"] == u
+                           and (d is None or abs(s["discount"] - d) < 1e-9)]
+                    if hit:
+                        s = hit[0]
+                        xs.append(i + (k - 1.5) * 0.08)
+                        ys.append(s["A_set"] * 100)
+                        lo.append((s["A_set"] - s["ci"][0]) * 100)
+                        hi.append((s["ci"][1] - s["A_set"]) * 100)
+                c = t["muted"] if m == "clairvoyant" else t["series"]["pimc4"]
+                if xs:
+                    ax.errorbar(xs, ys, yerr=[lo, hi], fmt=mk, color=c, markersize=6, elinewidth=1, capsize=0,
+                                markerfacecolor=c if ev == "offline" else t["surface"],
+                                label=f"{LABEL[m]}, {'offline' if ev == 'offline' else 'network'}")
+                k += 1
+        ax.set_xticks(range(len(arms)))
+        ax.set_xticklabels([a[0] for a in arms], color=t["ink2"], fontsize=9)
+        ax.tick_params(colors=t["ink2"])
+        ax.set_ylabel("A_set (%), 1,000 simulations", color=t["ink2"])
+        leg = ax.legend(frameon=False, fontsize=8.5, loc="lower left")
+        for tx in leg.get_texts():
+            tx.set_color(t["ink2"])
+        ax.set_title("E2b: the backprop discount and its unit", color=t["ink"], fontsize=12, loc="left")
+        fig.tight_layout()
+        p = Path(f"{out_prefix}-{mode}.png")
+        fig.savefig(p, facecolor=t["surface"])
+        plt.close(fig)
+        paths.append(p)
+    return paths
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--items", default=str(REPO / "data/search_bench/sb-v1"))
@@ -342,6 +460,7 @@ def main(argv=None) -> int:
     ap.add_argument("--split", default="test")
     ap.add_argument("--plot", default=None)
     ap.add_argument("--title", default="Agreement with top 17lands players against compute")
+    ap.add_argument("--partial", action="store_true", help="include runs that have not finished")
     a = ap.parse_args(argv)
     items = load_items(Path(a.items))
     if a.split:
@@ -356,10 +475,36 @@ def main(argv=None) -> int:
                 leak[r["method"]] &= r["pass"]
         leak = dict(leak)
     summary = summarize(rows, runs, items, leak)
+    if not a.partial:
+        summary = [x for x in summary if x["n"] >= len(items)]
+    done = {x["run_id"] for x in summary}
     refs = references(items, None)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "summary.json").write_text(json.dumps({"references": refs, "runs": summary}, indent=1))
+    contrasts = []
+    for ev in ("offline", "remote"):
+        for b in (100, 300, 1000, 3000, 10000):
+            rid = lambda m: f"{m}-b{b}-{ev}-d0.99"
+            for x, y in (("pimc1", "clairvoyant"), ("pimc4", "clairvoyant"), ("ismcts", "clairvoyant"),
+                         ("pimc4", "pimc1"), ("ismcts", "pimc4"), ("ismcts", "pimc1")):
+                if rid(x) in done and rid(y) in done:
+                    contrasts.append(paired(rows, items, rid(x), rid(y)))
+        for m in METHOD_ORDER:
+            for lo, hi in ((100, 1000), (100, 3000), (1000, 3000), (300, 3000)):
+                x, y = f"{m}-b{hi}-{ev}-d0.99", f"{m}-b{lo}-{ev}-d0.99"
+                if x in done and y in done:
+                    contrasts.append(paired(rows, items, x, y))
+    for m in METHOD_ORDER:
+        for b in (100, 300, 1000, 3000):
+            x, y = f"{m}-b{b}-remote-d0.99", f"{m}-b{b}-offline-d0.99"
+            if x in done and y in done:
+                contrasts.append(paired(rows, items, x, y))
+    for x in done:
+        if "-s1" in x:
+            base = x.replace("-s1", "")
+            if base in done:
+                contrasts.append(paired(rows, items, x, base))
+    (out / "summary.json").write_text(json.dumps({"references": refs, "runs": summary, "contrasts": contrasts}, indent=1))
     print("references", json.dumps(refs))
     print(f"{'run':44s} {'n':>5s} {'A_set':>6s} {'95% CI':>15s} {'strict':>6s} {'soft':>6s} {'pod-s':>7s} "
           f"{'steps/sim':>9s} {'p/act':>6s} {'p/turn':>6s}  per type")
@@ -368,8 +513,16 @@ def main(argv=None) -> int:
         print(f"{s['run_id']:44s} {s['n']:5d} {s['A_set']:6.3f} [{s['ci'][0]:.3f},{s['ci'][1]:.3f}] "
               f"{s['A_strict']:6.3f} {s['A_soft']:6.3f} {s['pod_s'] or 0:7.3f} {s['engine_steps_per_sim']:9.2f} "
               f"{s['plies_per_action'] or 0:6.2f} {s['plies_per_turn'] or 0:6.2f}  {pt}")
+    print("\npaired contrasts (a - b, macro A_set, 95% CI over games):")
+    for c in contrasts:
+        sig = "*" if c["ci"][0] > 0 or c["ci"][1] < 0 else " "
+        print(f"  {sig} {c['a']:36s} - {c['b']:36s} n {c['n']:5d}  {c['diff']:+.3f} [{c['ci'][0]:+.3f},{c['ci'][1]:+.3f}]")
     if a.plot:
         for p in plot(summary, refs, Path(a.plot), a.title):
+            print("plot", p)
+        for p in plot_types(summary, refs, items, Path(str(a.plot).replace("frontier", "by-type"))):
+            print("plot", p)
+        for p in plot_discount(summary, Path(str(a.plot).replace("frontier", "discount"))):
             print("plot", p)
     return 0
 
