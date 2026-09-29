@@ -1,6 +1,6 @@
 # Search benchmark, first experiment: results
 
-**Status: partial draft, 2026-09-29 08:50 PDT.** The plan is [docs/012](012-search-benchmark.md) §2,
+**Status: partial draft, 2026-09-29 09:50 PDT.** The plan is [docs/012](012-search-benchmark.md) §2,
 and this report follows its order.
 
 - **Done:** all 32 E2 runs, E0, E1 offline, E2b offline, 8 of E2b's 10 network runs, and the
@@ -399,8 +399,22 @@ network's PIMC arms and per-action and per-turn arms are still running.
 
 ## 7. Follow-ups with the extra budget *(running)*
 
-- **IS-MCTS offline at 10,000 simulations** (on a third pod): it was the only method still gaining
-  at 3,000 (+2.0 points from 1,000). About 12–14 pod-seconds per decision, about $2.
+- **IS-MCTS offline at 10,000 simulations,** on a third pod. It was the only method still gaining at
+  3,000 (+2.0 points from 1,000).
+
+  | IS-MCTS, offline | 1,000 | 3,000 | 10,000 |
+  |---|---|---|---|
+  | A_set | 52.1% | 54.2% | **55.4%** |
+  | Balanced (§8.3) | 0.614 | 0.623 | **0.636** |
+  | Cast or pass / attack / block, balanced | 0.61 / 0.65 / 0.58 | 0.64 / 0.65 / 0.58 | 0.65 / 0.68 / 0.58 |
+  | Pod-seconds per decision | 1.04 | 3.59 | 14.75 |
+  | Engine steps per simulation | 9.8 | 11.5 | 13.7 |
+
+  - **Still climbing, slowly.** It gains +1.2 points over 3,000 (95% CI −0.6 to +3.2) and +3.3 over
+    1,000 (+0.9 to +5.7). It is the best offline search on both measures, and its balanced score
+    nears the human policy's 0.646.
+  - **It costs a lot:** about $2.07 per 1,000 decisions, 4× the 3,000 run. 2 of the 1,000 searches hit
+    the 3,000-second time cap.
 - **#2b's human-pretrained network inside the search** (§9, step 0): its policy as priors and its
   human-outcome value head at the leaves, PIMC with 1 world.
 
