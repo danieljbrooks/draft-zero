@@ -1,11 +1,15 @@
 # Search benchmark, first experiment: results
 
-**Status: partial draft, 2026-09-29 05:15 PDT.** The plan is [docs/012](012-search-benchmark.md) §2,
+**Status: partial draft, 2026-09-29 07:30 PDT.** The plan is [docs/012](012-search-benchmark.md) §2,
 and this report follows its order.
 
-- **Done:** all 16 offline runs, 15 of 16 network runs, E0, E1 offline and E2b offline.
-- **Still running:** IS-MCTS with the network at 3,000 simulations; E2b with the network (4 of 10
-  runs); E1's network spot check; the extra-budget follow-ups (§7).
+- **Done:** all 32 E2 runs, E0, E1 offline, E2b offline, 8 of E2b's 10 network runs, and the
+  human-prior search at 100, 300 and 1,000 simulations.
+- **Still running:**
+  - E2b's last two network runs and E1's network spot check;
+  - #2a's policy as priors;
+  - the human-prior search at 3,000, and its priors-off control;
+  - IS-MCTS and PIMC with 1 world offline at 10,000 (§7).
 
 Numbers may move by a point or two, and conclusions marked *tentative* may change.
 
@@ -15,6 +19,15 @@ Numbers may move by a point or two, and conclusions marked *tentative* may chang
   <source media="(prefers-color-scheme: dark)" srcset="img/016-frontier-dark.png">
   <img alt="Two panels, offline search and the trained network, each plotting agreement with top 17lands players (A_set, 35 to 75 percent) against pod-seconds per decision on a log axis. Every search method lies between 47 and 54 percent, a few points above the rule heuristic (47 percent) and chance (44 percent). The fair methods (PIMC with 1 and 4 worlds, IS-MCTS; colored) sit at or above the clairvoyant search (gray, hollow). Lines rise a few points from 100 to 1,000 simulations and flatten after. On the network panel, the network's policy with no search sits far above everything at 69 percent." src="img/016-frontier-light.png">
 </picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/016-frontier-balanced-dark.png">
+  <img alt="The same three panels on the balanced score (§8.3), where any constant answer scores 0.50. Offline search rises steadily with budget, from 0.57 at 100 simulations to 0.62-0.63 at 3,000. The #2a network's searches sit lower, 0.55-0.61. #2b's human-pretrained policy alone scores 0.65, and searching with it as priors keeps that at 100 and 300 simulations, then falls to 0.62 at 1,000." src="img/016-frontier-balanced-light.png">
+</picture>
+
+*Top: the planned headline, A_set, which passivity inflates (§8.1). Bottom: the balanced score
+of §8.3, where any constant answer scores 0.50. Three panels: offline search, #2a's network, and
+#2b's human-pretrained network (§7).*
 
 - **Why agreement is only about 50%: the searches are far more active than top players, and the
   headline metric mostly measures passivity** (§8).
@@ -274,18 +287,18 @@ tighter). Pod-seconds per decision in brackets. † still running.
 | Clairvoyant MCTS (fails E1) | 48.1% (0.15) | 47.6% (0.42) | 49.7% (1.40) | 50.9% (4.27) |
 | PIMC, 1 world | 48.7% (0.14) | 49.2% (0.41) | 52.8% (1.39) | **53.3%** (4.21) |
 | PIMC, 4 worlds | 51.4% (0.14) | 50.0% (0.41) | 50.4% (1.38) | 51.5% (4.16) |
-| IS-MCTS | 47.4% (0.18) | 47.3% (0.49) | 48.1% (1.66) | † |
+| IS-MCTS | 47.4% (0.18) | 47.3% (0.49) | 48.1% (1.66) | 50.7% (5.26) |
 
 Paired differences (A − B, points, 95% CI over games):
 
 | Comparison | Offline | Network |
 |---|---|---|
 | PIMC 1 − clairvoyant, 3,000 | +0.6 (−2.2, +3.5) | +2.4 (−0.5, +5.3) |
-| IS-MCTS − clairvoyant, 3,000 | +0.7 (−2.0, +3.5) | † |
+| IS-MCTS − clairvoyant, 3,000 | +0.7 (−2.0, +3.5) | −0.1 (−3.0, +3.2) |
 | PIMC 4 − PIMC 1, 1,000 | −2.5 (−5.2, +0.5) | −2.4 (−5.2, +0.5) |
 | PIMC 4 − PIMC 1, 3,000 | −1.2 (−4.0, +1.5) | −1.7 (−5.1, +1.3) |
 | IS-MCTS − PIMC 1, 1,000 | −0.6 (−3.1, +2.0) | **−4.8 (−7.7, −1.7)** |
-| IS-MCTS − PIMC 1, 3,000 | 0.0 (−3.0, +3.0) | † |
+| IS-MCTS − PIMC 1, 3,000 | 0.0 (−3.0, +3.0) | −2.5 (−5.6, +0.6) |
 | PIMC 1: 3,000 − 100 | **+6.1 (+2.3, +9.6)** | **+4.6 (+0.9, +8.2)** |
 | PIMC 1: 3,000 − 1,000 | +1.4 (−1.1, +4.2) | +0.4 (−2.2, +3.2) |
 | Clairvoyant: 3,000 − 100 | **+6.7 (+3.1, +10.6)** | +2.7 (−0.8, +6.4) |

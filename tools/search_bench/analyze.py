@@ -194,6 +194,7 @@ def summarize(rows, runs, items, leak: dict | None) -> list[dict]:
         p_v = sum(s.get("priorityEdgeVisits") or 0 for s in stats)
         t_v = sum(s.get("turnEdgeSum") or 0 for s in stats)
         method = r0["method"]
+        bal, bal_ci, bal_parts = balanced_score(items, {x["item"]: x["r"] for x in recs})
         verdict = None
         if leak is not None:
             verdict = leak.get(method)
@@ -212,15 +213,50 @@ def summarize(rows, runs, items, leak: dict | None) -> list[dict]:
             "plies_per_turn": round(e_v / t_v, 3) if t_v else None,
             "consistent": round(sum(bool(x["r"].get("consistent")) for x in recs) / len(recs), 3),
             "hides": verdict,
+            "net": r0.get("net"), "priors": bool(r0.get("priors")),
+            "balanced": bal, "balanced_ci": bal_ci, "balanced_parts": bal_parts,
         })
     return out
+
+
+def balanced_score(items: dict, R: dict, n_boot: int = 200, seed: int = 0):
+    """The §8.3 score: the mean of three balanced accuracies (cast or pass over spell and hold
+    decisions, attack or not, block or not). A constant answer scores 0.50. With a game-bootstrap CI."""
+    from diagnose import act_split
+    R = {i: r for i, r in R.items() if i in items}
+    if not R:
+        return None, None, None
+
+    def score(ids):
+        s = act_split(items, {i: R[i] for i in ids})
+        vals = [s[g]["bal_acc"] for g in ("cast", "attack", "block") if s[g]["bal_acc"] is not None]
+        return (sum(vals) / len(vals) if vals else None), s
+    b, parts = score(list(R))
+    by_game = defaultdict(list)
+    for i in R:
+        by_game[items[i]["row"]].append(i)
+    games = list(by_game)
+    rng = random.Random(seed)
+    vals = []
+    for _ in range(n_boot):
+        ids = [i for g in (rng.choice(games) for _ in games) for i in by_game[g]]
+        v, _ = score(ids)
+        if v is not None:
+            vals.append(v)
+    vals.sort()
+    ci = [round(vals[int(0.025 * len(vals))], 4), round(vals[int(0.975 * len(vals)) - 1], 4)] if vals else None
+    return (round(b, 4) if b is not None else None), ci, {g: parts[g]["bal_acc"] for g in ("cast", "attack", "block")}
 
 
 def references(items: dict, split: str | None) -> dict:
     its = [it for it in items.values() if split is None or it["split"] == split]
     ch = macro([(it["type"], chance(it)) for it in its])
     hs = [(it["type"], float(h in set(it["label"]))) for it in its if (h := heuristic(it)) is not None]
+    passive = {"spell": "Pass", "hold": "Pass", "attack": "no", "block": "Stop Choosing"}
+    pas = macro([(it["type"], float(passive[it["type"]] in set(it["label"]))) for it in its])
+    hb, _, _ = balanced_score({it["id"]: it for it in its}, {it["id"]: {"best": heuristic(it)} for it in its}, n_boot=0)
     return {"chance": round(ch, 4), "heuristic": round(macro(hs), 4) if hs else None, "n": len(its),
+            "passive": round(pas, 4), "heuristic_balanced": hb,
             "heuristic_n": len(hs),
             "chance_per_type": {t: round(sum(chance(it) for it in its if it["type"] == t)
                                          / max(1, sum(1 for it in its if it["type"] == t)), 4) for t in TYPES}}
@@ -336,6 +372,115 @@ def plot(summary: list[dict], refs: dict, out_prefix: Path, title: str) -> list[
         fig.text(0.06, 0.925, "Each line: 100, 300, 1,000 and 3,000 simulations per decision, left to right; bars are "
                  "95% CIs over games. 1 pod-second = $0.00014.", color=t["ink2"], fontsize=10, ha="left")
         fig.subplots_adjust(left=0.07, right=0.93, top=0.86, bottom=0.17, wspace=0.12)
+        p = Path(f"{out_prefix}-{mode}.png")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(p, facecolor=t["surface"])
+        plt.close(fig)
+        paths.append(p)
+    return paths
+
+
+PANELS = [("offline", None, "Offline search (a heuristic scores positions)"),
+          ("remote", None, "#2a network (self-play, gen 18)"),
+          ("remote", "imit", "#2b's start network (pretrained on human decisions)")]
+
+
+def plot_frontier(summary, refs, out_prefix: Path, metric: str, title: str, subtitle: str) -> list[Path]:
+    """Agreement against pod-seconds per decision, one panel per evaluator. Solid lines: priors
+    off; dashed: the network's policy as priors. Colored, filled: passes E1; gray, hollow: fails."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    key, cikey = ("A_set", "ci") if metric == "A_set" else ("balanced", "balanced_ci")
+    scale = 100 if metric == "A_set" else 1
+    rows = [s for s in summary if s.get(key) is not None and s["pod_s"] and not s["seed"]
+            and s["discount"] in (0.99, None) and s["unit"] in ("ply", None)]
+    ys = [s[key] * scale for s in rows]
+    if metric == "A_set":
+        ys += [refs["chance"] * 100, refs["heuristic"] * 100]
+    else:
+        ys += [0.5, refs["heuristic_balanced"] or 0.5]
+    pad = 3 if metric == "A_set" else 0.03
+    lo_y, hi_y = min(ys) - pad, max(ys) + pad
+    xs = [s["pod_s"] for s in rows]
+    paths = []
+    for mode, t in THEMES.items():
+        plt.rcParams.update({"font.family": ["Helvetica Neue", "Helvetica", "Arial", "DejaVu Sans"], "font.size": 10,
+                             "xtick.color": t["muted"], "ytick.color": t["muted"],
+                             "xtick.labelcolor": t["ink2"], "ytick.labelcolor": t["ink2"]})
+        fig, axes = plt.subplots(1, 3, figsize=(17, 6.6), dpi=150, sharex=True, sharey=True)
+        fig.patch.set_facecolor(t["surface"])
+        for ax, (ev, net, ttl) in zip(axes, PANELS):
+            _style(ax, t)
+            ax.set_xscale("log")
+            ax.set_xlim(min(xs) / 3, max(xs) * 6)
+            ax.set_ylim(lo_y, hi_y)
+            ax.set_title(ttl, color=t["ink"], fontsize=11, loc="left", pad=10)
+            if metric == "A_set":
+                ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:.0f}%"))
+                refl = [(refs["chance"] * 100, "chance", (0, (4, 3))), (refs["heuristic"] * 100, "rule heuristic", (0, (1, 2)))]
+            else:
+                refl = [(0.5, "chance / any constant answer", (0, (4, 3))),
+                        (refs["heuristic_balanced"], "rule heuristic", (0, (1, 2)))]
+            for y, lab, ls in refl:
+                if y is None:
+                    continue
+                ax.axhline(y, color=t["muted"], linewidth=1, linestyle=ls)
+                ax.text(ax.get_xlim()[1] / 1.15, y + (0.25 if metric == "A_set" else 0.003), lab, color=t["ink2"],
+                        fontsize=8, ha="right", va="bottom")
+            ends = []
+            panel = [s for s in rows if s["evaluator"] == ev and (s.get("net") or None) == net]
+            for m in METHOD_ORDER:
+                for pri in (False, True):
+                    pts = sorted([s for s in panel if s["method"] == m and s["priors"] == pri], key=lambda s: s["budget"])
+                    if not pts:
+                        continue
+                    px, py = [s["pod_s"] for s in pts], [s[key] * scale for s in pts]
+                    lo = [(s[key] - s[cikey][0]) * scale for s in pts]
+                    hi = [(s[cikey][1] - s[key]) * scale for s in pts]
+                    fair = m != "clairvoyant"
+                    c = t["series"].get(m, t["muted"]) if fair else t["muted"]
+                    ls = (0, (5, 2)) if pri else "-"
+                    ax.errorbar(px, py, yerr=[lo, hi], fmt="none", ecolor=c, elinewidth=1, alpha=0.4, capsize=0, zorder=2)
+                    ax.plot(px, py, color=c, linewidth=2, linestyle=ls, zorder=3)
+                    ax.plot(px, py, linestyle="none", marker="o", markersize=6.5,
+                            markerfacecolor=c if fair else t["surface"], markeredgecolor=t["surface"] if fair else c,
+                            markeredgewidth=1.5 if fair else 2, zorder=4)
+                    ends.append([py[-1], px[-1], LABEL[m] + (", policy priors" if pri else ""), t["ink"] if fair else t["ink2"]])
+                    if pri or m == "pimc1":
+                        for s_, x_, y_ in zip(pts, px, py):
+                            ax.annotate(f"{s_['budget']:,}", (x_, y_), xytext=(0, 7), textcoords="offset points",
+                                        color=t["ink2"], fontsize=7, ha="center")
+            ends.sort()
+            yl = [e[0] for e in ends]
+            gap = 1.1 if metric == "A_set" else 0.011
+            for i in range(1, len(yl)):
+                yl[i] = max(yl[i], yl[i - 1] + gap)
+            for e, y_ in zip(ends, yl):
+                ax.annotate(e[2], (e[1], e[0]), xytext=(e[1] * 1.3, y_), textcoords="data", color=e[3], fontsize=8.5,
+                            va="center")
+            for s in [s for s in summary if s["method"] == "policy" and s["evaluator"] == ev and (s.get("net") or None) == net
+                      and s.get(key) is not None]:
+                ax.plot([s["pod_s"]], [s[key] * scale], marker="s", markersize=8, color=t["ink2"], linestyle="none", zorder=5)
+                ax.annotate(f"its policy, no search", (s["pod_s"], s[key] * scale), xytext=(6, -12),
+                            textcoords="offset points", color=t["ink2"], fontsize=8.5, ha="left", va="top")
+            ax.set_xlabel("Pod-seconds per decision (log scale)", color=t["ink2"])
+        axes[0].set_ylabel("A_set: agreement with top 17lands players (macro over types)" if metric == "A_set"
+                           else "Balanced agreement: mean of cast/pass, attack and block balanced accuracies",
+                           color=t["ink2"])
+        handles = [Line2D([], [], color=t["series"]["ismcts"], marker="o", linewidth=2, label="passes the hidden-information test"),
+                   Line2D([], [], color=t["muted"], marker="o", markerfacecolor=t["surface"], linewidth=2,
+                          label="fails it: reads hidden cards"),
+                   Line2D([], [], color=t["ink2"], linewidth=2, label="priors off"),
+                   Line2D([], [], color=t["ink2"], linewidth=2, linestyle=(0, (5, 2)), label="the network's policy as priors"),
+                   Line2D([], [], color=t["ink2"], marker="s", linestyle="none", label="the network's policy, no search")]
+        leg = fig.legend(handles=handles, loc="lower center", ncol=5, frameon=False, fontsize=9)
+        for tx in leg.get_texts():
+            tx.set_color(t["ink2"])
+        fig.text(0.05, 0.955, title, color=t["ink"], fontsize=13, fontweight="bold", ha="left")
+        fig.text(0.05, 0.925, subtitle, color=t["ink2"], fontsize=10, ha="left")
+        fig.subplots_adjust(left=0.05, right=0.95, top=0.86, bottom=0.15, wspace=0.10)
         p = Path(f"{out_prefix}-{mode}.png")
         p.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(p, facecolor=t["surface"])
@@ -554,7 +699,7 @@ def main(argv=None) -> int:
           f"{'steps/sim':>9s} {'p/act':>6s} {'p/turn':>6s}  per type")
     for s in summary:
         pt = " ".join(f"{t[:2]} {v['A_set']:.2f}" for t, v in s["per_type"].items())
-        print(f"{s['run_id']:44s} {s['n']:5d} {s['A_set']:6.3f} [{s['ci'][0]:.3f},{s['ci'][1]:.3f}] "
+        print(f"{s['run_id']:44s} {s['n']:5d} bal {s['balanced'] or 0:.3f} {s['A_set']:6.3f} [{s['ci'][0]:.3f},{s['ci'][1]:.3f}] "
               f"{s['A_strict']:6.3f} {s['A_soft']:6.3f} {s['pod_s'] or 0:7.3f} {s['engine_steps_per_sim']:9.2f} "
               f"{s['plies_per_action'] or 0:6.2f} {s['plies_per_turn'] or 0:6.2f}  {pt}")
     sub = subdecision_check(rows, items)
@@ -571,7 +716,14 @@ def main(argv=None) -> int:
         sig = "*" if c["ci"][0] > 0 or c["ci"][1] < 0 else " "
         print(f"  {sig} {c['a']:36s} - {c['b']:36s} n {c['n']:5d}  {c['diff']:+.3f} [{c['ci'][0]:+.3f},{c['ci'][1]:+.3f}]")
     if a.plot:
-        for p in plot(summary, refs, Path(a.plot), a.title):
+        sub = ("Points: 100, 300, 1,000, 3,000 (and 10,000) simulations; bars are 95% CIs over games. "
+               f"Always passing scores {refs['passive']:.1%} on this measure (§8.1). 1 pod-second = $0.00014.")
+        for p in plot_frontier(summary, refs, Path(a.plot), "A_set", a.title, sub):
+            print("plot", p)
+        sub_b = ("Balanced accuracy scores a constant answer 0.50, so passivity can't win it (§8.3). "
+                 "Points: 100, 300, 1,000, 3,000 (and 10,000) simulations; bars are 95% CIs over games.")
+        for p in plot_frontier(summary, refs, Path(str(a.plot).replace("frontier", "frontier-balanced")), "balanced",
+                               "Balanced agreement with top 17lands players against compute", sub_b):
             print("plot", p)
         for p in plot_types(summary, refs, items, Path(str(a.plot).replace("frontier", "by-type"))):
             print("plot", p)
