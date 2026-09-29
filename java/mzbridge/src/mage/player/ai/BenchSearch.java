@@ -59,6 +59,10 @@ public final class BenchSearch {
         public long seed = 0;
         /** IS-MCTS: re-deal the hidden cards of the chosen world every iteration */
         public boolean redeal = true;
+        /** use the network's policy heads as PUCT priors (MageZero's setPriors: softmax at priorTemp, plus priorBonus off Pass) */
+        public boolean priors = false;
+        public double priorTemp = 1.5;
+        public double priorBonus = 0.1;
         public double timeoutSec = 900;
         /** 0: 4 x budget + 200 */
         public int maxIterations = 0;
@@ -151,6 +155,7 @@ public final class BenchSearch {
         double w;
         double value;
         double prior = 1.0;
+        float[] policy;           // the network's policy head for this node's decision (priors on)
         boolean hasValue, validated, terminal, win;
         ActionEncoder.ActionType type;
         UUID actor;
@@ -180,7 +185,7 @@ public final class BenchSearch {
         root.validated = true;
         describe(root, world.root);
         evaluate(root, world.root, cfg, st); // MageZero scores the root before searching; not a simulation
-        expandTree(root, world, st);
+        expandTree(root, world, cfg, st);
         int maxIt = cfg.maxIterations > 0 ? cfg.maxIterations : 4 * cfg.budget + 200;
         while (st.sims < cfg.budget && st.iterations < maxIt && !root.kids.isEmpty()) {
             if (System.nanoTime() > deadline) {
@@ -212,7 +217,7 @@ public final class BenchSearch {
                 v = cur.win ? 1.0 : -1.0;
             } else {
                 v = evaluate(cur, cur.eng, cfg, st);
-                expandTree(cur, world, st);
+                expandTree(cur, world, cfg, st);
             }
             backprop(cur, v, cfg, st);
             st.sims++;
@@ -235,7 +240,7 @@ public final class BenchSearch {
         return res;
     }
 
-    private static void expandTree(Node node, World world, Stats st) {
+    private static void expandTree(Node node, World world, Config cfg, Stats st) {
         long te = System.nanoTime();
         node.eng.expand();
         st.engineNanos += System.nanoTime() - te;
@@ -253,6 +258,39 @@ public final class BenchSearch {
         }
         st.nodes += ch.size();
         st.maxDepth = Math.max(st.maxDepth, node.depth + 1);
+        if (node.policy != null) {
+            double[] pr = priors(node.policy, ch, world.live, cfg);
+            if (pr != null) for (int i = 0; i < ch.size(); i++) node.kids.get(i).prior = pr[i];
+        }
+    }
+
+    /** MageZero's setPriors on a list of options: softmax(logit / T) plus a bonus for anything but Pass. */
+    static double[] priors(float[] policy, List<MCTSNode> opts, Game g, Config cfg) {
+        int n = opts.size();
+        double[] out = new double[n];
+        double mx = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < n; i++) {
+            int a;
+            try {
+                a = opts.get(i).getActionIndex(g);
+            } catch (RuntimeException e) {
+                return null;
+            }
+            if (a < 0 || a >= policy.length) return null;
+            out[i] = policy[a];
+            mx = Math.max(mx, out[i]);
+        }
+        double sum = 0;
+        for (int i = 0; i < n; i++) {
+            out[i] = Math.exp((out[i] - mx) / cfg.priorTemp);
+            sum += out[i];
+        }
+        for (int i = 0; i < n; i++) {
+            out[i] /= sum;
+            Ability pa = opts.get(i).getPriorityAction();
+            if (pa == null || (!pa.isManaAbility() && !(pa instanceof mage.abilities.common.PassAbility))) out[i] += cfg.priorBonus;
+        }
+        return out;
     }
 
     private static Node selectTree(Node node, UUID me, Config cfg) {
@@ -400,7 +438,17 @@ public final class BenchSearch {
                 Node next = null;
                 MCTSNode2 nsh = null;
                 while (!opts.isEmpty()) {
-                    String k = selectIS(cur, opts.keySet(), me, cfg);
+                    Map<String, Double> pri = null;
+                    if (cur.policy != null) {
+                        List<MCTSNode> ol = new ArrayList<>(opts.values());
+                        double[] pr = priors(cur.policy, ol, sh.getGame(), cfg);
+                        if (pr != null) {
+                            pri = new HashMap<>();
+                            int i = 0;
+                            for (String kk : opts.keySet()) pri.put(kk, pr[i++]);
+                        }
+                    }
+                    String k = selectIS(cur, opts.keySet(), me, cfg, pri);
                     Node ch = cur.byKey.get(k);
                     MCTSNode2 cand = (MCTSNode2) opts.get(k);
                     long tv = System.nanoTime();
@@ -496,7 +544,7 @@ public final class BenchSearch {
         }
     }
 
-    private static String selectIS(Node node, Set<String> keys, UUID me, Config cfg) {
+    private static String selectIS(Node node, Set<String> keys, UUID me, Config cfg, Map<String, Double> pri) {
         Iterator<String> it = keys.iterator();
         if (keys.size() == 1) return it.next();
         double sign = me.equals(node.actor) ? 1.0 : -1.0;
@@ -507,7 +555,8 @@ public final class BenchSearch {
             String k = it.next();
             Node ch = node.byKey.get(k);
             double q = ch.n > 0 ? ch.q() : 0.0;
-            double val = sign * q + cfg.cPuct * prior * Math.sqrt(ch.avail) / (1 + ch.n);
+            double p = pri == null ? prior : pri.get(k);
+            double val = sign * q + cfg.cPuct * p * Math.sqrt(ch.avail) / (1 + ch.n);
             if (val > bestVal) {
                 bestVal = val;
                 best = k;
@@ -595,7 +644,23 @@ public final class BenchSearch {
             long[] idx = new long[sv == null ? 0 : sv.size()];
             int i = 0;
             if (sv != null) for (int f : sv) idx[i++] = f;
-            v = cfg.nn.infer(idx).value;
+            RemoteModelEvaluator.InferenceResult out = cfg.nn.infer(idx);
+            v = out.value;
+            if (cfg.priors) {
+                switch (eng.actionType) {
+                    case PRIORITY:
+                        node.policy = eng.targetPlayer.equals(eng.playerId) ? out.policy_player : out.policy_opponent;
+                        break;
+                    case CHOOSE_TARGET:
+                        node.policy = out.policy_target;
+                        break;
+                    case CHOOSE_USE:
+                        node.policy = out.policy_binary;
+                        break;
+                    default:
+                        node.policy = null;
+                }
+            }
         }
         st.evals++;
         st.evalNanos += System.nanoTime() - te;

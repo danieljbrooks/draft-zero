@@ -49,15 +49,20 @@ def run_id(r: dict) -> str:
     rid = f"{r['method']}-b{r['budget']}-{r['evaluator']}"
     if r["method"] != "policy":
         rid += f"-d{r['discount']:g}{'' if r['unit'] == 'ply' else '-' + r['unit']}"
+    if r.get("priors"):
+        rid += "-pri"
     if r.get("seed", 0):
         rid += f"-s{r['seed']}"
     return rid
 
 
 def grid(name: str, evaluator: str, a) -> list[dict]:
-    def R(method, budget, discount=0.99, unit="ply", seed=0):
-        return {"method": method, "budget": budget, "evaluator": evaluator, "discount": discount,
-                "unit": unit, "seed": seed}
+    def R(method, budget, discount=0.99, unit="ply", seed=0, priors=False):
+        out = {"method": method, "budget": budget, "evaluator": evaluator, "discount": discount,
+               "unit": unit, "seed": seed}
+        if priors:
+            out["priors"] = True
+        return out
     budgets = [int(b) for b in a.budgets.split(",")] if a.budgets else list(BUDGETS)
     methods = a.methods.split(",") if a.methods else list(METHODS)
     if name == "e2":
@@ -74,6 +79,10 @@ def grid(name: str, evaluator: str, a) -> list[dict]:
         return out
     if name == "policy":
         return [R("policy", 0)]
+    if name == "priors":
+        # follow-up: the network's policy heads as PUCT priors (MageZero's setPriors); needs a
+        # policy-serving server (MageZero's own), not the value-only one
+        return [R(m, b, priors=True) for b in budgets for m in methods]
     if name == "cal":
         return [R(m, b) for b in budgets for m in methods]
     raise SystemExit(f"unknown grid {name}")
@@ -99,6 +108,8 @@ def request_for(item: dict, r: dict) -> tuple[list, dict]:
     else:
         raise ValueError(m)
     opts["seed"] = 7 + 1000 * r.get("seed", 0)
+    if r.get("priors"):
+        opts["priors"] = True
     return specs, opts
 
 
@@ -186,7 +197,8 @@ def main(argv=None) -> int:
 
     stop = threading.Event()
     threading.Thread(target=sampler, args=(out, stop, {"evaluator": a.evaluator}), daemon=True).start()
-    pool = BridgePool(a.workers, prefix=f"sb_{a.evaluator}_", heap=a.heap, timeout=3600)
+    # worker runtime dirs are per output dir: two runners on one pod must not share a worker name
+    pool = BridgePool(a.workers, prefix=f"sb_{out.name}_", heap=a.heap, timeout=3600)
     counter = iter(range(10**12))
     lock = threading.Lock()
     try:

@@ -134,7 +134,7 @@ def cmd_run(a) -> int:
     # IS-MCTS is the slowest: start it first
     jobs.sort(key=lambda j: (j[2] != "ismcts", j[2] != "pimc4"))
     print(f"{len(jobs)} probe searches, {a.workers} workers", flush=True)
-    pool = BridgePool(a.workers, prefix="sb_leak_", heap=a.heap, timeout=7200)
+    pool = BridgePool(a.workers, prefix=f"sb_{out.name}_", heap=a.heap, timeout=7200)
     t0 = time.time()
     try:
         with open(path, "a") as f, ThreadPoolExecutor(a.workers) as ex:

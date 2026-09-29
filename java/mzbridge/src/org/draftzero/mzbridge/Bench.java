@@ -54,6 +54,9 @@ final class Bench {
         base.cPuct = Worker.optDouble(opt, "cPuct", 1.0);
         base.redeal = Worker.optBool(opt, "redeal", true);
         base.timeoutSec = Worker.optDouble(opt, "timeoutSec", 900.0);
+        base.priors = Worker.optBool(opt, "priors", false);
+        base.priorTemp = Worker.optDouble(opt, "priorTemp", 1.5);
+        base.priorBonus = Worker.optDouble(opt, "priorBonus", 0.1);
         if (base.budget < 1) throw new IllegalArgumentException("budget must be >= 1");
         JsonObject evalOpt = opt.has("evaluator") && opt.get("evaluator").isJsonObject() ? opt.getAsJsonObject("evaluator") : new JsonObject();
         String evalType = Worker.optString(evalOpt, "type", "offline");
@@ -62,6 +65,7 @@ final class Bench {
         } else if (!"offline".equals(evalType)) {
             throw new IllegalArgumentException("evaluator.type must be offline or remote, got '" + evalType + "'");
         }
+        if (base.priors && base.nn == null) throw new IllegalArgumentException("priors need evaluator.type remote");
         List<Long> worldSeeds = new ArrayList<>();
         if (opt.has("worldSeeds") && opt.get("worldSeeds").isJsonArray()) {
             for (JsonElement e : opt.getAsJsonArray("worldSeeds")) worldSeeds.add(e.getAsLong());
@@ -152,6 +156,7 @@ final class Bench {
         set.addProperty("evaluator", evalType);
         set.addProperty("perfectInfo", perfectInfo);
         set.addProperty("redeal", base.redeal);
+        set.addProperty("priors", base.priors);
         set.addProperty("seed", seed);
         set.addProperty("idSeed", idSeed);
         set.addProperty("preLand", preLand);
@@ -215,6 +220,9 @@ final class Bench {
         c.redeal = b.redeal;
         c.timeoutSec = b.timeoutSec;
         c.maxIterations = b.maxIterations;
+        c.priors = b.priors;
+        c.priorTemp = b.priorTemp;
+        c.priorBonus = b.priorBonus;
         return c;
     }
 
