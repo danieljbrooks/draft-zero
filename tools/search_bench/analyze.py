@@ -451,6 +451,33 @@ def plot_discount(summary, out_prefix: Path) -> list[Path]:
     return paths
 
 
+def subdecision_check(rows, items) -> list[dict]:
+    """E2b's free check (docs/012 §2.1): at 1,000 simulations, per discount arm, how much of the
+    root's search goes to options that take one or more sub-decisions (a spell's target, the next
+    attacker) before their action completes, over decisions offering both kinds of option."""
+    by = defaultdict(list)
+    for r in rows:
+        if r.get("budget") != 1000 or r.get("method") not in ("clairvoyant", "pimc4") or r.get("seed") or r.get("priors"):
+            continue
+        if r["item_id"] not in items:
+            continue
+        kids = [c for c in r.get("children") or [] if c.get("sub") is not None and c["sub"] >= 0]
+        multi = [c for c in kids if c["sub"] >= 1]
+        single = [c for c in kids if c["sub"] == 0]
+        if not multi or not single:
+            continue
+        tot = sum(c["N"] for c in kids) or 1
+        best = next((c for c in kids if c["label"] == r.get("best")), None)
+        by[(r["method"], r["evaluator"], r["discount"], r["unit"])].append(
+            (sum(c["N"] for c in multi) / tot, float(best is not None and best["sub"] >= 1), r["item_id"]))
+    out = []
+    for (m, ev, d, u), xs in sorted(by.items()):
+        out.append({"method": m, "evaluator": ev, "discount": d, "unit": u, "n": len(xs),
+                    "share_multi": round(sum(x[0] for x in xs) / len(xs), 4),
+                    "chose_multi": round(sum(x[1] for x in xs) / len(xs), 4)})
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--items", default=str(REPO / "data/search_bench/sb-v1"))
@@ -513,6 +540,15 @@ def main(argv=None) -> int:
         print(f"{s['run_id']:44s} {s['n']:5d} {s['A_set']:6.3f} [{s['ci'][0]:.3f},{s['ci'][1]:.3f}] "
               f"{s['A_strict']:6.3f} {s['A_soft']:6.3f} {s['pod_s'] or 0:7.3f} {s['engine_steps_per_sim']:9.2f} "
               f"{s['plies_per_action'] or 0:6.2f} {s['plies_per_turn'] or 0:6.2f}  {pt}")
+    sub = subdecision_check(rows, items)
+    if sub:
+        print("\nE2b sub-decision check (decisions offering options with and without sub-decisions, 1,000 sims):")
+        for x in sub:
+            print(f"  {x['method']:12s} {x['evaluator']:7s} {x['discount']:<7g} {x['unit']:7s} n {x['n']:4d}  "
+                  f"visit share on multi-step options {x['share_multi']:.3f}  chose one {x['chose_multi']:.3f}")
+        summ = json.loads((out / "summary.json").read_text())
+        summ["subdecision_check"] = sub
+        (out / "summary.json").write_text(json.dumps(summ, indent=1))
     print("\npaired contrasts (a - b, macro A_set, 95% CI over games):")
     for c in contrasts:
         sig = "*" if c["ci"][0] > 0 or c["ci"][1] < 0 else " "
