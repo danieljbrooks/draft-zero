@@ -92,7 +92,7 @@ def request_for(item: dict, r: dict) -> tuple[list, dict]:
     m = r["method"]
     opts = dict(item["request"])
     opts.update(budget=max(1, r["budget"]), discount=r["discount"], discountUnit=r["unit"],
-                idSeed=item["build_seed"], timeoutSec=1500)
+                idSeed=item["build_seed"], timeoutSec=max(1500, 0.3 * r["budget"]))
     if m in ("clairvoyant", "policy"):
         specs = [item["real"]]
         opts.update(method="policy" if m == "policy" else "tree", worldSeeds=[item["build_seed"]])
