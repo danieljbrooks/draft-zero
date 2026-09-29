@@ -180,9 +180,13 @@ own server.
 
 ### 1.4 Compute
 
-- **Pods:** two Secure RTX 3090 pods, each with a 31.1-core quota and 116 GB, at $0.50/hr: the
-  reference pod of docs/012 §2.6. Pod 1 ran the network runs at budgets 100–3,000. Pod 2 ran the
-  offline half and E1, then E2b with the network.
+- **Pods:** three Secure RTX 3090 pods, each with a 31.1-core quota and 116 GB, at $0.50/hr: the
+  reference pod of docs/012 §2.6. Secure 3090s were scarce, and a 16-vCPU L40S offered in their
+  place was released at once.
+  - Pod 1 (10.6 h): the network runs of E2, E0's references and the human-prior follow-up.
+  - Pod 2 (11.4 h): E1, the offline runs of E0, E2 and E2b, E2b's network runs, E1's network check
+    and #2a's priors.
+  - Pod 3 (about 5.8 h): the two 10,000-simulation runs.
 - **Load:** 30 bridge workers (one JVM, one search each) for offline search. 32 workers and four
   value-server replicas sharing the GPU for network search. Every search is fresh, so the pod-seconds
   per decision are a batch's wall-clock at full load divided by its 1,000 decisions.
