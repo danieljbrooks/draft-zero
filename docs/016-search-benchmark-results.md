@@ -1,6 +1,6 @@
 # Search benchmark, first experiment: results
 
-**Status: partial draft, 2026-09-29 07:30 PDT.** The plan is [docs/012](012-search-benchmark.md) §2,
+**Status: partial draft, 2026-09-29 07:50 PDT.** The plan is [docs/012](012-search-benchmark.md) §2,
 and this report follows its order.
 
 - **Done:** all 32 E2 runs, E0, E1 offline, E2b offline, 8 of E2b's 10 network runs, and the
@@ -391,8 +391,30 @@ network's PIMC arms and per-action and per-turn arms are still running.
 - **IS-MCTS offline at 10,000 simulations** (on a third pod): it was the only method still gaining
   at 3,000 (+2.0 points from 1,000). About 12–14 pod-seconds per decision, about $2.
 - **#2b's human-pretrained network inside the search** (§9, step 0): its policy as priors and its
-  human-outcome value head at the leaves, PIMC with 1 world at 100, 300 and 1,000 simulations,
-  plus the same network with priors off at 1,000. About $1.
+  human-outcome value head at the leaves, PIMC with 1 world. The 3,000-simulation point is still
+  running.
+
+  | PIMC with 1 world, network | A_set | Balanced (§8.3) | Cast or pass | Which spell | Attack or not (attack rate) | Block or not |
+  |---|---|---|---|---|---|---|
+  | #2b's policy alone, no search | 54.7% | **0.646** | **0.66** | 67.5% | **0.73** (32%) | 0.54 |
+  | #2b, its policy as priors, 100 | 55.2% | 0.643 | 0.62 | 66.8% | 0.68 (37%) | **0.63** |
+  | #2b, its policy as priors, 300 | **57.0%** | 0.645 | 0.65 | 67.9% | 0.71 (40%) | 0.58 |
+  | #2b, its policy as priors, 1,000 | 54.9% | 0.617 | 0.63 | 68.1% | 0.67 (48%) | 0.54 |
+  | #2b, priors off (its value head only), 1,000 | 53.7% | 0.599 | 0.62 | | 0.61 | 0.58 |
+  | #2a gen 18, priors off, 1,000 | 52.8% | 0.604 | 0.64 | 65.7% | 0.58 (50%) | 0.59 |
+
+  - **The human policy carries the gain; the human value head doesn't.** With priors off, #2b's
+    value head, trained on human game results, searches no better than #2a's self-play value head
+    (0.599 against 0.604 balanced).
+  - **Priors keep the human policy's quality, but search doesn't improve on it.** Search with the
+    human prior is level with the policy alone at 100 and 300 simulations (0.64–0.65 balanced), and
+    loses ground at 1,000 (0.62). A_set at 1,000 is +0.2 points over the policy alone (95% CI −3.2
+    to +3.5).
+  - **More search drifts back toward over-activity.** The attack rate rises from 37% at 100
+    simulations to 48% at 1,000, and the block gain at 100 fades. The value head at the leaves has
+    the same taste as the searches in §8.2. The prior helps most while the budget is small.
+  - **The best A_set in the experiment is this search at 300 simulations,** 57.0%, 2–3 points above
+    the rest, and within the CIs.
 
 - **The network's policy as priors** (MageZero's setPriors: softmax at temperature 1.5, plus 0.1 for
   anything but Pass), for all four methods at 300 and 1,000 simulations, on MageZero's own server,
@@ -620,6 +642,15 @@ roughly:
   human one.
 - **Go on if** the human-prior search beats both the human policy alone and the priors-off search on
   the balanced measures of §8.3.
+- **Result so far** (§7): it beats the priors-off search (+0.02 to +0.05 balanced) but only matches
+  the human policy alone, and falls behind it by 1,000 simulations. The human knowledge sits in the
+  policy. What the search adds is limited by the value at the leaves, which neither #2a's nor #2b's
+  value head gets right. Two consequences for the plan:
+  - Step 1 should put as much effort into a better value target as into the policy. Options: value
+    from human game results over more data; value trained on the human policy's own play-outs; or
+    blending the human policy's Q with the search's.
+  - Step 2's sweep should include a larger c_puct and a lower prior temperature, which keep the
+    search closer to the prior.
 
 **Step 1 — a human network for all four decision types (2–3 days, ~$3).**
 - **Rebuild the imitation tables from the top players' games** (90,719, about 7× #2b's data;
