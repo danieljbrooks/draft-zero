@@ -523,6 +523,81 @@ nothing*. docs/013 found two failure modes to design around:
 So deliver human knowledge **through the search's prior and value**, pretrain **lightly**, and
 **keep it anchored** during self-play.
 
+### 9.1 The imitation network's data, its leak into this benchmark, and scaling it
+
+**What #2b's network was trained on** (docs/011 §1–2):
+
+| | Train | Val | Test |
+|---|---|---|---|
+| Turn-start decisions: the first main-phase priority, labelled with the turn's set of plays | **115,210** | 6,958 | 18,169 |
+| Replayed attack decisions: "attack with X?" | **17,393** | 1,017 | 2,691 |
+| Replayed mid-turn priority decisions | 37,991 (built, not used) | 2,147 | 6,123 |
+| Value target: the game result | on every decision | | |
+
+- **132,603 training decisions** in all, from 13,533 training games. Players of every skill level,
+  since the tables have no win-rate filter.
+- **Trained on:** the priority head (turn-start), the binary head (attacks) and the value head.
+  The target head, used for blocks, was never trained on human data. That is why its blocks are
+  at chance here.
+- **Training:** 17 epochs, 40 minutes on the RTX 3090 pod. The best validation came at 24
+  minutes.
+
+**What share of the available data that is.** The tables sampled 1 game in 48 of the FDN Premier
+Draft replay file: 16,483 of its 791,159 games (2.1%), of which 13,533 (**1.7% of all games**) were
+in training. At about 8.5 turn-start decisions and 1.3 replayed attacks per game, the file holds
+roughly:
+
+| Pool | Games | Turn-start decisions | Attack decisions | Multiple of #2b's training set |
+|---|---|---|---|---|
+| #2b's training set | 13,533 | 115k | 17k | 1× |
+| Top players only (win rate ≥ 0.60, ≥ 100 games) | 90,719 | ~770k | ~120k | ~7× |
+| Every game | 791,159 | ~6.7M | ~1.0M | ~58× |
+
+**The leak into this evaluation is small, and doesn't show in the scores.**
+
+- **Checked, and none:**
+  - no benchmark game is an imitation game;
+  - no benchmark game's mirrored partner is one;
+  - #2a's network saw no human data at all.
+- **Draft level: 8 of the 1,000 test decisions (0.8%)** come from a draft (the same player and the
+  same deck) with another game in #2b's training set. In another 19, the mirrored *opponent's*
+  draft was in training. The benchmark's sampling happened to protect it: its rows (every 36th
+  from row 17) and the imitation rows (every 48th from row 5) are never within 12 rows of each
+  other, and a draft's 5.8 games sit together in the file.
+- **No inflation to see:** on the 27 affected decisions the imitation policy scores about what the
+  search does, which saw no human data.
+- **Player level: unmeasurable.** 17lands' public data has no user id, so a player's *other*
+  drafts may be in training. That leaks style, not decisions. It could flatter the imitation
+  policy slightly on players with many drafts.
+- **A mismatch, not a leak:** #2b's priority head was trained at the turn's first decision,
+  *before* the land drop. The benchmark asks after it (§1.1).
+
+**Scaling up is feasible and cheap; the limits are labels and plasticity, not compute.**
+
+- **Building the tables:** docs/011 built 16,483 games at about 290 decisions a second on the
+  laptop with 3 workers, 7.8 minutes for the turn-start tables. The top-player games (~7×) would
+  take about 45 minutes on the laptop or 10–20 minutes on a pod. Every game (~58×) would take
+  about 6 hours on the laptop or about an hour on a pod.
+- **Storage:** about 2.2 KB per decision in h5. That is 1.7 GB for the top players and about
+  15 GB for every game.
+- **Training:** #2b's run saw about 830 samples a second on the 3090. One epoch over the top
+  players' decisions is about 20 minutes, five epochs about $1. One epoch over every game is about
+  2.5 hours.
+- **What doesn't scale for free:**
+  - *Block labels:* a new table from `state_after_user_turn`. Only unique pairings are usable,
+    about 88% of blocks (docs/008 §3.3).
+  - *Targets and modes:* no label resolver yet.
+  - *Mid-turn priority:* the table exists but was never used. Its orders are imputed.
+  - *Fidelity:* about a third of turn states fall outside tiers T0 and T1 and are dropped.
+- **Holding out the benchmark at scale.** A 1-in-1 build would include sb-v1's games' drafts. Hold
+  out every draft of sb-v1's 1,874 games and their mirrored partners (about 11k rows) at the draft
+  level, not the row level.
+- **Which players to learn from.** docs/008 found no skill signal: top players' decisions weren't
+  predicted better than others'. Start with the top players, which is 7× the data and matches this
+  benchmark. Add everyone if the model is data-limited, weighting top players up.
+- **Plasticity is the real risk** (docs/013): more data means more pretraining. Keep it short, apply
+  shrink and perturb, and screen with docs/013 §2.3's test.
+
 **Step 0 — test the idea with what exists (running now, ~$1).**
 - Put #2b's starting network inside PIMC with 1 world: its human policy as PUCT priors
   (MageZero's setPriors), and its value head, trained on human game results, at the leaves. Budgets
@@ -533,9 +608,10 @@ So deliver human knowledge **through the search's prior and value**, pretrain **
   the balanced measures of §8.3.
 
 **Step 1 — a human network for all four decision types (2–3 days, ~$3).**
-- **Rebuild the imitation tables** from 1 game in 8 instead of 1 in 48: about 100k games, 6× the
-  data. Add block decisions (`state_after_user_turn` with block labels) and mid-turn priority.
-  Hold out sb-v1's games and their mirrored partners; this time the pairs file exists.
+- **Rebuild the imitation tables from the top players' games** (90,719, about 7× #2b's data;
+  §9.1). Add block decisions (`state_after_user_turn` with block labels) and mid-turn priority.
+  Hold out sb-v1 at the draft level, with every mirrored partner's draft; the pairs file exists
+  this time.
 - **Train lightly:** policy heads for priority, attack, block and target, and the value head on
   game results. Stop early, well before the 73%-top-1 point of docs/011, then shrink and perturb
   (docs/013 §2.3).
