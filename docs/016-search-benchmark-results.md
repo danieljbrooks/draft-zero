@@ -1,6 +1,6 @@
 # Search benchmark, first experiment: results
 
-**Status: partial draft, 2026-09-29 07:50 PDT.** The plan is [docs/012](012-search-benchmark.md) §2,
+**Status: partial draft, 2026-09-29 08:50 PDT.** The plan is [docs/012](012-search-benchmark.md) §2,
 and this report follows its order.
 
 - **Done:** all 32 E2 runs, E0, E1 offline, E2b offline, 8 of E2b's 10 network runs, and the
@@ -402,8 +402,7 @@ network's PIMC arms and per-action and per-turn arms are still running.
 - **IS-MCTS offline at 10,000 simulations** (on a third pod): it was the only method still gaining
   at 3,000 (+2.0 points from 1,000). About 12–14 pod-seconds per decision, about $2.
 - **#2b's human-pretrained network inside the search** (§9, step 0): its policy as priors and its
-  human-outcome value head at the leaves, PIMC with 1 world. The 3,000-simulation point is still
-  running.
+  human-outcome value head at the leaves, PIMC with 1 world.
 
   | PIMC with 1 world, network | A_set | Balanced (§8.3) | Cast or pass | Which spell | Attack or not (attack rate) | Block or not |
   |---|---|---|---|---|---|---|
@@ -411,6 +410,7 @@ network's PIMC arms and per-action and per-turn arms are still running.
   | #2b, its policy as priors, 100 | 55.2% | 0.643 | 0.62 | 66.8% | 0.68 (37%) | **0.63** |
   | #2b, its policy as priors, 300 | **57.0%** | 0.645 | 0.65 | 67.9% | 0.71 (40%) | 0.58 |
   | #2b, its policy as priors, 1,000 | 54.9% | 0.617 | 0.63 | 68.1% | 0.67 (48%) | 0.54 |
+  | #2b, its policy as priors, 3,000 | 56.6% | 0.644 | 0.63 | | 0.72 | 0.58 |
   | #2b, priors off (its value head only), 1,000 | 53.7% | 0.599 | 0.62 | | 0.61 | 0.58 |
   | #2a gen 18, priors off, 1,000 | 52.8% | 0.604 | 0.64 | 65.7% | 0.58 (50%) | 0.59 |
 
@@ -418,14 +418,28 @@ network's PIMC arms and per-action and per-turn arms are still running.
     value head, trained on human game results, searches no better than #2a's self-play value head
     (0.599 against 0.604 balanced).
   - **Priors keep the human policy's quality, but search doesn't improve on it.** Search with the
-    human prior is level with the policy alone at 100 and 300 simulations (0.64–0.65 balanced), and
-    loses ground at 1,000 (0.62). A_set at 1,000 is +0.2 points over the policy alone (95% CI −3.2
-    to +3.5).
+    human prior is level with the policy alone at 100, 300 and 3,000 simulations (0.643–0.645
+    balanced, against 0.646). The dip at 1,000 (0.617) is within the CIs. On A_set the 3,000 run is
+    +1.9 points over the policy alone (95% CI −1.6 to +5.3).
   - **More search drifts back toward over-activity.** The attack rate rises from 37% at 100
     simulations to 48% at 1,000, and the block gain at 100 fades. The value head at the leaves has
     the same taste as the searches in §8.2. The prior helps most while the budget is small.
-  - **The best A_set in the experiment is this search at 300 simulations,** 57.0%, 2–3 points above
-    the rest, and within the CIs.
+  - **The best balanced score of any search in the experiment is this one** (0.64–0.65), against
+    0.62–0.63 for the best priors-off offline searches. Its A_set, 55–57%, is the best among searches
+    that don't gain by passing (next point).
+- **#2a's gen 18 policy as priors,** all four methods at 300 simulations (1,000 still running):
+
+  | 300 simulations, #2a network | A_set, priors off → on | Balanced, priors off → on |
+  |---|---|---|
+  | PIMC, 1 world | 49.2% → 57.8% | 0.573 → 0.594 |
+  | PIMC, 4 worlds | 50.0% → **62.3%** | 0.592 → 0.578 |
+  | IS-MCTS | 47.3% → 56.7% | 0.572 → 0.577 |
+  | Clairvoyant MCTS | 47.6% → 56.1% | 0.550 → 0.571 |
+
+  - **#2a's prior raises A_set by 8–12 points and the balanced score by almost nothing.** It makes
+    the search pass more, the same habit that gives #2a's policy its 68.6% (§8.1). The *human*
+    prior is the one that improves the balanced score: 0.645 against 0.573 for PIMC with 1 world at
+    300. A_set alone would have picked the wrong prior.
 
 - **The network's policy as priors** (MageZero's setPriors: softmax at temperature 1.5, plus 0.1 for
   anything but Pass), for all four methods at 300 and 1,000 simulations, on MageZero's own server,
