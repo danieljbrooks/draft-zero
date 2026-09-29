@@ -266,8 +266,19 @@ the chosen actions don't differ (a permutation test, p > 0.01).
   opponent's hand or a card it scried to the top. So the fair methods also ignore information they
   are entitled to. That costs quality, not fairness. Nothing reuses trees, so docs/012's tree-reuse
   probe doesn't apply.
-- **The network spot check** runs the counterspell and cantrip pairs with the network
-  *(pending)*.
+- **The network spot check agrees.** It ran #2a's network, 3,000 simulations and 16 seeds on four
+  pairs.
+
+  | Pair | Clairvoyant MCTS: ΔQ, 95% CI; choices X / Y | Verdict | PIMC with 4 worlds |
+  |---|---|---|---|
+  | counterspell | Cast Serra Angel −0.58 [−0.71, −0.44]; Pass 15 of 16 / Cast 15 of 16 | fails | passes (ΔQ ≤ 0.0002) |
+  | counterspell, extreme | −0.47 [−0.57, −0.38]; Pass 16 / Cast 16 | fails | passes |
+  | cantrip | +0.016 [+0.000, +0.031]; Cast 14 / Cast 7 (p = 0.02) | passes the rule | passes |
+  | cantrip, extreme | −0.017 [−0.021, −0.014]; Cast 11 / Pass 15 (p = 0.001) | fails | passes |
+
+  With the network the clairvoyant search leaks *more* on the counterspell pair (−0.58 against
+  −0.37 offline). PIMC's differences are not exactly zero with the network, about 0.0001: the
+  inference server's fp16 batches vary with what else is in them.
 
 ## 4. E2: method × budget
 
