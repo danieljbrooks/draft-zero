@@ -103,6 +103,9 @@ public final class Worker {
                         // with options.specs (pre-determinized specs) the request spec is optional
                         resp = Coach.run(req.has("spec") && !req.get("spec").isJsonNull() ? spec(req) : null, opt);
                         break;
+                    case "bench":
+                        resp = Bench.run(opt); // docs/012's search benchmark (Bench.java)
+                        break;
                     case "replay_turn":
                         resp = TurnReplay.run(spec(req), opt); // one recorded turn, both seats scripted (README)
                         break;
@@ -111,7 +114,7 @@ public final class Worker {
                         quit = true;
                         break;
                     default:
-                        throw new IllegalArgumentException("unknown op '" + op + "' (ping, build, encode, coach, replay_turn, quit)");
+                        throw new IllegalArgumentException("unknown op '" + op + "' (ping, build, encode, coach, bench, replay_turn, quit)");
                 }
                 resp.addProperty("ok", true);
             } catch (Throwable e) {
@@ -230,6 +233,7 @@ public final class Worker {
         BridgePlayer o = b.players.get(Spec.other(seat));
         d.role = BridgePlayer.Role.DECIDER;
         d.mode = mode;
+        d.preLand = opt == null ? null : optString(opt, "preLand", null);
         d.listener = l;
         if (opt != null && opt.has("decideFrom") && opt.get("decideFrom").isJsonObject()) {
             JsonObject from = opt.getAsJsonObject("decideFrom");
@@ -243,7 +247,7 @@ public final class Worker {
         }
         o.role = BridgePlayer.Role.PUPPET;
         o.mode = mode; // the puppet re-anchors at MageZero's checkpoints too (BridgePlayer.checkpoint)
-        StateInjector.anchor(b, mode == BridgePlayer.Mode.SEARCH);
+        StateInjector.anchor(b, mode != BridgePlayer.Mode.CAPTURE);
         DeterministicIds.reset(StateInjector.mix(b.idSeed, 5));
         Game game = b.game;
         try {

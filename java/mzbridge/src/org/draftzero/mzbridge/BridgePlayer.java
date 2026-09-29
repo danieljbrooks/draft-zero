@@ -18,6 +18,7 @@ import mage.player.ai.MCTSNode;
 import mage.player.ai.MCTSNode2;
 import mage.player.ai.encoder.ActionEncoder;
 import mage.players.ChooseCreatureToBlockAbility;
+import mage.players.PlayerScript;
 import mage.target.Target;
 
 import java.util.*;
@@ -48,7 +49,7 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
 
     public enum Role {PUPPET, DECIDER}
 
-    public enum Mode {CAPTURE, SEARCH}
+    public enum Mode {CAPTURE, SEARCH, ROOT}
 
     /** Called at the decision point, before the game moves on (encode / state dumps happen here). */
     public interface Listener {
@@ -79,6 +80,13 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
     public transient RuntimeException failure;
     /** priority windows the decider passed before its decision (only Pass legal, or before decideFrom) */
     public transient int passedBefore;
+    /** Benchmark: play this land (a priority option's label) at the first decision, then decide. */
+    public transient String preLand;
+    /** ROOT mode: the captured search root and the scripts that rebuild it */
+    public transient MCTSNode2 capturedRoot;
+    public transient PlayerScript capturedPrefixA;
+    public transient PlayerScript capturedPrefixB;
+    public transient ActionEncoder.ActionType capturedType;
 
     public BridgePlayer(String name, String seat) {
         super(name, RangeOfInfluence.ONE, 6);
@@ -126,6 +134,26 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
     @Override
     public boolean priority(Game game) {
         if (stopped(game)) return false;
+        if (preLand != null && role == Role.DECIDER && decision == null && game.isActivePlayer(playerId)
+                && game.getTurnStepType() == PhaseStep.PRECOMBAT_MAIN && game.getStack().isEmpty()
+                && game.getTurnNum() >= fromTurn) {
+            // the benchmark's decisions come after the human's land drop (docs/012 §2.2): play it at
+            // the first main-phase priority, deciding or not (an attack question comes later)
+            try {
+                game.getState().setPriorityPlayerId(playerId);
+                for (ActivatedAbility a : getPlayableAbilities(game)) {
+                    if (a.toString().equals(preLand)) {
+                        preLand = null;
+                        if (activateAbility(a, game)) return true;
+                        throw new IllegalStateException("preLand: could not play " + a);
+                    }
+                }
+                throw new IllegalStateException("preLand '" + preLand + "' is not a legal play here");
+            } catch (RuntimeException e) {
+                fail(game, e);
+                return false;
+            }
+        }
         if (!deciding(game)) {
             checkpoint(game);
             if (role == Role.DECIDER && decision == null) passedBefore++;
@@ -145,7 +173,7 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
             // the checkpoint ComputerPlayerMCTS.priority takes before searching. It also clears the
             // micro-decision histories, which MCTSPlayer's encoding of this point has empty too; a
             // capture only needs that part (the anchor copy costs a game copy)
-            if (mode == Mode.SEARCH) game.setLastPriority(playerId);
+            if (mode != Mode.CAPTURE) game.setLastPriority(playerId);
             else ((GameImpl) game).clearHistory();
             Decision d = newDecision(game, "PRIORITY", "priority");
             for (ActivatedAbility a : playable) {
@@ -172,7 +200,7 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
     private void checkpoint(Game game) {
         if (!game.isCheckPoint(playerId)) return;
         game.getState().setPriorityPlayerId(playerId);
-        if (mode == Mode.SEARCH) game.setLastPriority(playerId);
+        if (mode != Mode.CAPTURE) game.setLastPriority(playerId);
         else ((GameImpl) game).clearHistory();
     }
 
@@ -426,7 +454,9 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
         decision = d;
         if (listener != null) listener.onDecision(game, this, d);
         MCTSNode best = null;
-        if (mode == Mode.SEARCH) {
+        if (mode == Mode.ROOT) {
+            captureRoot(game, type);
+        } else if (mode == Mode.SEARCH) {
             long t0 = System.nanoTime();
             best = getNextAction(game, type);
             d.searchSeconds = (System.nanoTime() - t0) / 1e9;
@@ -434,6 +464,25 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
         }
         game.pause();
         return best;
+    }
+
+    /**
+     * ROOT mode: MageZero's search root for this decision, built exactly as
+     * ComputerPlayerMCTS2.getNextAction builds it (a copy of the last priority checkpoint plus both
+     * players' scripts since then), validated but neither expanded nor searched. The benchmark's
+     * driver (mage.player.ai.BenchSearch) searches it.
+     */
+    private void captureRoot(Game game, ActionEncoder.ActionType type) {
+        if (actionEncoder == null) actionEncoder = new ActionEncoder();
+        Game sim = createMCTSGame(game.getLastPriority());
+        PlayerScript a = new PlayerScript(getPlayerHistory());
+        PlayerScript b = new PlayerScript(game.getOpponent(playerId).getPlayerHistory());
+        MCTSNode2 r = new MCTSNode2(this, sim, type, new PlayerScript(a), new PlayerScript(b));
+        r.validateState();
+        capturedRoot = r;
+        capturedPrefixA = a;
+        capturedPrefixB = b;
+        capturedType = type;
     }
 
     private void fail(Game game, RuntimeException e) {
