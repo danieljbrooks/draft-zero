@@ -17,7 +17,7 @@ Numbers may move by a point or two, and conclusions marked *tentative* may chang
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/016-frontier-dark.png">
-  <img alt="Two panels, offline search and the trained network, each plotting agreement with top 17lands players (A_set, 35 to 75 percent) against pod-seconds per decision on a log axis. Every search method lies between 47 and 54 percent, a few points above the rule heuristic (47 percent) and chance (44 percent). The fair methods (PIMC with 1 and 4 worlds, IS-MCTS; colored) sit at or above the clairvoyant search (gray, hollow). Lines rise a few points from 100 to 1,000 simulations and flatten after. On the network panel, the network's policy with no search sits far above everything at 69 percent." src="img/016-frontier-light.png">
+  <img alt="Three panels (offline search, #2a network, #2b human-pretrained network), each plotting A_set against pod-seconds per decision on a log axis. The priors-off searches lie between 47 and 54 percent, a few points above the rule heuristic (47 percent) and chance (44 percent), rising a few points from 100 to 1,000 simulations. The fair methods (colored) sit at or above the clairvoyant search (gray, hollow). #2a's policy alone scores 69 percent, by passing. On the third panel, search with the human-pretrained policy as priors scores 55 to 57 percent, about its policy alone (55 percent)." src="img/016-frontier-light.png">
 </picture>
 
 <picture>
