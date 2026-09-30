@@ -380,9 +380,9 @@ def plot(summary: list[dict], refs: dict, out_prefix: Path, title: str) -> list[
     return paths
 
 
-PANELS = [("offline", None, "Offline search (a heuristic scores positions)"),
-          ("remote", None, "#2a network (self-play, gen 18)"),
-          ("remote", "imit", "#2b's start network (pretrained on human decisions)")]
+PANELS = [("offline", None, "Search scored by a hand-written heuristic"),
+          ("remote", None, "Search scored by the #2a network (self-play)"),
+          ("remote", "imit", "Search scored by the #2b network (imitation of humans)")]
 
 
 def plot_frontier(summary, refs, out_prefix: Path, metric: str, title: str, subtitle: str) -> list[Path]:
@@ -414,7 +414,7 @@ def plot_frontier(summary, refs, out_prefix: Path, metric: str, title: str, subt
         for ax, (ev, net, ttl) in zip(axes, PANELS):
             _style(ax, t)
             ax.set_xscale("log")
-            ax.set_xlim(min(xs) / 3, max(xs) * 6)
+            ax.set_xlim(min(xs) / 3, max(xs) * 3)
             ax.set_ylim(lo_y, hi_y)
             ax.set_title(ttl, color=t["ink"], fontsize=11, loc="left", pad=10)
             if metric == "A_set":
@@ -447,40 +447,33 @@ def plot_frontier(summary, refs, out_prefix: Path, metric: str, title: str, subt
                     ax.plot(px, py, linestyle="none", marker="o", markersize=6.5,
                             markerfacecolor=c if fair else t["surface"], markeredgecolor=t["surface"] if fair else c,
                             markeredgewidth=1.5 if fair else 2, zorder=4)
-                    ends.append([py[-1], px[-1], LABEL[m] + (", policy priors" if pri else ""), t["ink"] if fair else t["ink2"]])
-                    if pri or m == "pimc1":
+                    if m == "pimc1":
                         for s_, x_, y_ in zip(pts, px, py):
-                            ax.annotate(f"{s_['budget']:,}", (x_, y_), xytext=(0, 7), textcoords="offset points",
-                                        color=t["ink2"], fontsize=7, ha="center")
-            ends.sort()
-            yl = [e[0] for e in ends]
-            gap = 1.1 if metric == "A_set" else 0.011
-            for i in range(1, len(yl)):
-                yl[i] = max(yl[i], yl[i - 1] + gap)
-            for e, y_ in zip(ends, yl):
-                ax.annotate(e[2], (e[1], e[0]), xytext=(e[1] * 1.3, y_), textcoords="data", color=e[3], fontsize=8.5,
-                            va="center")
+                            b = s_["budget"]
+                            ax.annotate(f"{b // 1000}k" if b >= 1000 else str(b), (x_, y_), xytext=(0, 7),
+                                        textcoords="offset points", color=t["ink2"], fontsize=7.5, ha="center")
             for s in [s for s in summary if s["method"] == "policy" and s["evaluator"] == ev and (s.get("net") or None) == net
                       and s.get(key) is not None]:
                 ax.plot([s["pod_s"]], [s[key] * scale], marker="s", markersize=8, color=t["ink2"], linestyle="none", zorder=5)
-                ax.annotate(f"its policy, no search", (s["pod_s"], s[key] * scale), xytext=(6, -12),
+                ax.annotate("the network's policy,\nno search", (s["pod_s"], s[key] * scale), xytext=(7, -3),
                             textcoords="offset points", color=t["ink2"], fontsize=8.5, ha="left", va="top")
             ax.set_xlabel("Pod-seconds per decision (log scale)", color=t["ink2"])
-        axes[0].set_ylabel("A_set: agreement with top 17lands players (macro over types)" if metric == "A_set"
-                           else "Balanced agreement: mean of cast/pass, attack and block balanced accuracies",
-                           color=t["ink2"])
-        handles = [Line2D([], [], color=t["series"]["ismcts"], marker="o", linewidth=2, label="passes the hidden-information test"),
-                   Line2D([], [], color=t["muted"], marker="o", markerfacecolor=t["surface"], linewidth=2,
-                          label="fails it: reads hidden cards"),
-                   Line2D([], [], color=t["ink2"], linewidth=2, label="priors off"),
-                   Line2D([], [], color=t["ink2"], linewidth=2, linestyle=(0, (5, 2)), label="the network's policy as priors"),
-                   Line2D([], [], color=t["ink2"], marker="s", linestyle="none", label="the network's policy, no search")]
-        leg = fig.legend(handles=handles, loc="lower center", ncol=5, frameon=False, fontsize=9)
+        axes[0].set_ylabel("Agreement with top players (A_set)" if metric == "A_set"
+                           else "Balanced agreement (0.50 = any constant answer)", color=t["ink2"])
+        handles = [Line2D([], [], color=t["muted"], marker="o", markerfacecolor=t["surface"], markeredgewidth=2, linewidth=2,
+                          label="Clairvoyant MCTS (sees hidden cards; fails the leak test)"),
+                   Line2D([], [], color=t["series"]["pimc1"], marker="o", linewidth=2, label="PIMC, 1 sampled world"),
+                   Line2D([], [], color=t["series"]["pimc4"], marker="o", linewidth=2, label="PIMC, 4 sampled worlds"),
+                   Line2D([], [], color=t["series"]["ismcts"], marker="o", linewidth=2, label="IS-MCTS"),
+                   Line2D([], [], color=t["ink2"], linewidth=2, label="solid: no policy priors"),
+                   Line2D([], [], color=t["ink2"], linewidth=2, linestyle=(0, (5, 2)), label="dashed: the network's policy as priors"),
+                   Line2D([], [], color=t["ink2"], marker="s", linestyle="none", label="the network's policy alone, no search")]
+        leg = fig.legend(handles=handles, loc="lower center", ncol=4, frameon=False, fontsize=9.5)
         for tx in leg.get_texts():
             tx.set_color(t["ink2"])
         fig.text(0.05, 0.955, title, color=t["ink"], fontsize=13, fontweight="bold", ha="left")
         fig.text(0.05, 0.925, subtitle, color=t["ink2"], fontsize=10, ha="left")
-        fig.subplots_adjust(left=0.05, right=0.95, top=0.86, bottom=0.15, wspace=0.10)
+        fig.subplots_adjust(left=0.05, right=0.98, top=0.86, bottom=0.19, wspace=0.08)
         p = Path(f"{out_prefix}-{mode}.png")
         p.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(p, facecolor=t["surface"])

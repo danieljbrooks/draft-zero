@@ -1,28 +1,144 @@
-# Search benchmark, first experiment: results
+# Search benchmark: results of the first experiment
 
-**Status: final, 2026-09-29 11:50 PDT.** The plan is [docs/012](012-search-benchmark.md) §2, and this report
-follows its order. It covers:
+*September 2026. The full design of the experiment is in the proposal,
+[docs/012](012-search-benchmark.md).*
 
-- **the first experiment:** E0, E1, E2 and E2b, 16 offline and 16 network runs of E2 and 20 runs of
-  E2b on 1,000 held-out decisions;
-- **follow-ups on the extra budget:** policy priors from two networks, and 10,000 simulations;
-- **a diagnosis** of why agreement is low (§8), and an imitation-learning plan (§9).
+## The question
 
-## Summary
+Strong game-playing programs such as AlphaZero combine two parts: a neural network that judges
+positions, and a **tree search** that uses it to look ahead before each move. For Magic, how much
+search helps, and which kind of search works best, is an open question. Magic's rules engines are
+slow, and much of the game is hidden: you can't see your opponent's hand or the order of either
+library.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="img/016-frontier-dark.png">
-  <img alt="Three panels (offline search, #2a network, #2b human-pretrained network), each plotting A_set against pod-seconds per decision on a log axis. The priors-off searches lie between 47 and 54 percent, a few points above the rule heuristic (47 percent) and chance (44 percent), rising a few points from 100 to 1,000 simulations. The fair methods (colored) sit at or above the clairvoyant search (gray, hollow). #2a's policy alone scores 69 percent, by passing. On the third panel, search with the human-pretrained policy as priors scores 55 to 57 percent, about its policy alone (55 percent)." src="img/016-frontier-light.png">
-</picture>
+This experiment explores how effective different search techniques are at Magic limited.
+
+- **What we measured.** Playing thousands of games for every setting would be slow and expensive.
+  Instead we took **1,000 real positions from human games** of Foundations (FDN) limited, recorded
+  by [17lands](https://www.17lands.com/). We rebuilt each one in the XMage rules engine, let each
+  search choose a play, and measured **how often it chose what a top player chose.** The positions
+  are casting a spell, holding back, attacking and blocking. Every setting sees the same positions,
+  so small differences show up. This measures agreement with strong players, not playing strength
+  directly (§6).
+- **The search methods.** One of them, today's MageZero search, **peeks** at hidden cards: it
+  searches the real game, including the opponent's hand. We call it *clairvoyant MCTS*. The others
+  **hide** them, as a human player must.
+  - *PIMC* guesses the hidden cards (a plausible opponent hand and deck, drawn from 17lands data)
+    and searches the guessed game as if it were real. It uses 1 or 4 guesses.
+  - *IS-MCTS* builds a single search tree over many guesses, drawing a fresh one at every step.
+- **Leak probes.** To check that the hiding methods really hide, we built pairs of positions that
+  look identical to the player and differ only in hidden cards: a counterspell in the opponent's
+  hand or not; a good or a bad next draw. A fair search decides the same way in both.
+- **Search budgets.** Each method searched with 100, 300, 1,000 and 3,000 **simulations** per
+  decision, the number of positions it looks at, and the two best also with 10,000.
+- **How positions are scored inside the search:** a hand-written heuristic (life, cards, board), or
+  experiment #2a's network, trained by self-play.
+- **A few additional experiments:**
+  - how the search discounts distant outcomes (per decision, per action or per turn);
+  - a network's *policy*, its instinct for which play is good, used to guide the search
+    ("priors"). This includes experiment #2b's network, pretrained on human decisions;
+  - the larger budgets.
+
+Compute is measured in **pod-seconds per decision:** seconds of the rented machine (one RTX 3090 GPU
+and 31 CPU cores) spent per decision. 1 pod-second costs about $0.00014.
+
+## What we found
+
+1. **Search doesn't need to see the opponent's cards.**
+   - The methods that hide information (PIMC, IS-MCTS) agree with top players as well as the
+     search that peeks.
+   - They do it at the same or a better price: PIMC with one guess costs the same as the peeking
+     search.
+   - The leak probes confirm that they hide. The peeking search plays around a counterspell only
+     when one is really there; the others decide the same either way (§3).
+2. **More search consistently helped.**
+   - With the heuristic scoring positions, agreement climbed steadily for every method from 100 to
+     3,000 simulations, and again at 10,000.
+   - The trees grew from about 6 to 14 decisions deep, yet even at 10,000 simulations the search
+     sees less than one turn ahead (§8.5).
+   - The slow rules engine is what limits the budget. A faster engine such as gorge or mtg-kernel,
+     16–470× faster than XMage in [docs/015](015-rules-engine-comparison.md), would allow far more
+     search for the same time and money. On this evidence, that should improve play.
+   - With a much faster engine, the network's inference becomes the next bottleneck (docs/015).
+3. **A little imitation learning goes a long way.**
+   - Experiment #2b's network was pretrained on human decisions from under 2% of the available
+     games. With no search at all, it matched top players as well as the best search here, for a
+     thousandth of the compute (§7).
+   - Using its policy to guide search kept that level.
+   - Bootstrapping limited agents with imitation learning looks promising. The training procedure
+     needs work: how the policy is used as a prior, and how to keep self-play from overwriting it
+     (§9).
+4. **Self-play hasn't yet beaten the hand-written heuristic.**
+   - After 18 generations of self-play, experiment #2a's network scored positions no better than
+     the heuristic: search with it agreed with top players no more often (§4.3).
+   - Its policy alone was worse than search.
+   - That points at the training recipe, and possibly at scale: 18 generations and about 2,700 games
+     is very small next to AlphaZero's tens of millions (docs/014).
+5. **Top players wait; the agents act.**
+   - Expert players tend to hold a spell until the last viable moment. That keeps their options
+     open and lets them learn more before committing.
+   - The agents lean towards action: they attack, block and cast far more often than the players
+     did (§8.2).
+   - Future versions of this benchmark could focus on these last-chance timings: the second main
+     phase, the opponent's end step, or holding up a combat trick.
+
+## How agreement is scored, and why passing matters
+
+Almost half of the top players' decisions were to **do nothing**:
+
+| Decision | What the top player did |
+|---|---|
+| Hold: a spell was castable, but they cast nothing that turn | passed, every time (that's how these positions were chosen) |
+| Block: "should this creature block?" | didn't block, 80% of the time |
+| Attack: "attack with this creature?" | didn't attack, 54% |
+| Spell: a turn in which they cast something | cast. But Pass also counts as a match in 61% of these, because 17lands doesn't record whether a turn's spells came before or after combat |
+
+In all, **45% of the players' decisions were to wait.** So the plain agreement score planned in
+docs/012 (*A_set*) rewards passivity. An agent that **always does nothing scores 73.8%**, more than
+any search (47–55%).
+
+**That is why #2a's network looks so strong on its own.** Its policy, with no search, scores 68.6%,
+the highest raw number in this report, because it almost always passes:
+
+| | Does nothing: passes, doesn't attack, doesn't block |
+|---|---|
+| Top players | 45% of decisions |
+| #2a's policy, no search | **86%**: it passes priority on 98% of spell decisions and 88% of holds, and declines 80% of attacks and 70% of blocks |
+| #2b's human-trained policy, no search | 33% |
+| The searches | 25–32% |
+
+Why #2a's policy passes so much wasn't measured. From reading MageZero's code, one likely
+contributor: it records a training example at every combat step even when passing is the only legal
+play, so many of the policy's training targets are "pass".
+
+**The balanced score.** To stop passivity or aggression from winning, we also score three yes/no
+questions: *cast or hold*, *attack or not*, *block or not*. Each is scored by balanced accuracy:
+the average of how often the agent matched the player when the player acted, and when the player
+waited. Always passing, always acting and choosing at random all score 0.50. The balanced score is
+the mean over the three questions (§8.3). It is the measure to trust in this report.
+
+## The results at a glance
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/016-frontier-balanced-dark.png">
-  <img alt="The same three panels on the balanced score (§8.3), where any constant answer scores 0.50. Offline search rises steadily with budget, from 0.57 at 100 simulations to 0.64 for IS-MCTS at 10,000. The #2a network's searches sit lower, 0.55 to 0.62, with its policy as priors (dashed) barely higher. #2b's human-pretrained policy alone scores 0.65, and searching with it as priors stays at 0.62 to 0.65 at every budget." src="img/016-frontier-balanced-light.png">
+  <img alt="Three panels, one per way of scoring positions inside the search (a hand-written heuristic, the #2a network, the #2b network), plotting the balanced score against compute per decision on a log scale. Lines are search methods: clairvoyant MCTS (gray, hollow, peeks at hidden cards), PIMC with 1 and 4 guessed worlds, and IS-MCTS; dashed lines use the network's policy as priors; squares are a network's policy with no search. With the heuristic, every method climbs from about 0.57 at 100 simulations to 0.62-0.64 at 3,000-10,000. With the #2a network, searches sit at 0.55-0.62 and its policy alone at 0.54. With the #2b network, its policy alone scores 0.65 and search guided by it 0.62-0.65." src="img/016-frontier-balanced-light.png">
 </picture>
 
-*Top: the planned headline, A_set, which passivity inflates (§8.1). Bottom: the balanced score
-of §8.3, where any constant answer scores 0.50. Three panels: offline search, #2a's network, and
-#2b's human-pretrained network (§7).*
+*The balanced score (0.50 = any constant answer) against compute. Each line is one search method.
+Its points are 100, 300, 1,000 and 3,000 simulations per decision (and 10,000 for two methods),
+labelled on the orange PIMC line. Bars are 95% confidence intervals. The three panels differ in how
+positions inside the search are scored. The gray square on the right, #2b's human-trained policy
+with no search, is the best single point.*
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/016-frontier-dark.png">
+  <img alt="The same three panels on the plain agreement score (A_set). Searches without priors lie between 47 and 55 percent, a few points above the rule heuristic (47 percent) and chance (44 percent). #2a's policy alone scores 69 percent by passing, and #2a's policy as priors (dashed) lifts the searches by passing more. #2b's policy alone scores 55 percent and search guided by it 55-57 percent." src="img/016-frontier-light.png">
+</picture>
+
+*The same runs on the plain agreement score, A_set. It rewards passing: #2a's policy alone (gray
+square, middle) looks best here only because it almost always passes.*
+
+## Findings in detail
 
 - **Every search agrees with top players about equally, and not much more than a simple
   heuristic,** by the planned headline. A_set, macro-averaged over four decision types, is 47–55%
@@ -220,8 +336,9 @@ drops the lenient Pass on spell decisions (§1.1).
 
 - **The rule heuristic barely beats chance.** It is "cast the biggest spell; attack when power is
   at least the best blocker's toughness; block when the blocker kills the attacker and survives".
-- **#2a's policy scores highest of anything in this report, mostly by passing.** It passes on 88%
-  of holds, and Pass counts on spell decisions where the human attacked. Its strict score, 53.9%,
+- **#2a's policy scores highest of anything in this report, by passing.** It does nothing on 86% of
+  decisions, against the top players' 45%. That wins almost every hold (88%), and on spell decisions
+  Pass counts as a match whenever the human attacked (§ "How agreement is scored"). Its strict score, 53.9%,
   is about where the searches are. Its policy heads learned from self-play searches' visit counts
   (300 simulations with tree reuse), yet they prefer Pass far more than any search here does. Why
   isn't clear from this data. With priors off, the search never reads them.
@@ -551,7 +668,12 @@ few points of it.
 | Spell: casts one of the human's spells / another spell / passes | 100% cast | 60% / 30% / 9% |
 
 When the human didn't attack, the search attacked 54% of the time. When the human didn't block,
-it blocked 48% of the time. Humans were no more likely to cast a cheaper spell than a dearer one
+it blocked 48% of the time.
+
+This fits how experts play limited. They hold a spell until the last viable moment, keeping their
+options open and waiting for information: what the opponent does, what they draw next, whether a
+trick is coming. A search that looks less than a turn ahead (§8.5), with a scoring function that
+likes immediate board changes (§8.4), can't see the value of waiting. Humans were no more likely to cast a cheaper spell than a dearer one
 when they differed from the search: the wrong spell splits evenly across cheaper, dearer and
 equal mana value (10% each).
 
@@ -636,8 +758,20 @@ accuracy on whether to act and 70–80% on which.
   for decisions.
 - **Holds need a fairer label.** "Pass" is the label only because the human cast nothing all
   turn; some of those turns may have held for instant-speed plays that 17lands doesn't time.
+- **Test the waiting directly.** A future version could focus on last-chance timings: the second
+  main phase after combat, the opponent's end step, or holding up mana for a trick in combat. Does
+  the agent cast its spell then, or waste the chance? These need mid-turn positions, which the
+  pipeline can't yet rebuild (§1.1). Arena logs, which record the order of a turn's plays, are one
+  way to get them (docs/008).
 
-## 9. A plan: imitation learning as the starting point
+## 9. A potential plan for bootstrapping limited agents with imitation learning
+
+**Training is hard.** So far we have tried imitation learning only at a small scale: experiment #2b
+pretrained on 132,603 decisions from 1.7% of the available games (§9.1). The results are
+promising. That network's policy, with no search at all, agreed with top players as well as the
+best search in this benchmark. There's room to scale it up at least 7×, and the training recipe is
+the part to work on: #2b's network stopped learning once self-play began (docs/013). The plan below
+is one way to proceed.
 
 **Principle.** Human play is a better starting point than the search's own evaluator. The best
 human model agrees with top players at least as well as any search here, and knows *when to do
