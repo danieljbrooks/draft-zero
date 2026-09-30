@@ -1,46 +1,46 @@
 # DraftZero
 
-One network that plays a Magic limited format with **any** deck. Every game draws both
-decks at random from ~31.5k Foundations (FDN) Premier Draft decks built by top 17lands
-players, and the agent is scored with 17lands-style statistics: card GIH win rate, rank
-correlation against the public data, and per-colour deck records.
+DraftZero is a project to build computer agents that play **Magic: The Gathering limited** at a
+high level. In limited formats such as draft, players build a deck on the spot from the cards they
+open, so almost every game is played with a deck nobody has played before. Playing limited well
+means understanding a whole set of cards, not memorising one deck.
 
-This is deliberately the opposite of [MageZero](https://github.com/WillWroble/MageZero),
-which decomposes Magic into deck-local subgames. DraftZero uses MageZero as a library —
-its RL framework, XMage bridge, trainer and evaluator — and adds the format-level parts.
+The current approach is to train **AlphaZero-style** agents. A neural network plays games against
+itself; a tree search uses the network to look ahead before each move; and the results of those
+games teach the network to play better. The games run in [XMage](https://github.com/magefree/mage),
+an open-source engine that implements the full rules of Magic, through
+[MageZero](https://github.com/WillWroble/MageZero), Will Wroble's AlphaZero-style framework for
+XMage. DraftZero adds what it takes to learn a whole format:
+- one agent that can play any deck from a set (Foundations, "FDN", so far);
+- decks and human reference data from [17lands](https://www.17lands.com/);
+- benchmarks that compare the agents with top human players.
+
+It's early days. The first agent learned to beat plain search modestly, and later runs haven't
+improved on it yet. The experiments below say what has been tried and what was learned. The
+[docs](docs/) have the details, and [ROADMAP.md](ROADMAP.md) says what comes next.
 
 ## Experiments
 
-| # | What | Result | Code | Artifacts |
-|---|---|---|---|---|
-| 1 | One agent for all of FDN: 2,507 games, 34 generations, one L40S, ~$28 | Beats raw search 110/197 (55.8%); plateaued by gen 10 | tag [`exp1-fdn-generalist`](https://github.com/danieljbrooks/draft-zero/tree/exp1-fdn-generalist) | [report](docs/003-fdn-generalist-report.md) · [Hugging Face](https://huggingface.co/danbrooks/draftzero-fdn-exp1) |
-| 2a | Exp #2, heuristic start, on MageZero v0.2 ("run 1"): 2,673 games, 18 generations, one RTX 3090, ~$22 | 50% against raw search at gen 16 (95/191), no gain on gen 0; league learning through gen 8; 17lands commons ρ +0.20 | `configs/exp2.yml` on `main` | [report](docs/014-exp2-run1-report.md) · HF `danbrooks/draftzero-checkpoints` (private), `2026-09-27_01-59-54/` |
-| 2b | Exp #2 – Imitation: the same settings from a start pretrained on 17lands decisions ("run 2"): 12 generations, ~$14 | 45% against raw search at gen 8 (88/195); stopped learning within three generations | `configs/exp2_run2.yml` on `main` | [report](docs/013-exp2-imitation-report.md) · [setup](docs/011-exp2-run2-imitation.md) · HF prefix `2026-09-27_03-42-21/` |
+| # | Experiment | What we learned | Details |
+|---|---|---|---|
+| 1 | One agent for every FDN deck, trained by self-play from scratch | It learned to beat plain search modestly, then plateaued | [report](docs/003-fdn-generalist-report.md) · tag [`exp1-fdn-generalist`](https://github.com/danieljbrooks/draft-zero/tree/exp1-fdn-generalist) · [Hugging Face](https://huggingface.co/danbrooks/draftzero-fdn-exp1) |
+| 2a | The same on MageZero v0.2, with more search per move | No gain over plain search. Learning stalled after about eight generations, and its value estimate, the only part the search used, improved slowly | [report](docs/014-exp2-run1-report.md) · `configs/exp2.yml` |
+| 2b | As 2a, but starting from a network pretrained on human decisions from 17lands | The human start didn't help. Heavy pretraining left the network unable to keep learning | [report](docs/013-exp2-imitation-report.md) · [setup](docs/011-exp2-run2-imitation.md) · `configs/exp2_run2.yml` |
+| 3 | Search benchmark: which tree-search method, at what cost, best matches top players' decisions while respecting hidden information | Search that can't see hidden cards costs nothing in quality. Search matches top players only modestly, mostly because of how it scores positions, not which method it uses. A policy learned from human play is the strongest signal | [plan](docs/012-search-benchmark.md) · [results](docs/016-search-benchmark-results.md) · `tools/search_bench/` |
 
-Exp #2 is done ([ROADMAP](ROADMAP.md), Phase 4). It has two components with the same settings,
-differing only in the starting network:
-- **[Experiment #2a](docs/014-exp2-run1-report.md)** starts from heuristic search ("run 1").
-- **[Experiment #2b – Imitation](docs/013-exp2-imitation-report.md)** starts from a network pretrained
-  on 17lands decisions ("run 2").
+Checkpoints from experiment #2 are in the private Hugging Face repo `danbrooks/draftzero-checkpoints`
+(prefixes in the reports).
 
-The imitation start (73% agreement with humans) did not help: its network stopped learning within three
-generations, while the heuristic start kept improving. #2a learned for about eight generations (league
-59%), then plateaued at 50% against raw search. Its value head, the only part the search reads,
-memorised its training positions and improved only slowly on new games. 17lands agreement on
-commons ended at ρ +0.20.
-
-Studies: **[human gameplay data](docs/008-gameplay-data.md)**. 17lands and Arena logs mapped onto XMage
-states (a recorded turn replays to the same next state ~89% of the time), human-trained heads versus
-gen 33, and a first test of MCTS coaching. **[Hidden information](docs/009-hidden-information.md)**.
-MageZero's network and search both see the opponent's hand and the library order. The search plays
-around a counterspell only when it's really there. The doc:
-- compares how other hidden-information games handle this;
-- evaluates IS-MCTS;
-- checks XMage's own bots (the MAD AI never simulates an opponent's response, and upstream's Monte
-  Carlo player determinizes);
-- plans fair baselines and experiment #2.
-
-What comes next, and why: **[ROADMAP.md](ROADMAP.md)**.
+**Studies** behind the experiments:
+- **[Human gameplay data](docs/008-gameplay-data.md):** turning 17lands and Arena game logs into
+  XMage positions, for imitation learning and for scoring agents against people.
+- **[Hidden information](docs/009-hidden-information.md):** MageZero's search could see the
+  opponent's hand. The doc covers how other hidden-information games handle this, and what fair
+  search looks like.
+- **[Rules engines](docs/015-rules-engine-comparison.md):** faster engines than XMage for a limited
+  agent.
+- **Running experiments:** the [runbook](docs/002-RUNBOOK.md) and
+  [RunPod tips](docs/005-runpod-tips.md).
 
 ## How the pieces relate
 
@@ -55,7 +55,9 @@ DraftZero                    this repo — pools, generalist loop, parallel JVMs
                              MageZero's scripts unmodified)
 ```
 
-Dependencies point one way only. Nothing in MageZero knows DraftZero exists. Experiment #1
+MageZero trains agents for particular decks; DraftZero uses it as a library (its RL framework, XMage
+bridge, trainer and evaluator) and adds the format-level parts. Dependencies point one way only.
+Nothing in MageZero knows DraftZero exists. Experiment #1
 ran on an older MageZero fork (`mz-engine`, `bcc76de`) and the v0.1 XMage build
 (`danieljbrooks/mage` `exp1-fdn-generalist`); its checkpoints don't load under v0.2.
 
@@ -75,8 +77,9 @@ ran on an older MageZero fork (`mz-engine`, `bcc76de`) and the v0.1 XMage build
 | `src/draftzero/workers/` | where self-play runs: local, ssh, runpod |
 | `tools/extract_decks.py` | build the deck pool from 17lands public game data |
 | `src/draftzero/gameplay/` | human gameplay data ([docs/008](docs/008-gameplay-data.md)): 17lands replays and Arena logs → XMage states (`StateSpec`), turn replay, imitation data, coaching; `dz gameplay <tool>` |
-| `java/mzbridge/` | a long-lived XMage worker, no fork change: builds any `StateSpec` and answers build / encode / coach / replay_turn requests |
+| `java/mzbridge/` | a long-lived XMage worker, no fork change: builds any `StateSpec` and answers build / encode / coach / bench / replay_turn requests. `bench` runs the search benchmark's searches (MageZero-style MCTS, PIMC, IS-MCTS) |
 | `tools/gameplay/` | experiment scripts for the gameplay-data study |
+| `tools/search_bench/` | the search benchmark ([docs/012](docs/012-search-benchmark.md), [docs/016](docs/016-search-benchmark-results.md)): decision set, runner, leak test, analysis, pod plans |
 | `assets/` | small versioned inputs: deck metadata, action vocab, GIH reference |
 | `assets/sample/` | 80 decks and pools, so a fresh clone runs without the full pool |
 | `configs/` | run configs (`fdn_l40s.yml` produced experiment #1) and the curriculum |
