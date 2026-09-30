@@ -1,7 +1,8 @@
-# Search benchmark: results of the first experiment
+# Experiment #3: MCTS Method Benchmark
 
 *September 2026. The full design of the experiment is in the proposal,
-[docs/012](012-search-benchmark.md).*
+[docs/012](012-search-benchmark.md). This is part 1. Follow-up work on the benchmark, if we carry it
+out, will be part 2.*
 
 ## The question
 
