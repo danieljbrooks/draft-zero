@@ -338,7 +338,7 @@ drops the lenient Pass on spell decisions (§1.1).
   at least the best blocker's toughness; block when the blocker kills the attacker and survives".
 - **#2a's policy scores highest of anything in this report, by passing.** It does nothing on 86% of
   decisions, against the top players' 45%. That wins almost every hold (88%), and on spell decisions
-  Pass counts as a match whenever the human attacked (§ "How agreement is scored"). Its strict score, 53.9%,
+  Pass counts as a match whenever the human attacked (see "How agreement is scored, and why passing matters" above). Its strict score, 53.9%,
   is about where the searches are. Its policy heads learned from self-play searches' visit counts
   (300 simulations with tree reuse), yet they prefer Pass far more than any search here does. Why
   isn't clear from this data. With priors off, the search never reads them.
