@@ -67,10 +67,12 @@ MageZero's `NetTransformer`, with **21.9M parameters**:
 
 - **Input.** A sparse game-state feature embedding. It grew during the run as new features appeared, ending at **31,676 × 512**.
 - **Body.** A 2-layer transformer encoder (d_model 512, 4 heads, feed-forward 1024), then an MLP 512→256. Dropout is 0.3 on input and 0.2 on the embedding.
-- **Five output heads:**
-  - player priority (what to cast, play, or activate, or pass; 128 slots)
-  - opponent priority (a prediction of the opponent's action; 128 slots)
-  - target choice (128 slots)
+- **Five output heads.** The three action heads are 1,024 slots wide. FDN's set-wide action
+  vocabulary (`assets/vocab/FDN_SPG.tsv`) gives each card and ability its own slot, instead of
+  MageZero's default 128 hashed slots.
+  - player priority (what to cast, play, or activate, or pass; 1,024 slots)
+  - opponent priority (a prediction of the opponent's action; 1,024 slots)
+  - target choice (1,024 slots)
   - yes/no choice (2 options)
   - value
 
