@@ -12,6 +12,7 @@ import mage.game.Game;
 import mage.player.ai.ComputerPlayerMCTS2;
 import mage.player.ai.encoder.ActionEncoder;
 import mage.player.ai.encoder.StateEncoder;
+import mage.player.ai.score.GameStateEvaluator3;
 
 import java.io.*;
 import java.lang.management.ManagementFactory;
@@ -186,9 +187,13 @@ public final class Worker {
         StateInjector.Built b = StateInjector.build(spec, optLong(opt, "idSeed", seed), seed, optBool(opt, "lenient", false));
         b.warnings.addAll(0, subs.warnings);
         long t1 = System.nanoTime();
+        // the built state before advancing, as the build op dumps it (labels map spec aliases to names)
+        JsonObject dump = optBool(opt, "dump", false) ? Dumper.dump(b, false) : null;
         String seat = decisionSeat(spec, opt);
+        boolean heuristic = optBool(opt, "heuristic", false);
         int[][] features = new int[1][];
         double[] encMs = new double[1];
+        Double[] heur = new Double[1];
         BridgePlayer.Listener l = (game, p, d) -> {
             long te = System.nanoTime();
             StateEncoder enc = new StateEncoder();
@@ -199,6 +204,8 @@ public final class Worker {
             Set<Integer> fv = enc.processState(game, me, ActionEncoder.ActionType.valueOf(d.type), d.text);
             features[0] = fv.stream().mapToInt(Integer::intValue).sorted().toArray();
             encMs[0] = (System.nanoTime() - te) / 1e6;
+            // offline MageZero's leaf score (docs/017's value pilot), from the decision player's seat
+            if (heuristic) heur[0] = GameStateEvaluator3.evaluateNormalized(me, game);
         };
         String[] reason = new String[1];
         Decision d = advance(b, seat, opt, BridgePlayer.Mode.CAPTURE, l, reason);
@@ -212,6 +219,8 @@ public final class Worker {
         if (features[0] != null) for (int f : features[0]) fa.add(f);
         r.add("features", fa);
         r.addProperty("nFeatures", fa.size());
+        if (heur[0] != null) r.addProperty("heuristic", heur[0]);
+        if (dump != null) r.add("dump", dump);
         r.add("warnings", Dumper.strings(b.warnings));
         if (!subs.applied.isEmpty()) r.add("substitutions", subs.toJson());
         JsonObject t = new JsonObject();
