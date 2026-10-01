@@ -5,7 +5,7 @@ session, and update it before ending one** — mark items done, record decisions
 the bottom, and move anything you learned into the right phase. It's the single source of
 truth for status. Chat history isn't.
 
-*Last updated: 2026-09-27*
+*Last updated: 2026-10-01*
 
 ## Where things stand
 
@@ -511,16 +511,31 @@ The first experiment ran on 2026-09-29, for $14.35 on three RTX 3090 pods:
   - search with it as priors in PIMC with 1 world;
   - then self-play from it.
 
-**Faster engines.** Explore Jack Maiorino's [mtg-kernel](https://github.com/jackmaiorino/mtg-kernel),
-the engine behind Spellbench's first benchmark. It's reportedly about 40× faster than XMage
-overall, and 1,000× for training (unverified). Not started: this is a backlog item.
-- Why it matters: XMage's speed caps the search budget and the cost of every run. docs/012 records
-  engine-independent counts so its results can be re-costed on a faster engine.
-- [ ] Explore:
-  - its card and rules coverage (FDN?);
-  - what the 40× and 1,000× figures measure;
-  - whether its search can be kept to one seat's view (Spellbench v2's contract);
-  - what running MageZero's search and networks on it would take.
+**Faster engines** ([docs/015](docs/015-rules-engine-comparison.md)). Five engines compared on
+speed, FDN cards and MCTS support: XMage, Forge, gorge, mtg-kernel and ManaBrew.
+- **gorge and ManaBrew** are fast and have FDN today.
+- **mtg-kernel** is the fastest and the best built for search; its FDN support is in progress.
+- **Why it matters:** XMage's speed caps the search budget and the cost of every run. docs/012
+  records engine-independent counts, so its results can be re-costed on a faster engine.
+- [x] Explore mtg-kernel: its coverage, the 40× and 1,000× figures, one-seat search, and what
+      MageZero-style search would take (docs/015 §2, §4, §5).
+- [x] Compare gorge, Forge and ManaBrew on the same test (docs/015).
+- [ ] **Follow mtg-kernel's FDN Limited support**
+      ([mtg-kernel#110](https://github.com/jackmaiorino/mtg-kernel/issues/110)). Dan wants to follow
+      it. Status on 2026-10-01:
+  - seven milestones are planned;
+  - three are in open, stacked PRs, none merged: deck loading
+    ([#113](https://github.com/jackmaiorino/mtg-kernel/pull/113)), a custom-deck reset/step
+    interface ([#115](https://github.com/jackmaiorino/mtg-kernel/pull/115)) and opt-in full priority
+    windows ([#116](https://github.com/jackmaiorino/mtg-kernel/pull/116));
+  - still to come: mulligans, trample damage, planeswalkers, the FDN cards, fair opponent-deck
+    sampling and DraftZero integration;
+  - no date is promised.
+
+  Update docs/015 §4 as milestones land.
+- [ ] **Test training models on FDN Limited on mtg-kernel when it's ready.** "Ready" means its
+      milestone 4: our pair A decks, its test fixtures, play complete games with real card
+      behaviour. Start small: one self-play run, compared with XMage at equal cost.
 
 **Study.** Read with a specific question in mind.
 - [ ] KataGo paper (Wu, 2019): AlphaZero on a small compute budget. Its "playout cap
@@ -555,6 +570,14 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 ## Decision log
 
 Add dated entries, newest first.
+
+- **2026-10-01** — Engines ([docs/015](docs/015-rules-engine-comparison.md)): five compared.
+  - gorge and ManaBrew have FDN today.
+  - ManaBrew is a Rust port of Forge. It matched Java Forge in 267 of 280 FDN games, but resumes
+    only at turn start.
+  - mtg-kernel's FDN support is under way in #110.
+  - Dan will follow mtg-kernel's Limited work and test training on FDN there once its fixture
+    decks play complete games.
 
 - **2026-09-26** — Hidden information: exp #2 accepts some leakage; exp #3 should do better. For
   exp #2 the network no longer sees the opponent's hand, but the search still runs on the real
