@@ -31,6 +31,65 @@ def test_exp4_split_keeps_test_inside_2b_test_range():
     assert 0.0 <= h < 1.0 and h == build.component_hash("some-draft")
 
 
+def _toy_table(rows: list[tuple[list[int], list[int], list[int]]], first_row: int) -> dict:
+    """A table in imitation's layout from (features, legal, set) per row."""
+    import numpy as np
+    t = {"indices": np.asarray([x for f, _, _ in rows for x in f], np.int32),
+         "offsets": np.r_[0, np.cumsum([len(f) for f, _, _ in rows])].astype(np.int64),
+         "legal_idx": np.asarray([x for _, l, _ in rows for x in l], np.int32),
+         "legal_indptr": np.r_[0, np.cumsum([len(l) for _, l, _ in rows])].astype(np.int64),
+         "set_idx": np.asarray([x for _, _, s in rows for x in s], np.int32),
+         "set_indptr": np.r_[0, np.cumsum([len(s) for _, _, s in rows])].astype(np.int64),
+         "z": np.asarray([1.0 if (first_row + i) % 2 else -1.0 for i in range(len(rows))], np.float32),
+         "meta/label_status": np.zeros(len(rows), np.int32),
+         "meta/row": np.arange(first_row, first_row + len(rows), dtype=np.int32),
+         "labels": [[f"opt{x}" for x in l] for _, l, _ in rows], "lab_idx": [l for _, l, _ in rows]}
+    return t
+
+
+def test_merge_h5_concatenates_tables_and_shifts_csr_pointers(tmp_path):
+    import h5py
+    import numpy as np
+    from draftzero.gameplay import imitation as im
+    build = tool("build")
+    rows = [([1, 2, 3], [4, 5], [5]), ([6], [7, 8, 9], [7, 9]), ([10, 11], [12, 13], []), ([14, 15, 16, 17], [1, 2], [2])]
+    parts = [rows[:1], rows[1:3], rows[3:]]
+    paths = []
+    for i, p in enumerate(parts):
+        paths.append(tmp_path / f"p{i}.h5")
+        im._save_table(_toy_table(p, sum(len(q) for q in parts[:i])), paths[-1])
+    im._save_table(_toy_table(rows, 0), tmp_path / "whole.h5")
+    assert build.merge_h5(paths, tmp_path / "merged.h5") == len(rows)
+    with h5py.File(tmp_path / "whole.h5") as a, h5py.File(tmp_path / "merged.h5") as b:
+        assert sorted(build._h5_datasets(a)) == sorted(build._h5_datasets(b))
+        for k in build._h5_datasets(a):
+            x = a[k].asstr()[:] if h5py.check_string_dtype(a[k].dtype) else a[k][:]
+            y = b[k].asstr()[:] if h5py.check_string_dtype(b[k].dtype) else b[k][:]
+            assert np.array_equal(x, y), k
+        assert dict(a.attrs).keys() == dict(b.attrs).keys()
+
+
+def test_build_part_writer_resumes_after_an_unfinished_part(tmp_path):
+    build = tool("build")
+    game = lambda r: {"row": r, "ts": [{"row": r, "status": "ok"}], "rp": [], "bl": [], "op": []}   # noqa: E731
+    w = build.PartWriter(tmp_path, part_games=3)
+    for r in range(8):
+        w.add(game(r))
+    for f in w.files.values():              # a stop: part 2 is open with 2 games and no marker
+        f.close()
+    parts = build.completed_parts(tmp_path)
+    assert [p["rows"] for p in parts] == [[0, 1, 2], [3, 4, 5]] and parts[0]["stats"]["ts_ok"] == 3
+    w = build.PartWriter(tmp_path, part_games=3)
+    assert w.done_rows == set(range(6)) and w.next_i == 2
+    assert not list(tmp_path.glob("*.00002.pkl.gz"))
+    for r in (6, 7):
+        w.add(game(r))
+    w.close()
+    parts = build.completed_parts(tmp_path)
+    assert [p["rows"] for p in parts][-1] == [6, 7]
+    assert [r["row"] for p in parts for r in build.load_shard(p["paths"]["ts"])] == list(range(8))
+
+
 def test_play_pairs_and_scores_by_role():
     play = tool("play")
     pairs = play.deck_pairs(["a", "b", "c", "d"], 5, seed=1)

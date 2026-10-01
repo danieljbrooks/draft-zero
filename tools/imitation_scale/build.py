@@ -3,8 +3,8 @@ with every stop that offers a real choice, the player's block decisions, and the
 on every row.
 
     python tools/imitation_scale/build.py splits [--sbv1 <items.jsonl.gz>]   # row -> exp4 split
-    python tools/imitation_scale/build.py build --workers 28 [--limit N]     # shards
-    python tools/imitation_scale/build.py tables                             # shards -> HDF5
+    python tools/imitation_scale/build.py build --workers 28 [--limit N]     # shard parts; re-run resumes
+    python tools/imitation_scale/build.py tables                             # shard parts -> HDF5; re-run resumes
 
 Splits. The components of docs/011 (drafts joined by a mirrored game) hashed with #2b's salt, so
 the hash is #2b's. #2b split it 0.82 / 0.05 / 0.13 (train / val / test); experiment #4 takes
@@ -15,7 +15,8 @@ experiment #3's benchmark games (sb-v1), and of their mirrored partners, is held
 draft level as docs/016 §9.1 asked. Top players (user_game_win_rate_bucket >= 0.60) are chosen at
 build time.
 
-Records (one shard each under data/imitation_scale/shards, a gzip pickle stream of per-game lists):
+Records (under data/imitation_scale/shards, in parts of PART_GAMES games: <kind>.<part>.pkl.gz, each a
+gzip pickle stream of per-game lists, and part.<part>.json once the part is finished):
   ts   turn starts: imitation.turn_start_record with the heuristic's score;
   rp   every decision turn replayed (imitation.replay_records, allStops, heuristic): the player's
        priority decisions at every stop with a real choice, attacks, targets;
@@ -35,7 +36,9 @@ import gzip
 import hashlib
 import json
 import multiprocessing as mp
+import os
 import pickle
+import shutil
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -228,13 +231,108 @@ def _work(task: tuple) -> dict:
             "sec": {"ts": t1 - t0, "rp": t2 - t1, "bl": t3 - t2, "op": time.monotonic() - t3}}
 
 
-def build(workers: int, limit: int | None = None, heap: str = "2500m", top: float = TOP, log=print) -> dict:
+SHARD_KINDS = ("ts", "rp", "bl", "op")
+PART_GAMES = 5000             # games per shard part: `tables` holds one part in memory (~1.3 MB a game)
+
+
+def _game_stats(res: dict) -> Counter:
+    s = Counter(games=1, errors=int("error" in res))
+    s["ts"] += len(res["ts"])
+    s["ts_ok"] += sum(r.get("status") == "ok" for r in res["ts"])
+    s["rp"] += len(res["rp"])
+    s["rp_ok"] += sum(bool(r.get("reproduced")) for r in res["rp"])
+    s["rp_decisions"] += sum(len(r.get("decisions") or []) for r in res["rp"] if r.get("reproduced"))
+    s["bl"] += len(res["bl"])
+    s["bl_ok"] += sum(r.get("status") == "ok" for r in res["bl"])
+    s["op"] += len(res["op"])
+    s["op_ok"] += sum(bool(r.get("reproduced")) for r in res["op"])
+    s["op_decisions"] += sum(len(r.get("decisions") or []) for r in res["op"] if r.get("reproduced"))
+    return s
+
+
+def _part_marker(out_dir: Path, i: int) -> Path:
+    return out_dir / f"part.{i:05d}.json"
+
+
+def completed_parts(out_dir: Path) -> list[dict]:
+    """The finished shard parts in `out_dir`, in order: {"i", "paths": {kind: path}, "rows", "stats",
+    "sec", "seconds"}. A part is finished once its marker is written, after its files are closed. A
+    build from before parts existed (ts.pkl.gz, ...) is one part with no rows recorded."""
+    parts = []
+    for m in sorted(out_dir.glob("part.*.json")):
+        d = json.loads(m.read_text())
+        d["paths"] = {k: out_dir / f"{k}.{d['i']:05d}.pkl.gz" for k in SHARD_KINDS}
+        parts.append(d)
+    if not parts and (out_dir / "ts.pkl.gz").exists():
+        parts.append({"i": -1, "rows": [], "stats": {}, "sec": {}, "seconds": None, "legacy": True,
+                      "paths": {k: out_dir / f"{k}.pkl.gz" for k in SHARD_KINDS}})
+    return parts
+
+
+class PartWriter:
+    """Writes `build`'s per-game results as shard parts of `part_games` games each: <kind>.<i>.pkl.gz
+    for kind in ts / rp / bl / op (gzip pickle streams of per-game lists), then part.<i>.json (rows,
+    stats). A stopped build loses only its unfinished part: resuming drops the unmarked files and
+    skips the rows of the marked parts."""
+
+    def __init__(self, out_dir: Path, part_games: int = PART_GAMES):
+        self.dir, self.part_games = out_dir, part_games
+        out_dir.mkdir(parents=True, exist_ok=True)
+        done = completed_parts(out_dir)
+        if any(p.get("legacy") for p in done):
+            raise SystemExit(f"{out_dir} holds a build from before shard parts (ts.pkl.gz ...): move it away first")
+        keep = {p["i"] for p in done}
+        for k in SHARD_KINDS:                       # an unfinished part's files
+            for f in out_dir.glob(f"{k}.*.pkl.gz"):
+                if int(f.name.split(".")[1]) not in keep:
+                    f.unlink()
+        self.done_rows = {r for p in done for r in p["rows"]}
+        self.next_i = max(keep, default=-1) + 1
+        self.files = None
+
+    def _open(self) -> None:
+        self.i = self.next_i
+        self.next_i += 1
+        # gzip level 1: the features are int arrays that compress about 3x, at little cost in time
+        self.files = {k: gzip.open(self.dir / f"{k}.{self.i:05d}.pkl.gz", "wb", compresslevel=1) for k in SHARD_KINDS}
+        self.rows, self.stats, self.sec, self.t0 = [], Counter(), Counter(), time.monotonic()
+
+    def add(self, res: dict) -> None:
+        if self.files is None:
+            self._open()
+        for k, f in self.files.items():
+            pickle.dump(res[k], f, protocol=pickle.HIGHEST_PROTOCOL)
+        self.rows.append(int(res["row"]))
+        self.stats.update(_game_stats(res))
+        self.sec.update(res.get("sec") or {})
+        if len(self.rows) >= self.part_games:
+            self.close()
+
+    def close(self) -> None:
+        if self.files is None:
+            return
+        for f in self.files.values():
+            f.close()
+        m = _part_marker(self.dir, self.i)
+        tmp = m.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"i": self.i, "rows": self.rows, "stats": dict(self.stats),
+                                   "sec": {k: round(v, 1) for k, v in self.sec.items()},
+                                   "seconds": round(time.monotonic() - self.t0, 1)}))
+        os.replace(tmp, m)
+        self.files = None
+
+
+def build(workers: int, limit: int | None = None, heap: str = "2500m", top: float = TOP, log=print,
+          part_games: int = PART_GAMES) -> dict:
     """Every top player's game in a split (not held out), `workers` processes with one bridge JVM
-    each. Shards ts.pkl / rp.pkl / bl.pkl under data/imitation_scale/shards."""
+    each. Shard parts under data/imitation_scale/shards (PartWriter); re-running resumes, skipping
+    the games of finished parts."""
     from draftzero.gameplay.replay import open_lines, replay_path
     splits = np.load(SPLIT_FILE)
     out_dir = OUT / "shards"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    writer = PartWriter(out_dir, part_games)
+    if writer.done_rows:
+        log(f"resuming: {len(writer.done_rows)} games in {writer.next_i} finished parts", flush=True)
     H, lines = open_lines(replay_path())
     wr_col = H.cols.index("user_game_win_rate_bucket")
     ctx = mp.get_context("spawn")
@@ -254,49 +352,38 @@ def build(workers: int, limit: int | None = None, heap: str = "2500m", top: floa
             if limit is not None and k >= limit:
                 break
             k += 1
+            if i in writer.done_rows:
+                seen["resumed"] += 1
+                continue
             yield (i, line, int(splits[i]))
 
     stats = Counter()
-    sec = Counter()
     t0 = time.monotonic()
-    # gzip level 1: the features are int arrays that compress about 3x, at little cost in time
-    files = {k: gzip.open(out_dir / f"{k}.pkl.gz", "wb", compresslevel=1) for k in ("ts", "rp", "bl", "op")}
     try:
         with ctx.Pool(workers, initializer=im._worker_init,
                       initargs=(H.cols, str(out_dir / "runtime"), heap, counter)) as pool:
             for res in pool.imap_unordered(_work, tasks(), chunksize=2):
-                for k, f in files.items():
-                    pickle.dump(res[k], f, protocol=pickle.HIGHEST_PROTOCOL)
-                stats["games"] += 1
-                stats["errors"] += "error" in res
-                stats["ts"] += len(res["ts"])
-                stats["ts_ok"] += sum(r.get("status") == "ok" for r in res["ts"])
-                stats["rp"] += len(res["rp"])
-                stats["rp_ok"] += sum(bool(r.get("reproduced")) for r in res["rp"])
-                stats["rp_decisions"] += sum(len(r.get("decisions") or []) for r in res["rp"] if r.get("reproduced"))
-                stats["bl"] += len(res["bl"])
-                stats["bl_ok"] += sum(r.get("status") == "ok" for r in res["bl"])
-                stats["op"] += len(res["op"])
-                stats["op_ok"] += sum(bool(r.get("reproduced")) for r in res["op"])
-                stats["op_decisions"] += sum(len(r.get("decisions") or []) for r in res["op"] if r.get("reproduced"))
-                for k, v in (res.get("sec") or {}).items():
-                    sec[k] += v
+                writer.add(res)
+                stats.update(_game_stats(res))
                 if stats["games"] % 500 == 0:
                     el = time.monotonic() - t0
                     log(f"{stats['games']} games in {el:.0f} s ({stats['games'] / el:.1f}/s): {stats['ts_ok']} turn starts, "
                         f"{stats['rp_ok']}/{stats['rp']} turns reproduced ({stats['rp_decisions']} decisions), "
                         f"{stats['bl_ok']}/{stats['bl']} blocks, {stats['op_ok']}/{stats['op']} opponent turns "
                         f"({stats['op_decisions']} decisions)", flush=True)
-                    for f in files.values():
-                        f.flush()
     finally:
-        for f in files.values():
-            f.close()
+        writer.close()
         lines.close()
     el = time.monotonic() - t0
-    out = {**stats, "seconds": round(el, 1), "games_per_s": round(stats["games"] / max(el, 1e-9), 2),
+    parts = completed_parts(out_dir)
+    total, sec = Counter(), Counter()
+    for p in parts:
+        total.update(p["stats"])
+        sec.update(p["sec"])
+    out = {**total, "parts": len(parts), "seconds_this_run": round(el, 1),
+           "games_this_run": stats["games"], "games_per_s": round(stats["games"] / max(el, 1e-9), 2),
            "worker_seconds": {k: round(v, 1) for k, v in sec.items()}, "workers": workers, "top": top,
-           "rows_scanned": seen["rows"], "rows_held_out": seen["held_out"]}
+           "rows_scanned": seen["rows"], "rows_held_out": seen["held_out"], "rows_resumed": seen["resumed"]}
     (out_dir / "build_stats.json").write_text(json.dumps(out, indent=1))
     return out
 
@@ -394,18 +481,137 @@ def _priority_tables(pri: dict, prefix: str, h5: Path, log) -> None:
         log(f"{prefix}_{s}: {len(sel)} rows")
 
 
-def tables(log=print) -> dict:
-    """Shards -> HDF5 tables in imitation.write_h5's layout, per split: turnstart_*, replay_priority_*
-    (with meta/step, meta/stack and a per-row weight: exact 1, imputed IMPUTED_WEIGHT),
-    replay_attack_*, replay_target_* (spell targets the outcome settles) and block_* (both
-    CHOOSE_TARGET, legal and set CSR); meta/heuristic on every row."""
+CSR_PTRS = {"offsets": "indices", "legal_indptr": "legal_idx", "set_indptr": "set_idx"}
+
+
+def _h5_datasets(f) -> list[str]:
+    import h5py
+    names: list[str] = []
+    f.visititems(lambda n, o: names.append(n) if isinstance(o, h5py.Dataset) else None)
+    return names
+
+
+def merge_h5(paths: list[Path], out: Path, block_elems: int = 1 << 24) -> int:
+    """Concatenate tables of one layout (one table's parts, in order) into `out`, a block at a time.
+    The CSR pointers (offsets, legal_indptr, set_indptr) are shifted by the rows before them; every
+    other dataset is per row or a CSR's data, so it is concatenated on its first axis. Returns rows."""
+    import h5py
+    srcs = [h5py.File(p, "r") for p in paths]
+    try:
+        keys = _h5_datasets(srcs[0])
+        for s, p in zip(srcs[1:], paths[1:]):
+            if set(_h5_datasets(s)) != set(keys):
+                raise ValueError(f"{p}: datasets {sorted(set(_h5_datasets(s)) ^ set(keys))} differ from {paths[0]}")
+        tmp = out.with_name(out.name + ".tmp")
+        with h5py.File(tmp, "w") as g:
+            for k in keys:
+                d0 = srcs[0][k]
+                if d0.shape == ():
+                    raise ValueError(f"{paths[0]}: scalar dataset {k}")
+                if k in CSR_PTRS:
+                    total = sum(s[k].shape[0] - 1 for s in srcs) + 1
+                    ds = g.create_dataset(k, shape=(total,), dtype=d0.dtype)
+                    ds[0] = 0
+                    pos, base = 1, 0
+                    for s in srcs:
+                        p = s[k][:].astype(np.int64)
+                        ds[pos:pos + len(p) - 1] = p[1:] - p[0] + base
+                        pos += len(p) - 1
+                        base += int(p[-1] - p[0])
+                    continue
+                total = sum(s[k].shape[0] for s in srcs)
+                is_str = h5py.check_string_dtype(d0.dtype) is not None
+                kw = {}
+                if d0.compression and total:
+                    kw = dict(compression=d0.compression, compression_opts=d0.compression_opts, chunks=True)
+                ds = g.create_dataset(k, shape=(total,) + d0.shape[1:],
+                                      dtype=h5py.string_dtype() if is_str else d0.dtype, **kw)
+                rows_per_block = max(1, block_elems // max(1, int(np.prod(d0.shape[1:]))))
+                pos = 0
+                for s in srcs:
+                    d = s[k]
+                    n = d.shape[0]
+                    for a in range(0, n, rows_per_block):
+                        b = min(n, a + rows_per_block)
+                        ds[pos + a:pos + b] = d.asstr()[a:b] if is_str else d[a:b]
+                    pos += n
+            for name in [""] + [n for n in _h5_datasets(srcs[0])]:
+                src = srcs[0][name] if name else srcs[0]
+                dst = g[name] if name else g
+                for a, v in src.attrs.items():
+                    dst.attrs[a] = v
+            n_rows = int(g["offsets"].shape[0] - 1) if "offsets" in g else None
+        os.replace(tmp, out)
+        return n_rows
+    finally:
+        for s in srcs:
+            s.close()
+
+
+def _sum_stats(a: dict, b: dict) -> dict:
+    """Part stats summed: counts add, dicts of counts add key by key."""
+    out = dict(a)
+    for k, v in b.items():
+        if isinstance(v, dict):
+            c = Counter(out.get(k) or {})
+            c.update(v)
+            out[k] = dict(c.most_common())
+        elif isinstance(v, (int, float)):
+            out[k] = out.get(k, 0) + v
+        else:
+            out[k] = v
+    return out
+
+
+def tables(log=print, keep_parts: bool = False) -> dict:
+    """Shard parts -> HDF5 tables (tables_part), one part at a time into h5/parts/<i>/, then each
+    table's parts merged into h5/<table>_<split>.h5 (merge_h5). A finished part is marked, so a
+    re-run resumes. Memory: one part (~1.3 MB a game) rather than the whole build."""
+    sh, h5 = OUT / "shards", OUT / "h5"
+    parts = completed_parts(sh)
+    if not parts:
+        raise SystemExit(f"no finished shard parts in {sh}")
+    pdir = h5 / "parts"
+    out: dict = {}
+    t0 = time.monotonic()
+    for j, p in enumerate(parts):
+        d = pdir / f"{max(p['i'], 0):05d}"
+        done = d / "done.json"
+        if done.exists():
+            st = json.loads(done.read_text())
+        else:
+            if d.exists():
+                shutil.rmtree(d)
+            d.mkdir(parents=True)
+            st = tables_part(p["paths"], d, log=lambda *a, **k: None)
+            done.write_text(json.dumps(st, default=str))
+        out = _sum_stats(out, st)
+        log(f"tables: part {j + 1}/{len(parts)} done ({time.monotonic() - t0:.0f} s)", flush=True)
+    names = sorted({f.name for p in parts for f in (pdir / f"{max(p['i'], 0):05d}").glob("*.h5")})
+    for name in names:
+        srcs = [pdir / f"{max(p['i'], 0):05d}" / name for p in parts]
+        srcs = [s for s in srcs if s.exists()]
+        n = merge_h5(srcs, h5 / name)
+        log(f"{name[:-3]}: {n} rows from {len(srcs)} parts", flush=True)
+    out["parts"] = len(parts)
+    (OUT / "tables_stats.json").write_text(json.dumps(out, indent=1, default=str))
+    if not keep_parts:
+        shutil.rmtree(pdir)
+    return out
+
+
+def tables_part(paths: dict, h5: Path, log=print) -> dict:
+    """One shard part ({kind: path}) -> HDF5 tables in imitation.write_h5's layout under `h5`, per
+    split: turnstart_*, replay_priority_* and opp_priority_* (with meta/step, meta/stack and a
+    per-row weight: exact 1, imputed IMPUTED_WEIGHT), replay_attack_*, replay_target_* (spell
+    targets the outcome settles), opp_block_* and block_* (CHOOSE_TARGET, legal and set CSR);
+    meta/heuristic on every row."""
     import h5py
     from draftzero.gameplay.ids import Ids
     ids = Ids.load()
-    sh, h5 = OUT / "shards", OUT / "h5"
     out: dict = {}
     # turn starts
-    ts = load_shard(sh / "ts.pkl.gz")
+    ts = load_shard(paths["ts"])
     out["turnstart_status"] = dict(Counter(r.get("status") for r in ts))
     for i, s in enumerate(SPLITS):
         rs = [r for r in ts if r.get("split") == i and r.get("status") == "ok"]
@@ -419,8 +625,8 @@ def tables(log=print) -> dict:
         log(f"turnstart_{s}: {len(rs)} rows")
     del ts
     # replayed turns: the user's own (rp) and the opponent's after them (op)
-    rp = load_shard(sh / "rp.pkl.gz")
-    op = load_shard(sh / "op.pkl.gz") if (sh / "op.pkl.gz").exists() else []
+    rp = load_shard(paths["rp"])
+    op = load_shard(paths["op"]) if paths["op"].exists() else []
     for name, recs in (("replay", rp), ("opp", op)):
         out[f"{name}_turns"] = len(recs)
         out[f"{name}_reproduced"] = sum(bool(t.get("reproduced")) for t in recs)
@@ -475,7 +681,7 @@ def tables(log=print) -> dict:
         _priority_tables(im.replay_tables(op, ids)["priority"], "opp_priority", h5, log)
     del op
     # blocks
-    bl = load_shard(sh / "bl.pkl.gz")
+    bl = load_shard(paths["bl"])
     out["block_status"] = dict(Counter(r.get("status") for r in bl))
     for i, s in enumerate(SPLITS):
         rs = [r for r in bl if r.get("split") == i and r.get("status") == "ok"]
@@ -489,7 +695,6 @@ def tables(log=print) -> dict:
         im._save_table(t, path, action_type=im.ACTION_TYPE["CHOOSE_TARGET"])
         _append(path, **{"meta/heuristic": _heur(r.get("heuristic") for r in rs)})
         log(f"block_{s}: {len(rs)} rows")
-    (OUT / "tables_stats.json").write_text(json.dumps(out, indent=1, default=str))
     return out
 
 
@@ -502,7 +707,9 @@ def main(argv=None) -> None:
     b.add_argument("--workers", type=int, default=3)
     b.add_argument("--limit", type=int)
     b.add_argument("--heap", default="2500m")
-    sub.add_parser("tables")
+    b.add_argument("--part-games", type=int, default=PART_GAMES, help="games per shard part")
+    t = sub.add_parser("tables")
+    t.add_argument("--keep-parts", action="store_true", help="keep h5/parts/ (the per-part tables)")
     a = ap.parse_args(argv)
     if a.cmd == "splits":
         codes, stats = make_splits(a.sbv1 if a.sbv1 and a.sbv1.exists() else None)
@@ -513,9 +720,9 @@ def main(argv=None) -> None:
         (OUT / "row_split_exp4.stats.json").write_text(json.dumps(stats, indent=1))
         print(json.dumps(stats, indent=1))
     elif a.cmd == "build":
-        print(json.dumps(build(a.workers, a.limit, a.heap), indent=1))
+        print(json.dumps(build(a.workers, a.limit, a.heap, part_games=a.part_games), indent=1))
     else:
-        print(json.dumps(tables(), indent=1, default=str))
+        print(json.dumps(tables(keep_parts=a.keep_parts), indent=1, default=str))
 
 
 if __name__ == "__main__":
