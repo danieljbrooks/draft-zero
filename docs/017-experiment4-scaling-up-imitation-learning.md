@@ -21,7 +21,7 @@ This experiment asks how far supervised learning from top players' games goes:
 - **every evaluation mixes the two halves:** the imitation policy or the default policy as the
   search's prior, and the cloned value or the heuristic at its leaves;
 - the deciding test is play: the imitation-plus-cloned-value bot against the heuristic bot, at a
-  search budget of 3,000;
+  search budget of 1,000;
 - then two ways to keep training from that start without losing the human policy.
 
 Every search uses IS-MCTS. It runs on RunPod over a few days. The initial budget was $30–40, and
@@ -359,7 +359,7 @@ Every comparison pairs a cloned head with the heuristic, on the same positions o
    simulations, how well the search's root value predicts who won the game, with each leaf
    evaluator and each prior. The search's agreement with the human's choice comes from the same
    runs.
-3. **In play:** the imitation-plus-cloned-value bot against the heuristic bot at 3,000 simulations,
+3. **In play:** the imitation-plus-cloned-value bot against the heuristic bot at 1,000 simulations,
    200 games (§6.5).
 
 ## 5. Multiple epochs
@@ -384,7 +384,7 @@ Every comparison pairs a cloned head with the heuristic, on the same positions o
   hard to train further. That doesn't matter for using the network in search as it is. If it seeds
   self-play later, apply shrink and perturb and screen it with docs/013's test first.
 
-## 6. The plan: about $45–55 on RunPod
+## 6. The plan: about $27–35 on RunPod
 
 ### 6.1 Stages
 
@@ -395,18 +395,19 @@ Every comparison pairs a cloned head with the heuristic, on the same positions o
 | 2. Hyperparameter sweep | about 13 short runs on a 10% subset; a plot and a report (§6.3) | GPU pod | 6 | $3–6 |
 | 3. Large training | the chosen settings, all training games, several epochs, checkpoints throughout (§6.4) | GPU pod | 12 | $6–8 |
 | 4. Cheap evaluation | 1,000 held-out decisions, IS-MCTS at 300 and 3,000 simulations, the four prior and leaf mixes (§6.5) | GPU pod | 6 | $3–6 |
-| 5. Play | the heuristic bot against the imitation-plus-cloned-value bot, IS-MCTS at 3,000 simulations, 200 games (§6.5) | GPU pod, 24+ vCPU | 34 | $17 |
+| 5. Play | the heuristic bot against the imitation-plus-cloned-value bot, IS-MCTS at 1,000 simulations, 200 games (§6.5) | GPU pod, 24+ vCPU | 10.5 | $5.25 |
 | 6. Two follow-up checkpoints | about 400 self-play games, IS-MCTS at 300 simulations, then two training settings (§6.6) | GPU pod | 9 | $4.50 |
-| 7. Evaluate them | 40 games each at 3,000 against the heuristic bot, and the 1,000 decisions at 300 and 3,000 | GPU pod | 17 | $8.50 |
-| **Total** | | | **~87** | **~$45–55** |
+| 7. Evaluate them | 40 games each at 1,000 against the heuristic bot, and the 1,000 decisions at 300 and 3,000 | GPU pod | 7.5 | $3.75 |
+| **Total** | | | **~54** | **~$27–35** |
 
 - **The low end assumes RTX 3090 rates ($0.50/hr);** the high end, an L40S for the training stages
   (§6.7).
-- **IS-MCTS raised the estimate** from ~$32–40 with PIMC. Most of the increase is play, where the
-  heuristic bot's IS-MCTS costs 2.8× PIMC's (§3.4).
+- **The games run at 1,000 simulations,** not 3,000. That cuts the play stages from about 51
+  pod-hours to 18, and the total from ~$45–55 to ~$27–35. IS-MCTS (§3.4) still costs more than
+  PIMC would have, mostly for the heuristic bot.
 - **The game stages are estimates.** A game is assumed to have about 140 searched decisions (from
-  #2a's 61 games an hour at 300 simulations). At 3,000 simulations IS-MCTS costs 5.3 pod-seconds a
-  decision with the network and 3.6 for the heuristic seat (docs/016 §4.1). That gives about 6
+  #2a's 61 games an hour at 300 simulations). At 1,000 simulations IS-MCTS costs 1.7 pod-seconds a
+  decision with the network and 1.0 for the heuristic seat (docs/016 §4.1). That gives about 19
   games a pod-hour. Stage 0 measures it.
 - **If a stage runs 50% over its estimate, stop and report** before going on.
 
@@ -499,7 +500,7 @@ The policy alone and the value head alone, with no search, are references.
     result.
 
 **Sizable: play.**
-- The heuristic bot against the imitation-plus-cloned-value bot, IS-MCTS at 3,000
+- The heuristic bot against the imitation-plus-cloned-value bot, IS-MCTS at 1,000
   simulations, both seats.
 - 200 games: 100 deck pairs from the eval pool, each played with seats swapped. That gives a 95% CI
   of about ±7 points.
@@ -515,10 +516,10 @@ imitation-plus-cloned-value bot plays against itself. This is the first step of 
    AlphaStar). This guards against #2b's failure, where self-play overwrote the human policy in one
    epoch (docs/013).
 
-- **Data:** about 400 games at 300 simulations, shared by both. At 3,000 they would cost about ten
-  times as much.
+- **Data:** about 400 games at 300 simulations, shared by both. At 1,000, the evaluation games'
+  budget, they would cost about three times as much.
 - **Evaluation:**
-  - 40 games each at 3,000 simulations against the heuristic bot. That's ±15 points, so it catches
+  - 40 games each at 1,000 simulations against the heuristic bot. That's ±15 points, so it catches
     only large changes;
   - sb-v2 at 300 and 3,000, the finer signal.
 
@@ -566,15 +567,16 @@ imitation-plus-cloned-value bot plays against itself. This is the first step of 
 
 **Decided:**
 1. **Data:** top players only. Players under 60% are a reserve, first for the value head.
-2. **The deciding test:** 200 games at 3,000 simulations against the heuristic bot, then 40-game
-   screens for the follow-up checkpoints.
+2. **The deciding test:** 200 games at 1,000 simulations against the heuristic bot, then 40-game
+   screens for the follow-up checkpoints, also at 1,000. The 1,000 benchmark decisions stay at 300
+   and 3,000.
 3. **No opponent head in the first run:** uniform priors at the opponent's nodes.
 4. **Rollout distillation waits.** Stage 6's frozen-policy value training is the same idea, on games
    the bot plays.
 5. **IS-MCTS for every search** (§3.4); the budget can grow to cover it (§6.1).
 6. **The game player** is new, built on experiment #3's IS-MCTS. MageZero's own evaluator has no
    IS-MCTS: its search sees the hidden cards, and it walks its whole tree every simulation, which
-   is slow at 3,000.
+   is slow at high budgets.
 
 **Open:**
 1. **Stage 6's training data.** Assumed: self-play games of the imitation-plus-cloned-value
