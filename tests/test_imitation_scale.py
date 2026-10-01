@@ -90,6 +90,14 @@ def test_build_part_writer_resumes_after_an_unfinished_part(tmp_path):
     assert [r["row"] for p in parts for r in build.load_shard(p["paths"]["ts"])] == list(range(8))
 
 
+def test_play_shards_split_games_by_deck_pair():
+    play = tool("play")
+    tasks = play.game_tasks(play.deck_pairs(["a", "b", "c", "d"], 7, seed=1), 1, mirror=False)
+    parts = [play.shard_tasks(tasks, f"{i}/3") for i in range(3)]
+    assert sorted((t["pair"], t["swap"]) for p in parts for t in p) == sorted((t["pair"], t["swap"]) for t in tasks)
+    assert all(len({t["pair"] % 3 for t in p}) == 1 for p in parts) and play.shard_tasks(tasks, None) == tasks
+
+
 def test_play_pairs_and_scores_by_role():
     play = tool("play")
     pairs = play.deck_pairs(["a", "b", "c", "d"], 5, seed=1)

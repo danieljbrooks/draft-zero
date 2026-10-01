@@ -116,6 +116,17 @@ def game_tasks(pairs: list, seed: int, mirror: bool) -> list[dict]:
     return tasks
 
 
+def shard_tasks(tasks: list[dict], shard: str | None) -> list[dict]:
+    """--shard i/n: this pod's share of the games, by deck pair (pair % n == i), so a pair's two games
+    stay together and n pods' games.jsonl files concatenate into the whole run."""
+    if not shard:
+        return tasks
+    i, n = (int(x) for x in shard.split("/"))
+    if not 0 <= i < n:
+        raise SystemExit(f"--shard {shard}: need 0 <= i < n")
+    return [t for t in tasks if t["pair"] % n == i]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pool", default=str(REPO / "data/pools/eval.txt"))
@@ -134,6 +145,7 @@ def main(argv=None) -> int:
     ap.add_argument("--record", action="store_true")
     ap.add_argument("--belief-port", type=int, default=50070, help="the belief service (closed decklists)")
     ap.add_argument("--open-decklists", action="store_true", help="re-deal from the real decklist instead")
+    ap.add_argument("--shard", default=None, metavar="I/N", help="play only deck pairs with pair %% N == I (one pod of N)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
 
@@ -142,7 +154,7 @@ def main(argv=None) -> int:
     stems = dzpaths.read_pool(Path(a.pool))
     pairs = deck_pairs(stems, a.pairs, a.seed)
     ports = [int(p) for p in a.ports.split(",")]
-    tasks = game_tasks(pairs, a.seed, mirror=a.bot1 == a.bot2)
+    tasks = shard_tasks(game_tasks(pairs, a.seed, mirror=a.bot1 == a.bot2), a.shard)
     done_keys = set()
     games_file = out / "games.jsonl"
     if games_file.exists():
