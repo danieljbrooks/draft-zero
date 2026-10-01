@@ -322,7 +322,7 @@ def references(items: dict, split: str | None) -> dict:
     its = [it for it in items.values() if split is None or it["split"] == split]
     ch = macro([(it["type"], chance(it)) for it in its])
     hs = [(it["type"], float(h in set(it["label"]))) for it in its if (h := heuristic(it)) is not None]
-    passive = {"spell": "Pass", "hold": "Pass", "attack": "no", "block": "Stop Choosing"}
+    passive = {"spell": "Pass", "hold": "Pass", "attack": "no", "block": "Stop Choosing", "endstep": "Pass", "oppwindow": "Pass"}
     pas = macro([(it["type"], float(passive[it["type"]] in set(it["label"]))) for it in its])
     hb, _, _ = balanced_score({it["id"]: it for it in its}, {it["id"]: {"best": heuristic(it)} for it in its}, n_boot=0)
     return {"chance": round(ch, 4), "heuristic": round(macro(hs), 4) if hs else None, "n": len(its),
