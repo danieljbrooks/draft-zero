@@ -1,0 +1,35 @@
+# Experiment #4, stage 6: training on the IL+BC bot's own games (docs/017 §6.6). The settings the
+# three arms share (configs/exp4_stage6_arms.yml runs them), with the anchored arm's own settings as
+# the defaults, so this file also trains that arm alone and scores any network on the self-play games:
+#
+#   python tools/imitation_scale/selfplay_tables.py --records runs/exp4/stage6/play/records \
+#       --out data/imitation_scale/h5                                # selfplay_{train,val,test}.h5
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_stage6_arms.yml --out runs/exp4/stage6/arms
+#   # stage 6b: the IL+BC network on the held-out self-play games (and the human test split)
+#   python -m draftzero.gameplay.supervised evaluate --checkpoint runs/exp4/main/best.pt.gz \
+#       --config configs/exp4_stage6.yml --split test --json runs/exp4/stage6/ilbc_test.json
+#
+# Set init_checkpoint to stage 3's chosen network before running.
+tables_dir: data/imitation_scale/h5
+tables:
+  - {name: selfplay, kind: soft, value_column: z_td}            # the bot's searched decisions: visit shares, TD(0.95) values
+  - {name: turnstart, kind: priority_set, group: human}         # human decisions, as stage 3 trained on them
+  - {name: replay_priority, kind: priority_set, group: human}
+  - {name: opp_priority, kind: priority_set, group: human}
+  - {name: replay_attack, kind: binary, group: human}
+  - {name: replay_target, kind: target, group: human}
+  - {name: opp_block, kind: target, group: human}
+init_checkpoint: runs/exp4/main/best.pt.gz   # the IL+BC network: weights, shape and feature vocab
+group_shares: {human: 0.15}                  # human positions in every stretch of batches
+kl_weight: 1.0                               # x KL(pi_IL+BC || pi) on the self-play positions ...
+kl_weight_end: 0.1                           # ... annealed over the run
+val_rows: 20000
+lr: 1.0e-4                                   # fine-tuning: a third of stage 3's
+warmup_steps: 100
+max_epochs: 8                                # an epoch is one pass over the self-play training rows
+time_budget_s: null
+patience_epochs: null                        # no plateau stop: the arms train equally long, and the
+                                             # collapse curves (evals.jsonl) are the result
+eval_every_steps: 200
+ckpt_every_s: 120
+latest_every_s: 300

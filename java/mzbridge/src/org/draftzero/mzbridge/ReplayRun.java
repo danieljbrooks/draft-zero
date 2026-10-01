@@ -21,6 +21,7 @@ import mage.game.stack.Spell;
 import mage.game.stack.StackObject;
 import mage.player.ai.encoder.ActionEncoder;
 import mage.player.ai.encoder.StateEncoder;
+import mage.player.ai.score.GameStateEvaluator3;
 import mage.target.Target;
 
 import java.util.*;
@@ -50,6 +51,14 @@ final class ReplayRun {
     final int turn;
     final boolean encode;
     final boolean perfectInfo;
+    /** record the scripted seat's priority decisions at every stop with a real choice (end step,
+     *  combat, a spell on the stack), not only in its main phases or where it plays */
+    boolean allStops;
+    /** each recorded decision also carries GameStateEvaluator3's score from the deciding seat */
+    boolean heuristic;
+    /** whose decisions are recorded: the scripted seat (default), or the other one (the 17lands
+     *  user during the opponent's turn: its instants, flash and blocks; docs/017 §2.2) */
+    String recordSeat;
     final TargetResolver resolver;
     final Map<TurnScript.Item, String> due = new IdentityHashMap<>();
     final List<TurnScript.Item> mine = new ArrayList<>();
@@ -76,6 +85,7 @@ final class ReplayRun {
         this.items = script.freshItems();
         this.seat = script.seat;
         this.opp = Spec.other(seat);
+        this.recordSeat = seat;
         this.turn = script.turn;
         this.encode = encode;
         this.perfectInfo = perfectInfo;
@@ -202,6 +212,18 @@ final class ReplayRun {
         return game.getTurnNum() == turn && seat.equals(b.seatOf(game.getActivePlayerId()));
     }
 
+    /** Whether a script item's window has come: the scripted seat's plays at their window once the
+     *  stack is empty, a "respond" item when it can answer the top of the stack; the other seat's
+     *  "respond" items fall back to the end step when nothing ever triggered them. */
+    boolean dueNow(TurnScript.Item it, Game game, int w, boolean stackEmpty, boolean scripted) {
+        String d = due.get(it);
+        if (d.equals("respond")) {
+            if (!stackEmpty) return respondNow(it, game);
+            return !scripted && w >= windowIndex("end_step");
+        }
+        return stackEmpty && windowIndex(d) <= w;
+    }
+
     static boolean isMain(Game game) {
         PhaseStep st = game.getTurnStepType();
         return st == PhaseStep.PRECOMBAT_MAIN || st == PhaseStep.POSTCOMBAT_MAIN;
@@ -239,8 +261,7 @@ final class ReplayRun {
         if (p.seat.equals(seat)) {
             for (TurnScript.Item it : mine) {
                 if (it.done || here.equals(it.failedAt)) continue;
-                boolean now = due.get(it).equals("respond") ? !stackEmpty && respondNow(it, game)
-                        : stackEmpty && windowIndex(due.get(it)) <= w;
+                boolean now = dueNow(it, game, w, stackEmpty, true);
                 if (now) {
                     ActivatedAbility a = find(playable, it, game);
                     if (a != null) {
@@ -253,13 +274,7 @@ final class ReplayRun {
         } else {
             for (TurnScript.Item it : theirs) {
                 if (it.done || here.equals(it.failedAt)) continue;
-                String d = due.get(it);
-                boolean now;
-                if (d.equals("respond")) {
-                    now = !stackEmpty ? respondNow(it, game) : w >= windowIndex("end_step"); // never triggered: end step
-                } else {
-                    now = stackEmpty && windowIndex(d) <= w;
-                }
+                boolean now = dueNow(it, game, w, stackEmpty, false);
                 if (!now) continue;
                 ActivatedAbility a = find(playable, it, game);
                 if (a != null) {
@@ -270,7 +285,13 @@ final class ReplayRun {
             }
         }
         JsonObject rec = null;
-        if (p.seat.equals(seat) && nonTrivial && (isMain(game) || pick != null)) {
+        boolean scripted = p.seat.equals(seat);
+        if (p.seat.equals(recordSeat) && nonTrivial && (allStops || (scripted && isMain(game)) || pick != null)) {
+            List<TurnScript.Item> own = scripted ? mine : theirs;
+            // the label set: in the scripted seat's main phases, every play it has left (17lands has
+            // no order inside a turn); elsewhere only the plays the replay has due at this stop, so
+            // an instant it cast later is not labelled at an earlier stop (docs/017 §2.2)
+            boolean dueOnly = !scripted || !isMain(game);
             JsonObject d = decision(game, p, "PRIORITY", "priority");
             rec = d;
             // sorted by label: the engine's playable order can follow hash order (a card that
@@ -285,14 +306,15 @@ final class ReplayRun {
                 o.addProperty("label", label);
                 o.addProperty("idx", p.actionEncoder.getActionIndex(e.getValue(), true));
                 legal.add(o);
-                for (TurnScript.Item it : mine) if (!it.done && (it.key.equals(label) || flashbackOf(it, e.getValue(), game))) {
+                for (TurnScript.Item it : own) if (!it.done && (it.key.equals(label) || flashbackOf(it, e.getValue(), game))
+                        && (!dueOnly || dueNow(it, game, w, stackEmpty, scripted))) {
                     set.add(label);
                     break;
                 }
             }
             d.add("legal", legal);
             d.add("set", set);
-            boolean left = script.unscripted > 0 || mine.stream().anyMatch(i -> !i.done);
+            boolean left = (scripted && script.unscripted > 0) || own.stream().anyMatch(i -> !i.done);
             if (pick != null) {
                 d.addProperty("chosen", ability.toString());
                 d.addProperty("label_kind", "imputed_order");
@@ -655,6 +677,7 @@ final class ReplayRun {
         Map<String, Integer> newBlockers = newRefs(blockPlan.stream().map(x -> x.blocker).filter(x -> x.startsWith("new:")).toList());
         Set<UUID> usedNewAttackers = new HashSet<>();
         Set<TurnScript.Block> realised = new HashSet<>();
+        boolean recordBlocks = p.seat.equals(recordSeat) && !recordSeat.equals(seat) && inTurn(game);
         for (Permanent blk : blockers) {
             UUID target = null;
             if (blockCalls > 1) {
@@ -682,6 +705,7 @@ final class ReplayRun {
                     }
                 }
             }
+            if (recordBlocks && blockCalls == 1) recordBlock(p, blk, target, game);
             if (target != null) {
                 p.getPlayerHistory().targetSequence.add(target);
                 p.declareBlocker(defendingPlayerId, blk.getId(), target, game);
@@ -700,6 +724,30 @@ final class ReplayRun {
                 notes.add("recorded blocker " + x.blocker + " was not able to block");
             }
         }
+    }
+
+    /** One block question as MageZero asks it (ChooseCreatureToBlockAbility: a target per blocker),
+     *  with the scripted answer; exact when the turn's pairing is (unique, or no block at all). */
+    void recordBlock(ReplayPlayer p, Permanent blk, UUID target, Game game) {
+        List<String[]> labelled = new ArrayList<>();
+        for (UUID a : game.getCombat().getAttackers()) {
+            if (blk.canBlock(a, game)) labelled.add(new String[]{BridgePlayer.targetLabel(game, a, p.getId()), a.toString()});
+        }
+        if (labelled.isEmpty()) return;
+        labelled.add(new String[]{"Stop Choosing", STOP_CHOOSING.toString()});
+        labelled.sort(Comparator.comparing((String[] x) -> x[0]).thenComparing(x -> x[1]));
+        String text = "choose which creature to block for " + blk.getName() + ":Choose a target:attacking creature";
+        JsonObject d = decision(game, p, "CHOOSE_TARGET", text);
+        JsonArray legal = new JsonArray();
+        Set<String> seen = new HashSet<>();
+        for (String[] l : labelled) if (seen.add(l[0])) legal.add(option(l[0], p.actionEncoder.getTargetIndex(l[0])));
+        if (legal.size() < 2) return;
+        d.add("legal", legal);
+        d.addProperty("chosen", target == null ? "Stop Choosing" : BridgePlayer.targetLabel(game, target, p.getId()));
+        boolean exact = script.blockPairing == null || script.blockPairing.equals("unique") || script.blockPairing.equals("none");
+        d.addProperty("label_kind", exact ? "exact" : "guessed_target");
+        d.addProperty("evidence", "block_" + (script.blockPairing == null ? "none" : script.blockPairing));
+        finishDecision(d, game, p, "CHOOSE_TARGET", text);
     }
 
     private UUID attackerId(String ref, Game game, Set<UUID> usedNew) {
@@ -846,7 +894,7 @@ final class ReplayRun {
             if (possible.isEmpty()) break;
             boolean canStop = target.isChosen(game);
             TargetResolver.Pick pk = resolver.pick(p, outcome, target, source, game, possible, canStop);
-            boolean record = inTurn && p.seat.equals(seat) && pk.options >= 2;
+            boolean record = inTurn && p.seat.equals(recordSeat) && pk.options >= 2;
             List<String[]> labelled = new ArrayList<>();
             if (record) {
                 for (UUID id : possible) labelled.add(new String[]{BridgePlayer.targetLabel(game, id, p.getId()), id.toString()});
@@ -900,7 +948,7 @@ final class ReplayRun {
     JsonObject beforeUse(ReplayPlayer p, String message, Game game) {
         if (!inTurn(game)) return null;
         flags.add("guessed_use");
-        if (!p.seat.equals(seat)) return null;
+        if (!p.seat.equals(recordSeat)) return null;
         JsonObject d = decision(game, p, "CHOOSE_USE", message);
         JsonArray legal = new JsonArray();
         legal.add(option("no", 0));
@@ -955,7 +1003,7 @@ final class ReplayRun {
                 flags.add("guessed_mode");
             }
         }
-        if (inTurn(game) && p.seat.equals(seat) && options.size() > 1) {
+        if (inTurn(game) && p.seat.equals(recordSeat) && options.size() > 1) {
             String text = "choose num for " + source;
             JsonObject d = decision(game, p, "CHOOSE_NUM", text);
             JsonArray legal = new JsonArray();
@@ -1039,7 +1087,9 @@ final class ReplayRun {
     }
 
     void finishDecision(JsonObject d, Game game, ReplayPlayer p, String type, String text) {
+        if (!p.seat.equals(recordSeat)) return;   // only the recorded seat's decisions are labels
         if (encode) d.add("features", features(game, p, type, text));
+        if (heuristic) d.addProperty("heuristic", GameStateEvaluator3.evaluateNormalized(p.getId(), game));
         decisions.add(d);
     }
 

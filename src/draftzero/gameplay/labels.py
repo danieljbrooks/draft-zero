@@ -549,6 +549,63 @@ def _offturn(g: Game, u: TurnRecord, q: TurnRecord | None, ana, ids: Ids) -> dic
     return lab
 
 
+def opponent_turn_label(g: Game, n: int, ids: Ids | None = None) -> dict:
+    """The opponent's half-turn right after user turn n, as a replay script with the opponent active
+    (turnreplay.replay_opp_turn, docs/017 §2.2): its land plays, casts (its hand is hidden, so every
+    recorded cast is taken from hand, or flashback from its graveyard), activated abilities and
+    attacks (spec aliases B:..., new:<name> for a creature that entered that turn), plus the user's
+    blocks and instant-speed plays in it (`_offturn`)."""
+    ids = ids or Ids.load(g.meta.get("expansion") or "FDN")
+    ana = analyze(g, ids)
+    u, q = g.user_slot(n), g.next_slot(n)
+    if u is None or q is None or q.side != "oppo" or not q.played:
+        raise ValueError(f"row {g.row_index} has no opponent turn after user turn {n}")
+    end_u = ana.states[u.seq]
+    b_start, a_start = end_u.bf["oppo"], end_u.bf["user"]
+    lab: dict = {"user_turn": n, "opp_turn": q.n, "global_turn": q.global_turn, "terminal": q.terminal}
+    lab["lands"] = sorted((_key_entry(ids.name(c), *ids.play_key(ids.name(c))) for c in q.L("lands_played")),
+                          key=lambda d: d["name"])
+    once = recorded_once(g, q, ids)
+    hand = Counter(ids.name(c) for c in q.L("creatures_cast") + q.L("non_creatures_cast")
+                   + q.L("oppo_instants_sorceries_cast"))
+    lab["casts"] = _casts(q, "oppo", hand, Counter(end_u.gy["oppo"]), ids)
+    board = {i.name for i in b_start} | {ids.name(c) for c in _eot_bf(q, "oppo")}
+    lab["activations"] = _activations(once.get("oppo_abilities", q.L("oppo_abilities")), board, ids)
+    # the opponent's attacks, as turn_label does the user's
+    pacified = _pacified(a_start, ids)
+    att_list = once.get("creatures_attacked", q.L("creatures_attacked"))
+    attacked_grps = Counter(att_list)
+    left_early = Counter(q.L("oppo_creatures_killed_non_combat"))
+    eligible, notes = [], []
+    for i in b_start:
+        if i.kind != "crea" or "Defender" in ids.info(i.name).keywords:
+            continue
+        if i.iid in pacified:
+            notes.append(f"B:{alias(i)} enchanted by a hostile Aura: excluded")
+            continue
+        if "doesnt_untap" in ids.info(i.name).features and not attacked_grps.get(i.grp):
+            notes.append(f"B:{alias(i)} may not have untapped: excluded")
+            continue
+        eligible.append(i)
+    attacked, new = _match(attacked_grps, eligible)
+    att_ids = {i.iid for i in attacked}
+    lab["attacks"] = {}
+    for i in sorted(eligible, key=lambda i: i.iid):
+        if i.iid not in att_ids and left_early.get(i.grp):
+            notes.append(f"B:{alias(i)} died outside combat this turn: excluded")
+            continue
+        lab["attacks"][f"B:{alias(i)}"] = i.iid in att_ids
+    for g_, k in new.items():
+        for j in range(k):
+            lab["attacks"][f"new:{ids.name(g_)}" + (f"#{j + 1}" if k > 1 else "")] = True
+    dup = [g_ for g_, k in Counter(i.grp for i in eligible).items() if k > 1 and 0 < attacked_grps.get(g_, 0) < k]
+    if dup:
+        notes.append("which copy attacked is a guess for: " + ", ".join(sorted(ids.name(x) for x in dup)))
+    lab["attack_notes"] = notes
+    lab.update(_offturn(g, u, q, ana, ids))
+    return lab
+
+
 def after_turn_label(g: Game, n: int, ids: Ids | None = None) -> dict:
     """The labels of `reconstruct.state_after_user_turn(g, n)`: what the user did during the
     opponent's half-turn right after user turn n (blocks, block_pairing, offturn_instants,

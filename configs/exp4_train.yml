@@ -1,0 +1,32 @@
+# Experiment #4, stage 3: the large training (docs/017 §6.4). Edit the settings the sweep chose
+# (arch, lr, value target) before launching; everything else is the plan's.
+#
+#   python -m draftzero.gameplay.supervised train --config configs/exp4_train.yml --out runs/exp4/main \
+#       --tables-dir data/imitation_scale/h5
+#   # after a pod restart or a kill (SIGTERM saves latest.pt first):
+#   python -m draftzero.gameplay.supervised train --out runs/exp4/main --resume
+#
+# Writes runs/exp4/main/: evals.jsonl (every evaluation), best_policy / best_value / best .pt.gz
+# (MageZero's format), ckpt/step*.pt.gz every 30 minutes, latest.pt (resume state), final.pt.gz,
+# summary.json.
+# the tables tools/imitation_scale/build.py writes (docs/017 §2.2, §8.1)
+tables:
+  - {name: turnstart, kind: priority_set}         # the turn's first main-phase priority, set labels
+  - {name: replay_priority, kind: priority_set}   # the player's later stops in its own turn (timing)
+  - {name: opp_priority, kind: priority_set}      # the player's stops in the opponent's turn (timing)
+  - {name: replay_attack, kind: binary}           # "attack with X?"
+  - {name: replay_target, kind: target}           # spell targets the outcome settles
+  - {name: opp_block, kind: target}               # every block question, from the opponent's turn
+  # - {name: block, kind: target}                 # the first block question of each attack: overlaps opp_block
+fraction: 1.0
+val_rows: 20000
+data_cache: /workspace/cache/supervised   # mapped tables, so a resume skips the vocab mapping
+arch: {type: transformer, layers: 2, width: 512}
+lr: 3.0e-4
+value_per_game: 4
+time_budget_s: 43200        # a 12-hour cap; the plateau rule or max_epochs should stop it first
+max_epochs: 6
+eval_every_s: 1800
+ckpt_every_s: 1800
+latest_every_s: 600
+patience_epochs: 1.0        # stop once the combined validation measure is flat for an epoch

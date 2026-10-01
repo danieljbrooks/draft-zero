@@ -5,14 +5,30 @@ workers kept full, run after run.
         --grid e2 --evaluator offline --workers 30
     python tools/search_bench/run.py ... --grid e2 --evaluator remote --ports 50052,50152,50252 --workers 36
 
-A run is one configuration: method x budget x evaluator x discount (and its unit) x seed. The
-methods (docs/012 §2.1), each a `bench` request over the item's worlds:
+A run is one configuration: method x budget x evaluator x discount (and its unit) x seed, plus
+experiment #4's prior and leaf evaluator (--leaf, --leaf-mix, --opponent-priors; with the
+network's policy as priors, --grid priors). The methods (docs/012 §2.1), each a `bench` request
+over the item's worlds:
 
     clairvoyant  tree search on the item's real world (the filler hand and library orders)
     pimc1        tree search on the first belief world
     pimc4        one tree per belief world, the first four, a quarter of the budget each
     ismcts       one information-set tree over the eight belief worlds, re-dealt every iteration
     policy       the network's root policy, no search (E0 reference; remote only)
+
+Leaf evaluators (--leaf): net (the value head; the default with --evaluator remote), heuristic
+(offline search's GameStateEvaluator3, the only one offline; with a network and priors on, the
+network still gives the priors) and mix (--leaf-mix lambda: lambda x net + (1 - lambda) x
+heuristic). --opponent-priors uniform (the default; experiment #3's priors runs were net) gives
+the opponent's nodes uniform priors. --is-policy-per-world (the default; experiment #3 had none)
+keeps one policy per (actor, decision type) at IS-MCTS's shared nodes: a node's actor and decision
+type can differ between worlds. Run ids say what differs from experiment #3: -leafh,
+-mix<lambda>, -oppu, -pw.
+
+Every decision row has rootValue (the root's static evaluation by the leaf evaluator; the
+network's value for policy), rootQ (the search's backed-up root value; PIMC: visit-weighted over
+its worlds' roots), bestQ (the chosen option's backed-up value) and rootNetValue (the network's
+value at the root, null offline), all from the searcher's perspective.
 
 Runs go one after another, each over all its decisions at once, so its wall-clock at full load
 gives pod-seconds per decision (docs/012 §2.6). Output, all resumable:
@@ -51,6 +67,15 @@ def run_id(r: dict) -> str:
         rid += f"-d{r['discount']:g}{'' if r['unit'] == 'ply' else '-' + r['unit']}"
     if r.get("priors"):
         rid += "-pri"
+        if r.get("opponentPriors") == "uniform":
+            rid += "-oppu"
+        if r.get("isPolicyPerWorld"):
+            rid += "-pw"
+    if r["method"] != "policy" and r["evaluator"] == "remote":  # offline is always heuristic
+        if r.get("leaf") == "heuristic":
+            rid += "-leafh"
+        elif r.get("leaf") == "mix":
+            rid += f"-mix{r['leafMix']:g}"
     if r.get("net"):
         rid += f"-net{r['net']}"
     if r.get("seed", 0):
@@ -90,6 +115,20 @@ def grid(name: str, evaluator: str, a) -> list[dict]:
     raise SystemExit(f"unknown grid {name}")
 
 
+def set_leaf(r: dict, leaf: str, leaf_mix: float, opponent_priors: str, policy_per_world: bool = False) -> dict:
+    """Record experiment #4's options on a run (and so in its rows, runs.jsonl and config.json):
+    leaf always, leafMix for mix, opponentPriors when priors are on (it matters only then), and
+    isPolicyPerWorld for IS-MCTS with priors (only then)."""
+    r["leaf"] = leaf
+    if leaf == "mix":
+        r["leafMix"] = leaf_mix
+    if r.get("priors"):
+        r["opponentPriors"] = opponent_priors
+        if r["method"] == "ismcts" and policy_per_world:
+            r["isPolicyPerWorld"] = True
+    return r
+
+
 def request_for(item: dict, r: dict) -> tuple[list, dict]:
     m = r["method"]
     opts = dict(item["request"])
@@ -112,6 +151,13 @@ def request_for(item: dict, r: dict) -> tuple[list, dict]:
     opts["seed"] = 7 + 1000 * r.get("seed", 0)
     if r.get("priors"):
         opts["priors"] = True
+        opts["opponentPriors"] = r.get("opponentPriors", "net")
+        if r.get("isPolicyPerWorld"):
+            opts["isPolicyPerWorld"] = True
+    if r.get("leaf"):
+        opts["leaf"] = r["leaf"]
+        if r["leaf"] == "mix":
+            opts["leafMix"] = r["leafMix"]
     return specs, opts
 
 
@@ -184,12 +230,27 @@ def main(argv=None) -> int:
     ap.add_argument("--d-turn", type=float, default=0.7, help="E2b per-turn discount (from E0)")
     ap.add_argument("--only", default=None, help="run ids to run, comma-separated")
     ap.add_argument("--net", default=None, help="tag for a network other than #2a gen 18 (run ids get -net<tag>)")
+    ap.add_argument("--leaf", choices=("net", "heuristic", "mix"), default=None,
+                    help="leaf evaluator: net (default with --evaluator remote), heuristic (the only one offline), mix")
+    ap.add_argument("--leaf-mix", type=float, default=0.5, help="lambda for --leaf mix: lambda x net + (1 - lambda) x heuristic")
+    ap.add_argument("--opponent-priors", choices=("net", "uniform"), default="uniform",
+                    help="priors at the opponent's nodes when priors are on (experiment #3: net)")
+    ap.add_argument("--is-policy-per-world", action=argparse.BooleanOptionalAction, default=True,
+                    help="IS-MCTS with priors: one policy per (actor, decision type) at a shared node "
+                         "(experiment #3: off, the creating world's policy for every world)")
     a = ap.parse_args(argv)
+    leaf = a.leaf or ("net" if a.evaluator == "remote" else "heuristic")
+    if a.evaluator == "offline" and leaf != "heuristic":
+        ap.error(f"--leaf {leaf} needs --evaluator remote")
+    if not 0.0 <= a.leaf_mix <= 1.0:
+        ap.error("--leaf-mix must be in [0, 1]")
 
     out = Path(a.out)
     (out / "decisions").mkdir(parents=True, exist_ok=True)
     items = load_items(Path(a.items), a.split or None, a.limit, a.types)
     runs = grid(a.grid, a.evaluator, a)
+    for r in runs:
+        set_leaf(r, leaf, a.leaf_mix, a.opponent_priors, a.is_policy_per_world)
     if a.net:
         for r in runs:
             r["net"] = a.net
@@ -241,6 +302,7 @@ def main(argv=None) -> int:
                         resp = pool.request("bench", None, specs=specs, **opts)
                         row.update(best=resp.get("best"), children=resp.get("children"),
                                    rootVisits=resp.get("rootVisits"), rootValue=resp.get("rootValue"),
+                                   rootQ=resp.get("rootQ"), bestQ=resp.get("bestQ"), rootNetValue=resp.get("rootNetValue"),
                                    consistent=resp.get("consistent"), decision=(resp.get("decision") or {}).get("type"),
                                    stats=resp.get("stats"), timing_ms=resp.get("timing_ms"))
                     except Exception as e:  # noqa: BLE001 - record and continue

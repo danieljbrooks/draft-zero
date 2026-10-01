@@ -1,0 +1,24 @@
+# Experiment #4, stage 6c: the three training arms from the IL+BC network (docs/017 §6.6), on the
+# same self-play games and the same human rows. Shared settings: configs/exp4_stage6.yml.
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_stage6_arms.yml --out runs/exp4/stage6/arms
+#
+# Each run's evals.jsonl is its collapse curve: on the human validation rows, policy top-1 and
+# non-Pass top-1, Pass at the top (policy/pass_top1 against the humans' policy/pass_human) and
+# entropy; on the held-out self-play games, cross-entropy and top-1 agreement with the search, KL to
+# the IL+BC network (selfplay/kl_ref), value AUC, log-loss and calibration error against results.
+# sweep.csv has them at each run's best combined evaluation.
+title: "Experiment #4, stage 6: training on the IL+BC bot's own games"
+base_config: configs/exp4_stage6.yml
+runs:
+  - name: no_anchor          # the control: self-play targets only. Expected to drift from the human policy (docs/013)
+    group_shares: {human: 0.0}
+    kl_weight: 0.0
+    kl_weight_end: null
+  - name: anchored           # + KL toward the IL+BC policy (annealed 1.0 -> 0.1) and 15% human positions
+    group_shares: {human: 0.15}
+  - name: frozen_policy      # the anchored arm with the trunk and policy heads frozen: only the value head learns
+    group_shares: {human: 0.15}
+    kl_weight: 0.0
+    kl_weight_end: null
+    freeze: [trunk, policy]

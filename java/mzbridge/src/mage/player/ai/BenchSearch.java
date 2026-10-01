@@ -33,6 +33,11 @@ import java.util.*;
  * scored by GameStateEvaluator3 at priority decisions and inheriting the parent's score at micro
  * decisions, and the final choice by visits.
  *
+ * Experiment #4 crosses the prior with the leaf evaluator: Config.leaf (net | heuristic | mix,
+ * independent of Config.priors) and Config.opponentPriors (net | uniform at the opponent's nodes).
+ * Values are always the searcher's: the network encodes every state from the searcher's seat, and
+ * backprop never flips signs (selection does, at the opponent's nodes).
+ *
  * Two methods:
  *  - searchTree: one MageZero-style tree on one world (clairvoyant MCTS on the real world; one
  *    of PIMC's K worlds).
@@ -63,9 +68,69 @@ public final class BenchSearch {
         public boolean priors = false;
         public double priorTemp = 1.5;
         public double priorBonus = 0.1;
+        /**
+         * What scores a leaf (experiment #4 crosses it with the prior):
+         *   net        the network's value head (needs nn)
+         *   heuristic  offline search's: GameStateEvaluator3 at priority decisions, micro decisions
+         *              inherit their parent's score. With nn and priors on, the network is still
+         *              called for the policy, and its value is ignored.
+         *   mix        leafMix x net + (1 - leafMix) x heuristic, the heuristic part as above (needs nn)
+         * null: net with a network, heuristic without one.
+         */
+        public String leaf = null;
+        public double leafMix = 0.5;
+        /**
+         * Priors at nodes where the opponent acts (priority, target and binary decisions alike):
+         * net (the opponent's priority head, the target and binary heads: experiment #3) or uniform
+         * (no network prior, as MageZero's noPolicyOpponent). Only matters with priors on.
+         */
+        public String opponentPriors = "net";
+        /**
+         * IS-MCTS only, with priors on. A shared node's actor and decision type can differ between
+         * worlds. true: a node keeps one policy per (actor, decision type), read from the network
+         * in the first world that meets that pair there. false (experiment #3): the policy read in
+         * the world that created the node is mapped onto every world's options.
+         */
+        public boolean isPolicyPerWorld = false;
         public double timeoutSec = 900;
         /** 0: 4 x budget + 200 */
         public int maxIterations = 0;
+
+        /** A copy with another seed (the game player searches each decision with its own). */
+        public Config copyWithSeed(long newSeed) {
+            Config c = new Config();
+            c.budget = budget;
+            c.discount = discount;
+            c.unit = unit;
+            c.cPuct = cPuct;
+            c.nn = nn;
+            c.seed = newSeed;
+            c.redeal = redeal;
+            c.timeoutSec = timeoutSec;
+            c.maxIterations = maxIterations;
+            c.priors = priors;
+            c.priorTemp = priorTemp;
+            c.priorBonus = priorBonus;
+            c.leaf = leaf;
+            c.leafMix = leafMix;
+            c.opponentPriors = opponentPriors;
+            c.isPolicyPerWorld = isPolicyPerWorld;
+            return c;
+        }
+
+        public String leafMode() {
+            return leaf != null ? leaf : nn != null ? "net" : "heuristic";
+        }
+
+        /** Throws on an option combination the search can't run. */
+        public void check() {
+            String l = leafMode();
+            if (!List.of("net", "heuristic", "mix").contains(l)) throw new IllegalArgumentException("leaf must be net, heuristic or mix, got '" + l + "'");
+            if (nn == null && !l.equals("heuristic")) throw new IllegalArgumentException("leaf " + l + " needs a network (evaluator.type remote)");
+            if (!(leafMix >= 0.0 && leafMix <= 1.0)) throw new IllegalArgumentException("leafMix must be in [0, 1], got " + leafMix);
+            if (!List.of("net", "uniform").contains(opponentPriors)) throw new IllegalArgumentException("opponentPriors must be net or uniform, got '" + opponentPriors + "'");
+            if (priors && nn == null) throw new IllegalArgumentException("priors need a network (evaluator.type remote)");
+        }
     }
 
     /** One world at the decision: MageZero's root (validated and expanded) and how to rebuild it. */
@@ -93,6 +158,14 @@ public final class BenchSearch {
 
     public static final class Stats {
         public long sims, iterations, scriptFailures, engineSteps, evals, nodes, redeals, redealFailures;
+        /** network calls (leaf values, priors, the root's reported value) */
+        public long netEvals;
+        /** network priors applied to a node's options (tree: once per expanded node; IS-MCTS: per selection), and those at nodes where the opponent acts */
+        public long netPriors, oppNetPriors;
+        /** IS-MCTS with isPolicyPerWorld: network calls for a shared node's other (actor, decision type) */
+        public long policyRefreshes;
+        /** IS-MCTS without isPolicyPerWorld: priors applied from a policy read for another actor or decision type */
+        public long policyMismatches;
         public int maxDepth;
         public long engineNanos, evalNanos, searchNanos;
         /** per edge traversed in backprop: all, out of a priority decision, and turns crossed */
@@ -108,6 +181,11 @@ public final class BenchSearch {
             nodes += o.nodes;
             redeals += o.redeals;
             redealFailures += o.redealFailures;
+            netEvals += o.netEvals;
+            netPriors += o.netPriors;
+            oppNetPriors += o.oppNetPriors;
+            policyRefreshes += o.policyRefreshes;
+            policyMismatches += o.policyMismatches;
             maxDepth = Math.max(maxDepth, o.maxDepth);
             engineNanos += o.engineNanos;
             evalNanos += o.evalNanos;
@@ -136,8 +214,19 @@ public final class BenchSearch {
     public static final class Result {
         public final List<RootChild> children = new ArrayList<>();
         public int rootVisits;
+        /** the search's backed-up root value, root.w / root.n, the searcher's perspective (null: no simulation, or no search) */
         public Double rootQ;
+        /** root.w and root.n, so several worlds' roots can be pooled (visit-weighted) */
+        public double rootW;
+        public int rootN;
+        /**
+         * The root's static evaluation by the leaf evaluator, before any search (MageZero scores the
+         * root first), the searcher's perspective. Policy only: the network's value. Offline, a
+         * micro-decision root (attack, block) has no parent to inherit from, so it is 0.
+         */
         public Double rootValue;
+        /** the network's value at the root, whatever the leaf evaluator (null without a network) */
+        public Double rootNet;
         public final Stats stats = new Stats();
     }
 
@@ -153,10 +242,14 @@ public final class BenchSearch {
         int n;
         int avail;
         double w;
-        double value;
+        double value;             // the leaf evaluator's score
+        double heur;              // its heuristic part (leaf heuristic or mix): what micro decisions below inherit
+        double net;               // the network's value, when the network was called here
         double prior = 1.0;
         float[] policy;           // the network's policy head for this node's decision (priors on)
-        boolean hasValue, validated, terminal, win;
+        String policyKey;         // the (actor, decision type) the policy was read for
+        Map<String, float[]> policyByKey;  // IS-MCTS with isPolicyPerWorld: one policy per (actor, type)
+        boolean hasValue, hasHeur, hasNet, validated, terminal, win;
         ActionEncoder.ActionType type;
         UUID actor;
         int turn;
@@ -175,6 +268,7 @@ public final class BenchSearch {
     // ============================================================================ tree method
 
     public static Result searchTree(World world, Config cfg) {
+        cfg.check();
         Result res = new Result();
         Stats st = res.stats;
         long t0 = System.nanoTime();
@@ -185,6 +279,7 @@ public final class BenchSearch {
         root.validated = true;
         describe(root, world.root);
         evaluate(root, world.root, cfg, st); // MageZero scores the root before searching; not a simulation
+        rootNet(root, world.root, cfg, st);
         expandTree(root, world, cfg, st);
         int maxIt = cfg.maxIterations > 0 ? cfg.maxIterations : 4 * cfg.budget + 200;
         while (st.sims < cfg.budget && st.iterations < maxIt && !root.kids.isEmpty()) {
@@ -236,7 +331,10 @@ public final class BenchSearch {
             res.rootVisits += k.n;
         }
         res.rootQ = root.n > 0 ? root.q() : null;
+        res.rootW = root.w;
+        res.rootN = root.n;
         res.rootValue = root.value;
+        res.rootNet = root.hasNet ? root.net : null;
         return res;
     }
 
@@ -258,9 +356,13 @@ public final class BenchSearch {
         }
         st.nodes += ch.size();
         st.maxDepth = Math.max(st.maxDepth, node.depth + 1);
-        if (node.policy != null) {
+        if (node.policy != null) { // set by evaluate() only where priors apply (opponentPriors)
             double[] pr = priors(node.policy, ch, world.live, cfg);
-            if (pr != null) for (int i = 0; i < ch.size(); i++) node.kids.get(i).prior = pr[i];
+            if (pr != null) {
+                for (int i = 0; i < ch.size(); i++) node.kids.get(i).prior = pr[i];
+                st.netPriors++;
+                if (!world.player.getId().equals(node.actor)) st.oppNetPriors++;
+            }
         }
     }
 
@@ -331,20 +433,9 @@ public final class BenchSearch {
         int i = 0;
         if (sv != null) for (int f : sv) idx[i++] = f;
         RemoteModelEvaluator.InferenceResult out = cfg.nn.infer(idx);
-        float[] pol;
-        switch (r.actionType) {
-            case PRIORITY:
-                pol = me.equals(r.playerId) ? out.policy_player : out.policy_opponent;
-                break;
-            case CHOOSE_TARGET:
-                pol = out.policy_target;
-                break;
-            case CHOOSE_USE:
-                pol = out.policy_binary;
-                break;
-            default:
-                pol = null;
-        }
+        res.stats.netEvals = 1;
+        // the root is the searcher's decision, so opponentPriors does not matter here; applied for consistency
+        float[] pol = policyAllowed(r.actionType, me.equals(r.playerId), cfg) ? head(out, r.actionType, me.equals(r.playerId)) : null;
         List<MCTSNode> ch = r.getChildren();
         double[] logit = new double[ch.size()];
         double mx = Double.NEGATIVE_INFINITY;
@@ -370,6 +461,7 @@ public final class BenchSearch {
             res.children.add(c);
         }
         res.rootValue = (double) out.value;
+        res.rootNet = (double) out.value;
         res.stats.evals = 1;
         res.stats.searchNanos = System.nanoTime() - t0;
         return res;
@@ -378,6 +470,7 @@ public final class BenchSearch {
     // ============================================================================ IS-MCTS
 
     public static Result searchIS(List<World> worlds, Config cfg) {
+        cfg.check();
         Result res = new Result();
         Stats st = res.stats;
         long t0 = System.nanoTime();
@@ -399,7 +492,10 @@ public final class BenchSearch {
             if (sh == null) continue;
             Node cur = root;
             describe(cur, sh);
-            if (!root.hasValue) evaluate(root, sh, cfg, st); // as searchTree: not a simulation
+            if (!root.hasValue) { // as searchTree: not a simulation
+                evaluate(root, sh, cfg, st);
+                rootNet(root, sh, cfg, st);
+            }
             double v;
             while (true) {
                 if (cur.terminal) {
@@ -437,15 +533,25 @@ public final class BenchSearch {
                 if (cur == root) rootOptions = Math.max(rootOptions, opts.size());
                 Node next = null;
                 MCTSNode2 nsh = null;
+                // a shared node's actor can differ between worlds (describe() sets it for this
+                // iteration's), and its policy was read once, in the world that created it: the
+                // opponent-prior rule is applied to this iteration's actor
+                boolean mine = me.equals(cur.actor);
+                // isPolicyPerWorld: the policy for this world's actor and decision type at this node
+                float[] curPolicy = cfg.isPolicyPerWorld ? policyFor(cur, sh, mine, cfg, st)
+                        : (mine || cfg.opponentPriors.equals("net")) ? cur.policy : null;
                 while (!opts.isEmpty()) {
                     Map<String, Double> pri = null;
-                    if (cur.policy != null) {
+                    if (curPolicy != null) {
                         List<MCTSNode> ol = new ArrayList<>(opts.values());
-                        double[] pr = priors(cur.policy, ol, sh.getGame(), cfg);
+                        double[] pr = priors(curPolicy, ol, sh.getGame(), cfg);
                         if (pr != null) {
                             pri = new HashMap<>();
                             int i = 0;
                             for (String kk : opts.keySet()) pri.put(kk, pr[i++]);
+                            st.netPriors++;
+                            if (!mine) st.oppNetPriors++;
+                            if (!cfg.isPolicyPerWorld && !policyKey(cur.type, mine).equals(cur.policyKey)) st.policyMismatches++;
                         }
                     }
                     String k = selectIS(cur, opts.keySet(), me, cfg, pri);
@@ -493,7 +599,10 @@ public final class BenchSearch {
             }
         }
         res.rootQ = root.n > 0 ? root.q() : null;
+        res.rootW = root.w;
+        res.rootN = root.n;
         res.rootValue = root.hasValue ? root.value : null;
+        res.rootNet = root.hasNet ? root.net : null;
         return res;
     }
 
@@ -629,44 +738,124 @@ public final class BenchSearch {
         node.turn = eng.getGame().getTurnNum();
     }
 
-    /** Score a leaf: the value network, or offline MageZero's heuristic (micro decisions inherit). */
+    /**
+     * Score a leaf with cfg's leaf evaluator (Config.leaf), from the searcher's perspective, and
+     * with priors on read the network's policy for the node's options:
+     *  - the heuristic part (leaf heuristic or mix) is offline MageZero's: GameStateEvaluator3 at
+     *    priority decisions; micro decisions inherit their parent's heuristic score (0 at a
+     *    micro-decision root);
+     *  - the network is called when the leaf needs its value (net, mix) or the node needs its
+     *    policy (priors on, a decision with a policy head, the searcher's unless opponentPriors is
+     *    net). With leaf heuristic its value is ignored.
+     */
     private static double evaluate(Node node, MCTSNode eng, Config cfg, Stats st) {
         long te = System.nanoTime();
-        double v;
-        if (cfg.nn == null) {
+        String leaf = cfg.leafMode();
+        double h = 0.0;
+        if (!leaf.equals("net")) {
             if (eng.actionType == ActionEncoder.ActionType.PRIORITY) {
-                v = GameStateEvaluator3.evaluateNormalized(eng.targetPlayer, eng.getGame());
+                h = GameStateEvaluator3.evaluateNormalized(eng.targetPlayer, eng.getGame());
             } else {
-                v = node.parent != null && node.parent.hasValue ? node.parent.value : 0.0;
+                h = node.parent != null && node.parent.hasHeur ? node.parent.heur : 0.0;
             }
-        } else {
-            Set<Integer> sv = eng.stateVector;
-            long[] idx = new long[sv == null ? 0 : sv.size()];
-            int i = 0;
-            if (sv != null) for (int f : sv) idx[i++] = f;
-            RemoteModelEvaluator.InferenceResult out = cfg.nn.infer(idx);
-            v = out.value;
-            if (cfg.priors) {
-                switch (eng.actionType) {
-                    case PRIORITY:
-                        node.policy = eng.targetPlayer.equals(eng.playerId) ? out.policy_player : out.policy_opponent;
-                        break;
-                    case CHOOSE_TARGET:
-                        node.policy = out.policy_target;
-                        break;
-                    case CHOOSE_USE:
-                        node.policy = out.policy_binary;
-                        break;
-                    default:
-                        node.policy = null;
-                }
+            node.heur = h;
+            node.hasHeur = true;
+        }
+        boolean mine = eng.targetPlayer.equals(eng.playerId);
+        boolean wantPolicy = cfg.priors && policyAllowed(eng.actionType, mine, cfg);
+        if (!leaf.equals("heuristic") || wantPolicy) {
+            RemoteModelEvaluator.InferenceResult out = infer(eng, cfg, st);
+            node.net = out.value;
+            node.hasNet = true;
+            if (wantPolicy) {
+                node.policy = head(out, eng.actionType, mine);
+                node.policyKey = policyKey(eng.actionType, mine);
             }
+        }
+        double v;
+        switch (leaf) {
+            case "net":
+                v = node.net;
+                break;
+            case "mix":
+                v = cfg.leafMix * node.net + (1.0 - cfg.leafMix) * h;
+                break;
+            default:
+                v = h;
         }
         st.evals++;
         st.evalNanos += System.nanoTime() - te;
         node.value = v;
         node.hasValue = true;
         return v;
+    }
+
+    /** The network's value at the root, for the output only (the search never reads it): one extra call when evaluate() made none. */
+    private static void rootNet(Node root, MCTSNode eng, Config cfg, Stats st) {
+        if (cfg.nn == null || root.hasNet || root.terminal) return;
+        long te = System.nanoTime();
+        root.net = infer(eng, cfg, st).value;
+        root.hasNet = true;
+        st.evalNanos += System.nanoTime() - te;
+    }
+
+    private static RemoteModelEvaluator.InferenceResult infer(MCTSNode eng, Config cfg, Stats st) {
+        Set<Integer> sv = eng.stateVector;
+        long[] idx = new long[sv == null ? 0 : sv.size()];
+        int i = 0;
+        if (sv != null) for (int f : sv) idx[i++] = f;
+        st.netEvals++;
+        return cfg.nn.infer(idx);
+    }
+
+    static String policyKey(ActionEncoder.ActionType type, boolean mine) {
+        return (mine ? "me:" : "opp:") + type;
+    }
+
+    /**
+     * IS-MCTS with isPolicyPerWorld: the policy for this iteration's actor and decision type at a
+     * shared node, read from the network in this world (sh) the first time the pair is met there.
+     */
+    private static float[] policyFor(Node cur, MCTSNode2 sh, boolean mine, Config cfg, Stats st) {
+        if (!cfg.priors || !policyAllowed(cur.type, mine, cfg)) return null;
+        String k = policyKey(cur.type, mine);
+        if (k.equals(cur.policyKey)) return cur.policy;
+        if (cur.policyByKey == null) cur.policyByKey = new HashMap<>();
+        float[] pol = cur.policyByKey.get(k);
+        if (pol == null && !cur.policyByKey.containsKey(k)) {
+            long te = System.nanoTime();
+            pol = head(infer(sh, cfg, st), cur.type, mine);
+            st.evalNanos += System.nanoTime() - te;
+            st.policyRefreshes++;
+            cur.policyByKey.put(k, pol);
+        }
+        return pol;
+    }
+
+    /** Whether a decision gets the network's prior: it has a policy head, and it is the searcher's or opponentPriors is net. */
+    static boolean policyAllowed(ActionEncoder.ActionType type, boolean mine, Config cfg) {
+        switch (type) {
+            case PRIORITY:
+            case CHOOSE_TARGET:
+            case CHOOSE_USE:
+                return mine || cfg.opponentPriors.equals("net");
+            default:
+                return false;
+        }
+    }
+
+    /** The policy head for a decision (MageZero's): priority by who acts; target and binary are shared. */
+    static float[] head(RemoteModelEvaluator.InferenceResult out, ActionEncoder.ActionType type, boolean mine) {
+        switch (type) {
+            case PRIORITY:
+                return mine ? out.policy_player : out.policy_opponent;
+            case CHOOSE_TARGET:
+                return out.policy_target;
+            case CHOOSE_USE:
+                return out.policy_binary;
+            default:
+                return null;
+        }
     }
 
     private static void backprop(Node leaf, double v, Config cfg, Stats st) {

@@ -12,6 +12,10 @@ Scores (docs/012 §2.3), each per decision type and macro-averaged over the type
 References: chance (uniform over the distinct legal options) and the rule heuristic ("the
 biggest spell; attack when power >= the best blocker's toughness; block when the blocker kills
 the attacker and survives"), both computed here from the item's decision state.
+
+Experiment #4's runs (a leaf evaluator other than the evaluator's own, or uniform opponent
+priors) are scored and listed like any other, with leaf, leafMix and opponentPriors in the
+summary, but left out of experiment #3's plots and contrasts.
 """
 
 from __future__ import annotations
@@ -31,6 +35,18 @@ TYPES = ("spell", "hold", "attack", "block")
 METHOD_ORDER = ("clairvoyant", "pimc1", "pimc4", "ismcts")
 LABEL = {"clairvoyant": "Clairvoyant MCTS", "pimc1": "PIMC, 1 world", "pimc4": "PIMC, 4 worlds",
          "ismcts": "IS-MCTS", "policy": "Policy network, no search"}
+
+
+def leaf_of(r: dict) -> str:
+    """A run's leaf evaluator; rows from before experiment #4 used the evaluator's own."""
+    return r.get("leaf") or ("net" if r.get("evaluator") == "remote" else "heuristic")
+
+
+def exp3_style(r: dict) -> bool:
+    """A run (or row, or summary) experiment #3 could have made: the evaluator's own leaf, and
+    with priors on, the network's opponent priors."""
+    own = "net" if r.get("evaluator") == "remote" else "heuristic"
+    return leaf_of(r) == own and (not r.get("priors") or r.get("opponentPriors", "net") == "net")
 
 
 def load_items(path: Path) -> dict[str, dict]:
@@ -214,6 +230,8 @@ def summarize(rows, runs, items, leak: dict | None) -> list[dict]:
             "consistent": round(sum(bool(x["r"].get("consistent")) for x in recs) / len(recs), 3),
             "hides": verdict,
             "net": r0.get("net"), "priors": bool(r0.get("priors")),
+            "leaf": leaf_of(r0), "leafMix": r0.get("leafMix"),
+            "opponentPriors": (r0.get("opponentPriors") or "net") if r0.get("priors") else None,
             "balanced": bal, "balanced_ci": bal_ci, "balanced_parts": bal_parts,
         })
     return out
@@ -290,6 +308,7 @@ def plot(summary: list[dict], refs: dict, out_prefix: Path, title: str) -> list[
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
     paths = []
+    summary = [s for s in summary if exp3_style(s)]
     main = [s for s in summary if s["method"] in METHOD_ORDER and s["discount"] == 0.99 and s["unit"] == "ply"
             and not s["seed"] and s["pod_s"]]
     ys = [s["A_set"] for s in main] + [refs["chance"]] + ([refs["heuristic"]] if refs.get("heuristic") else []) \
@@ -395,7 +414,7 @@ def plot_frontier(summary, refs, out_prefix: Path, metric: str, title: str, subt
     key, cikey = ("A_set", "ci") if metric == "A_set" else ("balanced", "balanced_ci")
     scale = 100 if metric == "A_set" else 1
     rows = [s for s in summary if s.get(key) is not None and s["pod_s"] and not s["seed"]
-            and s["discount"] in (0.99, None) and s["unit"] in ("ply", None)]
+            and s["discount"] in (0.99, None) and s["unit"] in ("ply", None) and exp3_style(s)]
     ys = [s[key] * scale for s in rows]
     if metric == "A_set":
         ys += [refs["chance"] * 100, refs["heuristic"] * 100]
@@ -500,7 +519,7 @@ def plot_types(summary, refs, items, out_prefix: Path) -> list[Path]:
     import matplotlib.pyplot as plt
     paths = []
     main = [s for s in summary if s["method"] in METHOD_ORDER and s["discount"] == 0.99 and s["unit"] == "ply"
-            and not s["seed"] and not s.get("priors")]
+            and not s["seed"] and not s.get("priors") and exp3_style(s)]
     for mode, t in THEMES.items():
         fig, axes = plt.subplots(1, 4, figsize=(15, 4.6), dpi=150, sharey=True)
         fig.patch.set_facecolor(t["surface"])
@@ -546,7 +565,7 @@ def plot_discount(summary, out_prefix: Path) -> list[Path]:
     arms = [("1.0 / ply", 1.0, "ply"), ("0.99 / ply", 0.99, "ply"), ("0.95 / ply", 0.95, "ply"),
             ("0.9 / ply", 0.9, "ply"), ("0.95-matched\n/ action", None, "action"), ("0.95-matched\n/ turn", None, "turn")]
     rows = [s for s in summary if s["budget"] == 1000 and s["method"] in ("clairvoyant", "pimc4") and not s["seed"]
-            and not s.get("priors")]
+            and not s.get("priors") and exp3_style(s)]
     if not any(s["discount"] != 0.99 for s in rows):
         return []
     paths = []
@@ -595,7 +614,8 @@ def subdecision_check(rows, items) -> list[dict]:
     attacker) before their action completes, over decisions offering both kinds of option."""
     by = defaultdict(list)
     for r in rows:
-        if r.get("budget") != 1000 or r.get("method") not in ("clairvoyant", "pimc4") or r.get("seed") or r.get("priors"):
+        if r.get("budget") != 1000 or r.get("method") not in ("clairvoyant", "pimc4") or r.get("seed") or r.get("priors") \
+                or not exp3_style(r):
             continue
         if r["item_id"] not in items:
             continue
@@ -652,7 +672,7 @@ def main(argv=None) -> int:
                 if x["run_id"] == rec["run_id"]:
                     x["pod_s_cold"] = x["pod_s"]
                     x["pod_s"] = rec["pod_s_per_decision"]
-    done = {x["run_id"] for x in summary}
+    done = {x["run_id"] for x in summary if exp3_style(x)}  # experiment #3's contrasts
     refs = references(items, None)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)

@@ -12,7 +12,7 @@ for port in 50052 50152 50252 50352; do
   for k in $(seq 1 120); do curl -s localhost:$port/healthz > /dev/null && break; sleep 2; done
 done
 P=50052,50152,50252,50352
-R="python tools/search_bench/run.py --items data/search_bench/sb-v1 --split test --evaluator remote --ports $P --workers 32 --heap 2g --net imit"
+R="python tools/search_bench/run.py --items data/search_bench/sb-v1 --split test --evaluator remote --ports $P --workers 32 --heap 2g --net imit --opponent-priors net --no-is-policy-per-world"
 $R --out runs/search_bench/imit_network --grid priors --budgets 100,300,1000 --methods pimc1
 $R --out runs/search_bench/imit_network --grid e2 --budgets 1000 --methods pimc1
 $R --out runs/search_bench/imit_network --grid priors --budgets 3000 --methods pimc1

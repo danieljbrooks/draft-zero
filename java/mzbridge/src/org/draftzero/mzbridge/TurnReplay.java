@@ -21,6 +21,12 @@ import java.util.*;
  *                                blocks[[[blocker, attacker|null], ...], ...], blockPairing, opp[]}
  *                     expected  {life{A,B}, hand{A[], unknownA}, battlefield{A[], B[]}, deaths{...}}
  *                     seed, idSeed, lenient, substitute, encode, perfectInfo,
+ *                     allStops (record the scripted seat's priority decisions at every stop with a
+ *                     real choice, not only in its main phases or where it plays: end step, combat,
+ *                     a spell on the stack), recordSeat (whose decisions are recorded, default
+ *                     the scripted seat: "A" with seat "B" replays the opponent's turn and records
+ *                     the user's instants, flash and blocks), heuristic (each decision also carries offline
+ *                     MageZero's GameStateEvaluator3 score from its seat),
  *                     maxAttempts (default 12), policies[] (explicit attempts, else the built-in list)
  *   response reproduced (the verdict; the envelope's "ok" only says the request ran), attempt (1-based
  *            index of the attempt reported), policy, diff, diffKeys, items,
@@ -76,6 +82,9 @@ final class TurnReplay {
         boolean lenient = Worker.optBool(opt, "lenient", false);
         boolean encode = Worker.optBool(opt, "encode", false);
         boolean perfectInfo = Worker.optBool(opt, "perfectInfo", false);
+        boolean allStops = Worker.optBool(opt, "allStops", false);
+        String recordSeat = Worker.optString(opt, "recordSeat", null);
+        boolean heuristic = Worker.optBool(opt, "heuristic", false);
         Substitutions.Result subs = Substitutions.apply(spec, Worker.optObject(opt, "substitute"));
         int defaultTurn = spec.turn + (spec.activePlayer.equals(Worker.optString(Worker.optObject(opt, "script"), "seat", "A")) ? 0 : 1);
         TurnScript script = TurnScript.parse(Worker.optObject(opt, "script"), Worker.optObject(opt, "expected"), defaultTurn);
@@ -100,7 +109,7 @@ final class TurnReplay {
         int bestIdx = 0;
         long buildMs = 0, replayMs = 0;
         for (int i = 0; i < policies.size(); i++) {
-            Attempt a = attempt(spec, script, policies.get(i), seed, idSeed, lenient, encode, perfectInfo);
+            Attempt a = attempt(spec, script, policies.get(i), seed, idSeed, lenient, encode, perfectInfo, allStops, heuristic, recordSeat);
             buildMs += a.buildMs;
             replayMs += a.replayMs;
             log.add(a.summary());
@@ -239,7 +248,7 @@ final class TurnReplay {
     }
 
     static Attempt attempt(Spec spec, TurnScript script, TurnScript.Policy pol, long seed, long idSeed, boolean lenient,
-                           boolean encode, boolean perfectInfo) {
+                           boolean encode, boolean perfectInfo, boolean allStops, boolean heuristic, String recordSeat) {
         Attempt a = new Attempt();
         a.policy = pol;
         long t0 = System.nanoTime();
@@ -247,6 +256,9 @@ final class TurnReplay {
         a.warnings = b.warnings;
         Game game = b.game;
         ReplayRun run = new ReplayRun(b, script, pol, encode, perfectInfo);
+        run.allStops = allStops;
+        run.heuristic = heuristic;
+        if (recordSeat != null) run.recordSeat = recordSeat;
         a.run = run;
         // both seats become script-following puppets: replace the player objects in the game state
         for (String s : Spec.SEATS) {
@@ -316,10 +328,12 @@ final class TurnReplay {
         if (lifeDiff.size() > 0) diff.add("life", lifeDiff);
 
         // A's hand as the cleanup step began (17lands' snapshot comes before the discard to hand size)
-        Player pa = game.getPlayer(run.b.players.get(run.seat).getId());
+        Player pa = game.getPlayer(run.b.players.get(run.recordSeat).getId());
         Map<String, Integer> hand = new TreeMap<>();
         ReplayWatcher hw = game.getState().getWatcher(ReplayWatcher.class);
-        List<String> atCleanup = hw == null ? null : hw.handAtCleanup(run.turn, run.seat);
+        // the recorded seat's hand: A, the 17lands user (in the opponent's turn the watcher has no
+        // cleanup hand for A, which discards nothing then: its hand at the end is the one)
+        List<String> atCleanup = hw == null ? null : hw.handAtCleanup(run.turn, run.recordSeat);
         if (atCleanup != null) {
             for (String nm : atCleanup) hand.merge(nm, 1, Integer::sum);
         } else {
@@ -376,7 +390,7 @@ final class TurnReplay {
         for (TurnScript.Item it : run.items) {
             if (!it.done) {
                 undone.add(it.describe());
-                if (it.seat.equals(run.seat)) undoneMine++;
+                if (it.seat.equals(run.seat) || it.seat.equals(run.recordSeat)) undoneMine++;
                 if (!keys.contains(new com.google.gson.JsonPrimitive("undone:" + it.seat))) keys.add("undone:" + it.seat);
             }
         }

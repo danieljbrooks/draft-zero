@@ -81,10 +81,11 @@ def perm_key(grp: int, ids: Ids) -> str:
     return ids.name(grp)
 
 
-def expected_snapshot(g: Game, n: int, ids: Ids) -> dict:
-    """The recorded end of user turn n: life, A's hand (unknown ids by count), both battlefields
-    (perm_key multisets) and the non-token creatures that died (combat / non-combat)."""
-    u = g.user_slot(n)
+def expected_snapshot(g: Game, n: int, ids: Ids, slot: TurnRecord | None = None) -> dict:
+    """The recorded end of user turn n (or of `slot`, e.g. the opponent's turn after it): life, A's
+    hand (unknown ids by count), both battlefields (perm_key multisets) and the non-token creatures
+    that died (combat / non-combat)."""
+    u = slot if slot is not None else g.user_slot(n)
     hand = u.L("eot_user_cards_in_hand")
     known = [ids.name(c) for c in hand if c != -1 and ids.cards17.get(c)]
     return {
@@ -216,7 +217,7 @@ def _add_to_hand(spec: StateSpec, names: list[str], flags: list[str]) -> None:
         flags.append("opp_decklist_extended_for_script")
 
 
-def _untap_for(spec: StateSpec, items: list[dict], ids: Ids, flags: list[str]) -> None:
+def _untap_for(spec: StateSpec, items: list[dict], ids: Ids, flags: list[str], seat: str = "B") -> None:
     """B pays for its recorded instant-speed plays (spells and activated abilities) with the lands it
     left untapped at the end of its turn. Which lands it tapped there is inferred from mana spent
     (reconstruct.choose_tapped_lands), so the inference can leave the wrong colours or too few
@@ -224,7 +225,7 @@ def _untap_for(spec: StateSpec, items: list[dict], ids: Ids, flags: list[str]) -
     a colour B's plays need for an untapped one they do not need (the count, i.e. the mana spent,
     stays), then untap more lands if the count is short."""
     from draftzero.gameplay.statespec import Perm
-    B = spec.players["B"]
+    B = spec.players[seat]
     pips = Counter()
     need_total = 0
     for it in items:
@@ -276,7 +277,7 @@ def _untap_for(spec: StateSpec, items: list[dict], ids: Ids, flags: list[str]) -
             short -= 1
             changed = True
     if changed:
-        flags.append("opp_lands_untapped_for_script")
+        flags.append("opp_lands_untapped_for_script" if seat == "B" else "user_lands_untapped_for_script")
 
 
 def replay_request(g: Game, n: int, ids: Ids | None = None, partner: Game | None = None) -> tuple[dict, dict, dict]:
@@ -349,6 +350,83 @@ def replay_turn(bridge, g: Game, n: int, ids: Ids | None = None, partner: Game |
              "diffKeys": ["bridge_error"]}
     # the worker's envelope "ok" only says the request ran (a failed one raised above): from here on
     # "ok" is the verdict, the end of turn matched the snapshot
+    r["ok"] = bool(r.get("reproduced"))
+    r["meta"] = meta
+    return r
+
+
+def replay_request_opp(g: Game, n: int, ids: Ids | None = None) -> tuple[dict, dict, dict]:
+    """(spec dict, request options, meta) for replaying the opponent's turn right after user turn n,
+    the opponent scripted and active, the user's decisions recorded (recordSeat A; docs/017 §2.2).
+    The spec is the end of user turn n (reconstruct.state_after_user_turn, eot_rollover). The
+    opponent's hand is hidden, so its recorded plays are put in it (hindsight, flagged); the user's
+    off-turn instants, flash and abilities are its script items with their windows read off the
+    card, and its blocks are the recorded pairing."""
+    from draftzero.gameplay.labels import opponent_turn_label
+    from draftzero.gameplay.reconstruct import state_after_user_turn
+    ids = ids or Ids.load(g.meta.get("expansion") or "FDN")
+    spec = state_after_user_turn(g, n, "eot_rollover", ids=ids)
+    lab = opponent_turn_label(g, n, ids)
+    q = g.next_slot(n)
+    flags: list[str] = ["opp_turn_hindsight_hand"]
+    notes: list[str] = list(lab.get("attack_notes", []))
+    unscripted = 0
+    b_hand = [x["name"] for x in lab["lands"]] + [c["name"] for c in lab["casts"] if c.get("zone") != "graveyard"]
+    _add_to_hand(spec, b_hand, flags)
+    casts = [{"kind": "cast", "key": c["key"], "name": c["name"], "family": c["family"]} for c in lab["casts"] if c["key"]]
+    acts = []
+    for a in lab["activations"]:
+        if not a["key"]:
+            notes.append(f"opponent ability {a['id']} has no XMage key: not scripted")
+            unscripted += 1
+            continue
+        acts.append({"kind": "activation", "key": a["key"], "name": a["source"]})
+    mine = []          # the user's plays in the opponent's turn: the other seat's items
+    for x in lab["offturn_instants"]:
+        if x.get("key"):
+            mine.append({"kind": "cast", "key": x["key"], "name": x["name"], "family": "instant_sorcery",
+                         "mv": _cost_mv(x["key"] if x["key"].startswith("Flashback ") else ids.info(x["name"]).mana_cost)})
+    for x in lab["offturn_flash"]:
+        if x.get("key"):
+            mine.append({"kind": "cast", "key": x["key"], "name": x["name"], "family": "flash",
+                         "mv": _cost_mv(ids.info(x["name"]).mana_cost)})
+    for a in lab["offturn_activations"]:
+        if a.get("key"):
+            mine.append({"kind": "activation", "key": a["key"], "name": a["source"]})
+        else:
+            notes.append(f"user ability {a['id']} has no XMage key: not scripted")
+            flags.append("user_activation_unkeyed")
+    _untap_for(spec, mine, ids, flags, seat="A")
+    pairs = [[b, a] for b, a, _ in lab["blocks"] if a is not None]
+    guess = [x.split(": ", 1)[1] for x in notes if x.startswith("which copy attacked is a guess for: ")]
+    script = {
+        "seat": "B", "turn": lab["global_turn"],
+        "lands": [{"kind": "land", "key": x["key"], "name": x["name"]} for x in lab["lands"] if x.get("key")],
+        "casts": casts, "activations": acts, "opp": mine,
+        "attacks": lab["attacks"], "attackGuess": [n_ for x in guess for n_ in x.split(", ")],
+        "blocks": [pairs] if pairs else [], "blockPairing": lab["block_pairing"], "unscripted": unscripted,
+    }
+    tier = spec.provenance.tier if spec.provenance else None
+    meta = {"row": g.row_index, "turn": n, "opp_turn": True, "global_turn": lab["global_turn"], "tier": tier,
+            "spec_flags": list(spec.provenance.flags) if spec.provenance else [], "flags": flags, "notes": notes,
+            "n_casts": len(casts), "n_user": len(mine), "block_pairing": lab["block_pairing"], "on_play": g.on_play}
+    return spec.to_dict(), {"script": script, "expected": expected_snapshot(g, n, ids, slot=q), "recordSeat": "A"}, meta
+
+
+def replay_opp_turn(bridge, g: Game, n: int, ids: Ids | None = None, *, seed: int = 0, encode: bool = False,
+                    perfect_info: bool = False, max_attempts: int = 12, timeout: float | None = None, **options) -> dict:
+    """replay_turn for the opponent's turn right after user turn n, recording the user's decisions
+    in it (replay_request_opp). Same response as replay_turn."""
+    from draftzero.gameplay.bridge import BridgeError
+    spec, opt, meta = replay_request_opp(g, n, ids)
+    try:
+        kw = {"timeout": timeout} if timeout and not hasattr(bridge, "workers") else {}
+        r = bridge.request("replay_turn", spec, seed=seed, encode=encode or None, perfectInfo=perfect_info or None,
+                           maxAttempts=max_attempts, **opt, **options, **kw)
+    except BridgeError as e:
+        err = e.error or {}
+        r = {"reproduced": False, "bridge_error": f"{err.get('type')}: {err.get('message')}"[:500],
+             "diffKeys": ["bridge_error"]}
     r["ok"] = bool(r.get("reproduced"))
     r["meta"] = meta
     return r

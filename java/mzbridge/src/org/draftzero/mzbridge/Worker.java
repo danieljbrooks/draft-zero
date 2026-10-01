@@ -107,6 +107,9 @@ public final class Worker {
                     case "bench":
                         resp = Bench.run(opt); // docs/012's search benchmark (Bench.java)
                         break;
+                    case "play":
+                        resp = Play.run(opt); // one full game, IS-MCTS for both seats (docs/017)
+                        break;
                     case "replay_turn":
                         resp = TurnReplay.run(spec(req), opt); // one recorded turn, both seats scripted (README)
                         break;
@@ -115,7 +118,7 @@ public final class Worker {
                         quit = true;
                         break;
                     default:
-                        throw new IllegalArgumentException("unknown op '" + op + "' (ping, build, encode, coach, bench, replay_turn, quit)");
+                        throw new IllegalArgumentException("unknown op '" + op + "' (ping, build, encode, coach, bench, play, replay_turn, quit)");
                 }
                 resp.addProperty("ok", true);
             } catch (Throwable e) {

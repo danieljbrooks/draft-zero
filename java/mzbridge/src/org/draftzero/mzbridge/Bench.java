@@ -27,7 +27,26 @@ import java.util.*;
  * Other options: budget (total simulations), discount (0.99), discountUnit (ply | action | turn),
  * cPuct (1), evaluator {type offline|remote, host, port}, perfectInfo (false: the network does
  * not see the opponent's hand, as in experiment #2), preLand (a land option to play first),
- * redeal (IS-MCTS, true), timeoutSec, decisionPlayer, decideFrom, lenient.
+ * redeal (IS-MCTS, true), timeoutSec, decisionPlayer, decideFrom, lenient, priors (false),
+ * priorTemp (1.5), priorBonus (0.1), and for experiment #4 (BenchSearch.Config):
+ *
+ *   leaf            net | heuristic | mix: what scores a leaf. Default net with a remote
+ *                   evaluator, heuristic offline (offline allows only heuristic)
+ *   leafMix         lambda in [0, 1] for mix: lambda x net + (1 - lambda) x heuristic (0.5)
+ *   isPolicyPerWorld  IS-MCTS with priors: a shared node keeps one policy per (actor, decision
+ *                   type), read in the first world that meets the pair there. Default false
+ *                   (experiment #3: the creating world's policy for every world)
+ *   opponentPriors  net | uniform: priors at the opponent's nodes when priors are on. Default net
+ *                   (experiment #3's behaviour); run.py defaults to uniform
+ *
+ * Values in the output, all from the searcher's perspective:
+ *   rootValue     the root's static evaluation by the leaf evaluator before the search (world 0's
+ *                 root; IS-MCTS: the first iteration's determinization). Policy: the network's
+ *                 value. Offline, 0 at a micro-decision root (attack, block): nothing to inherit
+ *   rootQ         the search's backed-up root value, sum(root.w) / sum(root.n) over the worlds'
+ *                 roots (one root for clairvoyant and IS-MCTS; PIMC: the visit-weighted mean)
+ *   bestQ         the chosen option's backed-up value: its Q merged over worlds, visit-weighted
+ *   rootNetValue  the network's value at the root (world 0), whatever the leaf; null offline
  */
 final class Bench {
     private Bench() {
@@ -46,26 +65,9 @@ final class Bench {
         boolean lenient = Worker.optBool(opt, "lenient", false);
         boolean perfectInfo = Worker.optBool(opt, "perfectInfo", false);
         String preLand = Worker.optString(opt, "preLand", null);
-        BenchSearch.Config base = new BenchSearch.Config();
-        base.budget = Worker.optInt(opt, "budget", 1000);
-        base.discount = Worker.optDouble(opt, "discount", 0.99);
-        base.unit = Worker.optString(opt, "discountUnit", "ply");
-        if (!List.of("ply", "action", "turn").contains(base.unit)) throw new IllegalArgumentException("discountUnit must be ply, action or turn");
-        base.cPuct = Worker.optDouble(opt, "cPuct", 1.0);
-        base.redeal = Worker.optBool(opt, "redeal", true);
-        base.timeoutSec = Worker.optDouble(opt, "timeoutSec", 900.0);
-        base.priors = Worker.optBool(opt, "priors", false);
-        base.priorTemp = Worker.optDouble(opt, "priorTemp", 1.5);
-        base.priorBonus = Worker.optDouble(opt, "priorBonus", 0.1);
-        if (base.budget < 1) throw new IllegalArgumentException("budget must be >= 1");
+        BenchSearch.Config base = config(opt);
         JsonObject evalOpt = opt.has("evaluator") && opt.get("evaluator").isJsonObject() ? opt.getAsJsonObject("evaluator") : new JsonObject();
         String evalType = Worker.optString(evalOpt, "type", "offline");
-        if ("remote".equals(evalType)) {
-            base.nn = Coach.evaluator(Worker.optString(evalOpt, "host", "127.0.0.1"), Worker.optInt(evalOpt, "port", 50052));
-        } else if (!"offline".equals(evalType)) {
-            throw new IllegalArgumentException("evaluator.type must be offline or remote, got '" + evalType + "'");
-        }
-        if (base.priors && base.nn == null) throw new IllegalArgumentException("priors need evaluator.type remote");
         List<Long> worldSeeds = new ArrayList<>();
         if (opt.has("worldSeeds") && opt.get("worldSeeds").isJsonArray()) {
             for (JsonElement e : opt.getAsJsonArray("worldSeeds")) worldSeeds.add(e.getAsLong());
@@ -110,12 +112,15 @@ final class Bench {
         // ---- search
         BenchSearch.Stats stats = new BenchSearch.Stats();
         Map<String, Agg> by = new LinkedHashMap<>();
-        Double rootValue = null;
+        Double rootValue = null, rootNet = null;
+        double rootW = 0.0;
+        long rootN = 0;
         if (method.equals("policy")) {
             if (base.nn == null) throw new IllegalArgumentException("method policy needs evaluator.type remote");
             BenchSearch.Result r = BenchSearch.rootPolicy(worlds.get(0), base);
             stats.add(r.stats);
             rootValue = r.rootValue;
+            rootNet = r.rootNet;
             merge(by, r, first);
         } else if (method.equals("ismcts")) {
             BenchSearch.Config cfg = copy(base);
@@ -123,6 +128,9 @@ final class Bench {
             BenchSearch.Result r = BenchSearch.searchIS(worlds, cfg);
             stats.add(r.stats);
             rootValue = r.rootValue;
+            rootNet = r.rootNet;
+            rootW += r.rootW;
+            rootN += r.rootN;
             merge(by, r, first);
         } else {
             int k = worlds.size();
@@ -133,7 +141,12 @@ final class Bench {
                 if (cfg.budget < 1) continue;
                 BenchSearch.Result r = BenchSearch.searchTree(worlds.get(i), cfg);
                 stats.add(r.stats);
-                if (i == 0) rootValue = r.rootValue;
+                if (i == 0) {
+                    rootValue = r.rootValue;
+                    rootNet = r.rootNet;
+                }
+                rootW += r.rootW;
+                rootN += r.rootN;
                 merge(by, r, first);
             }
         }
@@ -157,6 +170,10 @@ final class Bench {
         set.addProperty("perfectInfo", perfectInfo);
         set.addProperty("redeal", base.redeal);
         set.addProperty("priors", base.priors);
+        set.addProperty("opponentPriors", base.opponentPriors);
+        set.addProperty("isPolicyPerWorld", base.isPolicyPerWorld);
+        set.addProperty("leaf", base.leafMode());
+        if (base.leafMode().equals("mix")) set.addProperty("leafMix", base.leafMix);
         set.addProperty("seed", seed);
         set.addProperty("idSeed", idSeed);
         set.addProperty("preLand", preLand);
@@ -177,9 +194,13 @@ final class Bench {
             ch.add(j);
         }
         out.add("children", ch);
-        out.addProperty("best", agg.isEmpty() || (agg.get(0).visits == 0 && !method.equals("policy")) ? null : agg.get(0).label);
+        boolean chose = !(agg.isEmpty() || (agg.get(0).visits == 0 && !method.equals("policy")));
+        out.addProperty("best", chose ? agg.get(0).label : null);
         out.addProperty("rootVisits", total);
         out.addProperty("rootValue", rootValue);
+        out.addProperty("rootQ", rootN > 0 ? rootW / rootN : null);
+        out.addProperty("bestQ", chose ? agg.get(0).q : null);
+        out.addProperty("rootNetValue", rootNet);
         out.add("worldInfo", wj);
         out.add("hiddenNames", Dumper.strings(new ArrayList<>(hiddenNames)));
         JsonObject s = new JsonObject();
@@ -188,6 +209,11 @@ final class Bench {
         s.addProperty("scriptFailures", stats.scriptFailures);
         s.addProperty("engineSteps", stats.engineSteps);
         s.addProperty("evals", stats.evals);
+        s.addProperty("netEvals", stats.netEvals);
+        s.addProperty("netPriors", stats.netPriors);
+        s.addProperty("oppNetPriors", stats.oppNetPriors);
+        s.addProperty("policyRefreshes", stats.policyRefreshes);
+        s.addProperty("policyMismatches", stats.policyMismatches);
         s.addProperty("nodes", stats.nodes);
         s.addProperty("maxDepth", stats.maxDepth);
         s.addProperty("redeals", stats.redeals);
@@ -209,6 +235,36 @@ final class Bench {
         return out;
     }
 
+    /** The search settings of a bench request (also one seat of a play request: Play). */
+    static BenchSearch.Config config(JsonObject opt) {
+        BenchSearch.Config base = new BenchSearch.Config();
+        base.budget = Worker.optInt(opt, "budget", 1000);
+        base.discount = Worker.optDouble(opt, "discount", 0.99);
+        base.unit = Worker.optString(opt, "discountUnit", "ply");
+        if (!List.of("ply", "action", "turn").contains(base.unit)) throw new IllegalArgumentException("discountUnit must be ply, action or turn");
+        base.cPuct = Worker.optDouble(opt, "cPuct", 1.0);
+        base.redeal = Worker.optBool(opt, "redeal", true);
+        base.timeoutSec = Worker.optDouble(opt, "timeoutSec", 900.0);
+        base.priors = Worker.optBool(opt, "priors", false);
+        base.priorTemp = Worker.optDouble(opt, "priorTemp", 1.5);
+        base.priorBonus = Worker.optDouble(opt, "priorBonus", 0.1);
+        if (base.budget < 1) throw new IllegalArgumentException("budget must be >= 1");
+        JsonObject evalOpt = opt.has("evaluator") && opt.get("evaluator").isJsonObject() ? opt.getAsJsonObject("evaluator") : new JsonObject();
+        String evalType = Worker.optString(evalOpt, "type", "offline");
+        if ("remote".equals(evalType)) {
+            base.nn = Coach.evaluator(Worker.optString(evalOpt, "host", "127.0.0.1"), Worker.optInt(evalOpt, "port", 50052));
+        } else if (!"offline".equals(evalType)) {
+            throw new IllegalArgumentException("evaluator.type must be offline or remote, got '" + evalType + "'");
+        }
+        if (base.priors && base.nn == null) throw new IllegalArgumentException("priors need evaluator.type remote");
+        base.leaf = Worker.optString(opt, "leaf", null);
+        base.leafMix = Worker.optDouble(opt, "leafMix", 0.5);
+        base.opponentPriors = Worker.optString(opt, "opponentPriors", "net");
+        base.isPolicyPerWorld = Worker.optBool(opt, "isPolicyPerWorld", false);
+        base.check();
+        return base;
+    }
+
     private static BenchSearch.Config copy(BenchSearch.Config b) {
         BenchSearch.Config c = new BenchSearch.Config();
         c.budget = b.budget;
@@ -223,6 +279,10 @@ final class Bench {
         c.priors = b.priors;
         c.priorTemp = b.priorTemp;
         c.priorBonus = b.priorBonus;
+        c.leaf = b.leaf;
+        c.leafMix = b.leafMix;
+        c.opponentPriors = b.opponentPriors;
+        c.isPolicyPerWorld = b.isPolicyPerWorld;
         return c;
     }
 

@@ -29,6 +29,17 @@ deck filled from the belief model with the item's own seed (what clairvoyant MCT
 4 the first four, IS-MCTS all eight). The belief model leaves out the game's drafts (and a
 mirrored partner's). Draft ids are never written.
 
+sb-v2 (experiment #4, docs/017 §6.5): `--version sb-v2`. Games from experiment #4's test split
+(tools/imitation_scale/build.py splits: data/imitation_scale/row_split_exp4.npy), which no exp #4
+table trains on; test items only. Two more types, built from the end-of-turn snapshot of user turn
+n (reconstruct.state_after_user_turn, eot_rollover), both labelled Pass, which 17lands makes exact:
+
+  endstep    A's priority in its own end step, holding a castable instant, flash card or ability.
+             The snapshot follows everything A did that turn, so whatever A still holds, it held.
+  oppwindow  A's first window in the opponent's next turn (its upkeep), holding a castable
+             instant, flash card or ability, in an opponent turn in which A cast and activated
+             nothing. When A did act in that turn the step is unknown, so the turn is skipped.
+
 Output (git-ignored; mirrored-pair rows are in it): <out>/items.jsonl.gz and <out>/build.json.
 """
 
@@ -57,6 +68,12 @@ from draftzero.gameplay.bridge import BridgePool  # noqa: E402
 from draftzero.gameplay.ids import Ids  # noqa: E402
 
 VERSION = "sb-v1"
+VERSIONS = {"sb-v1": None,   # QUOTA and DEV_SHARE below
+            "sb-v2": {"quota": {"test": {"spell": 300, "hold": 125, "attack": 225, "block": 150,
+                                         "endstep": 100, "oppwindow": 100}},
+                      "dev_share": 0.0}}
+EXP4_SPLIT = REPO / "data" / "imitation_scale" / "row_split_exp4.npy"
+AFTER_TURN = ("block", "endstep", "oppwindow")       # kinds built from the state after user turn n
 QUOTA = {"test": {"spell": 375, "hold": 125, "attack": 300, "block": 200},
          "dev": {"spell": 110, "hold": 40, "attack": 90, "block": 60}}
 TURNS = range(3, 13)
@@ -100,8 +117,10 @@ def defender_open(dump: dict, seat: str) -> bool:
 def make_item(g, partner, n: int, kind: str, bridge, ids) -> dict:
     """One decision of `kind` in user turn n of game g, or raise Rejected(reason)."""
     block = kind == "block"
+    after = kind in AFTER_TURN
     try:
         spec = (rc.state_after_user_turn(g, n, "declare_attackers", ids=ids, labels=True) if block
+                else rc.state_after_user_turn(g, n, "eot_rollover", ids=ids, labels=True) if after
                 else rc.state_at_user_turn(g, n, "eot_rollover", ids=ids, labels=True))
     except ValueError as e:  # e.g. the opponent did not attack after user turn n
         raise Rejected("spec: " + str(e).split(": ", 1)[-1][:60])
@@ -118,7 +137,9 @@ def make_item(g, partner, n: int, kind: str, bridge, ids) -> dict:
         raise Rejected("cast")
     if kind == "attack" and not (labels.get("attacks") or {}):
         raise Rejected("no attack question recorded")
-    slot = g.user_slot(n) if block else g.prev_slot(n)
+    if kind == "oppwindow" and any(labels.get(k) for k in ("offturn_instants", "offturn_flash", "offturn_activations")):
+        raise Rejected("acted in the opponent's turn")
+    slot = g.user_slot(n) if after else g.prev_slot(n)
     if slot is None:
         raise Rejected("no slot")
     seen = Counter(rc.analyze(g, ids).states[slot.seq].revealed)
@@ -130,7 +151,9 @@ def make_item(g, partner, n: int, kind: str, bridge, ids) -> dict:
     opts = dict(labels.get("bridge") or {})
     if kind == "attack":
         opts["decideFrom"] = {"turn": opts.get("decideFrom", {}).get("turn", n), "step": "DECLARE_ATTACKERS"}
-    if kind != "block" and lands:
+    if kind == "endstep":
+        opts["decideFrom"] = {"turn": spec.turn, "step": "END_TURN"}
+    if not after and lands:
         opts["preLand"] = lands[0]["key"]
     real_d = real[0].to_dict()
     try:
@@ -151,12 +174,21 @@ def make_item(g, partner, n: int, kind: str, bridge, ids) -> dict:
         raise Rejected(f"reached {t} at {step}")
     if kind == "block" and not (t == "CHOOSE_TARGET" and step == "DECLARE_BLOCKERS"):
         raise Rejected(f"reached {t} at {step}")
+    if kind in ("endstep", "oppwindow") and not (t == "PRIORITY" and step == df.get("step")):
+        raise Rejected(f"reached {t} at {step}")
     legal = _legal(d)
     if len(set(legal)) < 2:
         raise Rejected("trivial")
     decision = {"type": t, "text": text, "turn": where.get("turn"), "step": step}
     names = co.alias_names(b.get("dump"))
-    ha = co._as_human(co.human_17lands(labels), decision, names)
+    if kind in ("endstep", "oppwindow"):
+        # held to the end of the turn (endstep) or through the opponent's whole turn (oppwindow):
+        # 17lands records each play's turn, so Pass is exact here
+        if "Pass" not in legal or not any(x != "Pass" for x in legal):
+            raise Rejected("nothing castable")
+        ha = co.HumanAction(["Pass"], False, "17lands: held through the turn")
+    else:
+        ha = co._as_human(co.human_17lands(labels), decision, names)
     if ha is None or not ha.labels:
         raise Rejected("label: " + str(getattr(ha, "reason", None))[:80])
     members = [m for m in (co.match_label(a, legal, t) for a in ha.labels) if m]
@@ -179,7 +211,7 @@ def make_item(g, partner, n: int, kind: str, bridge, ids) -> dict:
     if not members:
         raise Rejected("human unmatched")
     return {
-        "type": kind, "row": g.row_index, "turn": n, "on_play": g.on_play,
+        "type": kind, "row": g.row_index, "turn": n, "on_play": g.on_play, "won": g.won,
         "win_rate_bucket": g.meta.get("user_game_win_rate_bucket"), "rank": g.meta.get("rank"),
         "mirrored": partner is not None, "tier": fid["tier"],
         "decision": decision, "legal": legal, "n_options": len(set(legal)),
@@ -193,16 +225,30 @@ def make_item(g, partner, n: int, kind: str, bridge, ids) -> dict:
 
 
 def cmd_build(a) -> int:
-    out = Path(a.out)
+    global VERSION, QUOTA, DEV_SHARE
+    VERSION = a.version
+    if VERSIONS[VERSION]:
+        QUOTA, DEV_SHARE = VERSIONS[VERSION]["quota"], VERSIONS[VERSION]["dev_share"]
+    if a.every is None:
+        a.every = 1 if VERSION == "sb-v2" else 36
+    if a.start is None:
+        a.start = 0 if VERSION == "sb-v2" else 17
+    out = Path(a.out or REPO / "data/search_bench" / VERSION)
     out.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     pmap = pm.partner_map(pm.load_pairs())
     held = held_out_rows(pmap)
     ids = Ids.load("FDN")
     rows_seen = 0
+    if VERSION == "sb-v2":
+        import numpy as np
+        exp4 = np.load(EXP4_SPLIT)
 
-    def keep(g) -> bool:
-        return is_top(g) and g.row_index not in held and pmap.get(g.row_index) not in held
+        def keep(g) -> bool:   # experiment #4's test split: both halves of a mirrored game share it
+            return is_top(g) and exp4[g.row_index] == 2
+    else:
+        def keep(g) -> bool:
+            return is_top(g) and g.row_index not in held and pmap.get(g.row_index) not in held
 
     games = list(replay.iter_games(every=a.every, start=a.start, predicate=keep))
     print(f"{len(games)} top, held-out games from every {a.every}th row ({time.time() - t0:.0f}s)", flush=True)
@@ -238,17 +284,17 @@ def cmd_build(a) -> int:
         partner = partners.get(pmap.get(g.row_index)) if g.row_index in pmap else None
         turns = [n for n in g.decision_turns() if n in TURNS]
         grng = random.Random(SEED ^ g.row_index)
-        cands = [(n, k) for n in turns for k in ("spell", "hold", "attack", "block")]
+        cands = [(n, k) for n in turns for k in QUOTA[split]]
         grng.shuffle(cands)
         # the rarer types first, so a game's two slots go to them when it has one
-        rank = {"attack": 0, "hold": 1, "block": 2, "spell": 3}
+        rank = {"oppwindow": 0, "endstep": 0, "attack": 0, "hold": 1, "block": 2, "spell": 3}
         cands.sort(key=lambda c: rank[c[1]])
         got, used_turns = 0, set()
         for n, kind in cands:
             if got >= 2 or done():
                 return
             with lock:
-                if not need(split, kind) or (n, kind == "block") in used_turns:
+                if not need(split, kind) or (n, kind in AFTER_TURN) in used_turns:
                     continue
             try:
                 it = make_item(g, partner, n, kind, pool, ids)
@@ -267,10 +313,10 @@ def cmd_build(a) -> int:
                 it["split"] = split
                 items.append(it)
                 got += 1
-                used_turns.add((n, kind == "block"))
+                used_turns.add((n, kind in AFTER_TURN))
                 if len(items) % 50 == 0:
-                    print(f"  {len(items)} items  test {dict(counts['test'])}  dev {dict(counts['dev'])}"
-                          f"  ({time.time() - t0:.0f}s)", flush=True)
+                    print(f"  {len(items)} items  " + "  ".join(f"{sp} {dict(c)}" for sp, c in counts.items())
+                          + f"  ({time.time() - t0:.0f}s)", flush=True)
 
     try:
         with ThreadPoolExecutor(a.workers) as ex:
@@ -316,9 +362,10 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build")
-    b.add_argument("--out", default=str(REPO / "data/search_bench" / VERSION))
-    b.add_argument("--every", type=int, default=36)
-    b.add_argument("--start", type=int, default=17)
+    b.add_argument("--version", choices=sorted(VERSIONS), default="sb-v1")
+    b.add_argument("--out", help="default data/search_bench/<version>")
+    b.add_argument("--every", type=int, help="every k-th row (default 36 for sb-v1, 1 for sb-v2)")
+    b.add_argument("--start", type=int, help="first row (default 17 for sb-v1, 0 for sb-v2)")
     b.add_argument("--workers", type=int, default=4)
     s = sub.add_parser("stats")
     s.add_argument("--out", default=str(REPO / "data/search_bench" / VERSION))

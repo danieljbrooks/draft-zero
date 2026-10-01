@@ -305,9 +305,11 @@ def _feat(r: dict) -> np.ndarray:
     return np.asarray(r.get("features") or [], dtype=np.int32)
 
 
-def turn_start_record(g, n: int, b, ids, *, perfect_info: bool = False, spec=None, split: int = -1) -> dict:
+def turn_start_record(g, n: int, b, ids, *, perfect_info: bool = False, spec=None, split: int = -1,
+                      heuristic: bool = False) -> dict:
     """One turn-start decision: spec -> encode (labels['bridge'] options) -> labels. Never raises
-    for a bridge or reconstruction problem: status says what happened."""
+    for a bridge or reconstruction problem: status says what happened. heuristic=True also records
+    offline MageZero's GameStateEvaluator3 score of the decision state (docs/017)."""
     from draftzero.gameplay import reconstruct as rc
     from draftzero.gameplay.bridge import BridgeError
     rec = {"turn": n, "split": split, **_decision_meta(g)}
@@ -325,10 +327,12 @@ def turn_start_record(g, n: int, b, ids, *, perfect_info: bool = False, spec=Non
     rec["n_unkeyed_activations"] = sum(1 for x in lab.get("activations", []) if not x.get("key"))
     opts = dict(lab.get("bridge") or {})
     try:
-        r = b.encode(spec, perfectInfo=perfect_info, **opts)
+        r = b.encode(spec, perfectInfo=perfect_info, **({"heuristic": True} if heuristic else {}), **opts)
     except BridgeError as e:
         rec.update(status="bridge_error", error=str(e).splitlines()[0][:300])
         return rec
+    if heuristic:
+        rec["heuristic"] = r.get("heuristic")
     d = r.get("decision")
     if not d:
         rec.update(status="no_decision", error=(r.get("noDecision") or "")[:200])
@@ -369,13 +373,14 @@ def _attack_context(spec: dict, ids) -> dict:
     return {"blockers": blockers}
 
 
-def replay_records(g, n: int, b, ids, split: int = -1) -> dict:
-    """replay_turn(encode=True) for user turn n: the turn verdict and every decision of A's."""
+def replay_records(g, n: int, b, ids, split: int = -1, **replay_opts) -> dict:
+    """replay_turn(encode=True) for user turn n: the turn verdict and every decision of A's.
+    replay_opts go to the op (docs/017: allStops=True, heuristic=True)."""
     from draftzero.gameplay import turnreplay as tr
     from draftzero.gameplay.reconstruct import state_at_user_turn
     out = {"turn": n, "split": split, **_decision_meta(g)}
     try:
-        r = tr.replay_turn(b, g, n, ids, encode=True)
+        r = tr.replay_turn(b, g, n, ids, encode=True, **replay_opts)
     except Exception as e:           # noqa: BLE001
         out.update(reproduced=False, error=f"{type(e).__name__}: {e}"[:300], decisions=[])
         return out
@@ -392,6 +397,7 @@ def replay_records(g, n: int, b, ids, split: int = -1) -> dict:
                      "legal_idx": [int(x.get("idx", -1)) for x in d.get("legal") or []],
                      "chosen": d.get("chosen"), "label_kind": d.get("label_kind"), "evidence": d.get("evidence"),
                      "set": d.get("set"), "step": (d.get("where") or {}).get("step"),
+                     "stack": (d.get("where") or {}).get("stack"), "heuristic": d.get("heuristic"),
                      "features": _feat(d) if out["reproduced"] else None})
     out["decisions"] = decs
     return out
@@ -1167,6 +1173,7 @@ def replay_tables(rp: list[dict], ids) -> dict:
                 att["y"].append(1 if d["chosen"] == "yes" else 0)
                 att["heur"].append(int(ab["attack"]))
                 att["power"].append(ab["power"])
+                att["heuristic"].append(d.get("heuristic"))
                 for k, v in base.items():
                     att["meta/" + k].append(v)
             elif d["type"] == "PRIORITY" and d.get("label_kind") in ("exact", "imputed_order"):
@@ -1185,6 +1192,8 @@ def replay_tables(rp: list[dict], ids) -> dict:
                 pri["S"].append(si)
                 pri["kind"].append(d["label_kind"])
                 pri["step"].append(d.get("step"))
+                pri["stack"].append(d.get("stack") or 0)
+                pri["heuristic"].append(d.get("heuristic"))
                 for k, v in base.items():
                     pri["meta/" + k].append(v)
     return {"attack": dict(att), "priority": dict(pri)}

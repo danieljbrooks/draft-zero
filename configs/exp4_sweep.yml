@@ -1,0 +1,46 @@
+# Experiment #4, stage 2: the hyperparameter sweep (docs/017 §6.3). One setting at a time around the
+# default (MageZero v0.2's network: 2 layers, width 512, lr 3e-4), plus the default with a second seed
+# for the noise band. Every run gets the same 10% of the training games, the same feature vocab, the
+# same validation rows and the same 25-minute training budget.
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep.yml --out runs/exp4/sweep \
+#       --tables-dir data/imitation_scale/h5
+#
+# Writes runs/exp4/sweep/{sweep.json,sweep.csv,sweep-light.png,sweep-dark.png} and one run directory
+# per config (evals.jsonl, best_*.pt.gz, speed.json). Re-running the command skips finished runs and
+# resumes an interrupted one. The rule (docs/017 §6.3): keep the default unless a setting beats it by
+# more than twice the seed-to-seed difference, is no worse on the other head, and slows inference by
+# less than 25%.
+title: "Experiment #4 sweep: one setting at a time around MageZero's default network"
+base:
+  # the tables tools/imitation_scale/build.py writes (docs/017 §2.2, §8.1)
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+    # - {name: block, kind: target}     # overlaps opp_block
+  fraction: 0.1               # of the training games, the same 10% for every run
+  val_rows: 20000             # per table, whole games
+  time_budget_s: 1500         # 25 minutes of training per run
+  eval_every_s: 300
+  ckpt_every_s: null          # the best checkpoints are kept; no periodic ones
+  latest_every_s: 300
+  patience_epochs: null       # fixed budget: no plateau stop
+  value_per_game: 4           # docs/017 §5: a few positions per game per epoch for the value loss
+runs:
+  - {name: default, role: default, seed: 0}
+  - {name: default-seed1, role: default, seed: 1}
+  - {name: layers-1, arch: {layers: 1}}
+  - {name: layers-4, arch: {layers: 4}}
+  - {name: width-256, arch: {width: 256}}
+  - {name: width-768, arch: {width: 768}}
+  - {name: mlp, arch: {type: mlp}}                 # mean-pooled EmbeddingBag + 2 residual MLP blocks
+  - {name: lr-1e-4, lr: 1.0e-4}
+  - {name: lr-1e-3, lr: 1.0e-3}
+  - {name: value-td, value_target: td}             # TD(0.95) targets from the network's own values
+  - {name: value-aux, aux_targets: [turns_left]}   # + life_diff once the build writes meta/final_life_diff
+  - {name: value-td-aux, value_target: td, aux_targets: [turns_left]}
+  - {name: value-weight-0.1, value_weight: 0.1}   # #2b's 0.5 was for MSE; cross-entropy has another scale
