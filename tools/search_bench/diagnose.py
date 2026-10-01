@@ -231,12 +231,14 @@ def act_split(items: dict, R: dict) -> dict:
     both acted: the spell among the human's casts, the attacker blocked."""
     out = {}
     def acted(t, label):
-        if t in ("spell", "hold"):
+        if t in ("spell", "hold", "endstep", "oppwindow"):
             return label != "Pass"
         if t == "attack":
             return label == "yes"
         return label != "Stop Choosing"
-    for group, types in (("cast", ("spell", "hold")), ("attack", ("attack",)), ("block", ("block",))):
+    # sb-v2's timing items (endstep, oppwindow; docs/017 §6.5) are cast-or-pass questions too
+    for group, types in (("cast", ("spell", "hold", "endstep", "oppwindow")), ("attack", ("attack",)),
+                         ("block", ("block",))):
         tp = fn = tn = fp = 0
         what_ok = what_n = 0
         for iid, r in R.items():

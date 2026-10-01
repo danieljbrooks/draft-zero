@@ -31,7 +31,7 @@ from collections import defaultdict
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-TYPES = ("spell", "hold", "attack", "block")
+TYPES = ("spell", "hold", "attack", "block", "endstep", "oppwindow")   # the last two: sb-v2's timing items
 METHOD_ORDER = ("clairvoyant", "pimc1", "pimc4", "ismcts")
 LABEL = {"clairvoyant": "Clairvoyant MCTS", "pimc1": "PIMC, 1 world", "pimc4": "PIMC, 4 worlds",
          "ismcts": "IS-MCTS", "policy": "Policy network, no search"}
@@ -211,6 +211,7 @@ def summarize(rows, runs, items, leak: dict | None) -> list[dict]:
         t_v = sum(s.get("turnEdgeSum") or 0 for s in stats)
         method = r0["method"]
         bal, bal_ci, bal_parts = balanced_score(items, {x["item"]: x["r"] for x in recs})
+        vauc = value_aucs(items, recs)
         verdict = None
         if leak is not None:
             verdict = leak.get(method)
@@ -233,8 +234,59 @@ def summarize(rows, runs, items, leak: dict | None) -> list[dict]:
             "leaf": leaf_of(r0), "leafMix": r0.get("leafMix"),
             "opponentPriors": (r0.get("opponentPriors") or "net") if r0.get("priors") else None,
             "balanced": bal, "balanced_ci": bal_ci, "balanced_parts": bal_parts,
+            "value_auc": vauc,
         })
     return out
+
+
+def auc(scores: list[float], ys: list[int]) -> float | None:
+    """P(a won decision scores above a lost one), ties half (Mann-Whitney)."""
+    pairs = sorted(zip(scores, ys))
+    n1 = sum(ys)
+    n0 = len(ys) - n1
+    if not n1 or not n0:
+        return None
+    rank_sum, i = 0.0, 0
+    while i < len(pairs):
+        j = i
+        while j < len(pairs) and pairs[j][0] == pairs[i][0]:
+            j += 1
+        r = (i + 1 + j) / 2                     # the tied block's mean rank
+        rank_sum += r * sum(y for _, y in pairs[i:j])
+        i = j
+    return (rank_sum - n1 * (n1 + 1) / 2) / (n1 * n0)
+
+
+def value_aucs(items: dict, recs: list[dict], n_boot: int = 200, seed: int = 0) -> dict | None:
+    """docs/017 §6.5's value score: the AUC of the search's root value (rootQ), and of the root's
+    static value and the network's root value, against the item's game result (`won`, sb-v2), all
+    from the searcher's (the player's) side; rootQ with a game-bootstrap CI."""
+    out = {}
+    for key in ("rootQ", "rootValue", "rootNetValue"):
+        xs = [(x["r"].get(key), items[x["item"]].get("won"), items[x["item"]]["row"]) for x in recs]
+        xs = [(v, int(bool(w)), g) for v, w, g in xs if v is not None and w is not None]
+        if len(xs) < 10:
+            continue
+        a = auc([v for v, _, _ in xs], [w for _, w, _ in xs])
+        if a is None:
+            continue
+        out[key] = round(a, 4)
+        if key == "rootQ":
+            by_game = defaultdict(list)
+            for v, w, g in xs:
+                by_game[g].append((v, w))
+            games = list(by_game)
+            rng = random.Random(seed)
+            vals = []
+            for _ in range(n_boot):
+                s = [p for g in (rng.choice(games) for _ in games) for p in by_game[g]]
+                b = auc([v for v, _ in s], [w for _, w in s])
+                if b is not None:
+                    vals.append(b)
+            vals.sort()
+            if vals:
+                out["rootQ_ci"] = [round(vals[int(0.025 * len(vals))], 4), round(vals[int(0.975 * len(vals)) - 1], 4)]
+    return out or None
 
 
 def balanced_score(items: dict, R: dict, n_boot: int = 200, seed: int = 0):
@@ -277,7 +329,8 @@ def references(items: dict, split: str | None) -> dict:
             "passive": round(pas, 4), "heuristic_balanced": hb,
             "heuristic_n": len(hs),
             "chance_per_type": {t: round(sum(chance(it) for it in its if it["type"] == t)
-                                         / max(1, sum(1 for it in its if it["type"] == t)), 4) for t in TYPES}}
+                                         / max(1, sum(1 for it in its if it["type"] == t)), 4)
+                                for t in TYPES if any(it["type"] == t for it in its)}}
 
 
 def paired(rows, items, a: str, b: str, key: str = "set", n: int = 1000) -> dict:
@@ -714,7 +767,8 @@ def main(argv=None) -> int:
         pt = " ".join(f"{t[:2]} {v['A_set']:.2f}" for t, v in s["per_type"].items())
         print(f"{s['run_id']:44s} {s['n']:5d} bal {s['balanced'] or 0:.3f} {s['A_set']:6.3f} [{s['ci'][0]:.3f},{s['ci'][1]:.3f}] "
               f"{s['A_strict']:6.3f} {s['A_soft']:6.3f} {s['pod_s'] or 0:7.3f} {s['engine_steps_per_sim']:9.2f} "
-              f"{s['plies_per_action'] or 0:6.2f} {s['plies_per_turn'] or 0:6.2f}  {pt}")
+              f"{s['plies_per_action'] or 0:6.2f} {s['plies_per_turn'] or 0:6.2f}  {pt}"
+              + (f"  value AUC {s['value_auc']}" if s.get("value_auc") else ""))
     sub = subdecision_check(rows, items)
     if sub:
         print("\nE2b sub-decision check (decisions offering options with and without sub-decisions, 1,000 sims):")
