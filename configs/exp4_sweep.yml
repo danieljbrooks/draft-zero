@@ -1,7 +1,8 @@
 # Experiment #4, stage 2: the hyperparameter sweep (docs/017 §6.3). One setting at a time around the
 # default (MageZero v0.2's network: 2 layers, width 512, lr 3e-4), plus the default with a second seed
 # for the noise band. Every run gets the same 10% of the training games, the same feature vocab, the
-# same validation rows and the same 25-minute training budget.
+# same validation rows and the same number of samples: one epoch of that subset (docs/018 §Stage 2).
+# docs/017 §6.3 planned an equal 25-minute budget instead; that gives faster networks more data.
 #
 #   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep.yml --out runs/exp4/sweep \
 #       --tables-dir data/imitation_scale/h5
@@ -24,8 +25,9 @@ base:
     # - {name: block, kind: target}     # overlaps opp_block
   fraction: 0.1               # of the training games, the same 10% for every run
   val_rows: 20000             # per table, whole games
-  time_budget_s: 1500         # 25 minutes of training per run
-  eval_every_s: 300
+  max_epochs: 1.0             # one pass over the 10% subset: the same samples for every run
+  time_budget_s: 7200         # a cap only (the default needs ~27 minutes)
+  eval_every_s: 600
   ckpt_every_s: null          # the best checkpoints are kept; no periodic ones
   latest_every_s: 300
   patience_epochs: null       # fixed budget: no plateau stop
