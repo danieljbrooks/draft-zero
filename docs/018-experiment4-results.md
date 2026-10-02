@@ -28,7 +28,9 @@ has the stage estimates this doc tracks against.*
 - **Every network so far almost never acts in the opponent's turn.** Pass is its top choice 97.5–
   100% of the time, against 93.4% for the humans, though it ranks the right play first among the
   non-Pass options ~70% of the time when the human did act. It knows what to cast there but not
-  when. A candidate fix for stage 3: upweight the opponent's-turn rows where the human acted.
+  when. **The fix works:** tripling the policy loss of the opponent's-turn rows where the human
+  acted brings Pass-on-top down to 93.8% and improves the policy overall (set NLL −0.007, beyond
+  the noise). It is the new leader (Stage 2).
 - **The heuristic bot on the new benchmark (sb-v2):** IS-MCTS at 300 simulations scores 0.648
   balanced, and its root value predicts the game's result with AUC 0.724 (Stage 4).
 - **Compute: the network search is CPU-bound, not GPU-bound,** at about 3.2 pod-seconds a decision
@@ -38,7 +40,7 @@ has the stage estimates this doc tracks against.*
 
 ## Status
 
-*Spend so far: $11.21 of the ~$36–44 planned (RunPod balance $82.58 → $71.37). Ask before total spend passes $65.*
+*Spend so far: $17.65 of the ~$36–44 planned (RunPod balance $82.58 → $64.93, 20:45 UTC on 2 October). Ask before total spend passes $65. The second machine costs the project nothing.*
 
 | Stage | Status | Pod-hours | Cost | Notes |
 |---|---|---|---|---|
@@ -368,6 +370,25 @@ removed; round 2's remaining capacity runs move to the faster machine, on the cu
 (`x-l2`, `x-l4`, `x-mlp`, `x-mlp-w1024-b4`). Training stays on
 the GPUs; the game stages (4–7) go to RunPod Community pods, since the second machine's RAM can't hold many
 game JVMs. The lr-3e-4 backstop is dropped and the remaining tricks are deferred.
+
+**The passivity fix works, and it is the new leader (20:42).** `act-opp-3` triples the policy loss of the
+opponent's-turn rows where the human acted (`act_weights: {opp_priority: 3.0}`), on the leader's recipe:
+
+| | Pass on top, opponent's turn | Opp. turn, non-Pass top-1 | Opp. turn, set NLL | Non-Pass top-1 (all) | Set NLL (all) | Attack | Block | Targets | Value AUC | Value log-loss |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Humans | 0.934 | | | | | | | | | |
+| `hw-ref` (the leader) | 0.971 | 0.822 | 0.123 | 0.792 | 0.287 | 0.813 | 0.703 | 0.554 | 0.739 | 0.599 |
+| `act-opp-3` | **0.938** | **0.871** | **0.108** | **0.796** | **0.281** | 0.812 | 0.703 | 0.553 | 0.740 | 0.597 |
+
+- **The network now passes about as often as the humans** (93.8% against 93.4%), and it ranks the human's
+  play first more often when the human did act (0.871 against 0.822).
+- **It costs the policy nothing; it helps.** The opponent's-turn set NLL falls 0.015 and the overall NLL 0.007,
+  beyond the ~0.006 noise band; the other heads are unchanged. In the opponent's turn, top-1 on the rows with
+  exact labels (a Pass once nothing was left to play) slips from 0.994 to 0.977, the price of a less lopsided
+  prior, and on the rows with plays (imputed order) it rises from 0.918 to 0.947.
+- **Next:** ×10 on the same table (`act-opp-10`) and ×3 on all three priority tables (`act-all-3`) are queued
+  after the TD(λ) runs, and the 30% check gets the fix too (`s30-l1-act3`, next after `s30-l2`). If it holds
+  at 30%, stage 3 trains with it.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
