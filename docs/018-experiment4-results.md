@@ -290,10 +290,16 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `v16-td-cosine-1e-4` | the two small gains combine: TD for the policy, cosine from 1e-4 for the value | non-Pass 0.792 (+0.006), NLL 0.287 (−0.008), attack 0.813 (+0.005), block 0.704 (+0.007), value AUC 0.739 (−0.005), log-loss 0.599 (−0.004) against l5e5-vpg16 | **the new leader:** TD's policy gain (at or past the noise bar) with the value as good as before (cosine stops TD's log-loss slip, 0.617 to 0.599). The 30% check switches to this recipe |
 | `v16-auxres-fixed` | the result head, now actually trained: the trunk gets the outcome signal on every position while the value head keeps 16 | non-Pass 0.785 (−0.001), NLL 0.302 (+0.007), value AUC 0.718 (−0.026), log-loss 0.677 (+0.074) against l5e5-vpg16 (the same recipe without it); its aux loss fell 0.36 to 0.27 (memorising) while the value log-loss rose from 0.613 | rejected: no policy gain, and the value overfits through the trunk (the trunk learns to recognise games) |
 | `v16-aux-turns-fixed` | a turns-left head, now actually trained, helps the shared trunk | every measure within ±0.005 of l5e5-vpg16 (non-Pass 0.788, NLL 0.294, value AUC 0.744); its aux loss trained (0.033) | neutral, now a valid test: a turns-left head adds nothing |
-| `v16-l2` | capacity: 2 layers help on the right recipe (round 1's 2 layers trained unstably) | *running (RunPod)* |  |
-| `v16-l4` | capacity: 4 layers help on the right recipe | *queued* |  |
-| `v16-mlp-lr-1e-4, v16-mlp-w1024-b4` | the MLP on the recipe, and a big MLP (fast enough to afford) | *queued* |  |
+| `v16-l2` | capacity: 2 layers help on the right recipe (round 1's 2 layers trained unstably) | against l5e5-vpg16 (1 layer): non-Pass 0.779 (−0.007), NLL 0.303 (+0.008), attack 0.805 (−0.003), value AUC 0.743 (−0.001); inference at 1,139 evaluations a second against 2,125 | rejected on 10%: a second layer doesn't pay here, and halves the inference speed; the 30% check (`s30-l2`) decides |
+| `v16-l4` | capacity: 4 layers help on the right recipe | *moved to the second machine as `x-l4`, on the current leader's recipe* |  |
+| `v16-mlp-lr-1e-4, v16-mlp-w1024-b4` | the MLP on the recipe, and a big MLP (fast enough to afford) | *moved to the second machine as `x-mlp`, `x-mlp-w1024-b4`, on the current leader's recipe* |  |
 | `v16-seed1` | the noise band for the leader | seed 1 against seed 0: non-Pass +0.003, NLL −0.003, attack −0.009, block +0.007, value AUC +0.001, log-loss +0.007 | the noise band on this recipe: ~0.006 on the policy (twice the difference), ~0.014 on value log-loss; TD's policy gain is probably real, cosine's value gain borderline |
+| `hw-ref (second machine)` | the leader rerun on the second machine: does other hardware reproduce round 2? | every measure within 0.001 of `v16-td-cosine-1e-4`, except targets (0.554 against 0.547); 3.4× the training speed | passed: results from the two machines mix |
+| `act-opp-3` | the passivity fix: ×3 on the policy loss of the opponent's-turn rows where the human acted | Pass on top in the opponent's turn 0.938 (humans 0.934, leader 0.971); non-Pass 0.796 (+0.004), NLL 0.281 (−0.007), other heads unchanged | **the new leader:** human-like passing and a better policy; tested at 30% next (`s30-l1-act3`) |
+| `td-0.90, td-0.975, td-0.99` | TD(λ) around the leader's 0.95 (Dan, 20:45): lower bootstraps more, higher is closer to the plain result | *queued* |  |
+| `ep3` | the leader for three epochs of the 10% subset (the 30% run's step count): data or steps? | *queued* |  |
+| `act-opp-10, act-all-3` | the passivity fix stronger (×10), and on all three priority tables (×3) | *queued* |  |
+| `x-l2, x-l4, x-mlp, x-mlp-w1024-b4` | capacity on the current leader's recipe | *queued* |  |
 
 **Overfitting checks** (Dan asked, 15:10): every curve and leaderboard number is on the validation split
 (held out by draft; never trained on); the test split is untouched until stage 3's network is scored.
@@ -324,14 +330,14 @@ so the winner's validation numbers are slightly optimistic.
 | 12 | `v16-cosine-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001 cosine, emb std 0.02, warm-up 3000 | 0.787 | 0.297 | 0.806 | 0.698 | 0.542 | 0.749 | 0.592 | 98.2% | 2,158 |
 | 13 | `v16-cosine-2e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0002 cosine, emb std 0.02, warm-up 3000 | 0.775 | 0.301 | 0.814 | 0.703 | 0.566 | 0.746 | 0.601 | 97.8% | 2,158 |
 | 14 | `v16-auxres-fixed` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000, +result | 0.785 | 0.302 | 0.803 | 0.699 | 0.543 | 0.718 | 0.677 | 97.9% | 2,153 |
-| 15 | `c0-lr-5e-5` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.776 | 0.305 | 0.803 | 0.693 | 0.534 | 0.737 | 0.645 | 97.8% | 2,156 |
-| 16 | `c0-lr-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001, emb std 0.02, warm-up 3000 | 0.753 | 0.315 | 0.795 | 0.700 | 0.550 | 0.734 | 0.636 | 98.3% | 2,157 |
-| 17 | `c0` | transformer, 1 layer, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.760 | 0.316 | 0.780 | 0.688 | 0.554 | 0.701 | 0.655 | 97.8% | 2,144 |
-| 18 | `c0-cosine-3e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0003 cosine, emb std 0.02, warm-up 3000 | 0.766 | 0.319 | 0.792 | 0.691 | 0.551 | 0.712 | 0.654 | 99.8% | 2,151 |
-| 19 | `l5e5-w256` | transformer, 1 layer, width 256, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.771 | 0.320 | 0.791 | 0.694 | 0.542 | 0.731 | 0.671 | 99.5% | 5,374 |
-| 20 | `c0-lr-2e-5` | transformer, 1 layer, width 512, pre-LN, lr 2e-05, emb std 0.02, warm-up 3000 | 0.763 | 0.333 | 0.791 | 0.689 | 0.498 | 0.731 | 0.671 | 99.8% | 2,141 |
-| 21 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
-| – | `v16-l2` *(at 0.00 epoch)* | transformer, 2 layers, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.472 | 0.929 | 0.495 | 0.394 | 0.285 | 0.490 | 0.673 | 66.5% | – |
+| 15 | `v16-l2` | transformer, 2 layers, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.779 | 0.303 | 0.805 | 0.696 | 0.542 | 0.743 | 0.603 | 97.6% | 1,139 |
+| 16 | `c0-lr-5e-5` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.776 | 0.305 | 0.803 | 0.693 | 0.534 | 0.737 | 0.645 | 97.8% | 2,156 |
+| 17 | `c0-lr-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001, emb std 0.02, warm-up 3000 | 0.753 | 0.315 | 0.795 | 0.700 | 0.550 | 0.734 | 0.636 | 98.3% | 2,157 |
+| 18 | `c0` | transformer, 1 layer, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.760 | 0.316 | 0.780 | 0.688 | 0.554 | 0.701 | 0.655 | 97.8% | 2,144 |
+| 19 | `c0-cosine-3e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0003 cosine, emb std 0.02, warm-up 3000 | 0.766 | 0.319 | 0.792 | 0.691 | 0.551 | 0.712 | 0.654 | 99.8% | 2,151 |
+| 20 | `l5e5-w256` | transformer, 1 layer, width 256, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.771 | 0.320 | 0.791 | 0.694 | 0.542 | 0.731 | 0.671 | 99.5% | 5,374 |
+| 21 | `c0-lr-2e-5` | transformer, 1 layer, width 512, pre-LN, lr 2e-05, emb std 0.02, warm-up 3000 | 0.763 | 0.333 | 0.791 | 0.689 | 0.498 | 0.731 | 0.671 | 99.8% | 2,141 |
+| 22 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/018-sweep-r2-dark.png">
@@ -389,6 +395,24 @@ opponent's-turn rows where the human acted (`act_weights: {opp_priority: 3.0}`),
 - **Next:** ×10 on the same table (`act-opp-10`) and ×3 on all three priority tables (`act-all-3`) are queued
   after the TD(λ) runs, and the 30% check gets the fix too (`s30-l1-act3`, next after `s30-l2`). If it holds
   at 30%, stage 3 trains with it.
+
+**The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
+30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):
+
+| | Non-Pass top-1 | Set NLL | Attack | Block | Targets | Value AUC | Value log-loss |
+|---|---|---|---|---|---|---|---|
+| 10%, one epoch (`hw-ref`) | 0.792 | 0.287 | 0.813 | 0.703 | 0.554 | 0.739 | 0.599 |
+| 30%, one epoch (`s30-l1`) | **0.808** | **0.262** | **0.830** | **0.716** | **0.618** | **0.758** | **0.569** |
+| Change | +0.016 | −0.025 | +0.017 | +0.013 | +0.064 | +0.019 | −0.030 |
+
+- **Every head gains, by 3–10× the noise band.** Round 2's whole hill climb moved the set NLL by 0.029 (c0's 0.316
+  to 0.287); tripling the data moves it another 0.025. Spell targets, the smallest table, gain the most.
+- **The value head overfits less.** Its log-loss falls 0.030 with three times the games to memorise.
+- **Data or steps?** The 30% run also took three times the steps. A quarter of the way in (as many steps as
+  the 10% run's three quarters) it was behind (NLL 0.322 against 0.294), because the cosine rate was still high.
+  So the leader runs for three epochs of the 10% subset next (`ep3`, the same step count): if it gets close
+  to 0.262, repeating data is nearly as good as new data and stage 3 can train several epochs; if not, the
+  gain is the data, and stage 3 should see all of it with few repeats.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
