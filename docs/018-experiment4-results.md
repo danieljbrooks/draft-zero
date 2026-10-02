@@ -40,15 +40,15 @@ has the stage estimates this doc tracks against.*
 
 ## Status
 
-*Spend so far: $17.65 of the ~$36–44 planned (RunPod balance $82.58 → $64.93, 20:45 UTC on 2 October). Ask before total spend passes $65. The second machine costs the project nothing.*
+*Spend so far: $17.70 of the ~$36–44 planned (RunPod balance $82.58 → $64.88 at 20:50 UTC on 2 October, with no pod running). Storage and rounding account for the ~$0.80 the rows below don't. Ask before total spend passes $65. The second machine costs the project nothing.*
 
 | Stage | Status | Pod-hours | Cost | Notes |
 |---|---|---|---|---|
 | 0. Engineering | done on the laptop (docs/017 §8.1), plus fixes below | – | – | 384 tests pass; 3 added since |
 | GPU check | done: the RTX 3090 | 1.5 (3 pods) | $1.30 | the L40 is no cheaper per evaluation; network search is CPU-bound |
 | 1. Build | done: 161,206 games, 12.1M rows (10.9M train) | 3.6 | $1.82 | estimate 5 pod-hours, $2.50 |
-| 2. Hyperparameter sweep | round 1: 16 of 18 done; rounds 2–3 queued (an extended search, at Dan's go-ahead) | 12.2 so far | $6.10 so far | ~24 pod-hours expected against 6: over by design |
-| 3. Large training | not started | | | |
+| 2. Hyperparameter sweep | rounds 1 and 2 done on the RunPod 3090 (40 runs); round 2x and the 30% check continue on the second machine | 25.1 | $12.55 | ~24 pod-hours expected against 6: over by design. The second machine adds none |
+| 3. Large training | next, on the second machine, after the 30% check | | | |
 | 4. Cheap evaluation | heuristic bot at 300 done; at 3,000, half done | 4.6 | $1.01 | the pod's host rebooted; the rest runs with the network mixes |
 | 5. Play | not started | | | |
 | 6. Follow-up checkpoints | not started | | | |
@@ -421,7 +421,7 @@ Every pod's quote, what it actually had, and what it delivered (docs/005).
 | Pod | Stage | GPU, cloud | Quote | vCPU / RAM (cgroup) | Hours | Cost | Outcome |
 |---|---|---|---|---|---|---|---|
 | `qbptx0wvxlhstv` | – | CPU pod | $0.06/hr | – | ~0.03 | <$0.01 | tested that a pod's own API key can terminate it (GraphQL `podTerminate`): it can. The image's `runpodctl` 1.14 can't authenticate with that key, so docs/005's self-destruct line would fail silently. |
-| `cbrrtovvu7a1cc` | GPU check, 1, 2 | RTX 3090, Secure, CZ | $0.50/hr, 32 vCPU, 125 GB | 31.1 cores / 116 GB, EPYC 7H12 | 16.8 so far | $8.38 so far | running. `/workspace` is a network filesystem (MooseFS): writes ~570 MB/s, and `tar` must skip `chown` (`--no-same-owner`) |
+| `cbrrtovvu7a1cc` | GPU check, 1, 2 | RTX 3090, Secure, CZ | $0.50/hr, 32 vCPU, 125 GB | 31.1 cores / 116 GB, EPYC 7H12 | 29.1 | $14.54 | the 3090 of the GPU check, the build (stage 1) and rounds 1 and 2 of the sweep (40 runs). Removed at 20:50 UTC on 2 October, once round 2's results and weights were on Hugging Face (`exp4/sweep_r2`). `/workspace` is a network filesystem (MooseFS): writes ~570 MB/s, and `tar` must skip `chown` (`--no-same-owner`) |
 | `5bdvhik7ea0kaz` | GPU check | L40, Secure, US | $0.82/hr, 32 vCPU, 250 GB | 27.2 cores / 250 GB | 0.37 | $0.30 | model and training speed only (no bridge); removed |
 | `2yod0kvnr108f7` | server test | L40S, Secure, US | $1.09/hr, 32 vCPU, 125 GB | 27.2 cores / 125 GB, EPYC 9554 | 0.72 | $0.78 | the inference-server comparison (no Secure 3090 or L40 left); removed |
 | `rizee0c3sfip6l` | 4 (heuristic bot) | RTX 3090, Community with public IP, CA | $0.22/hr, 32 vCPU, 62 GB | 27.2 cores / 62 GB, EPYC 7702 | 4.6 | $1.01 | setup took 6 minutes. 4 JVM crashes (SIGBUS); the host rebooted at ~18:51 and the pod sat idle until 22:02 (~$0.70 lost); removed |
