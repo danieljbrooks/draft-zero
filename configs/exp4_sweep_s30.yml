@@ -36,6 +36,7 @@ runs:
   - {name: s30-l2, arch: {layers: 2}}
   # 20:42 the passivity fix (x3 on the opponent's-turn acted rows), 21:20 with TD(0.99) (Dan): the candidate stage-3 recipe
   - {name: s30-l1-act3-td99, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: s30-l1-w1024, arch: {width: 1024}}
-  - {name: s30-mlp, arch: {type: mlp, layers: 2}}
-  - {name: s30-l4, arch: {layers: 4}}
+  # 21:52: capacity on the candidate recipe (compare with s30-l1-act3-td99); 2 layers lost on the old one, so 4 goes last
+  - {name: s30-mlp, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: s30-l1-w1024, arch: {width: 1024}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: s30-l4, arch: {layers: 4}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}

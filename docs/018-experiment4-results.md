@@ -298,9 +298,9 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `act-opp-3` | the passivity fix: ×3 on the policy loss of the opponent's-turn rows where the human acted | Pass on top in the opponent's turn 0.938 (humans 0.934, leader 0.971); non-Pass 0.796 (+0.004), NLL 0.281 (−0.007), other heads unchanged | **the new leader:** human-like passing and a better policy; tested at 30% next (`s30-l1-act3`) |
 | `td-0.90, td-0.975, td-0.99` | TD(λ) around the leader's 0.95 (Dan, 20:45): lower bootstraps more, higher is closer to the plain result | value AUC / log-loss / set NLL / non-Pass by λ: 0.90: 0.732 / 0.610 / **0.285** / 0.793; 0.95 (leader): 0.739 / 0.599 / 0.287 / 0.792; 0.975: 0.745 / 0.587 / 0.289 / 0.792; 0.99: **0.749** / **0.583** / 0.292 / 0.786; 1 (the plain result, `v16-cosine-1e-4`): 0.749 / 0.592 / 0.297 / 0.787 | a clean, monotone trade: lower λ helps the policy, higher the value; the plain result has the worst policy. 0.975 and 0.99 are within noise of each other; the candidate recipe takes 0.99 (Dan: a game has ~75 decisions, and 0.95 bootstraps from ~20 ahead) |
 | `ep3` | the leader for three epochs of the 10% subset (the 30% run's step count): data or steps? | three epochs of 10% against one of 30% (the same steps): non-Pass 0.807 / 0.808, NLL 0.269 / 0.262, targets 0.619 / 0.618, value AUC 0.747 / 0.758, log-loss 0.597 / 0.569 | the policy wants steps (repeats recover most of its gain), the value head wants new games (repeats give it nothing): stage 3 can run 2–3 epochs, taking the value checkpoint early |
-| `act3-td99, act3-td975` | do the passivity fix and TD(0.99) stack? (0.975 alongside; 0.99 also at 30% as `s30-l1-act3-td99`, the candidate stage-3 recipe) | *queued* |  |
-| `act-opp-10, act-all-3` | the passivity fix stronger (×10), and on all three priority tables (×3) | *queued* |  |
-| `x-l2, x-l4, x-mlp, x-mlp-w1024-b4` | capacity on the current leader's recipe | *queued* |  |
+| `act3-td99, act3-td975` | do the passivity fix and TD(0.99) stack? (0.975 alongside; 0.99 also at 30% as `s30-l1-act3-td99`, the candidate stage-3 recipe) | act3-td99 against the passivity fix alone / TD 0.99 alone: non-Pass 0.791 / 0.796 / 0.786, NLL 0.285 / 0.281 / 0.292, value AUC **0.749** / 0.740 / 0.749, log-loss **0.582** / 0.597 / 0.583, Pass on top (opp. turn) 0.937 / 0.938 / 0.973; act3-td975 running | **the new leader:** they stack. TD 0.99's value, the fix's passing, and most of the fix's policy gain (NLL 0.292 → 0.285) |
+| `act-opp-10, act-all-3` | the passivity fix stronger (×10), and on all three priority tables (×3) (re-based at 21:52 on act3-td99) | *queued* |  |
+| `x-l2, x-l4, x-mlp, x-mlp-w1024-b4` | capacity on the current leader's recipe (re-based at 21:52 on act3-td99) | *queued* |  |
 
 **Overfitting checks** (Dan asked, 15:10): every curve and leaderboard number is on the validation split
 (held out by draft; never trained on); the test split is untouched until stage 3's network is scored.
@@ -415,8 +415,19 @@ the two already run (λ = 1 is the plain result):
   (about 9 a round), so 0.95 bootstraps from about 20 decisions ahead, two rounds, while 0.99 keeps the targets
   close to the result and leans little on the network's own estimate. That estimate is weak in these runs: the
   targets are computed once, from the network at a quarter epoch (value AUC ~0.72).
-- **Next:** the passivity fix with TD(0.99) (`act3-td99`, and 0.975 alongside) at 10%, and `s30-l1-act3-td99`
-  at 30%.
+- **They stack (21:52).** `act3-td99`, the passivity fix with TD(0.99), against each alone:
+
+  | | Non-Pass top-1 | Set NLL | Value AUC | Value log-loss | Pass on top, opp. turn |
+  |---|---|---|---|---|---|
+  | `hw-ref` (TD 0.95, no fix) | 0.792 | 0.287 | 0.739 | 0.599 | 0.971 |
+  | `act-opp-3` (the fix, TD 0.95) | **0.796** | **0.281** | 0.740 | 0.597 | 0.938 |
+  | `td-0.99` (TD 0.99, no fix) | 0.786 | 0.292 | **0.749** | 0.583 | 0.973 |
+  | `act3-td99` (both) | 0.791 | 0.285 | **0.749** | **0.582** | **0.937** |
+
+  The combination keeps TD 0.99's value head, the fix's human-like passing (humans: 0.934) and most of the fix's
+  policy gain. It is the new leader; the queued runs at 10% and the capacity runs at 30% are re-based on it.
+  At 30% (`s30-l1-act3-td99`), half way through, it leads `s30-l1` at the same point (value AUC 0.760 against
+  0.754, NLL 0.273 against 0.275).
 
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
 30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):
