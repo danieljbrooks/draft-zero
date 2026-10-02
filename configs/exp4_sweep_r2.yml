@@ -68,6 +68,10 @@ runs:
   # so they are fractions with far less variance than the result. Round 1's TD run was at the unstable 3e-4;
   # retest it on the leader (an existing option: no pipeline change).
   - {name: v16-td, lr: 5.0e-5, value_per_game: 16, value_target: td}
+  # 16:10 (Dan: warm-up + cosine has worked well elsewhere): cosine from 3e-4 beat constant 3e-4 but spent most of
+  # the epoch above the best constant rate (5e-5). Cosine at the right scale, on the leader's recipe:
+  - {name: v16-cosine-1e-4, lr: 1.0e-4, lr_schedule: cosine, value_per_game: 16}
+  - {name: v16-cosine-2e-4, lr: 2.0e-4, lr_schedule: cosine, value_per_game: 16}
   # 16:00 (Dan: the result head approved; the goal is a recipe that works at full scale, and whether capacity
   # helps with the right recipe). A throwaway result head on every position feeds the trunk the outcome signal
   # (every-position gave the best policy) while the value head keeps 16 positions.
