@@ -458,8 +458,18 @@ class TransformerNet(_HeadsMixin, nn.Module):
         return self._outputs(im.trunk(self, indices, offsets))
 
 
+class _BatchNorm1d(nn.BatchNorm1d):
+    """BatchNorm1d that normalises a one-row training batch (the batcher's longest states) with the
+    running statistics instead of failing on it."""
+
+    def forward(self, x):
+        if self.training and x.shape[0] < 2:
+            return F.batch_norm(x, self.running_mean, self.running_var, self.weight, self.bias, False, 0.0, self.eps)
+        return super().forward(x)
+
+
 def _norm1d(kind: str, d: int) -> nn.Module:
-    return nn.LayerNorm(d) if kind == "layer" else nn.BatchNorm1d(d) if kind == "batch" else nn.Identity()
+    return nn.LayerNorm(d) if kind == "layer" else _BatchNorm1d(d) if kind == "batch" else nn.Identity()
 
 
 class _MLPBlock(nn.Module):

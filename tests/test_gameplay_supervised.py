@@ -434,6 +434,8 @@ def test_mlp_activation_norm_and_pooling_options(tables, tmp_path, ffn, norm, ba
     assert meta["arch"]["ffn"] == ffn and meta["arch"]["mlp_norm"] == norm and meta["arch"]["bag_mode"] == bag
     with pytest.raises(ValueError):
         sv.full_arch({"type": "transformer", "ffn": "gelu"})
+    m.train()
+    assert sv.encode(m, torch.tensor([0, 5]), torch.tensor([0])).shape[0] == 1    # a one-row batch trains too
 
 
 @pytest.mark.skipif(not GEN0_2B.exists(), reason="experiment #2b's checkpoint is not in the HF cache")
