@@ -7,6 +7,10 @@ three lines per request, which caps one replica at a few hundred requests a seco
 the same forward pass (fp16 autocast, batches of up to 64 across requests) and returns the value
 plus the two-way binary head, which RemoteModelEvaluator requires to be present.
 
+Any network experiment #4's trainer saves loads, whatever its shape (supervised.load_any_checkpoint:
+1 layer, other widths, pre-LN, the MLP, TransformerNetX); MageZero's own server loads only its
+default shape.
+
 --policy also returns the three 1,024-wide policy heads (player, opponent, target), as MageZero's
 server does, for searches that read the priors (docs/017's imitation prior, play.py's network
 bots). The heads come from the same forward pass and go out as float32 (the client reads either
@@ -26,9 +30,12 @@ import threading
 import time
 from queue import Empty, Queue
 
+from pathlib import Path
+
 import magezero
 
 sys.path.insert(0, list(magezero.__path__)[0])
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 import msgpack  # noqa: E402
 import torch  # noqa: E402
@@ -153,13 +160,21 @@ def main() -> None:
     ckpt = load_model(a.model)
     VOCAB = FeatureVocab.from_state_dict(ckpt["feature_vocab"])
     VOCAB.require_encoding(GLOBAL_MAX)
-    require_policy_width(ckpt["model_state_dict"], a.model)
-    MODEL = NetTransformer(len(VOCAB)).to(DEVICE).eval()
-    MODEL.load_state_dict(ckpt["model_state_dict"])
-    POLICY_WIDTH = int(ckpt["model_state_dict"]["player_priority_head.2.weight"].shape[0]) \
-        if "player_priority_head.2.weight" in ckpt["model_state_dict"] else POLICY_WIDTH
+    arch = ckpt.get("arch")
+    if arch is None:                    # MageZero's own checkpoints: its default network
+        require_policy_width(ckpt["model_state_dict"], a.model)
+        MODEL = NetTransformer(len(VOCAB)).to(DEVICE).eval()
+        MODEL.load_state_dict(ckpt["model_state_dict"])
+    else:                               # the trainer's (supervised.save_weights): any shape it builds
+        from draftzero.gameplay import supervised as sv
+        MODEL, _, meta = sv.load_any_checkpoint(Path(a.model), device=DEVICE)
+        arch = meta["arch"]
+        POLICY_WIDTH = int(arch["policy_width"])
+    if arch is None:
+        POLICY_WIDTH = int(ckpt["model_state_dict"]["player_priority_head.2.weight"].shape[0]) \
+            if "player_priority_head.2.weight" in ckpt["model_state_dict"] else POLICY_WIDTH
     threading.Thread(target=worker_loop, daemon=True).start()
-    print(f"[value_server] {a.model} on :{a.port} device={DEVICE} threads={a.threads} policy={POLICY} "
+    print(f"[value_server] {a.model} ({type(MODEL).__name__}) on :{a.port} device={DEVICE} threads={a.threads} policy={POLICY} "
           f"linger={a.linger_ms} ms max_batch={MAX_BATCH}", flush=True)
     waitress.serve(app, host="127.0.0.1", port=a.port, threads=a.threads, _quiet=True)
 
