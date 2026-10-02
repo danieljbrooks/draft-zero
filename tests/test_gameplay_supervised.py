@@ -324,7 +324,7 @@ def _raw(p: Path) -> dict:
 
 
 @pytest.mark.parametrize("arch", [{"layers": 1, "width": 64}, {"layers": 4, "width": 256},
-                                  {"type": "mlp", "layers": 2, "width": 64}])
+                                  {"type": "mlp", "layers": 2, "width": 64}, {"layers": 2, "width": 64, "norm_first": True}])
 def test_non_default_architectures_rebuild_from_the_saved_arch(tmp_path, arch):
     vocab = _vocab(30)
     torch.manual_seed(1)
@@ -340,6 +340,27 @@ def test_non_default_architectures_rebuild_from_the_saved_arch(tmp_path, arch):
         assert torch.allclose(o1, o2, atol=1e-6)
     with pytest.raises(RuntimeError):            # MageZero's own loader builds the default network
         im.load_checkpoint(p)
+
+
+def test_pre_ln_and_embedding_init_options(tables, tmp_path):
+    vocab = _vocab(50)
+    # pre-LN: a final LayerNorm, not MageZero's shape, and the weights say so
+    m = sv.build_model({"norm_first": True}, len(vocab), vocab=vocab)
+    assert isinstance(m, sv.TransformerNet) and m.transformer.layers[0].norm_first and m.transformer.norm is not None
+    assert not sv.magezero_loadable({"norm_first": True})
+    assert sv.infer_arch(m.state_dict())["norm_first"] and not sv.infer_arch(sv.build_model({}, 50).state_dict())["norm_first"]
+    # the embedding init: MageZero's N(0, 1) keyed rows, scaled; the default shape stays MageZero's class
+    from magezero.model import NetTransformer
+    a = sv.build_model(sv.ARCH_DEFAULT, len(vocab), vocab=vocab)
+    b = sv.build_model(sv.ARCH_DEFAULT, len(vocab), vocab=vocab, emb_std=0.02)
+    assert type(b) is NetTransformer and torch.allclose(b.embedding.weight, a.embedding.weight * 0.02)
+    # and a short run with the "modern" recipe trains and checkpoints
+    log = lambda *_: None                                           # noqa: E731
+    s = sv.train(tiny_cfg(tables, max_steps=12, emb_init_std=0.02, warmup_steps=6,
+                          arch={**TINY, "norm_first": True}), tmp_path / "m", log=log)
+    assert s["step"] == 12
+    m2, _, meta = sv.load_any_checkpoint(tmp_path / "m" / "final.pt.gz")
+    assert meta["arch"]["norm_first"] and not meta["magezero_loadable"]
 
 
 @pytest.mark.skipif(not GEN0_2B.exists(), reason="experiment #2b's checkpoint is not in the HF cache")

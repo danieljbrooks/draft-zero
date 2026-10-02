@@ -142,7 +142,8 @@ AUX_TARGETS = {"turns_left": 10.0, "life_diff": 20.0}              # name -> sca
 TURN_BUCKETS = (((1, 2), "1-2"), ((3, 4), "3-4"), ((5, 6), "5-6"), ((7, 9), "7-9"), ((10, 10 ** 9), "10+"))
 
 ARCH_DEFAULT = {"type": "transformer", "layers": 2, "width": 512, "ff": None, "heads": 4, "head_hidden": 256,
-                "policy_width": im.A_DIM, "dropout": 0.1, "pool_dropout": 0.2}
+                "policy_width": im.A_DIM, "dropout": 0.1, "pool_dropout": 0.2,
+                "norm_first": False}   # pre-LayerNorm layers and a final LayerNorm (MageZero's are post-LN)
 DEFAULT_TABLES = [{"name": "turnstart", "kind": "priority_set"},
                   {"name": "replay_priority", "kind": "priority_set"},
                   {"name": "replay_attack", "kind": "binary"}]
@@ -181,6 +182,7 @@ DEFAULTS: dict[str, Any] = {
     "group_shares": {},            # table group -> fixed share of the training samples
     # optimisation
     "lr": 3e-4, "warmup_steps": 300, "lr_schedule": "constant", "lr_min_frac": 0.1,
+    "emb_init_std": None,          # embedding rows' initial std (None: MageZero's N(0, 1) keyed rows; scaled otherwise)
     "weight_decay": 0.0, "grad_clip": 1.0,
     "token_dropout": 0.3,
     "batch_tokens": 64 * 768,      # padded tokens per batch: rows <= batch_tokens // padded length L ...
@@ -229,7 +231,8 @@ def magezero_loadable(arch: dict | None) -> bool:
     the default shape. Dropout rates don't matter (no weights)."""
     a = full_arch(arch)
     return (a["type"] == "transformer" and a["layers"] == 2 and a["width"] == 512 and a["ff"] == 1024
-            and a["heads"] == 4 and a["head_hidden"] == 256 and a["policy_width"] == im.A_DIM)
+            and a["heads"] == 4 and a["head_hidden"] == 256 and a["policy_width"] == im.A_DIM
+            and not a["norm_first"])
 
 
 def _table_spec(t: dict, i: int) -> dict:
@@ -405,8 +408,10 @@ class TransformerNet(_HeadsMixin, nn.Module):
         self.input_dropout = 0.0
         self.embedding = nn.Embedding(num_embeddings, d)
         layer = nn.TransformerEncoderLayer(d_model=d, nhead=a["heads"], dim_feedforward=a["ff"],
-                                           dropout=a["dropout"], batch_first=True)
-        self.transformer = nn.TransformerEncoder(layer, num_layers=a["layers"], enable_nested_tensor=False)
+                                           dropout=a["dropout"], batch_first=True, norm_first=bool(a["norm_first"]))
+        # pre-LN stacks end with a LayerNorm (the residual stream is otherwise unnormalised)
+        self.transformer = nn.TransformerEncoder(layer, num_layers=a["layers"], enable_nested_tensor=False,
+                                                 norm=nn.LayerNorm(d) if a["norm_first"] else None)
         self.embedding_dropout = nn.Dropout(a["pool_dropout"])
         self._make_heads(d, a)
 
@@ -470,9 +475,10 @@ def _set_dropouts(m, a: dict) -> None:
         layer.self_attn.dropout = a["dropout"]
 
 
-def build_model(arch: dict, num_embeddings: int, vocab=None):
+def build_model(arch: dict, num_embeddings: int, vocab=None, emb_std: float | None = None):
     """The network for `arch`. The default shape is imitation.new_net's NetTransformer itself.
-    `vocab` initialises the embedding rows as pretrain.py did (magezero.vocab.initial_rows)."""
+    `vocab` initialises the embedding rows as pretrain.py did (magezero.vocab.initial_rows, N(0, 1)),
+    scaled to `emb_std` when given."""
     a = full_arch(arch)
     if magezero_loadable(a):
         m = im.new_net(num_embeddings, a["policy_width"])
@@ -484,7 +490,8 @@ def build_model(arch: dict, num_embeddings: int, vocab=None):
     if vocab is not None:
         from magezero.vocab import initial_rows
         with torch.no_grad():
-            m.embedding.weight.copy_(torch.as_tensor(initial_rows(vocab.ids, a["width"])))
+            rows = torch.as_tensor(initial_rows(vocab.ids, a["width"]))
+            m.embedding.weight.copy_(rows * float(emb_std) if emb_std is not None else rows)
     return m
 
 
@@ -497,7 +504,8 @@ def infer_arch(sd: dict) -> dict:
     return full_arch({"type": "transformer", "layers": max(layers) + 1, "width": sd["embedding.weight"].shape[1],
                       "ff": sd["transformer.layers.0.linear1.weight"].shape[0],
                       "head_hidden": sd["player_priority_head.0.weight"].shape[0],
-                      "policy_width": sd["player_priority_head.2.weight"].shape[0]})
+                      "policy_width": sd["player_priority_head.2.weight"].shape[0],
+                      "norm_first": "transformer.norm.weight" in sd})
 
 
 def encode(model, idx, off, pad_to: int | None = None):
@@ -1674,8 +1682,8 @@ class Trainer:
         self.data = data or load_data(cfg, vocab=vocab, log=self.log)
         self.vocab = self.data.vocab
         init = cfg["init_checkpoint"] if latest is None else None
-        self.model = build_model(cfg["arch"], len(self.vocab),
-                                 vocab=None if (latest or init) else self.vocab).to(self.dev)
+        self.model = build_model(cfg["arch"], len(self.vocab), vocab=None if (latest or init) else self.vocab,
+                                 emb_std=cfg["emb_init_std"]).to(self.dev)
         self.aux = AuxHeads(cfg["arch"]["width"], cfg["aux_targets"]).to(self.dev) if cfg["aux_targets"] else None
         if init:
             m0, v0, meta0 = load_any_checkpoint(init)

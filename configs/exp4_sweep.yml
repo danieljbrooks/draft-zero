@@ -46,3 +46,11 @@ runs:
   - {name: value-aux, aux_targets: [turns_left]}   # + life_diff once the build writes meta/final_life_diff
   - {name: value-td-aux, value_target: td, aux_targets: [turns_left]}
   - {name: value-weight-0.1, value_weight: 0.1}   # #2b's 0.5 was for MSE; cross-entropy has another scale
+  # transformer initialisation and warm-up (added after the first runs: 4 layers learned no attack or value head
+  # in one epoch, and 1 layer beat the default 2). MageZero's default: post-LN layers, N(0, 1) embedding rows,
+  # 300 warm-up steps of ~20.7k an epoch. Warm-up and the embedding init keep MageZero's shape; pre-LN doesn't.
+  - {name: warmup-3k, warmup_steps: 3000}
+  - {name: emb-std-0.02, emb_init_std: 0.02}
+  - {name: pre-ln, arch: {norm_first: true}}
+  - {name: modern, arch: {norm_first: true}, emb_init_std: 0.02, warmup_steps: 3000}
+  - {name: layers-4-modern, arch: {layers: 4, norm_first: true}, emb_init_std: 0.02, warmup_steps: 3000}
