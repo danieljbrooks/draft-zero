@@ -53,6 +53,10 @@ runs:
   # leader. The runs below are re-based on it.
   - {name: act-opp-10, act_weights: {opp_priority: 10.0}, td_lambda: 0.99}
   - {name: act-all-3, act_weights: {opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}, td_lambda: 0.99}
+  # 22:20 (Dan: which architectures for stage 3?): the two TransformerNetX options built for round 2 but deferred, on
+  # the leader: a separate value tower (the value head overfits; give it its own layer), and SwiGLU + attention pooling
+  - {name: x-value-tower, arch: {value_tower: true, value_layers: 1}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: x-swiglu-attnpool, arch: {ffn: swiglu, pool: attn}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   # 20:30: the hardware check passed (every measure within 0.001 of round 2's run, except targets 0.007), and this
   # machine is ~3.6x faster: round 2's remaining capacity runs move here, on the current leader's recipe
   - {name: x-l2, arch: {layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
