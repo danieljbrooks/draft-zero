@@ -274,9 +274,13 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `l5e5-w256` | width 256 is enough at the best learning rate (underfitting probe; 4 value positions) | non-Pass 0.771 (−0.004), NLL 0.320 (+0.015), attack 0.791 (−0.012), value log-loss 0.671 (+0.026) against width 512 at the same settings; inference 2.5x faster | slightly worse everywhere: the underfitting knee for 1 layer is near width 256 at this budget |
 | `l5e5-vpg32` | 32 value positions a game keeps most of every-position's policy gain without the value head overfitting | non-Pass 0.790 (+0.004), NLL 0.291 (−0.004), block 0.704 (+0.007); value AUC 0.732 (−0.012), log-loss 0.648 (+0.045) against l5e5-vpg16. The value log-loss was 0.591 at half an epoch, then rose | rejected: the policy gain is within noise and the value starts to overfit; 16 is the value head's sweet spot |
 | `l5e5-vpg16-aux` | a turns-left head (a target that varies within a game, so it can't be memorised per game) helps the shared trunk too | every measure within ±0.004 of l5e5-vpg16 (non-Pass 0.786, NLL 0.295, value AUC 0.743) | neutral: a within-game target adds nothing at this budget |
-| `l5e5-vpg16-auxres` | decouple: a throwaway result head on every position (aux weight 0.5) gives the trunk every-position's policy gain while the value head keeps 16 positions and stays calibrated (needs a trainer change and a sweep restart, 7016b66) | *paused (Dan, 15:10: no pipeline changes for now; it needs new trainer code and a sweep restart)* |  |
-| `v16-w1024` | 1 layer has headroom above width 512 at the leader's recipe | *running* |  |
+| `l5e5-vpg16-auxres` | decouple: a throwaway result head on every position (aux weight 0.5) gives the trunk every-position's policy gain while the value head keeps 16 positions and stays calibrated (needs a trainer change and a sweep restart, 7016b66) | *queued (approved 16:00; runs after the sweep restarts on the new trainer code)* |  |
+| `v16-w1024` | 1 layer has headroom above width 512 at the leader's recipe | *running* (at half an epoch: tied with the leader) |  |
 | `v16-td` | TD(0.95) targets (fractions bootstrapped from the network's own values: lower variance than the ±1 result) help the value head once training is stable (round 1 tested them only at the unstable 3e-4) | *queued (next)* |  |
+| `v16-l2` | capacity: 2 layers help on the right recipe (round 1's 2 layers trained unstably) | *queued* |  |
+| `v16-l4` | capacity: 4 layers help on the right recipe | *queued* |  |
+| `v16-mlp-lr-1e-4, v16-mlp-w1024-b4` | the MLP on the recipe, and a big MLP (fast enough to afford) | *queued* |  |
+| `v16-seed1` | the noise band for the leader | *queued* |  |
 
 **Overfitting checks** (Dan asked, 15:10): every curve and leaderboard number is on the validation split
 (held out by draft; never trained on); the test split is untouched until stage 3's network is scored.
@@ -305,7 +309,7 @@ so the winner's validation numbers are slightly optimistic.
 | 10 | `l5e5-w256` | transformer, 1 layer, width 256, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.771 | 0.320 | 0.791 | 0.694 | 0.542 | 0.731 | 0.671 | 99.5% | 5,374 |
 | 11 | `c0-lr-2e-5` | transformer, 1 layer, width 512, pre-LN, lr 2e-05, emb std 0.02, warm-up 3000 | 0.763 | 0.333 | 0.791 | 0.689 | 0.498 | 0.731 | 0.671 | 99.8% | 2,141 |
 | 12 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
-| – | `v16-w1024` *(at 0.25 epoch)* | transformer, 1 layer, width 1024, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.729 | 0.356 | 0.765 | 0.687 | 0.486 | 0.718 | 0.598 | 99.9% | – |
+| – | `v16-w1024` *(at 0.50 epoch)* | transformer, 1 layer, width 1024, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.766 | 0.330 | 0.791 | 0.688 | 0.524 | 0.732 | 0.598 | 99.7% | – |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/018-sweep-r2-dark.png">
@@ -313,6 +317,17 @@ so the winner's validation numbers are slightly optimistic.
 </picture>
 
 <!-- /r2-board -->
+
+### The scale check: 30% of the training games (queued)
+
+*Dan, 16:00: the goal is a recipe that works at full scale, and whether capacity helps with the right recipe.
+Most runs are still learning smoothly at the end of their one epoch.*
+
+`configs/exp4_sweep_s30.yml` runs round 2's recipe (pre-LN, embedding std 0.02, 3k warm-up, lr 5e-5, 16 value
+positions a game) on 30% of the training games: 3.3M rows, one epoch each, with the same validation rows as
+rounds 1 and 2. Runs: 1 layer, 2 layers, 1 layer at width 1024, an MLP, and 4 layers. It starts when round 2's
+queue empties (about 19:30 UTC); each run takes about 1–3 hours. The lr-3e-4 backstop is dropped and the
+remaining tricks are deferred.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
