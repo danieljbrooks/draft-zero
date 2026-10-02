@@ -39,4 +39,7 @@ runs:
   # 21:52: capacity on the candidate recipe (compare with s30-l1-act3-td99); 2 layers lost on the old one, so 4 goes last
   - {name: s30-mlp, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: s30-l1-w1024, arch: {width: 1024}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: s30-l4, arch: {layers: 4}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  # 22:25: x3 on all three priority tables beats x3 on the opponent's turn alone at 10% (non-Pass +0.011): check it at 30%
+  # before stage 3, in place of 4 layers (2 layers already lost at 30%)
+  - {name: s30-l1-actall3-td99, act_weights: {opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}, td_lambda: 0.99}
+  # - {name: s30-l4, arch: {layers: 4}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}

@@ -299,7 +299,7 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `td-0.90, td-0.975, td-0.99` | TD(λ) around the leader's 0.95 (Dan, 20:45): lower bootstraps more, higher is closer to the plain result | value AUC / log-loss / set NLL / non-Pass by λ: 0.90: 0.732 / 0.610 / **0.285** / 0.793; 0.95 (leader): 0.739 / 0.599 / 0.287 / 0.792; 0.975: 0.745 / 0.587 / 0.289 / 0.792; 0.99: **0.749** / **0.583** / 0.292 / 0.786; 1 (the plain result, `v16-cosine-1e-4`): 0.749 / 0.592 / 0.297 / 0.787 | a clean, monotone trade: lower λ helps the policy, higher the value; the plain result has the worst policy. 0.975 and 0.99 are within noise of each other; the candidate recipe takes 0.99 (Dan: a game has ~75 decisions, and 0.95 bootstraps from ~20 ahead) |
 | `ep3` | the leader for three epochs of the 10% subset (the 30% run's step count): data or steps? | three epochs of 10% against one of 30% (the same steps): non-Pass 0.807 / 0.808, NLL 0.269 / 0.262, targets 0.619 / 0.618, value AUC 0.747 / 0.758, log-loss 0.597 / 0.569 | the policy wants steps (repeats recover most of its gain), the value head wants new games (repeats give it nothing): stage 3 can run 2–3 epochs, taking the value checkpoint early |
 | `act3-td99, act3-td975` | do the passivity fix and TD(0.99) stack? (0.975 alongside; 0.99 also at 30% as `s30-l1-act3-td99`, the candidate stage-3 recipe) | act3-td99 against the passivity fix alone / TD 0.99 alone: non-Pass 0.791 / 0.796 / 0.786, NLL 0.285 / 0.281 / 0.292, value AUC **0.749** / 0.740 / 0.749, log-loss **0.582** / 0.597 / 0.583, Pass on top (opp. turn) 0.937 / 0.938 / 0.973; act3-td975: non-Pass 0.794, NLL 0.283, value AUC 0.746, log-loss 0.587 (the same trade as without the fix, within noise) | **the new leader:** they stack. TD 0.99's value, the fix's passing, and most of the fix's policy gain (NLL 0.292 → 0.285) |
-| `act-opp-10, act-all-3` | the passivity fix stronger (×10), and on all three priority tables (×3) (re-based at 21:52 on act3-td99) | *queued* |  |
+| `act-opp-10, act-all-3` | the passivity fix stronger (×10), and on all three priority tables (×3) (re-based at 21:52 on act3-td99) | against act3-td99: ×10 on the opponent's turn: NLL 0.301 (+0.015), Pass on top 0.894 (humans 0.934); ×3 on all three priority tables: non-Pass **0.802** (+0.011), NLL **0.280** (−0.006), targets 0.545 (−0.007), value unchanged (AUC 0.748, log-loss 0.583), Pass on top 0.938 | ×10 overshoots. ×3 on all three tables is **the new leader** at 10% (non-Pass ~2× the noise band); checked at 30% next (`s30-l1-actall3-td99`) |
 | `x-l2, x-l4, x-mlp, x-mlp-w1024-b4` | capacity on the current leader's recipe (re-based at 21:52 on act3-td99) | *queued* |  |
 
 **Overfitting checks** (Dan asked, 15:10): every curve and leaderboard number is on the validation split
@@ -438,6 +438,15 @@ the two already run (λ = 1 is the plain result):
 0.759 (−0.009), log-loss 0.565 (+0.008), Pass on top in the opponent's turn 0.958 (the fix works less on it). It
 evaluates 78,066 positions a second against 5,371 (14.5×) and trains in a third of the time, but its policy at 30%
 of the data is about the transformer's at 10%. The search is CPU-bound on the engine, so the transformer stays.
+
+**The fix's strength and reach (22:24),** on `act3-td99` at 10%:
+- **×10 on the opponent's turn overshoots:** Pass on top falls to 0.894, below the humans' 0.934, and the set NLL
+  rises 0.015. ×3 is the right strength.
+- **×3 on all three priority tables** (`act-all-3`: the turn start and the player's own later stops too) gives the
+  best policy at 10%: non-Pass 0.802 (+0.011, about twice the noise band), set NLL 0.280 (−0.006), with the value
+  unchanged and targets −0.007. In the player's own later stops, Pass on top falls from 0.691 to 0.660, against
+  the humans' 0.666: the networks were a little passive there too. It runs at 30% next
+  (`s30-l1-actall3-td99`, in place of 4 layers) before stage 3 takes it.
 
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
 30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):
