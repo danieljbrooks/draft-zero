@@ -433,6 +433,12 @@ the two already run (λ = 1 is the plain result):
   log-loss **0.557** (−0.012), Pass on top in the opponent's turn 0.933 (humans 0.934). The best run so far on
   every value measure and on the policy, and the candidate recipe for stage 3.
 
+**The MLP at 30% (22:09):** `s30-mlp` (2 blocks, the candidate recipe) against `s30-l1-act3-td99`: non-Pass 0.803
+(−0.009), set NLL 0.281 (+0.021), attack 0.807 (−0.021), block 0.705 (−0.013), targets 0.591 (−0.025), value AUC
+0.759 (−0.009), log-loss 0.565 (+0.008), Pass on top in the opponent's turn 0.958 (the fix works less on it). It
+evaluates 78,066 positions a second against 5,371 (14.5×) and trains in a third of the time, but its policy at 30%
+of the data is about the transformer's at 10%. The search is CPU-bound on the engine, so the transformer stays.
+
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
 30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):
 
