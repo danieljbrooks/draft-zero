@@ -37,3 +37,9 @@ runs:
   - {name: act-opp-3, act_weights: {opp_priority: 3.0}}
   - {name: act-opp-10, act_weights: {opp_priority: 10.0}}
   - {name: act-all-3, act_weights: {opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}}
+  # 20:30: the hardware check passed (every measure within 0.001 of round 2's run, except targets 0.007), and this
+  # machine is ~3.6x faster: round 2's remaining capacity runs move here, on the current leader's recipe
+  - {name: x-l2, arch: {layers: 2}}
+  - {name: x-l4, arch: {layers: 4}}
+  - {name: x-mlp, arch: {type: mlp, layers: 2}}
+  - {name: x-mlp-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}}
