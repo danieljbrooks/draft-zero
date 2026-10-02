@@ -34,29 +34,39 @@ base:
   warmup_steps: 3000
   lr: 3.0e-4
 runs:
-  # the combination, and its learning rate
+  # ---- done or running
   - {name: c0, role: default, seed: 0}
-  - {name: c0-lr-1e-4, lr: 1.0e-4}
+  - {name: c0-lr-1e-4, lr: 1.0e-4}          # -> the leader (10:54): same policy, better attack, block and value
   - {name: c0-lr-6e-4, lr: 6.0e-4}
-  # width: down to where it underfits, and up
-  - {name: c0-w256, arch: {width: 256}}
-  - {name: c0-w128, arch: {width: 128}}
-  - {name: c0-w1024, arch: {width: 1024}}
-  - {name: c0-w256-lr-6e-4, arch: {width: 256}, lr: 6.0e-4}
-  # depth back up, small and modern
-  - {name: l2-w256, arch: {layers: 2, width: 256}}
+  # ---- the stack: newest ideas first (each check-in puts new runs here)
+  # 10:54: the policy is flat across learning rates, the value/attack/block heads want a low one: a cosine
+  # decay could give both (fast early learning, a low rate late)
+  - {name: c0-cosine-3e-4, lr: 3.0e-4, lr_schedule: cosine}
+  # the width probes and the tricks, re-based on the leader (lr 1e-4)
+  - {name: l1e4-w256, lr: 1.0e-4, arch: {width: 256}}
+  - {name: l1e4-w1024, lr: 1.0e-4, arch: {width: 1024}}
+  - {name: l1e4-w128, lr: 1.0e-4, arch: {width: 128}}
+  - {name: c0-lr-5e-5, lr: 5.0e-5}
   # MLPs (mean-pooled bag of features + residual blocks; ~24x the transformer's inference speed)
   - {name: mlp-lr-1e-3, arch: {type: mlp, layers: 2}, lr: 1.0e-3}
   - {name: mlp-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}}
   - {name: mlp-w256-lr-1e-3, arch: {type: mlp, layers: 2, width: 256}, lr: 1.0e-3}
   - {name: mlp-b4-lr-1e-3, arch: {type: mlp, layers: 4}, lr: 1.0e-3}
   - {name: mlp-nodrop-lr-1e-3, arch: {type: mlp, layers: 2, dropout: 0.0, pool_dropout: 0.0}, lr: 1.0e-3, token_dropout: 0.1}
-  # regularisation and tricks on c0
+  - {name: l1e4-value-tower, lr: 1.0e-4, arch: {value_tower: true, value_layers: 1}}
+  - {name: l1e4-swiglu-attnpool, lr: 1.0e-4, arch: {ffn: swiglu, pool: attn}}
+  - {name: l1e4-token-dropout-0.1, lr: 1.0e-4, token_dropout: 0.1}
+  - {name: l1e4-seed1, lr: 1.0e-4, seed: 1}
+  # ---- the backstop: the original plan at lr 3e-4
+  - {name: c0-w256, arch: {width: 256}}
+  - {name: c0-w128, arch: {width: 128}}
+  - {name: c0-w1024, arch: {width: 1024}}
+  - {name: c0-w256-lr-6e-4, arch: {width: 256}, lr: 6.0e-4}
+  - {name: l2-w256, arch: {layers: 2, width: 256}}
   - {name: c0-token-dropout-0.1, token_dropout: 0.1}
   - {name: c0-value-tower, arch: {value_tower: true, value_layers: 1}}
   - {name: c0-swiglu-attnpool, arch: {ffn: swiglu, pool: attn}}
   - {name: c0-cosine-6e-4, lr: 6.0e-4, lr_schedule: cosine}
-  # the noise band, and the best guess in MageZero's shape (no server change: 2 post-LN layers, width 512)
   - {name: c0-seed1, role: default, seed: 1}
   - {name: mz-shape-lr-1e-4, arch: {layers: 2, norm_first: false}, lr: 1.0e-4, warmup_steps: 300}
   - {name: c0-w64, arch: {width: 64}}
