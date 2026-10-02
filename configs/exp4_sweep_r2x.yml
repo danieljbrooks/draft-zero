@@ -44,8 +44,10 @@ runs:
   # data or the 3x steps? The leader for three epochs of the 10% subset (the 30% run's steps) tells them apart,
   # and how many epochs stage 3 can usefully repeat.
   - {name: ep3, max_epochs: 3.0}
-  # 21:13: TD(lambda) is a clean trade (lower: policy, higher: value); 0.975 has the second-best value log-loss with the
-  # policy within noise of 0.95. Do it and the passivity fix stack?
+  # 21:13: TD(lambda) is a clean trade (lower: policy, higher: value); 0.975 and 0.99 are within noise of each other.
+  # 21:20 (Dan): 0.99, since a game has ~75 decisions and 0.95 bootstraps from ~20 ahead. Does it stack with the
+  # passivity fix? (0.975 alongside, as a check.)
+  - {name: act3-td99, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: act3-td975, act_weights: {opp_priority: 3.0}, td_lambda: 0.975}
   - {name: act-opp-10, act_weights: {opp_priority: 10.0}}
   - {name: act-all-3, act_weights: {opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}}
