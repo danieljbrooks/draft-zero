@@ -466,6 +466,20 @@ one CPU core of the second machine the MLP takes 0.39 ms an evaluation (8,300 a 
 transformer ~80 ms. An MLP tuning scan runs at 10% (`m-*` in `configs/exp4_sweep_r2x.yml`): learning rates
 3e-4 and 1e-3, widths 1024 and 2048, 4 blocks, no dropout, and ×3 on all three tables.
 
+**The MLP gets its own sweep (23:15, `configs/exp4_sweep_mlp.yml`).** 24 runs on the 10% subset, one setting at a
+time around `m0` (the transformer's recipe on MageZero's bag-of-tokens MLP: 2 residual blocks, width 512,
+LayerNorm, ReLU, dropout 0.1, token dropout 0.3, lr 1e-4): learning rates up to 3e-3; the style of Dan's
+statistical-drafting MLP (GELU, BatchNorm, dropout 0.6, a high rate); BatchNorm or no norm; GELU or SwiGLU; dropout
+0–0.5 and token dropout 0 or 0.5; sum or max pooling (the mean loses absolute counts); widths 1024 and 2048 and 4
+blocks; weight decay; and ×3 on all three tables. An MLP run takes about 4 minutes at 10% (training at ~15,900
+samples a second, 4.8× the transformer). The trainer gained the options (ad19262).
+
+**Gemini's suggestions for the value tower's cost (23:05)** run at 10% on the transformer's sweep: a value head
+on the shared features with the gradient stopped (`x-vdetach`, `arch.value_detach`), a cheap MLP value tower
+beside the transformer policy tower (`x-vt-mlp`, `arch.value_tower_type: mlp`), and a smaller value weight (0.2
+against 0.5, `x-vweight-0.2`). Round 1's value weight 0.1, on the unstable recipe, gave the policy −0.020 NLL and
+cost the value 0.070 AUC.
+
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
 30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):
 
