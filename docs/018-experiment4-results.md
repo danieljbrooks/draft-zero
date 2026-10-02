@@ -265,8 +265,9 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `c0` | the round-1 fixes (pre-LN, embedding std 0.02, 3k warm-up) stack on 1 layer | non-Pass 0.760 (=), NLL 0.316 (−0.007), attack 0.780 (+0.016), value AUC 0.701 (−0.016) against round 1's 1 layer | about neutral on 1 layer, which was already stable; it should take a higher learning rate |
 | `c0-lr-1e-4` | the lower learning rate that helped 2 layers helps 1 | non-Pass 0.753 (−0.007), NLL 0.315 (=), attack 0.795 (+0.016), block 0.700 (+0.012), value AUC 0.734 (+0.033), log-loss 0.636 (−0.019) | **the new leader:** the policy is flat, the attack, block and value heads gain (value AUC the best yet); the rest of the climb re-bases on lr 1e-4 |
 | `c0-lr-6e-4` | a stable 1-layer network takes a higher learning rate | NLL 0.335 (+0.020), attack 0.763 (−0.032), block 0.684 (−0.017), value AUC 0.701 (−0.033) against the leader | rejected: lower keeps winning, not higher |
-| `c0-cosine-3e-4` | the policy is flat across learning rates and the other heads want a low one, so a cosine decay from 3e-4 gets both | *running* |  |
-| `c0-lr-5e-5` | the trend continues below 1e-4 (lr 6e-4 < 3e-4 < 1e-4 on attack and value) | *queued (next)* |  |
+| `c0-cosine-3e-4` | the policy is flat across learning rates and the other heads want a low one, so a cosine decay from 3e-4 gets both | non-Pass 0.766 (+0.013, best yet), NLL 0.319 (+0.003), attack 0.792 (−0.003), value AUC 0.712 (−0.022), log-loss 0.654 (+0.018) against the leader | half right: the policy gains a little, the value prefers a constant low rate |
+| `c0-lr-5e-5` | the trend continues below 1e-4 (lr 6e-4 < 3e-4 < 1e-4 on attack and value) | *running* |  |
+| `l1e4-vpg16` | the value head is starved of data (4 positions a game an epoch), not of a low rate: 16 positions a game helps it | *queued (next)* |  |
 
 <!-- r2-board -->
 
@@ -276,7 +277,8 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | `c0-lr-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001, emb std 0.02, warm-up 3000 | 0.753 | 0.315 | 0.795 | 0.700 | 0.550 | 0.734 | 0.636 | 98.3% | 2,157 |
 | 2 | `c0` | transformer, 1 layer, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.760 | 0.316 | 0.780 | 0.688 | 0.554 | 0.701 | 0.655 | 97.8% | 2,144 |
-| 3 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
+| 3 | `c0-cosine-3e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0003 cosine, emb std 0.02, warm-up 3000 | 0.766 | 0.319 | 0.792 | 0.691 | 0.551 | 0.712 | 0.654 | 99.8% | 2,151 |
+| 4 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/018-sweep-r2-dark.png">
