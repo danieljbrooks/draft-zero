@@ -1,0 +1,258 @@
+# Experiment #4: results
+
+*October 2026. **Draft, in progress:** the results of experiment #4's stages 1–7, written as they
+run; this snapshot is from 00:12 UTC on 2 October, during stage 2. The plan, its reasoning and the
+decisions from review are in [docs/017](017-experiment4-scaling-up-imitation-learning.md); its §6.1
+has the stage estimates this doc tracks against.*
+
+## Preliminary results
+
+- **The data is built.** 161,206 top players' games became 12.1M decisions (10.9M for training),
+  about 80× #2b's 132,603. Every turn was replayed, including the opponent's turns, timing stops and
+  blocks (Stage 1).
+- **In the sweep, a 1-layer network beats MageZero's default 2-layer one on the same data.** After
+  one epoch of a 10% subset, it scores non-Pass top-1 0.760 against 0.703, set NLL 0.323 against
+  0.400, attack accuracy 0.764 against 0.715, and value AUC 0.717 against 0.648 (the default's two
+  seeds averaged). That's 3–4× docs/017 §6.3's bar of twice the seed-to-seed difference. A
+  4-layer network failed to learn its attack and value heads at all in that budget. So depth hurts
+  at this learning rate and budget. The learning-rate runs, still to come, should say whether
+  that's optimization or capacity (Stage 2).
+- **Every network so far almost never acts in the opponent's turn.** Pass is its top choice 97.5–
+  100% of the time, against 93.4% for the humans, though it ranks the right play first among the
+  non-Pass options ~70% of the time when the human did act. It knows what to cast there but not
+  when. A candidate fix for stage 3: upweight the opponent's-turn rows where the human acted.
+- **The heuristic bot on the new benchmark (sb-v2):** IS-MCTS at 300 simulations scores 0.648
+  balanced, and its root value predicts the game's result with AUC 0.724 (Stage 4).
+- **Compute: the network search is CPU-bound, not GPU-bound,** at about 3.2 pod-seconds a decision
+  on a 3090 against the plan's 1.7. A faster inference server didn't help; the host's CPU does.
+  Community 3090s at $0.22/hr (Secure: $0.50) should keep the game stages near their planned
+  dollars despite the extra pod-hours (GPU check).
+
+## Status
+
+*Spend so far: $6.82 of the ~$36–44 planned (RunPod balance $82.58 → $75.76).*
+
+| Stage | Status | Pod-hours | Cost | Notes |
+|---|---|---|---|---|
+| 0. Engineering | done on the laptop (docs/017 §8.1), plus fixes below | – | – | 384 tests pass; 3 added since |
+| GPU check | done: the RTX 3090 | 1.5 (3 pods) | $1.30 | the L40 is no cheaper per evaluation; network search is CPU-bound |
+| 1. Build | done: 161,206 games, 12.1M rows (10.9M train) | 3.6 | $1.82 | estimate 5 pod-hours, $2.50 |
+| 2. Hyperparameter sweep | running: 4 of 13 runs done | 3.9 so far | $1.98 so far | an equal sample budget per run (below); ~9 pod-hours expected against 6 |
+| 3. Large training | not started | | | |
+| 4. Cheap evaluation | heuristic bot at 300 done; at 3,000, half done | 4.6 | $1.01 | the pod's host rebooted; the rest runs with the network mixes |
+| 5. Play | not started | | | |
+| 6. Follow-up checkpoints | not started | | | |
+| 7. Their evaluation | not started | | | |
+| Failed pods | three Community pods that never started work | 1.0 | $0.22 | |
+
+## Before the first pod
+
+- **Laptop suite:** 384 passed, 1 skipped (2 min 39 s, `MZ_XMAGE_DIR` set to the v0.2 bundle).
+- **A fix to the build (c7e94dc).** The `tables` step loaded the whole build into memory:
+  measured on the 120-game smoke build, about 1.3 MB a game, so roughly 200 GB for the ~158k top
+  players' games. And the build couldn't resume: a stopped pod would lose the whole 3–4 hours.
+  - The build now writes shard parts of 5,000 games, each marked once it's closed. A re-run
+    skips the games of finished parts.
+  - `tables` converts one part at a time and merges each table's parts, shifting the CSR
+    pointers. It resumes too.
+  - **Checked:** on the smoke build, the new `tables` gives the same tables as the old one, from
+    the old single shard and from the same games split into four parts. Two new unit tests.
+- **Two more changes while stage 1 ran:**
+  - `play.py --shard i/n` (7169ab1) splits a stage's games across pods by deck pair. The game
+    stages are CPU-bound, so several $0.22 pods beat one bigger one. Each game also needs a long
+    `--game-timeout`: at full load a network decision takes 70–165 s in its worker, so a game of
+    ~140 decisions takes about 3 hours. The 2-hour default would kill games.
+  - `analyze.py` (ce543ab) counts sb-v2's timing items (`endstep`, `oppwindow`) in the
+    cast-or-pass part of the balanced score, as docs/017 §6.5 planned, and reports the AUC of the
+    root value against the game's result. sb-v1's output is unchanged.
+
+## GPU check (docs/017 §6.7)
+
+**The pick: the RTX 3090.** Per dollar, the L40 matches it on the model and on training, and
+the game stages are CPU-bound anyway.
+
+| | RTX 3090, Secure, $0.50/hr | L40, Secure, $0.82/hr |
+|---|---|---|
+| Model forward, fp16, batch 1 / 8 / 32 / 128 (evals/s) | 362 / 1,007 / 1,260 / 1,273 | 360 / 1,788 / 1,836 / 1,799 |
+| $ per million evaluations, batch 32 | **$0.11** | $0.12 |
+| Training samples/s (#2b's network, smoke tables) | 808 | 1,305 |
+| $ per million training samples | **$0.17** | $0.17 |
+| cgroup cores / RAM | 31.1 / 116 GB | 27.2 / 250 GB |
+
+- **The model:** #2b's network (2 layers, width 512), with state lengths sampled from the smoke
+  build's turn-start table. Batches pad to their longest state, about 1,450–1,600 tokens.
+- **Secure L40S was sold out at the time,** or offered with 16 vCPU. The L40 is the same Ada chip
+  with lower tensor throughput.
+- **Training is short and early:** 169 steps on the smoke tables, so the sweep's first runs will
+  give better numbers.
+
+**The network search is CPU-bound, not GPU-bound.** IS-MCTS at 1,000 simulations on 96 sb-v2
+decisions, with the imitation prior and the network at the leaves (stage 4's and 5's network
+bot), 32 workers and 4 replicas of MageZero's server, on the 3090:
+
+| Measure | Value |
+|---|---|
+| Evaluations a second | 298 |
+| Pod-seconds a decision | 3.19 (docs/017 §6.1 assumed 1.7) |
+| GPU busy | 49% |
+| Per simulation, in one worker | 55 ms engine, 40 ms waiting on the network |
+
+- MageZero's server packs 4,096 doubles for every state and logs every request. Each replica
+  kept one core at 100% and ran batches of one state, and 32 search JVMs took the rest of the
+  CPU.
+- At this rate the game stages (5–7) would cost about 1.9× their estimates.
+
+**A faster server doesn't help; a faster CPU does.** `value_server.py --policy` (d6c289c)
+returns MageZero's server's fields from the same forward pass, as float32 and without per-request
+logging, with an optional linger to batch across requests. On the laptop its outputs equal
+MageZero's server's exactly. The same search (160 sb-v2 decisions, IS-MCTS 1,000, imitation
+prior, network leaf) on an L40S pod with each server setup:
+
+| Servers | Workers | Evals/s | Pod-s a decision | Engine / network wait, ms a simulation | GPU busy | Cores busy (of 27.2) |
+|---|---|---|---|---|---|---|
+| MageZero's, 4 replicas | 32 | 464 | 2.03 | 29.5 / 26.5 | 52% | 24.1 |
+| `--policy`, 4 replicas | 32 | 464 | 2.03 | 30.0 / 26.1 | 56% | 24.7 |
+| `--policy`, 8 replicas | 32 | 457 | 2.06 | 31.6 / 25.4 | 60% | 25.0 |
+| `--policy`, 2 replicas, 2 ms linger | 32 | 434 | 2.17 | 27.5 / 33.0 | 25% | 22.8 |
+| `--policy`, 1 replica, 2 ms linger | 32 | 329 | 2.87 | 28.2 / 55.7 | 10% | 18.4 |
+| `--policy`, 4 replicas | 48 | 423 | 2.23 | 47.2 / 44.5 | 42% | 25.4 |
+
+- **The CPU is the limit.** With 4 replicas and 32 workers, the pod's cores are nearly all busy.
+  More workers only slow the engine (48 workers: 47 ms a simulation, against 30).
+- **One replica can't keep up:** about 330 requests a second (~3 ms of Python per request), with
+  the GPU 10% busy. Several replicas share the GPU at batch sizes of about one. That's where the
+  ~26 ms wait comes from. But with the CPU nearly full, a shorter wait would buy at most ~10%.
+- **The host's CPU matters most.** The L40S pod's host is an AMD EPYC 9554 (Zen 4, up to
+  3.76 GHz); the 3090 pod's is an EPYC 7H12 (Zen 2, up to 2.6 GHz). The engine takes 30 ms a
+  simulation on the first and 55 ms on the second.
+- **Per dollar, the 3090 still wins:** 3.19 pod-s a decision at $0.50/hr is $0.44 per thousand
+  decisions, against $0.61 for the L40S (2.03 at $1.09). A 3090 on a faster host would be better
+  still, so each game pod's CPU gets checked (`lscpu`) as soon as it's created.
+- MageZero's own server stays: it's as fast, and it's what experiment #3 used.
+
+## Stage 1: the build
+
+**161,206 top players' games became 12.1M table rows: 10.9M for training, 0.60M for
+validation and 0.53M for test.** That's 75 rows a game in the six tables the configs train on,
+against about 84 in the smoke build (which counted both block tables).
+
+| Table | Train | Validation | Test |
+|---|---|---|---|
+| `turnstart` (the turn's first main-phase priority) | 1,239,106 | 69,660 | 60,391 |
+| `replay_priority` (the player's later stops in its own turn) | 5,573,723 | 307,237 | 269,685 |
+| `opp_priority` (the player's stops in the opponent's turn) | 2,218,297 | 118,706 | 106,215 |
+| `replay_attack` ("attack with X?") | 1,391,893 | 77,708 | 68,980 |
+| `replay_target` (spell targets the outcome settles) | 209,905 | 11,625 | 10,319 |
+| `opp_block` (every block question) | 314,690 | 17,619 | 15,816 |
+| `block` (first block of each attack; overlaps `opp_block`, not trained on) | 351,265 | 19,636 | 17,106 |
+
+- **The build:** 2.54 hours, 28 workers, 17.6 games a second, no errors. The first-hour
+  estimate of 3.7 hours was for about 158k games at the smoke build's speed.
+- **The tables:** 1.0 hour (33 parts at ~47 s each, then the merge), 18 GB of HDF5. The shards
+  are 16 GB.
+- **Against the smoke build's rates (docs/017 §2.2):** 8.5 turn starts a game (smoke: 9.1); 51
+  replayed decisions in the player's own turns (smoke: 38 priority plus 10.6 attacks); 18
+  decisions in the opponent's turns (smoke: 19); 2.4 first-block questions (smoke: 3).
+  - Turns reproduced: 86.8% of the player's (1,194,268 of 1,375,521) and 83.5% of the
+    opponent's (1,084,253 of 1,297,734). Smoke: 85% and 85%.
+  - Turn starts: 99.5% usable. First-block questions: 64% labelled; the rest were mostly a
+    different decision at the replayed stop (138k) or had no exact pairing (74k).
+- **Held out:** 6,139 rows of sb-v1's drafts and their mirrored partners, as planned.
+
+## Stage 2: the hyperparameter sweep
+
+*Running: 4 of 13 runs done.*
+
+**Each run trains one epoch of the same 10% subset** (1.10M rows; the same feature vocab and
+validation rows), one setting changed at a time around MageZero's default (2 layers, width 512,
+learning rate 3e-4). Validation at the end of each run:
+
+| Run | Non-Pass top-1 | Set NLL | Turn-start top-1 | Attack accuracy | Block top-1 | Target top-1 | Value AUC | Value log-loss | Opponent's turn: Pass on top | Training samples/s |
+|---|---|---|---|---|---|---|---|---|---|---|
+| default, seed 0 | 0.707 | 0.395 | 0.704 | 0.720 | 0.684 | 0.530 | 0.635 | 0.691 | 99.9% | 680 |
+| default, seed 1 | 0.699 | 0.404 | 0.699 | 0.710 | 0.680 | 0.542 | 0.660 | 0.649 | 99.7% | 681 |
+| **1 layer** | **0.760** | **0.323** | **0.754** | **0.764** | 0.691 | 0.546 | **0.717** | **0.635** | 97.5% | 1,017 |
+| 4 layers | 0.667 | 0.499 | 0.665 | 0.505 | 0.685 | 0.518 | 0.502 | 0.676 | 100% | 352 |
+
+*Humans passed in 93.4% of the opponent's-turn rows. Chance on the block rows is 0.456, on the
+target rows 0.328.*
+
+- **The noise band** (twice the seed-to-seed difference, docs/017 §6.3's bar): about 0.016 in
+  non-Pass top-1, 0.018 in set NLL, 0.05 in value AUC and 0.08 in value log-loss. The value head is
+  noisy at this budget.
+- **1 layer clears the bar on both heads,** by 3–4× the bar on the policy. It also trains 50% faster. But
+  only MageZero's default shape loads into its inference server unchanged, so a 1-layer network
+  needs a small server change for stages 4–7.
+- **4 layers learned no attack or value head** (both at chance) in one epoch. With 1 layer best
+  and 4 worst, depth hurts at this learning rate and budget. The learning-rate runs (1e-4 and
+  1e-3, still to come) should say whether that's optimization or capacity.
+- **In the opponent's turn the networks almost never act.** When the human acted there, they rank
+  the right play first among the non-Pass options about 70% of the time. So they know what to cast
+  there but not when.
+- **Throughput:** the default trains at about 680 samples a second on this 3090; an evaluation of
+  the ~110k validation rows takes about 2 minutes. At full size that's ~4.5 hours an epoch, so
+  stage 3's 12-hour cap allows ~2.6 epochs of the default.
+
+**The budget changed to an equal number of samples** (f9157fa). docs/017 §6.3 gave every run the
+same 25 minutes. A faster network then sees more data: the 1-layer run would have trained 46% more
+samples than the default, and the 4-layer one about half as many. The two default seeds were
+resumed from 0.92 to 1.0 epoch (an exact resume: the learning rate is constant after warm-up). The
+first 1-layer run, stopped at 1.08 epochs, was restarted. The time-budget runs, for the record:
+
+| Run | Epochs | Non-Pass top-1 | Set NLL | Turn-start top-1 | Attack accuracy | Block top-1 | Value AUC |
+|---|---|---|---|---|---|---|---|
+| default, seed 0 | 0.92 | 0.715 | 0.390 | 0.711 | 0.717 | 0.683 | 0.639 |
+| default, seed 1 | 0.92 | 0.702 | 0.408 | 0.699 | 0.716 | 0.684 | 0.640 |
+| 1 layer | 0.81 | 0.739 | 0.336 | 0.738 | 0.759 | 0.689 | 0.701 |
+
+## Stage 4: cheap evaluation (sb-v2)
+
+*In progress. The heuristic bot needs no network, so it runs while stages 1–3 do.*
+
+| Mix | Simulations | Balanced score [95% CI] | Cast or pass / attack / block | Root value's AUC against the result [95% CI] | Pod-s a decision |
+|---|---|---|---|---|---|
+| Heuristic bot (uniform prior, heuristic leaves) | 300 | 0.648 [0.623, 0.672] | 0.728 / 0.602 / 0.615 | 0.724 [0.686, 0.759] | 0.67 |
+
+- **References on sb-v2's test items:** always passing scores 80.3% on agreement with the label
+  set (A_set); the rule heuristic 0.569 balanced.
+- **The value score:** the search's backed-up root value (`rootQ`) against whether the player won.
+  The heuristic's static score at the root alone gives 0.653.
+- **Agreement by type (A_set):** spell 0.64, hold 0.23, attack 0.60, block 0.48, `endstep` 0.50,
+  `oppwindow` 0.78.
+- **4 of the 1,000 decisions failed:** the JVM crashed (SIGBUS in JIT-compiled engine code,
+  `ContinuousEffects.copy`) in two workers on this Community host. `run.py` retries failed rows
+  on a re-run.
+- **The host then rebooted (about 18:51 UTC),** killing the 3,000-simulation run at 500 of 1,000
+  decisions and the pod's self-destruct with it. The wait loop watching it missed this for three
+  hours: its `pgrep -f` pattern matched its own SSH command line (docs/005's pitfall), so the pod
+  sat idle.
+  Watchers now use a bracketed pattern (`pgrep -f "[s]upervised sweep"`). The rest of the run, and
+  a check of a sample of this host's decisions on another host, go with stage 4's network runs.
+
+## Pods
+
+Every pod's quote, what it actually had, and what it delivered (docs/005).
+
+| Pod | Stage | GPU, cloud | Quote | vCPU / RAM (cgroup) | Hours | Cost | Outcome |
+|---|---|---|---|---|---|---|---|
+| `qbptx0wvxlhstv` | – | CPU pod | $0.06/hr | – | ~0.03 | <$0.01 | tested that a pod's own API key can terminate it (GraphQL `podTerminate`): it can. The image's `runpodctl` 1.14 can't authenticate with that key, so docs/005's self-destruct line would fail silently. |
+| `cbrrtovvu7a1cc` | GPU check, 1, 2 | RTX 3090, Secure, CZ | $0.50/hr, 32 vCPU, 125 GB | 31.1 cores / 116 GB, EPYC 7H12 | 8.4 so far | $4.21 so far | running. `/workspace` is a network filesystem (MooseFS): writes ~570 MB/s, and `tar` must skip `chown` (`--no-same-owner`) |
+| `5bdvhik7ea0kaz` | GPU check | L40, Secure, US | $0.82/hr, 32 vCPU, 250 GB | 27.2 cores / 250 GB | 0.37 | $0.30 | model and training speed only (no bridge); removed |
+| `2yod0kvnr108f7` | server test | L40S, Secure, US | $1.09/hr, 32 vCPU, 125 GB | 27.2 cores / 125 GB, EPYC 9554 | 0.72 | $0.78 | the inference-server comparison (no Secure 3090 or L40 left); removed |
+| `rizee0c3sfip6l` | 4 (heuristic bot) | RTX 3090, Community with public IP, CA | $0.22/hr, 32 vCPU, 62 GB | 27.2 cores / 62 GB, EPYC 7702 | 4.6 | $1.01 | setup took 6 minutes. 4 JVM crashes (SIGBUS); the host rebooted at ~18:51 and the pod sat idle until 22:02 (~$0.70 lost); removed |
+| `ubn5t7kjbu12l4` | 2–3 (meant) | RTX 3090, Community with public IP, CA | $0.22/hr, 16 vCPU, 62 GB | – | 0.35 | $0.08 | still pulling the image after 20 minutes; removed |
+| `4gm8oz4v2pa7qv` | 2–3 (meant) | RTX 3090, Community with public IP, FR | $0.22/hr, 8 vCPU, 30 GB | – | ~0 | ~$0 | too little RAM for stage 3; removed at once |
+| `47ojn7gvz1wub8` | 2–3 (meant) | RTX 3090, Community with public IP, CA | $0.22/hr, 16 vCPU, 62 GB | – | 0.63 | $0.14 | created with GraphQL `podFindAndDeployOnDemand` (`minMemoryInGb: 60`); still pulling the image after 38 minutes; removed. The sweep ran on the Secure pod instead |
+
+**Community 3090s with a public IP were $0.22/hr** on 2026-10-01, with 8–32 vCPU and 30–62
+GB, less than half the Secure price (docs/005 found no Community host with a public IP on
+2026-09-25). The network search is CPU-bound, so these are the cheapest pods per decision even on a
+slow host. But two of four sat for 20–40 minutes pulling the 10 GB image. `runpodctl pod create`
+has no RAM or vCPU floor; GraphQL `podFindAndDeployOnDemand` takes `minVcpuCount` and
+`minMemoryInGb` (with a `Bearer` key).
+
+Uploads from the laptop to a US pod ran at about 110 KB/s; pod to pod (`ssh -A`, then `scp`)
+moved 75 MB in 10 s.
+
+**Self-destruct:** `arm.sh <seconds>` sleeps, then calls GraphQL `podTerminate` with the pod's
+own key from PID 1's environment (an SSH session doesn't inherit it).
