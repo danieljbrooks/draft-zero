@@ -241,6 +241,40 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 - `value_server.py` serves any network the trainer saves (8c9afb9), so a network outside
   MageZero's shape can still play in stages 4–7.
 
+### Round 2: a hill climb around 1 layer (live log)
+
+*Running from ~10:00 UTC on 2 October, for 10+ hours at Dan's request. The run queue is
+`configs/exp4_sweep_r2.yml`, run with `sweep --follow`, which re-reads it before every run.*
+
+**How the loop works:**
+- **The base is `c0`, round 1's leaders combined:** 1 layer, width 512, pre-LN, embedding std 0.02,
+  3k warm-up, lr 3e-4. Every run trains one epoch of the 10% subset, as in round 1.
+- **A check-in every 20–30 minutes,** or when a run finishes: read the leaderboard, form a
+  hypothesis from the best run, and put the run that tests it at the **top** of the queue. The
+  sweep always takes the first unfinished run, so the newest promising ideas go first, and the
+  earlier plan stays below as a backstop.
+- **What's kept:**
+  - every change to the queue is pushed to main;
+  - each check-in sends the new runs' configs, curves, summaries and best weights to the
+    project's private HF repo (`exp4/sweep_r2/`);
+  - the metrics also go to the laptop;
+  - this log records each run's hypothesis and verdict.
+
+| Run | Hypothesis | Result against `c0` | Verdict |
+|---|---|---|---|
+| `c0` | the round-1 fixes (pre-LN, embedding std 0.02, 3k warm-up) stack on 1 layer | non-Pass 0.760 (=), NLL 0.316 (−0.007), attack 0.780 (+0.016), value AUC 0.701 (−0.016) against round 1's 1 layer | about neutral on 1 layer, which was already stable; it should take a higher learning rate |
+| `c0-lr-1e-4` | the lower learning rate that helped 2 layers helps 1 | *running* |  |
+
+<!-- r2-board -->
+
+**Round 2's leaderboard** (sorted by set NLL; `c0` is the reference):
+
+| # | Run | Setup | Non-Pass top-1 | Set NLL | Attack acc. | Block top-1 | Target top-1 | Value AUC | Value log-loss | Opp. turn: Pass on top | Inference evals/s (batch 32) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `c0` | transformer, 1 layer, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.760 | 0.316 | 0.780 | 0.688 | 0.554 | 0.701 | 0.655 | 97.8% | 2,144 |
+
+<!-- /r2-board -->
+
 ## Stage 4: cheap evaluation (sb-v2)
 
 *In progress. The heuristic bot needs no network, so it runs while stages 1–3 do.*

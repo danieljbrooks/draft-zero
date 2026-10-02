@@ -83,6 +83,8 @@ def plot(runs: Path, spec: dict, out: Path, title: str) -> list[Path]:
     ref = read_curve(runs / ref_name)
     groups = [g for g in spec["groups"] if any(read_curve(runs / n) for n, _ in g["runs"])]
     paths = []
+    if not groups:                    # nothing past step 0 yet
+        return paths
     for mode, t in THEMES.items():
         fig, axs = plt.subplots(len(groups), len(MEASURES), figsize=(4.1 * len(MEASURES), 2.9 * len(groups) + 0.8),
                                 facecolor=t["surface"], squeeze=False)
