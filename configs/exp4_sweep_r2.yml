@@ -66,6 +66,10 @@ runs:
   # position feeds the trunk the outcome signal (as every-position did for the policy), the value head keeps 16.
   # PAUSED (Dan, 15:10: don't change the pipeline yet; needs the new trainer code and a sweep restart):
   # - {name: l5e5-vpg16-auxres, lr: 5.0e-5, value_per_game: 16, aux_targets: [result], aux_weight: 0.5}
+  # 15:45 (Dan: a mid-game value is a fraction, not ±1): TD(0.95) targets bootstrap from the network's own values,
+  # so they are fractions with far less variance than the result. Round 1's TD run was at the unstable 3e-4;
+  # retest it on the leader (an existing option: no pipeline change).
+  - {name: v16-td, lr: 5.0e-5, value_per_game: 16, value_target: td}
   # the rest re-based on the leader, l5e5-vpg16 (lr 5e-5, 16 value positions a game)
   - {name: v16-w1024, lr: 5.0e-5, value_per_game: 16, arch: {width: 1024}}
   - {name: v16-w128, lr: 5.0e-5, value_per_game: 16, arch: {width: 128}}
