@@ -27,7 +27,8 @@ base:
   val_rows: 20000             # per table, whole games
   max_epochs: 1.0             # one pass over the 10% subset: the same samples for every run
   time_budget_s: 7200         # a cap only (the default needs ~27 minutes)
-  eval_every_s: 600
+  eval_every_s: null          # learning curves at the same epochs for every run: 0, 0.25, 0.5, 0.75 and 1.0
+  eval_every_steps: 5169      # (an epoch of the subset is 20,675 steps whatever the network; the last is the stop)
   ckpt_every_s: null          # the best checkpoints are kept; no periodic ones
   latest_every_s: 300
   patience_epochs: null       # fixed budget: no plateau stop
