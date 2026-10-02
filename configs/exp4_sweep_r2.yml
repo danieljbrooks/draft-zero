@@ -72,6 +72,9 @@ runs:
   # the epoch above the best constant rate (5e-5). Cosine at the right scale, on the leader's recipe:
   - {name: v16-cosine-1e-4, lr: 1.0e-4, lr_schedule: cosine, value_per_game: 16}
   - {name: v16-cosine-2e-4, lr: 2.0e-4, lr_schedule: cosine, value_per_game: 16}
+  # 16:50: TD gives the best policy yet (non-Pass 0.794, NLL 0.286) but every difference near the top is ~0.01, inside
+  # round 1's noise band (measured on another recipe): measure the leader's seed noise now, not last
+  - {name: v16-seed1, lr: 5.0e-5, value_per_game: 16, seed: 1}
   # 16:00 (Dan: the result head approved; the goal is a recipe that works at full scale, and whether capacity
   # helps with the right recipe). A throwaway result head on every position feeds the trunk the outcome signal
   # (every-position gave the best policy) while the value head keeps 16 positions.
@@ -84,7 +87,6 @@ runs:
   - {name: v16-mlp-lr-1e-4, lr: 1.0e-4, value_per_game: 16, arch: {type: mlp, layers: 2}}
   - {name: v16-mlp-w1024-b4, lr: 1.0e-4, value_per_game: 16, arch: {type: mlp, layers: 4, width: 1024}}
   # the noise band for the leader
-  - {name: v16-seed1, lr: 5.0e-5, value_per_game: 16, seed: 1}
   # ---- deferred (16:00): after the 30%-data scale check (configs/exp4_sweep_s30.yml)
   # - {name: v16-w128, lr: 5.0e-5, value_per_game: 16, arch: {width: 128}}
   # - {name: v16-mlp-lr-1e-3, lr: 1.0e-3, value_per_game: 16, arch: {type: mlp, layers: 2}}
