@@ -507,6 +507,14 @@ cost the value 0.070 AUC.
   doesn't help the MLP's policy. The first BatchNorm run stopped on a one-row batch (fixed in 265c4d3); the
   MLP sweep resumed at 23:40.
 
+**Results at 23:52:**
+- **The value tower with ×3 on the opponent's turn and the player's later stops** (`x-vt-actor3`, no weight at
+  the turn start): non-Pass 0.805, set NLL 0.272, targets 0.573, value AUC 0.747: the best 10% run, level with
+  ×3 on all three tables (`x-vt-actall3`: 0.804, 0.273) within the noise.
+- **Dan's statistical-drafting style on the MLP** (`m-sd-1e-3`: GELU, BatchNorm, dropout 0.6, lr 1e-3): non-Pass
+  0.723 (−0.038 against `m0`), set NLL 0.363 (+0.036), attack −0.035, value AUC −0.017. Heavy dropout suits a
+  pick model with a few hundred inputs; this MLP pools ~800 tokens and already drops 30% of them.
+
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
 30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):
 
