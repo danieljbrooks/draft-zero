@@ -162,8 +162,7 @@ against about 84 in the smoke build (which counted both block tables).
 
 ## Stage 2: the hyperparameter sweep
 
-*Running: round 1 has 2 of 18 runs left; rounds 2 and 3 follow (below). Snapshot at 08:30 UTC on 2
-October.*
+*Round 1 done (18 runs, 20:15 on 1 October to 09:50 on 2 October); round 2 running (below).*
 
 **Every run trains one epoch of the same 10% subset** (1.10M rows; the same feature vocab and
 validation rows) and is scored on the validation split: about 20,000 rows per table, whole games.
@@ -178,27 +177,28 @@ Round 1 changes one setting at a time around MageZero's default network (2 post-
 *Round 1's learning curves. The first runs were evaluated every 5 or 10 minutes, the later ones at
 every quarter epoch, so the points don't all line up.*
 
-**Round 1's leaderboard,** sorted by the policy's set NLL (lower is better):
+**Round 1's leaderboard** (final, all 18 runs), sorted by the policy's set NLL (lower is better):
 
-| # | Run | Non-Pass top-1 | Set NLL | Attack acc. | Block top-1 | Target top-1 | Value AUC | Value log-loss | Opp. turn: Pass on top | Inference evals/s (batch 32) | MageZero's shape |
+| # | Run | Setup | Non-Pass top-1 | Set NLL | Attack acc. | Block top-1 | Target top-1 | Value AUC | Value log-loss | Opp. turn: Pass on top | Inference evals/s (batch 32) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | 1 layer | 0.760 | 0.323 | 0.764 | 0.691 | 0.546 | 0.717 | 0.635 | 97.5% | 2,194 | no |
-| 2 | width 256 | 0.744 | 0.324 | 0.766 | 0.690 | 0.547 | 0.722 | 0.622 | 97.9% | 2,972 | no |
-| 3 | lr 1e-4 | 0.733 | 0.347 | 0.747 | 0.684 | 0.534 | 0.716 | 0.620 | 99.9% | 1,391 | yes |
-| 4 | pre-LN | 0.722 | 0.360 | 0.723 | 0.687 | 0.535 | 0.670 | 0.633 | 99.9% | 1,135 | no |
-| 5 | MLP (bag of features, 2 residual blocks) | 0.742 | 0.365 | 0.759 | 0.686 | 0.540 | 0.724 | 0.654 | 99.9% | 32,986 | no |
-| 6 | value weight 0.1 (from 0.5) | 0.726 | 0.375 | 0.726 | 0.686 | 0.524 | 0.565 | 0.665 | 99.9% | 1,386 | yes |
-| 7 | TD + turns-left head | 0.724 | 0.377 | 0.722 | 0.686 | 0.522 | 0.605 | 0.659 | 99.9% | 1,374 | yes |
-| 8 | TD(0.95) value targets | 0.714 | 0.382 | 0.716 | 0.687 | 0.539 | 0.656 | 0.642 | 99.8% | 1,382 | yes |
-| 9 | MageZero's default: 2 post-LN layers, width 512, lr 3e-4 | 0.707 | 0.395 | 0.720 | 0.684 | 0.530 | 0.635 | 0.691 | 99.9% | 1,379 | yes |
-| 10 | + turns-left head | 0.715 | 0.395 | 0.711 | 0.685 | 0.526 | 0.635 | 0.676 | 99.9% | 1,374 | yes |
-| 11 | 3k warm-up steps (from 300) | 0.706 | 0.401 | 0.702 | 0.684 | 0.530 | 0.657 | 0.638 | 99.9% | 1,389 | yes |
-| 12 | embedding init std 0.02 (from 1) | 0.697 | 0.402 | 0.741 | 0.676 | 0.539 | 0.699 | 0.655 | 100.0% | 1,390 | yes |
-| 13 | default, seed 1 | 0.699 | 0.404 | 0.710 | 0.680 | 0.542 | 0.660 | 0.649 | 99.7% | 1,385 | yes |
-| 14 | width 768 | 0.698 | 0.420 | 0.624 | 0.684 | 0.525 | 0.521 | 0.678 | 99.9% | 574 | no |
-| 15 | lr 1e-3 | 0.694 | 0.454 | 0.613 | 0.685 | 0.516 | 0.527 | 0.668 | 100.0% | 1,390 | yes |
-| 16 | 4 layers | 0.667 | 0.499 | 0.505 | 0.685 | 0.518 | 0.502 | 0.676 | 100.0% | 584 | no |
-| – | pre-LN + std 0.02 + 3k warm-up *(at 0.50 epoch)* | 0.717 | 0.366 | 0.755 | 0.686 | 0.526 | 0.668 | 0.692 | 99.7% | – | no |
+| 1 | `layers-1` | transformer, 1 layer, width 512, post-LN, lr 0.0003, emb N(0,1), warm-up 300 | 0.760 | 0.323 | 0.764 | 0.691 | 0.546 | 0.717 | 0.635 | 97.5% | 2,194 |
+| 2 | `width-256` | transformer, 2 layers, width 256, post-LN, lr 0.0003, emb N(0,1), warm-up 300 | 0.744 | 0.324 | 0.766 | 0.690 | 0.547 | 0.722 | 0.622 | 97.9% | 2,972 |
+| 3 | `modern` | transformer, 2 layers, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.756 | 0.329 | 0.773 | 0.690 | 0.553 | 0.710 | 0.623 | 99.2% | 1,135 |
+| 4 | `lr-1e-4` | transformer, 2 layers, width 512, post-LN, lr 0.0001, emb N(0,1), warm-up 300 | 0.733 | 0.347 | 0.747 | 0.684 | 0.534 | 0.716 | 0.620 | 99.9% | 1,391 |
+| 5 | `layers-4-modern` | transformer, 4 layers, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.727 | 0.357 | 0.756 | 0.686 | 0.541 | 0.679 | 0.671 | 99.9% | 581 |
+| 6 | `pre-ln` | transformer, 2 layers, width 512, pre-LN, lr 0.0003, emb N(0,1), warm-up 300 | 0.722 | 0.360 | 0.723 | 0.687 | 0.535 | 0.670 | 0.633 | 99.9% | 1,135 |
+| 7 | `mlp` | MLP, 2 blocks, width 512, lr 0.0003, emb N(0,1), warm-up 300 | 0.742 | 0.365 | 0.759 | 0.686 | 0.540 | 0.724 | 0.654 | 99.9% | 32,986 |
+| 8 | `value-weight-0.1` | transformer, 2 layers, width 512, post-LN, lr 0.0003, emb N(0,1), warm-up 300, value weight 0.1 | 0.726 | 0.375 | 0.726 | 0.686 | 0.524 | 0.565 | 0.665 | 99.9% | 1,386 |
+| 9 | `value-td-aux` | transformer, 2 layers, width 512, post-LN, lr 0.0003, emb N(0,1), warm-up 300, TD value, +turns_left | 0.724 | 0.377 | 0.722 | 0.686 | 0.522 | 0.605 | 0.659 | 99.9% | 1,374 |
+| 10 | `value-td` | transformer, 2 layers, width 512, post-LN, lr 0.0003, emb N(0,1), warm-up 300, TD value | 0.714 | 0.382 | 0.716 | 0.687 | 0.539 | 0.656 | 0.642 | 99.8% | 1,382 |
+| 11 | `default` | transformer, 2 layers, width 512, post-LN, lr 0.0003, emb N(0,1), warm-up 300 | 0.707 | 0.395 | 0.720 | 0.684 | 0.530 | 0.635 | 0.691 | 99.9% | 1,379 |
+| 12 | `value-aux` | transformer, 2 layers, width 512, post-LN, lr 0.0003, emb N(0,1), warm-up 300, +turns_left | 0.715 | 0.395 | 0.711 | 0.685 | 0.526 | 0.635 | 0.676 | 99.9% | 1,374 |
+| 13 | `warmup-3k` | transformer, 2 layers, width 512, post-LN, lr 0.0003, emb N(0,1), warm-up 3000 | 0.706 | 0.401 | 0.702 | 0.684 | 0.530 | 0.657 | 0.638 | 99.9% | 1,389 |
+| 14 | `emb-std-0.02` | transformer, 2 layers, width 512, post-LN, lr 0.0003, emb std 0.02, warm-up 300 | 0.697 | 0.402 | 0.741 | 0.676 | 0.539 | 0.699 | 0.655 | 100.0% | 1,390 |
+| 15 | `default-seed1` | transformer, 2 layers, width 512, post-LN, lr 0.0003, emb N(0,1), warm-up 300, seed 1 | 0.699 | 0.404 | 0.710 | 0.680 | 0.542 | 0.660 | 0.649 | 99.7% | 1,385 |
+| 16 | `width-768` | transformer, 2 layers, width 768, post-LN, lr 0.0003, emb N(0,1), warm-up 300 | 0.698 | 0.420 | 0.624 | 0.684 | 0.525 | 0.521 | 0.678 | 99.9% | 574 |
+| 17 | `lr-1e-3` | transformer, 2 layers, width 512, post-LN, lr 0.001, emb N(0,1), warm-up 300 | 0.694 | 0.454 | 0.613 | 0.685 | 0.516 | 0.527 | 0.668 | 100.0% | 1,390 |
+| 18 | `layers-4` | transformer, 4 layers, width 512, post-LN, lr 0.0003, emb N(0,1), warm-up 300 | 0.667 | 0.499 | 0.505 | 0.685 | 0.518 | 0.502 | 0.676 | 100.0% | 584 |
 
 - **The noise band** (twice the seed-to-seed difference, docs/017 §6.3's bar): about 0.016 in
   non-Pass top-1, 0.018 in set NLL, 0.05 in value AUC and 0.08 in value log-loss.
@@ -212,7 +212,10 @@ every quarter epoch, so the points don't all line up.*
     policy.
   - **Pre-LN:** helps the policy (+0.019 top-1, −0.040 NLL). Inference is 18% slower, within
     §6.3's 25%.
-  - **All three together** (`modern`) beat the default's whole epoch at a quarter epoch.
+  - **All three together** (`modern`) beat the default's whole epoch at a quarter epoch, and
+    make 2 layers as good as 1 (0.756 / 0.329). With them, 4 layers trains too (attack 0.756,
+    value AUC 0.679, against chance without), but it's no better per sample than 2 and takes
+    twice as long.
   - **A longer warm-up alone does nothing.**
 - **The value targets don't help on their own** (TD(0.95), a turns-left head, both). Value weight
   0.1 trades value for policy: +0.023 top-1, but −0.08 value AUC. So the shared trunk trades one
@@ -223,36 +226,8 @@ every quarter epoch, so the points don't all line up.*
 - **The MLP's inference is ~24× the transformer's** (33k against 1.4k evaluations a second at batch
   32). The network search is CPU-bound, so that matters less than it seems, but it's free speed.
 
-**What's left in the search:**
-
-| Round | Runs | What it tests | Expected end (UTC, 2 Oct) |
-|---|---|---|---|
-| 1 | `modern` (half done), 4 layers with `modern` | do the fixes stack; can depth train with them | ~10:00 |
-| 2 | 15 runs, `configs/exp4_sweep_r2.yml` | the fixes combined: a new reference in MageZero's shape at lr 1e-4 with the 0.02 init (two seeds), and around it a value tower, pre-LN at 1e-4 and 5e-4, 1 layer and width 256, two MLPs (lr 1e-3; width 1024 with 4 blocks), lr 2e-4 and a cosine schedule, 10% and no token dropout, SwiGLU with attention pooling, 4 pre-LN layers | ~19:30 |
-| 3 | the top 3–4 | the same comparison on 30% of the data, to check the ranking holds with more data before stage 3 picks a network | ~midnight |
-
-### Round 2: a hill climb around 1 layer (live log)
-
-*Running from ~10:00 UTC on 2 October, for 10+ hours at Dan's request. The run queue is
-`configs/exp4_sweep_r2.yml`, run with `sweep --follow`, which re-reads it before every run.*
-
-**How the loop works:**
-- **The base is `c0`, round 1's leaders combined:** 1 layer, width 512, pre-LN, embedding std 0.02,
-  3k warm-up, lr 3e-4. Every run trains one epoch of the 10% subset, as in round 1.
-- **A check-in every 20–30 minutes,** or when a run finishes: read the leaderboard, form a
-  hypothesis from the best run, and put the run that tests it at the **top** of the queue. The
-  sweep always takes the first unfinished run, so the newest promising ideas go first, and the
-  earlier plan stays below as a backstop.
-- **What's kept:**
-  - every change to the queue is pushed to main;
-  - each check-in sends the new runs' configs, curves, summaries and best weights to the
-    project's private HF repo (`exp4/sweep_r2/`);
-  - the metrics also go to the laptop;
-  - this log records each run's hypothesis and verdict.
-
-| Run | Hypothesis | Result against `c0` | Verdict |
-|---|---|---|---|
-| `c0` | the round-1 fixes stack on 1 layer | *pending* | |
+**What's next:** round 2 (below), a hill climb around 1 layer with the fixes, run as a loop that
+adds runs as results come in, for as long as Dan wants it to.
 
 **The budget changed to an equal number of samples** (f9157fa). docs/017 §6.3 gave every run the
 same 25 minutes. A faster network then sees more data: the 1-layer run would have trained 46% more
