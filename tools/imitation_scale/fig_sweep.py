@@ -40,6 +40,20 @@ SPECS = {
                                                              ["modern", "all three"], ["layers-4-modern", "4 layers, all three"]]},
         ],
     },
+    "round2": {
+        "reference": ["ref", "ref: default shape, lr 1e-4, embedding std 0.02"],
+        "groups": [
+            {"title": "Noise and shape", "runs": [["ref-seed1", "ref, seed 1"], ["layers-1", "1 layer"],
+                                                  ["width-256", "width 256"], ["layers-4-pre-ln", "4 layers, pre-LN"]]},
+            {"title": "Architecture", "runs": [["value-tower", "value tower (1 layer)"], ["pre-ln", "pre-LN"],
+                                               ["swiglu-attnpool", "SwiGLU + attention pooling"],
+                                               ["mlp-lr-1e-3", "MLP, lr 1e-3"], ["mlp-wide", "MLP, width 1024, 4 blocks"]]},
+            {"title": "Schedule and dropout", "runs": [["lr-2e-4", "lr 2e-4"], ["cosine-2e-4", "cosine from 2e-4"],
+                                                       ["pre-ln-lr-5e-4", "pre-LN, lr 5e-4"],
+                                                       ["token-dropout-0.1", "token dropout 0.1"],
+                                                       ["no-dropout", "no dropout"]]},
+        ],
+    },
 }
 
 THEMES = {
