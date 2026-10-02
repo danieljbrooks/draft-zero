@@ -301,7 +301,8 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `act3-td99, act3-td975` | do the passivity fix and TD(0.99) stack? (0.975 alongside; 0.99 also at 30% as `s30-l1-act3-td99`, the candidate stage-3 recipe) | act3-td99 against the passivity fix alone / TD 0.99 alone: non-Pass 0.791 / 0.796 / 0.786, NLL 0.285 / 0.281 / 0.292, value AUC **0.749** / 0.740 / 0.749, log-loss **0.582** / 0.597 / 0.583, Pass on top (opp. turn) 0.937 / 0.938 / 0.973; act3-td975: non-Pass 0.794, NLL 0.283, value AUC 0.746, log-loss 0.587 (the same trade as without the fix, within noise) | **the new leader:** they stack. TD 0.99's value, the fix's passing, and most of the fix's policy gain (NLL 0.292 → 0.285) |
 | `act-opp-10, act-all-3` | the passivity fix stronger (×10), and on all three priority tables (×3) (re-based at 21:52 on act3-td99) | against act3-td99: ×10 on the opponent's turn: NLL 0.301 (+0.015), Pass on top 0.894 (humans 0.934); ×3 on all three priority tables: non-Pass **0.802** (+0.011), NLL **0.280** (−0.006), targets 0.545 (−0.007), value unchanged (AUC 0.748, log-loss 0.583), Pass on top 0.938 | ×10 overshoots. ×3 on all three tables is **the new leader** at 10% (non-Pass ~2× the noise band); checked at 30% next (`s30-l1-actall3-td99`) |
 | `x-value-tower` | the network split into a policy tower and a value tower (TransformerNetX: each with its own embeddings, layer and pooling), on act3-td99: no value gradient in the policy's features | non-Pass 0.798 (+0.007), NLL **0.274** (−0.012), targets **0.578** (+0.026), attack +0.003, block +0.005; value unchanged (AUC 0.748, log-loss 0.581); inference 2,585 a second against 5,154 | **the best policy at 10%**, at half the inference speed: the gain is the separation (two shared layers lost). Checked at 30% (`s30-vt-act3-td99`) and with ×3 on all tables (`x-vt-actall3`) |
-| `x-swiglu-attnpool, m-*` | SwiGLU + attention pooling; then an MLP tuning scan (lr, width, depth, dropout, act weights) for the CPU-search model (Dan, 22:55) | *running / queued* |  |
+| `x-swiglu-attnpool, x-vt-actall3` | SwiGLU + attention pooling; the value tower with ×3 on all three tables | SwiGLU + attention pooling: NLL 0.279 (−0.007), value log-loss 0.576 (−0.006), non-Pass −0.001, inference 4,117 a second (−20%). Value tower + all tables: non-Pass **0.804** (+0.013), NLL **0.273** (−0.012), targets 0.573 (+0.021), value unchanged | SwiGLU + attention pooling: small gains on both heads, borderline. The value tower and ×3 on all tables stack on non-Pass (the best 10% run) |
+| `x-vdetach, x-vt-mlp, x-vweight-0.2` | Gemini (23:05): keep the value tower's policy gain at one tower's cost | *queued* |  |
 
 **Overfitting checks** (Dan asked, 15:10): every curve and leaderboard number is on the validation split
 (held out by draft; never trained on); the test split is untouched until stage 3's network is scored.
@@ -479,6 +480,20 @@ on the shared features with the gradient stopped (`x-vdetach`, `arch.value_detac
 beside the transformer policy tower (`x-vt-mlp`, `arch.value_tower_type: mlp`), and a smaller value weight (0.2
 against 0.5, `x-vweight-0.2`). Round 1's value weight 0.1, on the unstable recipe, gave the policy −0.020 NLL and
 cost the value 0.070 AUC.
+
+**Results at 23:15:**
+- **The value tower and ×3 on all three tables stack at 10%** (`x-vt-actall3`): non-Pass **0.804** (+0.013 against
+  `act3-td99`), set NLL 0.273 (−0.012), targets 0.573 (+0.021), the value unchanged. The best 10% run.
+- **SwiGLU + attention pooling** (`x-swiglu-attnpool`): set NLL 0.279 (−0.007) and value log-loss 0.576 (−0.006),
+  non-Pass unchanged, at 20% less inference speed. Small gains on both heads, at the edge of the noise.
+- **×3 on all three tables at 30%** (`s30-l1-actall3-td99` against `s30-l1-act3-td99`): non-Pass 0.815 (+0.003),
+  set NLL 0.258 (−0.002), targets 0.621 (+0.006), value AUC 0.766 (−0.002): within the noise overall. By table, the
+  player's own later stops gain (set NLL 0.236 against 0.245; Pass on top 0.658 against the humans' 0.666, from
+  0.691) while the turn start overshoots (Pass on top 0.021 against the humans' 0.051, set NLL +0.003). So the
+  candidate drops the turn start: ×3 on the opponent's turn and the later stops (`x-vt-actor3` at 10%,
+  `s30-vt-actor3-td99` at 30%, with the value tower).
+- **The MLP's base** (`m0`, 10%): non-Pass 0.762, set NLL 0.327, value AUC 0.746, Pass on top in the opponent's
+  turn 0.980: the passivity fix barely moves it.
 
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
 30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):

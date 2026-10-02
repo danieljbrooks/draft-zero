@@ -66,6 +66,8 @@ runs:
   # 23:05 (Gemini, via Dan): keep the separation's policy gain at one tower's cost? A value head on the shared features
   # with the gradient stopped (value_detach), and a cheap MLP value tower beside the transformer policy tower
   # (value_tower_type: mlp; the MLP's value at 30% was AUC 0.759 against the transformer's 0.768)
+  # 23:20: x3 on the turn start overshoots (Pass on top 0.021 against the humans' 0.051 at 30%): x3 on the other two only
+  - {name: x-vt-actor3, arch: {value_tower: true, value_layers: 1}, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99}
   - {name: x-vdetach, arch: {value_detach: true}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: x-vt-mlp, arch: {value_tower: true, value_tower_type: mlp, value_layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   # Gemini's third: a smaller value weight in the shared network (round 1's 0.1 on the unstable recipe: policy NLL -0.020,
