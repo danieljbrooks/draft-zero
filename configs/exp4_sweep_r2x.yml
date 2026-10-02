@@ -60,6 +60,9 @@ runs:
   # 22:55 (Dan): stage 3 trains two models to completion, the transformer for quality and an MLP for fast CPU search
   # (one CPU core: MLP 0.39 ms an evaluation, the 1-layer transformer ~80 ms). The MLP has only ever run on the
   # transformer's recipe: tune it. On the leader's recipe (TD 0.99, act x3 on the opponent's turn) unless noted.
+  # 22:44: the value tower gives the best policy at 10% (NLL 0.274, -0.012; targets +0.026), value unchanged: giving the
+  # value its own layer frees the shared one for the policy. Does it stack with x3 on all three tables?
+  - {name: x-vt-actall3, arch: {value_tower: true, value_layers: 1}, act_weights: {opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}, td_lambda: 0.99}
   - {name: m-base, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: m-lr-3e-4, lr: 3.0e-4, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: m-lr-1e-3, lr: 1.0e-3, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
