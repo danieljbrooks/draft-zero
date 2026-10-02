@@ -1,5 +1,8 @@
-# Experiment #4, stage 3: the large training (docs/017 §6.4). Edit the settings the sweep chose
-# (arch, lr, value target) before launching; everything else is the plan's.
+# Experiment #4, stage 3: the large training (docs/017 §6.4), with the recipe the sweep chose (docs/018, stage 2):
+# 1 layer with pre-LN, embedding std 0.02, warm-up + cosine from 1e-4, TD(0.99) value targets on 16 positions a
+# game, and the passivity fix (x3 on the policy loss of the rows where the human acted). Three epochs, not the
+# plan's plateau rule: cosine needs a fixed length, and the 10%-subset runs showed the policy still gains from
+# repeats while the value head peaks early (best_policy and best_value are kept apart).
 #
 #   python -m draftzero.gameplay.supervised train --config configs/exp4_train.yml --out runs/exp4/main \
 #       --tables-dir data/imitation_scale/h5
@@ -20,13 +23,20 @@ tables:
   # - {name: block, kind: target}                 # the first block question of each attack: overlaps opp_block
 fraction: 1.0
 val_rows: 20000
-data_cache: /workspace/cache/supervised   # mapped tables, so a resume skips the vocab mapping
-arch: {type: transformer, layers: 2, width: 512}
-lr: 3.0e-4
-value_per_game: 4
-time_budget_s: 43200        # a 12-hour cap; the plateau rule or max_epochs should stop it first
-max_epochs: 6
-eval_every_s: 1800
+data_cache: data/cache/supervised        # mapped tables, so a resume skips the vocab mapping
+arch: {type: transformer, layers: 1, width: 512, norm_first: true}
+emb_init_std: 0.02
+warmup_steps: 3000
+lr: 1.0e-4
+lr_schedule: cosine
+value_target: td
+td_lambda: 0.99
+value_per_game: 16
+act_weights: {opp_priority: 3.0}   # set from the 30% check (s30-l1-actall3-td99) at launch
+time_budget_s: 43200        # a 12-hour cap; max_epochs stops it first
+max_epochs: 3
+eval_every_s: null
+eval_every_steps: 26000     # about an eighth of an epoch (~209k steps of ~52 rows)
 ckpt_every_s: 1800
 latest_every_s: 600
-patience_epochs: 1.0        # stop once the combined validation measure is flat for an epoch
+patience_epochs: null       # the cosine schedule sets the length
