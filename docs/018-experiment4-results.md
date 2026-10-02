@@ -7,6 +7,13 @@ has the stage estimates this doc tracks against.*
 
 ## Preliminary results
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/018-recipe-dark.png">
+  <img alt="Validation curves over one epoch of 1.1M decisions for MageZero's default network (grey dashes) and the steps to the best recipe: lr 1e-4; pre-LN with a 0.02 embedding init and warm-up; 1 layer with those; 1 layer at lr 5e-5 with 16 value positions a game (the leader); and the leader with TD value targets. On non-Pass top-1, set NLL, attack accuracy and value AUC, each step improves on the default, and the leader and its TD variant are best." src="img/018-recipe-light.png">
+</picture>
+
+*MageZero's default network against the steps to the best recipe so far, on the validation split (stage 2).*
+
 - **The data is built.** 161,206 top players' games became 12.1M decisions (10.9M for training),
   about 80× #2b's 132,603. Every turn was replayed, including the opponent's turns, timing stops and
   blocks (Stage 1).
