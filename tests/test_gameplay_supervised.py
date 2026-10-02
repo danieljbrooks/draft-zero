@@ -605,3 +605,35 @@ def test_evaluate_cli_scores_a_network_on_the_selfplay_split(stage6, tmp_path, c
                     "--json", str(out)]) == 0
     r = json.loads(out.read_text())
     assert r["selfplay/kl_ref"] == pytest.approx(0, abs=1e-5) and r["selfplay/top1_search"] is not None
+
+
+def test_sweep_follow_picks_up_runs_added_while_it_runs(tables, tmp_path):
+    import threading
+    import time as _t
+    import yaml
+    base = {k: v for k, v in tiny_cfg(tables, max_steps=4, eval_every_steps=4).items()}
+    spec_path = tmp_path / "spec.yml"
+    spec = {"title": "t", "base": base, "runs": [{"name": "a", "seed": 0}]}
+    spec_path.write_text(yaml.safe_dump(spec))
+    out = tmp_path / "sweep"
+    res = {}
+    th = threading.Thread(target=lambda: res.update(rows=sv.run_sweep(spec_path, out, follow=True, follow_idle_s=120,
+                                                                       bench_seconds=0.05, log=lambda *_: None)))
+    th.start()
+    for _ in range(600):                      # run a finishes ...
+        if (out / "runs" / "a" / "speed.json").exists():
+            break
+        _t.sleep(0.1)
+    spec["runs"].insert(0, {"name": "b", "seed": 1, "lr": 1e-3})      # ... then a run is added (ahead of a)
+    spec_path.write_text(yaml.safe_dump(spec))
+    for _ in range(600):
+        if (out / "runs" / "b" / "speed.json").exists():
+            break
+        _t.sleep(0.1)
+    (out / "STOP").write_text("")
+    th.join(timeout=120)
+    assert not th.is_alive()
+    assert {r["name"] for r in res["rows"]} == {"a", "b"}
+    log = (out / "sweep.log").read_text()
+    assert log.count("data loaded") == 1 and "STOP file found" in log
+    assert [r["name"] for r in json.loads((out / "sweep.json").read_text())["runs"]] == ["b", "a"]   # the spec's order

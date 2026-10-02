@@ -2343,15 +2343,7 @@ def _run_row(name: str, spec: dict, summ: dict, speed: dict | None) -> dict:
     return row
 
 
-def run_sweep(spec_path: Path, out: Path, *, overrides: dict | None = None, only: list | None = None,
-              bench_seconds: float = 2.0, log=print) -> list[dict]:
-    """Every config of a sweep spec on the same data (one load: the same training-game subset,
-    feature vocab and validation rows), each with the same budget; a run that already finished is
-    read back, one with a latest.pt is resumed. Writes sweep.json, sweep.csv and sweep-{light,dark}.png.
-
-    spec: {base_config?: a config file, base: {config keys shared by every run}, runs: [{name, role?,
-    <config overrides>}]}; base_config is relative to the spec's directory or the working directory.
-    role 'default' marks the default config's seeds (the plot's noise band)."""
+def _load_sweep_spec(spec_path: Path, overrides: dict | None) -> tuple[dict, dict, list]:
     spec = load_config_file(spec_path)
     bc = spec.get("base_config")
     if bc and not Path(bc).exists() and (Path(spec_path).parent / bc).exists():
@@ -2361,14 +2353,31 @@ def run_sweep(spec_path: Path, out: Path, *, overrides: dict | None = None, only
     names = [r["name"] for r in runs]
     if len(set(names)) != len(names):
         raise ValueError("sweep run names must be unique")
+    return spec, base, runs
+
+
+def run_sweep(spec_path: Path, out: Path, *, overrides: dict | None = None, only: list | None = None,
+              bench_seconds: float = 2.0, follow: bool = False, follow_idle_s: float = 0.0, log=print) -> list[dict]:
+    """Every config of a sweep spec on the same data (one load: the same training-game subset,
+    feature vocab and validation rows), each with the same budget; a run that already finished is
+    read back, one with a latest.pt is resumed. Writes sweep.json, sweep.csv and sweep-{light,dark}.png.
+
+    spec: {base_config?: a config file, base: {config keys shared by every run}, runs: [{name, role?,
+    <config overrides>}]}; base_config is relative to the spec's directory or the working directory.
+    role 'default' marks the default config's seeds (the plot's noise band).
+
+    follow: re-read the spec before every run and take the first run not yet done, in the spec's
+    order, so runs can be added or reordered while the sweep goes (the data stay loaded; the data
+    settings may not change). With none left it waits up to follow_idle_s for more, and stops early
+    once <out>/STOP exists."""
+    spec, base, runs = _load_sweep_spec(spec_path, overrides)
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     lg = _Log(out / "sweep.log", log)
-    data = None
-    rows = []
-    for r in runs:
-        if only and r["name"] not in only:
-            continue
+    holder: dict = {}
+    rows: dict = {}
+
+    def one(r: dict, base: dict) -> dict:
         over = {k: v for k, v in r.items() if k not in ("name", "role")}
         cfg = resolve_config(base, over)
         changed = [k for k in DATA_KEYS if json.dumps(cfg[k], sort_keys=True) != json.dumps(base[k], sort_keys=True)]
@@ -2380,8 +2389,9 @@ def run_sweep(spec_path: Path, out: Path, *, overrides: dict | None = None, only
             summ = json.loads((rd / "summary.json").read_text())
             speed = json.loads((rd / "speed.json").read_text())
         else:
-            if data is None:
-                data = load_data(base, log=lg)
+            if "data" not in holder:
+                holder["data"] = load_data(base, log=lg)
+            data = holder["data"]
             if not (rd / "summary.json").exists():
                 lg(f"sweep: run {r['name']}: {over}")
                 summ = train(cfg, rd, resume=(rd / "latest.pt").exists(), data=data, log=log)
@@ -2395,11 +2405,44 @@ def run_sweep(spec_path: Path, out: Path, *, overrides: dict | None = None, only
                                  seconds=bench_seconds, log=None)
             (rd / "speed.json").write_text(json.dumps(speed, indent=1))
             del model
-        rows.append(_run_row(r["name"], r, summ, speed))
-        _write_sweep(out, rows, base)
-    paths = plot_sweep(rows, out / "sweep", title=spec.get("title") or "Supervised sweep")
+        return _run_row(r["name"], r, summ, speed)
+
+    def write(runs_now: list) -> None:
+        order = [r["name"] for r in runs_now]
+        _write_sweep(out, [rows[n] for n in order if n in rows] + [v for k, v in rows.items() if k not in order], base)
+
+    if not follow:
+        for r in runs:
+            if only and r["name"] not in only:
+                continue
+            rows[r["name"]] = one(r, base)
+            write(runs)
+    else:
+        idle_since = None
+        while True:
+            spec, base2, runs = _load_sweep_spec(spec_path, overrides)
+            changed = [k for k in DATA_KEYS if json.dumps(base2[k], sort_keys=True) != json.dumps(base[k], sort_keys=True)]
+            if changed:
+                raise ValueError(f"the spec's data settings changed ({changed}): start a new sweep")
+            base = base2
+            todo = [r for r in runs if r["name"] not in rows and (not only or r["name"] in only)]
+            if (out / "STOP").exists():
+                lg("sweep: STOP file found; stopping")
+                break
+            if not todo:
+                idle_since = idle_since or time.monotonic()
+                if time.monotonic() - idle_since >= follow_idle_s:
+                    break
+                time.sleep(30)
+                continue
+            idle_since = None
+            r = todo[0]
+            rows[r["name"]] = one(r, base)
+            write(runs)
+    paths = plot_sweep([rows[r["name"]] for r in runs if r["name"] in rows], out / "sweep",
+                       title=spec.get("title") or "Supervised sweep")
     lg(f"sweep: {len(rows)} runs -> {out / 'sweep.json'}, {out / 'sweep.csv'}, " + ", ".join(map(str, paths)))
-    return rows
+    return list(rows.values())
 
 
 def _write_sweep(out: Path, rows: list, base: dict) -> None:
@@ -2545,6 +2588,8 @@ def main(argv=None) -> int:
     s.add_argument("--only", default=None, help="comma-separated run names")
     s.add_argument("--bench-seconds", type=float, default=2.0)
     s.add_argument("--plot-only", action="store_true", help="redraw the plot from sweep.json")
+    s.add_argument("--follow", action="store_true", help="re-read the spec before each run (add runs as it goes)")
+    s.add_argument("--follow-idle", type=float, default=0.0, help="with --follow: seconds to wait for new runs")
     b = sub.add_parser("bench-speed", help="evaluations / s of a checkpoint or config")
     b.add_argument("--checkpoint", type=Path, default=None)
     b.add_argument("--config", type=Path, default=None)
@@ -2581,6 +2626,7 @@ def main(argv=None) -> int:
         if args.tables_dir:
             over["tables_dir"] = str(args.tables_dir)
         run_sweep(args.spec, args.out, overrides=over, only=args.only.split(",") if args.only else None,
+                  follow=args.follow, follow_idle_s=args.follow_idle,
                   bench_seconds=args.bench_seconds)
     elif args.cmd == "bench-speed":
         dev = pick_device(args.device or "auto")

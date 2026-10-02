@@ -1,16 +1,16 @@
-# Experiment #4, stage 2, round 2 (docs/018): the sweep's fixes combined. Round 1 (exp4_sweep.yml) found
-# MageZero's default (2 post-LN layers, width 512, N(0, 1) embedding rows, lr 3e-4) trains unstably:
-# lr 1e-4 helped every head, an embedding init of std 0.02 helped the attack and value heads, pre-LN
-# helped the policy, a longer warm-up alone did nothing, and the 1-layer, width-256 and MLP networks beat
-# the default. Same data, vocab, validation rows and budget as round 1 (one epoch of the 10% subset), so
-# the two rounds compare directly.
+# Experiment #4, stage 2, round 2 (docs/018): a hill climb around round 1's leaders, run with --follow so
+# runs can be added and reordered while it goes (the sweep re-reads this file before every run).
 #
 #   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_r2.yml --out runs/exp4/sweep_r2 \
-#       --tables-dir data/imitation_scale/h5
+#       --tables-dir data/imitation_scale/h5 --follow --follow-idle 7200
 #
-# The reference is round 2's `ref`: MageZero's shape (it loads into MageZero's server unchanged) at
-# lr 1e-4 with the 0.02 embedding init, with a second seed for the noise band.
-title: "Experiment #4 sweep, round 2: the round-1 fixes combined"
+# Round 1 (exp4_sweep.yml): MageZero's default (2 post-LN layers, width 512, N(0, 1) embedding rows,
+# lr 3e-4) trains unstably. 1 layer, width 256 and lr 1e-4 each beat it; pre-LN, a 0.02 embedding init and
+# a 3k warm-up together ("modern") made 2 layers as good as 1. The MLP was close and ~24x faster.
+#
+# The base here, c0, combines them: 1 layer, width 512, pre-LN, embedding std 0.02, 3k warm-up, lr 3e-4.
+# Same data, vocab, validation rows and budget (one epoch of the 10% subset) as round 1.
+title: "Experiment #4 sweep, round 2: a hill climb around 1 layer with the round-1 fixes"
 base:
   tables:
     - {name: turnstart, kind: priority_set}
@@ -24,42 +24,39 @@ base:
   max_epochs: 1.0
   time_budget_s: 7200
   eval_every_s: null
-  eval_every_steps: 5169      # quarter epochs, as round 1's later runs
+  eval_every_steps: 5169      # quarter epochs
   ckpt_every_s: null
   latest_every_s: 300
   patience_epochs: null
   value_per_game: 4
-  lr: 1.0e-4                  # round 1: better than 3e-4 on every head
-  emb_init_std: 0.02          # round 1: fixes the attack and value heads at 3e-4
+  arch: {layers: 1, norm_first: true}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 3.0e-4
 runs:
-  # the reference and its noise band
-  - {name: ref, role: default, seed: 0}
-  - {name: ref-seed1, role: default, seed: 1}
-  # a value tower: does a value head with its own features help both heads (round 1: value weight 0.1 helped
-  # the policy and hurt the value, so the shared trunk trades one against the other)?
-  - {name: value-tower, arch: {value_tower: true, value_layers: 1}}
-  # pre-LN at the lower learning rate, and at a higher one (pre-LN tolerates more)
-  - {name: pre-ln, arch: {norm_first: true}}
-  - {name: pre-ln-lr-5e-4, arch: {norm_first: true}, lr: 5.0e-4, warmup_steps: 2000}
-  # the small networks of round 1 at the fixed recipe
-  - {name: layers-1, arch: {layers: 1}}
-  - {name: width-256, arch: {width: 256}}
-  # more 1-layer networks (round 1's best, tried in one configuration only): its own learning rate with the
-  # init fix, wider, a value tower, and SwiGLU with attention pooling
-  - {name: layers-1-lr-3e-4, arch: {layers: 1}, lr: 3.0e-4}
-  - {name: layers-1-w1024, arch: {layers: 1, width: 1024}}
-  - {name: layers-1-value-tower, arch: {layers: 1, value_tower: true, value_layers: 1}}
-  - {name: layers-1-swiglu-attnpool, arch: {layers: 1, ffn: swiglu, pool: attn}}
-  # the MLP: a higher learning rate (pre-norm residual blocks), and a bigger one
-  - {name: mlp-lr-1e-3, arch: {type: mlp}, lr: 1.0e-3}
-  - {name: mlp-wide, arch: {type: mlp, width: 1024, layers: 4}, lr: 3.0e-4}
-  # the learning-rate schedule around the reference
-  - {name: lr-2e-4, lr: 2.0e-4}
-  - {name: cosine-2e-4, lr: 2.0e-4, lr_schedule: cosine, warmup_steps: 1000}
-  # less dropout: one epoch is far from overfitting, and 30% token dropout slows learning
-  - {name: token-dropout-0.1, token_dropout: 0.1}
-  - {name: no-dropout, token_dropout: 0.0, arch: {dropout: 0.0, pool_dropout: 0.0}}
-  # transformer variants
-  - {name: swiglu-attnpool, arch: {ffn: swiglu, pool: attn}}
-  # depth, now that it might train
-  - {name: layers-4-pre-ln, arch: {layers: 4, norm_first: true}}
+  # the combination, and its learning rate
+  - {name: c0, role: default, seed: 0}
+  - {name: c0-lr-1e-4, lr: 1.0e-4}
+  - {name: c0-lr-6e-4, lr: 6.0e-4}
+  # width: down to where it underfits, and up
+  - {name: c0-w256, arch: {width: 256}}
+  - {name: c0-w128, arch: {width: 128}}
+  - {name: c0-w1024, arch: {width: 1024}}
+  - {name: c0-w256-lr-6e-4, arch: {width: 256}, lr: 6.0e-4}
+  # depth back up, small and modern
+  - {name: l2-w256, arch: {layers: 2, width: 256}}
+  # MLPs (mean-pooled bag of features + residual blocks; ~24x the transformer's inference speed)
+  - {name: mlp-lr-1e-3, arch: {type: mlp, layers: 2}, lr: 1.0e-3}
+  - {name: mlp-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}}
+  - {name: mlp-w256-lr-1e-3, arch: {type: mlp, layers: 2, width: 256}, lr: 1.0e-3}
+  - {name: mlp-b4-lr-1e-3, arch: {type: mlp, layers: 4}, lr: 1.0e-3}
+  - {name: mlp-nodrop-lr-1e-3, arch: {type: mlp, layers: 2, dropout: 0.0, pool_dropout: 0.0}, lr: 1.0e-3, token_dropout: 0.1}
+  # regularisation and tricks on c0
+  - {name: c0-token-dropout-0.1, token_dropout: 0.1}
+  - {name: c0-value-tower, arch: {value_tower: true, value_layers: 1}}
+  - {name: c0-swiglu-attnpool, arch: {ffn: swiglu, pool: attn}}
+  - {name: c0-cosine-6e-4, lr: 6.0e-4, lr_schedule: cosine}
+  # the noise band, and the best guess in MageZero's shape (no server change: 2 post-LN layers, width 512)
+  - {name: c0-seed1, role: default, seed: 1}
+  - {name: mz-shape-lr-1e-4, arch: {layers: 2, norm_first: false}, lr: 1.0e-4, warmup_steps: 300}
+  - {name: c0-w64, arch: {width: 64}}
