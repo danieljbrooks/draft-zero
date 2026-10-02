@@ -297,7 +297,7 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `hw-ref (second machine)` | the leader rerun on the second machine: does other hardware reproduce round 2? | every measure within 0.001 of `v16-td-cosine-1e-4`, except targets (0.554 against 0.547); 3.4× the training speed | passed: results from the two machines mix |
 | `act-opp-3` | the passivity fix: ×3 on the policy loss of the opponent's-turn rows where the human acted | Pass on top in the opponent's turn 0.938 (humans 0.934, leader 0.971); non-Pass 0.796 (+0.004), NLL 0.281 (−0.007), other heads unchanged | **the new leader:** human-like passing and a better policy; tested at 30% next (`s30-l1-act3`) |
 | `td-0.90, td-0.975, td-0.99` | TD(λ) around the leader's 0.95 (Dan, 20:45): lower bootstraps more, higher is closer to the plain result | value AUC / log-loss / set NLL / non-Pass by λ: 0.90: 0.732 / 0.610 / **0.285** / 0.793; 0.95 (leader): 0.739 / 0.599 / 0.287 / 0.792; 0.975: 0.745 / 0.587 / 0.289 / 0.792; 0.99: **0.749** / **0.583** / 0.292 / 0.786; 1 (the plain result, `v16-cosine-1e-4`): 0.749 / 0.592 / 0.297 / 0.787 | a clean, monotone trade: lower λ helps the policy, higher the value; the plain result has the worst policy. 0.975 and 0.99 are within noise of each other; the candidate recipe takes 0.99 (Dan: a game has ~75 decisions, and 0.95 bootstraps from ~20 ahead) |
-| `ep3` | the leader for three epochs of the 10% subset (the 30% run's step count): data or steps? | *queued* |  |
+| `ep3` | the leader for three epochs of the 10% subset (the 30% run's step count): data or steps? | three epochs of 10% against one of 30% (the same steps): non-Pass 0.807 / 0.808, NLL 0.269 / 0.262, targets 0.619 / 0.618, value AUC 0.747 / 0.758, log-loss 0.597 / 0.569 | the policy wants steps (repeats recover most of its gain), the value head wants new games (repeats give it nothing): stage 3 can run 2–3 epochs, taking the value checkpoint early |
 | `act3-td99, act3-td975` | do the passivity fix and TD(0.99) stack? (0.975 alongside; 0.99 also at 30% as `s30-l1-act3-td99`, the candidate stage-3 recipe) | *queued* |  |
 | `act-opp-10, act-all-3` | the passivity fix stronger (×10), and on all three priority tables (×3) | *queued* |  |
 | `x-l2, x-l4, x-mlp, x-mlp-w1024-b4` | capacity on the current leader's recipe | *queued* |  |
@@ -441,6 +441,24 @@ the two already run (λ = 1 is the plain result):
 (+0.003). It led at a quarter epoch (NLL 0.313 against 0.322) and fell behind by half. It also costs half the
 inference speed (2,825 evaluations a second against 5,482) and twice the training time. Width 1024, the MLP and
 4 layers follow at 30%.
+
+**Data or steps: the policy wants steps, the value head wants games (21:40).** `ep3` ran the leader for three
+epochs of the 10% subset, the same 62k steps as `s30-l1`'s one epoch of 30%:
+
+| | Non-Pass top-1 | Set NLL | Attack | Block | Targets | Value AUC | Value log-loss |
+|---|---|---|---|---|---|---|---|
+| 10%, one epoch (`hw-ref`) | 0.792 | 0.287 | 0.813 | 0.703 | 0.554 | 0.739 | 0.599 |
+| 10%, three epochs (`ep3`) | 0.807 | 0.269 | 0.822 | 0.713 | **0.619** | 0.747 | 0.597 |
+| 30%, one epoch (`s30-l1`) | **0.808** | **0.262** | **0.830** | **0.716** | 0.618 | **0.758** | **0.569** |
+
+- **Repeating the games recovers most of the policy's gain:** all of the non-Pass and targets gain, and 0.018 of
+  the 0.025 in set NLL. The policy is limited by training steps more than by data at this scale.
+- **The value head gets nothing from repeats:** its log-loss stays at 0.597 against 0.569 with new games, and its
+  training loss (0.44) sits far below validation, the memorisation round 2 saw with every-position value training.
+- **For stage 3 (all 10.9M rows, 10× this subset):** a second or third epoch should still help the policy, while
+  the value head should peak in about the first. The trainer already keeps the best checkpoint per measure, so
+  stage 3 can run 2–3 epochs (about 75 minutes each on the second machine) and take the policy and value
+  checkpoints where each peaks, or lower the value positions per game after the first epoch.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
