@@ -357,7 +357,15 @@ Blackwell GPUs, a 24-core quota, a 40 GiB RAM limit), the 30% check on one GPU a
   against the humans' 93%. `act_weights` multiplies the policy loss of the rows where the human acted (×3 and
   ×10 on the opponent's-turn table, and ×3 on all three priority tables).
 
-The RunPod 3090 finishes round 2's 10% queue (2 and 4 layers, two MLPs), then is removed. Training stays on
+**The hardware check passed (20:30).** Round 2's leader rerun on the second machine's 300 W GPU: non-Pass
+0.792, NLL 0.287, attack 0.813, block 0.703, value AUC 0.739, log-loss 0.599, against 0.792, 0.287, 0.813,
+0.704, 0.739 and 0.599 on the RunPod 3090. Spell targets, the smallest and noisiest table, differ by 0.007
+(0.554 against 0.547). Training took 7.4 minutes against ~27 (3,370 samples a second against ~1,000), and
+inference ran at 5,203 evaluations a second against 2,156. Results from the two machines mix.
+
+So the RunPod 3090 stops after its running run (`v16-l2`, 2 layers on the earlier lr-5e-5 recipe) and is
+removed; round 2's remaining capacity runs move to the faster machine, on the current leader's recipe
+(`x-l2`, `x-l4`, `x-mlp`, `x-mlp-w1024-b4`). Training stays on
 the GPUs; the game stages (4–7) go to RunPod Community pods, since the second machine's RAM can't hold many
 game JVMs. The lr-3e-4 backstop is dropped and the remaining tricks are deferred.
 
