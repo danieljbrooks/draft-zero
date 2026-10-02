@@ -271,8 +271,8 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `c0-lr-2e-5` | lower still: the trend 6e-4 < 3e-4 < 1e-4 < 5e-5 continues | non-Pass 0.763, NLL 0.333 (+0.028 against lr 5e-5), target 0.498 (−0.036), value AUC 0.731 | rejected: too low for one epoch; the best rate at this budget is 5e-5 to 1e-4 |
 | `l5e5-vpg16` | the two winners combine: lr 5e-5 and 16 value positions a game | non-Pass 0.786 (+0.002), NLL 0.295 (=), attack 0.808 (+0.003), target 0.547 (−0.027), value AUC 0.744 (+0.009), log-loss 0.603 (−0.014) against l1e4-vpg16 | **the leader** (a tie on the policy, the best value head yet); 5e-5 and 1e-4 are interchangeable for the policy |
 | `l5e5-vpg-all` | more value positions help further: the value loss on every position | non-Pass 0.792 (+0.006), NLL 0.288 (−0.007), block 0.707 (+0.010); value AUC 0.698 (−0.046), log-loss 0.846 (+0.243) against l5e5-vpg16. The value log-loss was 0.606 at a quarter epoch, then rose as its training loss fell (0.547 to 0.365) | the policy's best yet, but the value head memorises games (one result per game). Keep 16; try the middle |
-| `l5e5-w256` | width 256 is enough at the best learning rate (underfitting probe; 4 value positions) | *running* |  |
-| `l5e5-vpg32` | 32 value positions a game keeps most of every-position's policy gain without the value head overfitting | *queued (next)* |  |
+| `l5e5-w256` | width 256 is enough at the best learning rate (underfitting probe; 4 value positions) | non-Pass 0.771 (−0.004), NLL 0.320 (+0.015), attack 0.791 (−0.012), value log-loss 0.671 (+0.026) against width 512 at the same settings; inference 2.5x faster | slightly worse everywhere: the underfitting knee for 1 layer is near width 256 at this budget |
+| `l5e5-vpg32` | 32 value positions a game keeps most of every-position's policy gain without the value head overfitting | *running* |  |
 | `l5e5-vpg16-aux` | a turns-left head (a target that varies within a game, so it can't be memorised per game) helps the shared trunk too | *queued* |  |
 
 <!-- r2-board -->
@@ -288,8 +288,9 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | 5 | `c0-lr-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001, emb std 0.02, warm-up 3000 | 0.753 | 0.315 | 0.795 | 0.700 | 0.550 | 0.734 | 0.636 | 98.3% | 2,157 |
 | 6 | `c0` | transformer, 1 layer, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.760 | 0.316 | 0.780 | 0.688 | 0.554 | 0.701 | 0.655 | 97.8% | 2,144 |
 | 7 | `c0-cosine-3e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0003 cosine, emb std 0.02, warm-up 3000 | 0.766 | 0.319 | 0.792 | 0.691 | 0.551 | 0.712 | 0.654 | 99.8% | 2,151 |
-| 8 | `c0-lr-2e-5` | transformer, 1 layer, width 512, pre-LN, lr 2e-05, emb std 0.02, warm-up 3000 | 0.763 | 0.333 | 0.791 | 0.689 | 0.498 | 0.731 | 0.671 | 99.8% | 2,141 |
-| 9 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
+| 8 | `l5e5-w256` | transformer, 1 layer, width 256, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.771 | 0.320 | 0.791 | 0.694 | 0.542 | 0.731 | 0.671 | 99.5% | 5,374 |
+| 9 | `c0-lr-2e-5` | transformer, 1 layer, width 512, pre-LN, lr 2e-05, emb std 0.02, warm-up 3000 | 0.763 | 0.333 | 0.791 | 0.689 | 0.498 | 0.731 | 0.671 | 99.8% | 2,141 |
+| 10 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/018-sweep-r2-dark.png">
