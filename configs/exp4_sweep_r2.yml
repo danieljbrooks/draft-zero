@@ -44,6 +44,10 @@ runs:
   - {name: c0-cosine-3e-4, lr: 3.0e-4, lr_schedule: cosine}
   # 11:21: lr 6e-4 is worse (NLL +0.020, attack −0.032): lower keeps winning, so try lower still next
   - {name: c0-lr-5e-5, lr: 5.0e-5}
+  # 11:47: cosine from 3e-4 gives the best non-Pass top-1 (0.766) but a worse value (AUC 0.712): the value head
+  # wants small constant steps. Maybe it's starved of data instead: it trains on only 4 positions a game
+  # an epoch (value_per_game), ~58k value samples in this epoch. Give it 4x as many on the leader.
+  - {name: l1e4-vpg16, lr: 1.0e-4, value_per_game: 16}
   # the width probes and the tricks, re-based on the leader (lr 1e-4)
   - {name: l1e4-w256, lr: 1.0e-4, arch: {width: 256}}
   - {name: l1e4-w1024, lr: 1.0e-4, arch: {width: 1024}}
