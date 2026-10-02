@@ -436,6 +436,12 @@ the two already run (λ = 1 is the plain result):
   to 0.262, repeating data is nearly as good as new data and stage 3 can train several epochs; if not, the
   gain is the data, and stage 3 should see all of it with few repeats.
 
+**Two layers don't pay at 30% either (21:33).** `s30-l2` against `s30-l1`: non-Pass 0.798 (−0.010), set NLL
+0.268 (+0.006), attack 0.829, block 0.712 (−0.004), targets 0.619, value AUC 0.756 (−0.002), log-loss 0.572
+(+0.003). It led at a quarter epoch (NLL 0.313 against 0.322) and fell behind by half. It also costs half the
+inference speed (2,825 evaluations a second against 5,482) and twice the training time. Width 1024, the MLP and
+4 layers follow at 30%.
+
 ## Stage 4: cheap evaluation (sb-v2)
 
 *In progress. The heuristic bot needs no network, so it runs while stages 1–3 do.*
