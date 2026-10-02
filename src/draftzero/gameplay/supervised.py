@@ -138,7 +138,9 @@ POLICY_KINDS = ("priority_set", "priority_onehot", "target")      # tables with 
 PRIORITY_KINDS = ("priority_set", "priority_onehot")
 SOFT_HEADS = {0: "priority", 3: "target", 5: "binary"}             # soft tables' meta/atype -> head
 FREEZABLE = ("trunk", "policy", "value")
-AUX_TARGETS = {"turns_left": 10.0, "life_diff": 20.0}              # name -> scale the head predicts in
+AUX_TARGETS = {"turns_left": 10.0, "life_diff": 20.0,             # name -> scale the head predicts in
+               "result": 1.0}  # the game's result on every row: a throwaway head that feeds the trunk the
+                               # outcome signal while the value head keeps value_per_game positions a game
 TURN_BUCKETS = (((1, 2), "1-2"), ((3, 4), "3-4"), ((5, 6), "5-6"), ((7, 9), "7-9"), ((10, 10 ** 9), "10+"))
 
 ARCH_DEFAULT = {"type": "transformer", "layers": 2, "width": 512, "ff": None, "heads": 4, "head_hidden": 256,
@@ -1130,6 +1132,9 @@ def load_data(cfg: dict, *, vocab=None, splits: tuple = ("train", "val"), log=pr
     if "turns_left" in cfg["aux_targets"]:
         _turns_left_proxy(train)
         _turns_left_proxy(val)
+    if "result" in cfg["aux_targets"]:
+        for t in train + val:
+            t.aux["result"] = t.z.astype(np.float32)
     for a in cfg["aux_targets"]:
         if not any(a in t.aux for t in train + val):
             log(f"supervised: WARNING aux target {a} is in no table (life_diff needs a meta/final_life_diff column): "

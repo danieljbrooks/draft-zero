@@ -637,3 +637,13 @@ def test_sweep_follow_picks_up_runs_added_while_it_runs(tables, tmp_path):
     log = (out / "sweep.log").read_text()
     assert log.count("data loaded") == 1 and "STOP file found" in log
     assert [r["name"] for r in json.loads((out / "sweep.json").read_text())["runs"]] == ["b", "a"]   # the spec's order
+
+
+def test_result_aux_head_trains_on_every_row(tables, tmp_path):
+    cfg = tiny_cfg(tables, max_steps=6, aux_targets=["result"], aux_weight=0.5, value_per_game=1)
+    data = sv.load_data(sv.resolve_config(cfg), log=lambda *_: None)
+    t = data.train[0]
+    assert np.array_equal(t.aux["result"], t.z)                 # every row carries its game's result
+    s = sv.train(cfg, tmp_path / "r", data=data, log=lambda *_: None)
+    assert s["step"] == 6
+    assert sv.load_any_checkpoint(tmp_path / "r" / "final.pt.gz")[2]["aux"].names == ["result"]

@@ -61,6 +61,10 @@ runs:
   # memorises games (log-loss 0.606 at a quarter epoch, 0.846 at the end). Try the middle, and a within-game target.
   - {name: l5e5-vpg32, lr: 5.0e-5, value_per_game: 32}
   - {name: l5e5-vpg16-aux, lr: 5.0e-5, value_per_game: 16, aux_targets: [turns_left]}
+  # 14:49: 32 value positions overfits the value head too (log-loss 0.591 at half an epoch, 0.648 at the end) for a
+  # policy gain within noise: 16 is the value head's sweet spot. Decouple: a throwaway "result" head on every
+  # position feeds the trunk the outcome signal (as every-position did for the policy), the value head keeps 16.
+  - {name: l5e5-vpg16-auxres, lr: 5.0e-5, value_per_game: 16, aux_targets: [result], aux_weight: 0.5}
   # the rest re-based on the leader, l5e5-vpg16 (lr 5e-5, 16 value positions a game)
   - {name: v16-w1024, lr: 5.0e-5, value_per_game: 16, arch: {width: 1024}}
   - {name: v16-w128, lr: 5.0e-5, value_per_game: 16, arch: {width: 128}}
