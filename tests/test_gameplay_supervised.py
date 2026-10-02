@@ -324,7 +324,10 @@ def _raw(p: Path) -> dict:
 
 
 @pytest.mark.parametrize("arch", [{"layers": 1, "width": 64}, {"layers": 4, "width": 256},
-                                  {"type": "mlp", "layers": 2, "width": 64}, {"layers": 2, "width": 64, "norm_first": True}])
+                                  {"type": "mlp", "layers": 2, "width": 64}, {"layers": 2, "width": 64, "norm_first": True},
+                                  {"layers": 1, "width": 64, "ffn": "swiglu"},
+                                  {"layers": 1, "width": 64, "pool": "attn", "norm_first": True},
+                                  {"layers": 1, "width": 64, "value_tower": True, "value_layers": 2}])
 def test_non_default_architectures_rebuild_from_the_saved_arch(tmp_path, arch):
     vocab = _vocab(30)
     torch.manual_seed(1)
@@ -332,13 +335,13 @@ def test_non_default_architectures_rebuild_from_the_saved_arch(tmp_path, arch):
     a = sv.full_arch(arch)
     assert not sv.magezero_loadable(a) and a["ff"] == 2 * a["width"]
     p = tmp_path / "x.pt.gz"
-    sv.save_weights(p, m, vocab, a, aux=sv.AuxHeads(a["width"], ["turns_left"]))
+    sv.save_weights(p, m, vocab, a, aux=sv.AuxHeads(sv.emb_width(a), ["turns_left"]))
     m2, _, meta = sv.load_any_checkpoint(p)
     assert meta["arch"] == a and meta["aux"] is not None and not meta["magezero_loadable"]
     idx, off = torch.tensor([0, 5, 7, 1, 2, 9]), torch.tensor([0, 2, 4])
     for o1, o2 in zip(m(idx, off), m2(idx, off)):
         assert torch.allclose(o1, o2, atol=1e-6)
-    with pytest.raises(RuntimeError):            # MageZero's own loader builds the default network
+    with pytest.raises((RuntimeError, KeyError)):    # MageZero's own loader builds the default network
         im.load_checkpoint(p)
 
 
@@ -361,6 +364,28 @@ def test_pre_ln_and_embedding_init_options(tables, tmp_path):
     assert s["step"] == 12
     m2, _, meta = sv.load_any_checkpoint(tmp_path / "m" / "final.pt.gz")
     assert meta["arch"]["norm_first"] and not meta["magezero_loadable"]
+
+
+def test_extended_transformer_trains_with_a_value_tower(tables, tmp_path):
+    vocab = _vocab(40)
+    arch = {**TINY, "ffn": "swiglu", "pool": "attn", "norm_first": True, "value_tower": True}
+    m = sv.build_model(arch, len(vocab), vocab=vocab, emb_std=0.02)
+    assert isinstance(m, sv.TransformerNetX) and not sv.magezero_loadable(arch)
+    assert torch.equal(m.embedding.weight, m.value_tower.embedding.weight)      # both towers start from the same rows
+    idx, off = torch.tensor([0, 5, 7, 1, 2, 9]), torch.tensor([0, 2, 4])
+    emb = sv.encode(m.eval(), idx, off)
+    assert emb.shape == (3, 2 * sv.full_arch(arch)["width"]) == (3, sv.emb_width(arch))
+    # the policy heads read the policy tower's half only: a value-tower change leaves them as they are
+    pa = m.player_priority_head(emb)
+    emb2 = emb.clone()
+    emb2[:, sv.full_arch(arch)["width"]:] += 1.0
+    assert torch.equal(m.player_priority_head(emb2), pa) and not torch.equal(m.value_head(emb2), m.value_head(emb))
+    log = lambda *_: None                                           # noqa: E731
+    s = sv.train(tiny_cfg(tables, max_steps=10, emb_init_std=0.02, arch=arch, aux_targets=["turns_left"]),
+                 tmp_path / "x", log=log)
+    assert s["step"] == 10
+    m2, _, meta = sv.load_any_checkpoint(tmp_path / "x" / "final.pt.gz")
+    assert isinstance(m2, sv.TransformerNetX) and meta["aux"] is not None and meta["arch"]["value_tower"]
 
 
 @pytest.mark.skipif(not GEN0_2B.exists(), reason="experiment #2b's checkpoint is not in the HF cache")

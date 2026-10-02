@@ -143,7 +143,11 @@ TURN_BUCKETS = (((1, 2), "1-2"), ((3, 4), "3-4"), ((5, 6), "5-6"), ((7, 9), "7-9
 
 ARCH_DEFAULT = {"type": "transformer", "layers": 2, "width": 512, "ff": None, "heads": 4, "head_hidden": 256,
                 "policy_width": im.A_DIM, "dropout": 0.1, "pool_dropout": 0.2,
-                "norm_first": False}   # pre-LayerNorm layers and a final LayerNorm (MageZero's are post-LN)
+                "norm_first": False,   # pre-LayerNorm layers and a final LayerNorm (MageZero's are post-LN)
+                "ffn": "relu",         # relu (MageZero's) | swiglu (gated, 2/3 x ff hidden units: about the same size)
+                "pool": "mean",        # mean (MageZero's) | attn (a learned query attends over the tokens)
+                "value_tower": False,  # the value head on its own embedding + layers (value_layers, default layers)
+                "value_layers": None}
 DEFAULT_TABLES = [{"name": "turnstart", "kind": "priority_set"},
                   {"name": "replay_priority", "kind": "priority_set"},
                   {"name": "replay_attack", "kind": "binary"}]
@@ -220,10 +224,23 @@ def full_arch(arch: dict | None, materialize: bool = True) -> dict:
         raise ValueError(f"arch.type must be transformer or mlp, not {a['type']!r}")
     if a["ff"] is None and materialize:
         a["ff"] = 2 * int(a["width"])
-    for k in ("layers", "width", "ff", "heads", "head_hidden", "policy_width"):
+    for k in ("layers", "width", "ff", "heads", "head_hidden", "policy_width", "value_layers"):
         if a[k] is not None:
             a[k] = int(a[k])
+    if a["ffn"] not in ("relu", "swiglu") or a["pool"] not in ("mean", "attn"):
+        raise ValueError(f"arch.ffn must be relu or swiglu and arch.pool mean or attn: {a['ffn']!r}, {a['pool']!r}")
     return a
+
+
+def extended_transformer(a: dict) -> bool:
+    """A transformer TransformerNetX builds: any option beyond depth, width and pre-LN."""
+    return a["type"] == "transformer" and (a["ffn"] != "relu" or a["pool"] != "mean" or bool(a["value_tower"]))
+
+
+def emb_width(arch: dict) -> int:
+    """The pooled embedding's width: two towers' worth with a value tower."""
+    a = full_arch(arch)
+    return a["width"] * (2 if a["value_tower"] and a["type"] == "transformer" else 1)
 
 
 def magezero_loadable(arch: dict | None) -> bool:
@@ -232,7 +249,7 @@ def magezero_loadable(arch: dict | None) -> bool:
     a = full_arch(arch)
     return (a["type"] == "transformer" and a["layers"] == 2 and a["width"] == 512 and a["ff"] == 1024
             and a["heads"] == 4 and a["head_hidden"] == 256 and a["policy_width"] == im.A_DIM
-            and not a["norm_first"])
+            and not a["norm_first"] and not extended_transformer(a))
 
 
 def _table_spec(t: dict, i: int) -> dict:
@@ -455,6 +472,125 @@ class BagMLPNet(_HeadsMixin, nn.Module):
         return self._outputs(self.encode(indices, offsets))
 
 
+def _padded(indices, offsets, num_embeddings: int, pad_to: int | None = None):
+    """(padded ids [B, L], mask [B, L]) as imitation.trunk pads: to `pad_to`, else the next bucket."""
+    indices = indices % num_embeddings
+    ends = torch.cat([offsets[1:], torch.tensor([indices.shape[0]], device=offsets.device)])
+    lengths = ends - offsets
+    max_len = pad_to or im.bucket_len(int(lengths.max().item()))
+    lengths = lengths.clamp(max=max_len)
+    ar = torch.arange(max_len, device=indices.device)
+    mask = ar.unsqueeze(0) < lengths.unsqueeze(1)
+    pos = offsets.unsqueeze(1) + ar.unsqueeze(0)
+    return torch.where(mask, indices[pos.clamp(max=indices.shape[0] - 1)], torch.zeros_like(pos)), mask
+
+
+class _Block(nn.Module):
+    """A transformer layer, post- or pre-LN, with a ReLU or SwiGLU feed-forward."""
+
+    def __init__(self, d: int, heads: int, ff: int, p: float, norm_first: bool, swiglu: bool):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(d, heads, dropout=p, batch_first=True)
+        self.norm1, self.norm2 = nn.LayerNorm(d), nn.LayerNorm(d)
+        h = max(1, int(2 * ff / 3)) if swiglu else ff
+        self.w1, self.w2 = nn.Linear(d, h), nn.Linear(h, d)
+        self.w3 = nn.Linear(d, h) if swiglu else None
+        self.drop = nn.Dropout(p)
+        self.norm_first = norm_first
+
+    def _ff(self, x):
+        h = F.silu(self.w1(x)) * self.w3(x) if self.w3 is not None else F.relu(self.w1(x))
+        return self.w2(self.drop(h))
+
+    def _sa(self, x, pad):
+        return self.attn(x, x, x, key_padding_mask=pad, need_weights=False)[0]
+
+    def forward(self, x, pad):
+        if self.norm_first:
+            x = x + self.drop(self._sa(self.norm1(x), pad))
+            return x + self.drop(self._ff(self.norm2(x)))
+        x = self.norm1(x + self.drop(self._sa(x, pad)))
+        return self.norm2(x + self.drop(self._ff(x)))
+
+
+class _AttnPool(nn.Module):
+    """A learned query attends over the state's tokens (Set Transformer's PMA with one seed)."""
+
+    def __init__(self, d: int, heads: int):
+        super().__init__()
+        self.query = nn.Parameter(torch.randn(1, 1, d) * 0.02)
+        self.attn = nn.MultiheadAttention(d, heads, batch_first=True)
+        self.norm = nn.LayerNorm(d)
+
+    def forward(self, x, mask):
+        q = self.query.expand(x.shape[0], -1, -1)
+        return self.norm(self.attn(q, x, x, key_padding_mask=~mask, need_weights=False)[0].squeeze(1))
+
+
+class _Tower(nn.Module):
+    """Embedding, transformer layers and pooling: a state's tokens to one vector."""
+
+    def __init__(self, num_embeddings: int, a: dict, layers: int):
+        super().__init__()
+        d = a["width"]
+        self.embedding = nn.Embedding(num_embeddings, d)
+        self.blocks = nn.ModuleList([_Block(d, a["heads"], a["ff"], a["dropout"], bool(a["norm_first"]),
+                                            a["ffn"] == "swiglu") for _ in range(layers)])
+        self.final_norm = nn.LayerNorm(d) if a["norm_first"] else nn.Identity()
+        self.pool = _AttnPool(d, a["heads"]) if a["pool"] == "attn" else None
+        self.dropout = nn.Dropout(a["pool_dropout"])
+
+    def forward(self, indices, offsets, pad_to=None):
+        padded, mask = _padded(indices, offsets, self.embedding.num_embeddings, pad_to)
+        x = self.embedding(padded)
+        for b in self.blocks:
+            x = b(x, ~mask)
+        x = self.final_norm(x)
+        if self.pool is not None:
+            p = self.pool(x, mask)
+        else:
+            p = (x * mask.unsqueeze(-1)).sum(1) / mask.sum(1).clamp(min=1).unsqueeze(-1).float()
+        return self.dropout(p)
+
+
+class _Slice(nn.Module):
+    def __init__(self, a: int, b: int):
+        super().__init__()
+        self.a, self.b = a, b
+
+    def forward(self, x):
+        return x[..., self.a:self.b]
+
+
+class TransformerNetX(_HeadsMixin, nn.Module):
+    """Transformer variants beyond MageZero's layer (docs/018, stage 2's second round): a SwiGLU
+    feed-forward, attention pooling, and a value tower (the value head on its own embedding and
+    layers, so its loss doesn't shape the policy's features). The pooled embedding is the towers'
+    outputs side by side, and each head reads its own part, so the trainer's code is unchanged."""
+
+    def __init__(self, num_embeddings: int, arch: dict):
+        super().__init__()
+        a = full_arch(arch)
+        d = a["width"]
+        self.tower = _Tower(num_embeddings, a, a["layers"])
+        self.embedding = self.tower.embedding           # the policy tower's: embedding init, embed_dim
+        self.value_tower = _Tower(num_embeddings, a, a["value_layers"] or a["layers"]) if a["value_tower"] else None
+        self._make_heads(d, a)
+        if self.value_tower is not None:
+            for name in ("player_priority_head", "opponent_priority_head", "target_head", "binary_head"):
+                setattr(self, name, nn.Sequential(_Slice(0, d), *getattr(self, name)))
+            self.value_head = nn.Sequential(_Slice(d, 2 * d), *self.value_head)
+
+    def encode(self, indices, offsets, pad_to=None):
+        e = self.tower(indices, offsets, pad_to)
+        if self.value_tower is not None:
+            e = torch.cat([e, self.value_tower(indices, offsets, pad_to)], -1)
+        return e
+
+    def forward(self, indices, offsets):
+        return self._outputs(self.encode(indices, offsets))
+
+
 class AuxHeads(nn.Module):
     """Auxiliary regression heads on the pooled embedding. Saved under `aux_state_dict`, outside
     model_state_dict, so MageZero's server still loads the network."""
@@ -483,6 +619,8 @@ def build_model(arch: dict, num_embeddings: int, vocab=None, emb_std: float | No
     if magezero_loadable(a):
         m = im.new_net(num_embeddings, a["policy_width"])
         _set_dropouts(m, a)
+    elif extended_transformer(a):
+        m = TransformerNetX(num_embeddings, a)
     elif a["type"] == "transformer":
         m = TransformerNet(num_embeddings, a)
     else:
@@ -491,7 +629,10 @@ def build_model(arch: dict, num_embeddings: int, vocab=None, emb_std: float | No
         from magezero.vocab import initial_rows
         with torch.no_grad():
             rows = torch.as_tensor(initial_rows(vocab.ids, a["width"]))
-            m.embedding.weight.copy_(rows * float(emb_std) if emb_std is not None else rows)
+            rows = rows * float(emb_std) if emb_std is not None else rows
+            m.embedding.weight.copy_(rows)
+            if getattr(m, "value_tower", None) is not None:
+                m.value_tower.embedding.weight.copy_(rows)
     return m
 
 
@@ -513,6 +654,8 @@ def encode(model, idx, off, pad_to: int | None = None):
     batch's padded length, known on the CPU) spares imitation.trunk a GPU sync to find it."""
     if isinstance(model, BagMLPNet):
         return model.encode(idx, off)
+    if isinstance(model, TransformerNetX):
+        return model.encode(idx, off, pad_to)
     return im.trunk(model, idx, off, pad_to)
 
 
@@ -1613,7 +1756,7 @@ def load_any_checkpoint(path: Path, device="cpu"):
     asd = ck.get("aux_state_dict") or ck.get("aux")
     if asd:
         names = ck.get("aux_targets") or ck.get("config", {}).get("aux_targets")
-        aux = AuxHeads(arch["width"], names)
+        aux = AuxHeads(emb_width(arch), names)
         aux.load_state_dict(asd)
         aux.to(device).eval()
     return model.to(device).eval(), vocab, {"arch": arch, "aux": aux, "info": ck.get("supervised"),
@@ -1684,7 +1827,7 @@ class Trainer:
         init = cfg["init_checkpoint"] if latest is None else None
         self.model = build_model(cfg["arch"], len(self.vocab), vocab=None if (latest or init) else self.vocab,
                                  emb_std=cfg["emb_init_std"]).to(self.dev)
-        self.aux = AuxHeads(cfg["arch"]["width"], cfg["aux_targets"]).to(self.dev) if cfg["aux_targets"] else None
+        self.aux = AuxHeads(emb_width(cfg["arch"]), cfg["aux_targets"]).to(self.dev) if cfg["aux_targets"] else None
         if init:
             m0, v0, meta0 = load_any_checkpoint(init)
             if not np.array_equal(v0.ids, self.vocab.ids):
