@@ -68,17 +68,10 @@ runs:
   # (value_tower_type: mlp; the MLP's value at 30% was AUC 0.759 against the transformer's 0.768)
   - {name: x-vdetach, arch: {value_detach: true}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: x-vt-mlp, arch: {value_tower: true, value_tower_type: mlp, value_layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: m-base, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: m-lr-3e-4, lr: 3.0e-4, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: m-lr-1e-3, lr: 1.0e-3, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   # Gemini's third: a smaller value weight in the shared network (round 1's 0.1 on the unstable recipe: policy NLL -0.020,
   # value AUC -0.070). 0.2 against the default 0.5
   - {name: x-vweight-0.2, value_weight: 0.2, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: m-w1024, arch: {type: mlp, layers: 2, width: 1024}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: m-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: m-w2048, arch: {type: mlp, layers: 2, width: 2048}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: m-nodrop, arch: {type: mlp, layers: 2, dropout: 0.0, pool_dropout: 0.0}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: m-actall3, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}, td_lambda: 0.99}
+  # 23:15: the MLP tuning (m-*) moved to its own sweep, configs/exp4_sweep_mlp.yml
   # ---- superseded at 22:55 by the MLP tuning above (2 layers lost at 30%; the MLP runs moved up)
   # - {name: x-l2, arch: {layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   # - {name: x-mlp, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}

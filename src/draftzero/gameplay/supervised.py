@@ -146,12 +146,14 @@ TURN_BUCKETS = (((1, 2), "1-2"), ((3, 4), "3-4"), ((5, 6), "5-6"), ((7, 9), "7-9
 ARCH_DEFAULT = {"type": "transformer", "layers": 2, "width": 512, "ff": None, "heads": 4, "head_hidden": 256,
                 "policy_width": im.A_DIM, "dropout": 0.1, "pool_dropout": 0.2,
                 "norm_first": False,   # pre-LayerNorm layers and a final LayerNorm (MageZero's are post-LN)
-                "ffn": "relu",         # relu (MageZero's) | swiglu (gated, 2/3 x ff hidden units: about the same size)
+                "ffn": "relu",         # relu (MageZero's) | swiglu (gated, 2/3 x ff hidden units: about the same size) | gelu (MLP)
                 "pool": "mean",        # mean (MageZero's) | attn (a learned query attends over the tokens)
                 "value_tower": False,  # the value head on its own embedding + layers (value_layers, default layers)
                 "value_layers": None,
                 "value_tower_type": "transformer",   # transformer | mlp (a pooled EmbeddingBag + MLP blocks: cheap)
-                "value_detach": False}  # the value head reads the shared features with the gradient stopped
+                "value_detach": False,  # the value head reads the shared features with the gradient stopped
+                "mlp_norm": "layer",    # the MLP's blocks: layer | batch (BatchNorm1d) | none
+                "bag_mode": "mean"}     # the MLP's token pooling: mean | sum | max
 DEFAULT_TABLES = [{"name": "turnstart", "kind": "priority_set"},
                   {"name": "replay_priority", "kind": "priority_set"},
                   {"name": "replay_attack", "kind": "binary"}]
@@ -233,8 +235,13 @@ def full_arch(arch: dict | None, materialize: bool = True) -> dict:
     for k in ("layers", "width", "ff", "heads", "head_hidden", "policy_width", "value_layers"):
         if a[k] is not None:
             a[k] = int(a[k])
-    if a["ffn"] not in ("relu", "swiglu") or a["pool"] not in ("mean", "attn"):
-        raise ValueError(f"arch.ffn must be relu or swiglu and arch.pool mean or attn: {a['ffn']!r}, {a['pool']!r}")
+    if a["ffn"] not in ("relu", "swiglu", "gelu") or a["pool"] not in ("mean", "attn"):
+        raise ValueError(f"arch.ffn must be relu, swiglu or gelu and arch.pool mean or attn: {a['ffn']!r}, {a['pool']!r}")
+    if a["type"] == "transformer" and a["ffn"] == "gelu":
+        raise ValueError("arch.ffn gelu is for the MLP only")
+    if a["mlp_norm"] not in ("layer", "batch", "none") or a["bag_mode"] not in ("mean", "sum", "max"):
+        raise ValueError(f"arch.mlp_norm must be layer, batch or none and arch.bag_mode mean, sum or max: "
+                         f"{a['mlp_norm']!r}, {a['bag_mode']!r}")
     if a["value_tower_type"] not in ("transformer", "mlp"):
         raise ValueError(f"arch.value_tower_type must be transformer or mlp, not {a['value_tower_type']!r}")
     return a
@@ -451,16 +458,31 @@ class TransformerNet(_HeadsMixin, nn.Module):
         return self._outputs(im.trunk(self, indices, offsets))
 
 
+def _norm1d(kind: str, d: int) -> nn.Module:
+    return nn.LayerNorm(d) if kind == "layer" else nn.BatchNorm1d(d) if kind == "batch" else nn.Identity()
+
+
 class _MLPBlock(nn.Module):
-    def __init__(self, d: int, ff: int, p: float):
+    """A pre-norm residual block: x + drop(fc2(act(fc1(norm(x))))). SwiGLU keeps about the size with
+    2/3 x ff gated hidden units."""
+
+    def __init__(self, d: int, ff: int, p: float, ffn: str = "relu", norm: str = "layer"):
         super().__init__()
-        self.norm = nn.LayerNorm(d)
-        self.fc1 = nn.Linear(d, ff)
-        self.fc2 = nn.Linear(ff, d)
+        self.ffn = ffn
+        self.norm = _norm1d(norm, d)
+        h = max(1, 2 * ff // 3) if ffn == "swiglu" else ff
+        self.fc1 = nn.Linear(d, 2 * h if ffn == "swiglu" else h)
+        self.fc2 = nn.Linear(h, d)
         self.drop = nn.Dropout(p)
 
     def forward(self, x):
-        return x + self.drop(self.fc2(F.relu(self.fc1(self.norm(x)))))
+        h = self.fc1(self.norm(x))
+        if self.ffn == "swiglu":
+            a, b = h.chunk(2, -1)
+            h = F.silu(a) * b
+        else:
+            h = F.gelu(h) if self.ffn == "gelu" else F.relu(h)
+        return x + self.drop(self.fc2(h))
 
 
 class BagMLPNet(_HeadsMixin, nn.Module):
@@ -471,9 +493,10 @@ class BagMLPNet(_HeadsMixin, nn.Module):
         super().__init__()
         a = full_arch(arch)
         d = a["width"]
-        self.embedding = nn.EmbeddingBag(num_embeddings, d, mode="mean")
-        self.blocks = nn.ModuleList([_MLPBlock(d, a["ff"], a["dropout"]) for _ in range(a["layers"])])
-        self.norm = nn.LayerNorm(d) if a["layers"] else nn.Identity()
+        self.embedding = nn.EmbeddingBag(num_embeddings, d, mode=a["bag_mode"])
+        self.blocks = nn.ModuleList([_MLPBlock(d, a["ff"], a["dropout"], a["ffn"], a["mlp_norm"])
+                                     for _ in range(a["layers"])])
+        self.norm = _norm1d(a["mlp_norm"], d) if a["layers"] else nn.Identity()
         self.embedding_dropout = nn.Dropout(a["pool_dropout"])
         self._make_heads(d, a)
 
@@ -575,9 +598,10 @@ class _BagTower(nn.Module):
     def __init__(self, num_embeddings: int, a: dict, layers: int):
         super().__init__()
         d = a["width"]
-        self.embedding = nn.EmbeddingBag(num_embeddings, d, mode="mean")
-        self.blocks = nn.ModuleList([_MLPBlock(d, a["ff"], a["dropout"]) for _ in range(layers)])
-        self.norm = nn.LayerNorm(d) if layers else nn.Identity()
+        self.embedding = nn.EmbeddingBag(num_embeddings, d, mode=a["bag_mode"])
+        self.blocks = nn.ModuleList([_MLPBlock(d, a["ff"], a["dropout"], "relu" if a["ffn"] == "swiglu" else a["ffn"],
+                                               a["mlp_norm"]) for _ in range(layers)])
+        self.norm = _norm1d(a["mlp_norm"], d) if layers else nn.Identity()
         self.dropout = nn.Dropout(a["pool_dropout"])
 
     def forward(self, indices, offsets, pad_to=None):

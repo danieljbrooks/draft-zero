@@ -419,6 +419,23 @@ def test_mlp_value_tower_beside_a_transformer_policy_tower(tables, tmp_path):
     assert isinstance(m2.value_tower, sv._BagTower) and meta["arch"]["value_tower_type"] == "mlp"
 
 
+@pytest.mark.parametrize("ffn,norm,bag", [("gelu", "batch", "sum"), ("swiglu", "none", "max"), ("relu", "layer", "mean")])
+def test_mlp_activation_norm_and_pooling_options(tables, tmp_path, ffn, norm, bag):
+    arch = {**TINY, "type": "mlp", "ffn": ffn, "mlp_norm": norm, "bag_mode": bag}
+    m = sv.build_model(arch, 40)
+    assert isinstance(m, sv.BagMLPNet) and m.embedding.mode == bag
+    assert isinstance(m.blocks[0].norm, {"layer": torch.nn.LayerNorm, "batch": torch.nn.BatchNorm1d,
+                                         "none": torch.nn.Identity}[norm])
+    idx, off = torch.tensor([0, 5, 7, 1, 2, 9]), torch.tensor([0, 2, 4])
+    assert sv.encode(m.eval(), idx, off).shape == (3, sv.full_arch(arch)["width"])
+    s = sv.train(tiny_cfg(tables, max_steps=6, arch=arch), tmp_path / "m", log=lambda *_: None)
+    assert s["step"] == 6
+    m2, _, meta = sv.load_any_checkpoint(tmp_path / "m" / "final.pt.gz")
+    assert meta["arch"]["ffn"] == ffn and meta["arch"]["mlp_norm"] == norm and meta["arch"]["bag_mode"] == bag
+    with pytest.raises(ValueError):
+        sv.full_arch({"type": "transformer", "ffn": "gelu"})
+
+
 @pytest.mark.skipif(not GEN0_2B.exists(), reason="experiment #2b's checkpoint is not in the HF cache")
 def test_load_any_checkpoint_reads_pretrain_checkpoints():
     m, vocab, meta = sv.load_any_checkpoint(GEN0_2B)
