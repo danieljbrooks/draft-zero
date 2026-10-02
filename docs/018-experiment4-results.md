@@ -288,7 +288,7 @@ so the winner's validation numbers are slightly optimistic.
 
 <!-- r2-board -->
 
-**Round 2's leaderboard** (sorted by set NLL; `c0` is the reference):
+**Round 2's leaderboard** (sorted by set NLL):
 
 | # | Run | Setup | Non-Pass top-1 | Set NLL | Attack acc. | Block top-1 | Target top-1 | Value AUC | Value log-loss | Opp. turn: Pass on top | Inference evals/s (batch 32) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -304,6 +304,7 @@ so the winner's validation numbers are slightly optimistic.
 | 10 | `l5e5-w256` | transformer, 1 layer, width 256, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.771 | 0.320 | 0.791 | 0.694 | 0.542 | 0.731 | 0.671 | 99.5% | 5,374 |
 | 11 | `c0-lr-2e-5` | transformer, 1 layer, width 512, pre-LN, lr 2e-05, emb std 0.02, warm-up 3000 | 0.763 | 0.333 | 0.791 | 0.689 | 0.498 | 0.731 | 0.671 | 99.8% | 2,141 |
 | 12 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
+| – | `v16-w1024` *(at 0.25 epoch)* | transformer, 1 layer, width 1024, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.729 | 0.356 | 0.765 | 0.687 | 0.486 | 0.718 | 0.598 | 99.9% | – |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/018-sweep-r2-dark.png">
