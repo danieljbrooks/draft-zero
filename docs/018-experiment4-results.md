@@ -287,8 +287,8 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `v16-td` | TD(0.95) targets (fractions bootstrapped from the network's own values: lower variance than the ±1 result) help the value head once training is stable (round 1 tested them only at the unstable 3e-4) | non-Pass 0.794 (+0.008), NLL 0.286 (−0.009), block 0.706 (+0.009), target 0.557 (+0.010); value AUC 0.737 (−0.007), log-loss 0.617 (+0.014), its calibration swinging with each TD refresh (ECE 0.05–0.10) | the best policy yet, but within noise; the value scores slightly worse against results. The leader's second seed moves up to measure the noise |
 | `v16-td-cosine-1e-4` | the two small gains combine: TD for the policy, cosine from 1e-4 for the value | non-Pass 0.792 (+0.006), NLL 0.287 (−0.008), attack 0.813 (+0.005), block 0.704 (+0.007), value AUC 0.739 (−0.005), log-loss 0.599 (−0.004) against l5e5-vpg16 | **the new leader:** TD's policy gain (at or past the noise bar) with the value as good as before (cosine stops TD's log-loss slip, 0.617 to 0.599). The 30% check switches to this recipe |
 | `v16-auxres-fixed` | the result head, now actually trained: the trunk gets the outcome signal on every position while the value head keeps 16 | non-Pass 0.785 (−0.001), NLL 0.302 (+0.007), value AUC 0.718 (−0.026), log-loss 0.677 (+0.074) against l5e5-vpg16 (the same recipe without it); its aux loss fell 0.36 to 0.27 (memorising) while the value log-loss rose from 0.613 | rejected: no policy gain, and the value overfits through the trunk (the trunk learns to recognise games) |
-| `v16-aux-turns-fixed` | a turns-left head, now actually trained, helps the shared trunk | *running* |  |
-| `v16-l2` | capacity: 2 layers help on the right recipe (round 1's 2 layers trained unstably) | *queued* |  |
+| `v16-aux-turns-fixed` | a turns-left head, now actually trained, helps the shared trunk | every measure within ±0.005 of l5e5-vpg16 (non-Pass 0.788, NLL 0.294, value AUC 0.744); its aux loss trained (0.033) | neutral, now a valid test: a turns-left head adds nothing |
+| `v16-l2` | capacity: 2 layers help on the right recipe (round 1's 2 layers trained unstably) | *running (RunPod)* |  |
 | `v16-l4` | capacity: 4 layers help on the right recipe | *queued* |  |
 | `v16-mlp-lr-1e-4, v16-mlp-w1024-b4` | the MLP on the recipe, and a big MLP (fast enough to afford) | *queued* |  |
 | `v16-seed1` | the noise band for the leader | seed 1 against seed 0: non-Pass +0.003, NLL −0.003, attack −0.009, block +0.007, value AUC +0.001, log-loss +0.007 | the noise band on this recipe: ~0.006 on the policy (twice the difference), ~0.014 on value log-loss; TD's policy gain is probably real, cosine's value gain borderline |
@@ -313,21 +313,23 @@ so the winner's validation numbers are slightly optimistic.
 | 3 | `l5e5-vpg-all` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.792 | 0.288 | 0.801 | 0.707 | 0.548 | 0.698 | 0.846 | 97.2% | 2,150 |
 | 4 | `l5e5-vpg32` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.790 | 0.291 | 0.805 | 0.704 | 0.547 | 0.732 | 0.648 | 97.1% | 2,153 |
 | 5 | `v16-seed1` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000, seed 1 | 0.789 | 0.293 | 0.798 | 0.704 | 0.549 | 0.745 | 0.610 | 97.6% | 2,153 |
-| 6 | `l5e5-vpg16-aux` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000, +turns_left | 0.786 | 0.295 | 0.809 | 0.698 | 0.543 | 0.743 | 0.606 | 97.3% | 2,146 |
-| 7 | `l1e4-vpg16` | transformer, 1 layer, width 512, pre-LN, lr 0.0001, emb std 0.02, warm-up 3000 | 0.784 | 0.295 | 0.805 | 0.697 | 0.574 | 0.735 | 0.617 | 97.1% | 2,149 |
-| 8 | `l5e5-vpg16` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.786 | 0.295 | 0.808 | 0.697 | 0.547 | 0.744 | 0.603 | 97.4% | 2,125 |
-| 9 | `l5e5-vpg16-auxres` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000, +result | 0.786 | 0.295 | 0.809 | 0.698 | 0.549 | 0.744 | 0.603 | 97.4% | 2,153 |
-| 10 | `v16-w1024` | transformer, 1 layer, width 1024, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.791 | 0.296 | 0.809 | 0.696 | 0.551 | 0.740 | 0.608 | 97.6% | 774 |
-| 11 | `v16-cosine-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001 cosine, emb std 0.02, warm-up 3000 | 0.787 | 0.297 | 0.806 | 0.698 | 0.542 | 0.749 | 0.592 | 98.2% | 2,158 |
-| 12 | `v16-cosine-2e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0002 cosine, emb std 0.02, warm-up 3000 | 0.775 | 0.301 | 0.814 | 0.703 | 0.566 | 0.746 | 0.601 | 97.8% | 2,158 |
-| 13 | `v16-auxres-fixed` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000, +result | 0.785 | 0.302 | 0.803 | 0.699 | 0.543 | 0.718 | 0.677 | 97.9% | 2,153 |
-| 14 | `c0-lr-5e-5` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.776 | 0.305 | 0.803 | 0.693 | 0.534 | 0.737 | 0.645 | 97.8% | 2,156 |
-| 15 | `c0-lr-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001, emb std 0.02, warm-up 3000 | 0.753 | 0.315 | 0.795 | 0.700 | 0.550 | 0.734 | 0.636 | 98.3% | 2,157 |
-| 16 | `c0` | transformer, 1 layer, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.760 | 0.316 | 0.780 | 0.688 | 0.554 | 0.701 | 0.655 | 97.8% | 2,144 |
-| 17 | `c0-cosine-3e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0003 cosine, emb std 0.02, warm-up 3000 | 0.766 | 0.319 | 0.792 | 0.691 | 0.551 | 0.712 | 0.654 | 99.8% | 2,151 |
-| 18 | `l5e5-w256` | transformer, 1 layer, width 256, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.771 | 0.320 | 0.791 | 0.694 | 0.542 | 0.731 | 0.671 | 99.5% | 5,374 |
-| 19 | `c0-lr-2e-5` | transformer, 1 layer, width 512, pre-LN, lr 2e-05, emb std 0.02, warm-up 3000 | 0.763 | 0.333 | 0.791 | 0.689 | 0.498 | 0.731 | 0.671 | 99.8% | 2,141 |
-| 20 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
+| 6 | `v16-aux-turns-fixed` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000, +turns_left | 0.788 | 0.294 | 0.809 | 0.699 | 0.541 | 0.744 | 0.603 | 97.2% | 2,148 |
+| 7 | `l5e5-vpg16-aux` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000, +turns_left | 0.786 | 0.295 | 0.809 | 0.698 | 0.543 | 0.743 | 0.606 | 97.3% | 2,146 |
+| 8 | `l1e4-vpg16` | transformer, 1 layer, width 512, pre-LN, lr 0.0001, emb std 0.02, warm-up 3000 | 0.784 | 0.295 | 0.805 | 0.697 | 0.574 | 0.735 | 0.617 | 97.1% | 2,149 |
+| 9 | `l5e5-vpg16` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.786 | 0.295 | 0.808 | 0.697 | 0.547 | 0.744 | 0.603 | 97.4% | 2,125 |
+| 10 | `l5e5-vpg16-auxres` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000, +result | 0.786 | 0.295 | 0.809 | 0.698 | 0.549 | 0.744 | 0.603 | 97.4% | 2,153 |
+| 11 | `v16-w1024` | transformer, 1 layer, width 1024, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.791 | 0.296 | 0.809 | 0.696 | 0.551 | 0.740 | 0.608 | 97.6% | 774 |
+| 12 | `v16-cosine-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001 cosine, emb std 0.02, warm-up 3000 | 0.787 | 0.297 | 0.806 | 0.698 | 0.542 | 0.749 | 0.592 | 98.2% | 2,158 |
+| 13 | `v16-cosine-2e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0002 cosine, emb std 0.02, warm-up 3000 | 0.775 | 0.301 | 0.814 | 0.703 | 0.566 | 0.746 | 0.601 | 97.8% | 2,158 |
+| 14 | `v16-auxres-fixed` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000, +result | 0.785 | 0.302 | 0.803 | 0.699 | 0.543 | 0.718 | 0.677 | 97.9% | 2,153 |
+| 15 | `c0-lr-5e-5` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.776 | 0.305 | 0.803 | 0.693 | 0.534 | 0.737 | 0.645 | 97.8% | 2,156 |
+| 16 | `c0-lr-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001, emb std 0.02, warm-up 3000 | 0.753 | 0.315 | 0.795 | 0.700 | 0.550 | 0.734 | 0.636 | 98.3% | 2,157 |
+| 17 | `c0` | transformer, 1 layer, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.760 | 0.316 | 0.780 | 0.688 | 0.554 | 0.701 | 0.655 | 97.8% | 2,144 |
+| 18 | `c0-cosine-3e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0003 cosine, emb std 0.02, warm-up 3000 | 0.766 | 0.319 | 0.792 | 0.691 | 0.551 | 0.712 | 0.654 | 99.8% | 2,151 |
+| 19 | `l5e5-w256` | transformer, 1 layer, width 256, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.771 | 0.320 | 0.791 | 0.694 | 0.542 | 0.731 | 0.671 | 99.5% | 5,374 |
+| 20 | `c0-lr-2e-5` | transformer, 1 layer, width 512, pre-LN, lr 2e-05, emb std 0.02, warm-up 3000 | 0.763 | 0.333 | 0.791 | 0.689 | 0.498 | 0.731 | 0.671 | 99.8% | 2,141 |
+| 21 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
+| – | `v16-l2` *(at 0.00 epoch)* | transformer, 2 layers, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.472 | 0.929 | 0.495 | 0.394 | 0.285 | 0.490 | 0.673 | 66.5% | – |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/018-sweep-r2-dark.png">
@@ -336,16 +338,28 @@ so the winner's validation numbers are slightly optimistic.
 
 <!-- /r2-board -->
 
-### The scale check: 30% of the training games (queued)
+### The scale check: 30% of the training games (running)
 
 *Dan, 16:00: the goal is a recipe that works at full scale, and whether capacity helps with the right recipe.
 Most runs are still learning smoothly at the end of their one epoch.*
 
 `configs/exp4_sweep_s30.yml` runs round 2's best recipe (pre-LN, embedding std 0.02, warm-up + cosine from
-1e-4, TD(0.95) value targets, 16 value positions a game) on 30% of the training games: 3.3M rows, one epoch each, with the same validation rows as
-rounds 1 and 2. Runs: 1 layer, 2 layers, 1 layer at width 1024, an MLP, and 4 layers. It starts when round 2's
-queue empties (about 22:00 UTC); each run takes about 1–3 hours. The lr-3e-4 backstop is dropped and the
-remaining tricks are deferred.
+1e-4, TD(0.95) value targets, 16 value positions a game) on 30% of the training games: 3.3M rows, one epoch
+each, with the same validation rows as rounds 1 and 2. Runs: 1 layer, 2 layers, 1 layer at width 1024, an
+MLP, and 4 layers.
+
+**Where it runs (from 20:15 UTC on 2 October):** on a second machine lent to the project (two RTX PRO 6000
+Blackwell GPUs, a 24-core quota, a 40 GiB RAM limit), the 30% check on one GPU and
+`configs/exp4_sweep_r2x.yml` on the other:
+- **A hardware reference:** round 2's leader rerun, to check the new hardware reproduces it within the seed
+  noise (±0.006 on the policy).
+- **The passivity fix** (0f814a9): every network so far tops Pass in the opponent's turn 97–99% of the time,
+  against the humans' 93%. `act_weights` multiplies the policy loss of the rows where the human acted (×3 and
+  ×10 on the opponent's-turn table, and ×3 on all three priority tables).
+
+The RunPod 3090 finishes round 2's 10% queue (2 and 4 layers, two MLPs), then is removed. Training stays on
+the GPUs; the game stages (4–7) go to RunPod Community pods, since the second machine's RAM can't hold many
+game JVMs. The lr-3e-4 backstop is dropped and the remaining tricks are deferred.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
