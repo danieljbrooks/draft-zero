@@ -1,4 +1,4 @@
-# Experiment #4, stage 2: the scale check (docs/018). Round 2's recipe at 30% of the training games (3.3M rows,
+# Experiment #4, stage 2: the scale check (docs/018). Round 2's best recipe (TD + cosine from 1e-4, 16 value positions) at 30% of the training games (3.3M rows,
 # 3x round 2's subset), one epoch each, to see whether the ranking holds with more data and whether capacity
 # starts to pay: the goal is a recipe that works at full scale (stage 3: all 10.9M rows, several epochs).
 # The validation rows are round 1's and 2's (val_rows and val_seed unchanged), so the numbers compare directly.
@@ -23,15 +23,17 @@ base:
   ckpt_every_s: null
   latest_every_s: 600
   patience_epochs: null
-  # round 2's leader, l5e5-vpg16
+  # round 2's leader (19:08), v16-td-cosine-1e-4: TD(0.95) value targets, warm-up + cosine from 1e-4
   arch: {layers: 1, norm_first: true}
   emb_init_std: 0.02
   warmup_steps: 3000
-  lr: 5.0e-5
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
   value_per_game: 16
 runs:
   - {name: s30-l1, role: default}
   - {name: s30-l2, arch: {layers: 2}}
   - {name: s30-l1-w1024, arch: {width: 1024}}
-  - {name: s30-mlp, arch: {type: mlp, layers: 2}, lr: 1.0e-4}
+  - {name: s30-mlp, arch: {type: mlp, layers: 2}}
   - {name: s30-l4, arch: {layers: 4}}
