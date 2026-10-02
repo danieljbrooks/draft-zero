@@ -445,7 +445,8 @@ of the data is about the transformer's at 10%. The search is CPU-bound on the en
 - **×3 on all three priority tables** (`act-all-3`: the turn start and the player's own later stops too) gives the
   best policy at 10%: non-Pass 0.802 (+0.011, about twice the noise band), set NLL 0.280 (−0.006), with the value
   unchanged and targets −0.007. In the player's own later stops, Pass on top falls from 0.691 to 0.660, against
-  the humans' 0.666: the networks were a little passive there too. It runs at 30% next
+  the humans' 0.666: the networks were a little passive there too. At the turn start it overshoots a little
+  (Pass on top 0.017 against the humans' 0.051), where the networks were already about right (0.047). It runs at 30% next
   (`s30-l1-actall3-td99`, in place of 4 layers) before stage 3 takes it.
 
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
