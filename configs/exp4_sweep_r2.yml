@@ -44,6 +44,12 @@ runs:
   # the small networks of round 1 at the fixed recipe
   - {name: layers-1, arch: {layers: 1}}
   - {name: width-256, arch: {width: 256}}
+  # more 1-layer networks (round 1's best, tried in one configuration only): its own learning rate with the
+  # init fix, wider, a value tower, and SwiGLU with attention pooling
+  - {name: layers-1-lr-3e-4, arch: {layers: 1}, lr: 3.0e-4}
+  - {name: layers-1-w1024, arch: {layers: 1, width: 1024}}
+  - {name: layers-1-value-tower, arch: {layers: 1, value_tower: true, value_layers: 1}}
+  - {name: layers-1-swiglu-attnpool, arch: {layers: 1, ffn: swiglu, pool: attn}}
   # the MLP: a higher learning rate (pre-norm residual blocks), and a bigger one
   - {name: mlp-lr-1e-3, arch: {type: mlp}, lr: 1.0e-3}
   - {name: mlp-wide, arch: {type: mlp, width: 1024, layers: 4}, lr: 3.0e-4}

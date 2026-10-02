@@ -43,8 +43,12 @@ SPECS = {
     "round2": {
         "reference": ["ref", "ref: default shape, lr 1e-4, embedding std 0.02"],
         "groups": [
-            {"title": "Noise and shape", "runs": [["ref-seed1", "ref, seed 1"], ["layers-1", "1 layer"],
-                                                  ["width-256", "width 256"], ["layers-4-pre-ln", "4 layers, pre-LN"]]},
+            {"title": "Noise and shape", "runs": [["ref-seed1", "ref, seed 1"], ["width-256", "width 256"],
+                                                  ["layers-4-pre-ln", "4 layers, pre-LN"]]},
+            {"title": "1 layer", "runs": [["layers-1", "1 layer"], ["layers-1-lr-3e-4", "1 layer, lr 3e-4"],
+                                          ["layers-1-w1024", "1 layer, width 1024"],
+                                          ["layers-1-value-tower", "1 layer + value tower"],
+                                          ["layers-1-swiglu-attnpool", "1 layer, SwiGLU + attention pooling"]]},
             {"title": "Architecture", "runs": [["value-tower", "value tower (1 layer)"], ["pre-ln", "pre-LN"],
                                                ["swiglu-attnpool", "SwiGLU + attention pooling"],
                                                ["mlp-lr-1e-3", "MLP, lr 1e-3"], ["mlp-wide", "MLP, width 1024, 4 blocks"]]},
