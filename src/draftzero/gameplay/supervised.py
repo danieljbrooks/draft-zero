@@ -149,7 +149,9 @@ ARCH_DEFAULT = {"type": "transformer", "layers": 2, "width": 512, "ff": None, "h
                 "ffn": "relu",         # relu (MageZero's) | swiglu (gated, 2/3 x ff hidden units: about the same size)
                 "pool": "mean",        # mean (MageZero's) | attn (a learned query attends over the tokens)
                 "value_tower": False,  # the value head on its own embedding + layers (value_layers, default layers)
-                "value_layers": None}
+                "value_layers": None,
+                "value_tower_type": "transformer",   # transformer | mlp (a pooled EmbeddingBag + MLP blocks: cheap)
+                "value_detach": False}  # the value head reads the shared features with the gradient stopped
 DEFAULT_TABLES = [{"name": "turnstart", "kind": "priority_set"},
                   {"name": "replay_priority", "kind": "priority_set"},
                   {"name": "replay_attack", "kind": "binary"}]
@@ -233,6 +235,8 @@ def full_arch(arch: dict | None, materialize: bool = True) -> dict:
             a[k] = int(a[k])
     if a["ffn"] not in ("relu", "swiglu") or a["pool"] not in ("mean", "attn"):
         raise ValueError(f"arch.ffn must be relu or swiglu and arch.pool mean or attn: {a['ffn']!r}, {a['pool']!r}")
+    if a["value_tower_type"] not in ("transformer", "mlp"):
+        raise ValueError(f"arch.value_tower_type must be transformer or mlp, not {a['value_tower_type']!r}")
     return a
 
 
@@ -253,7 +257,7 @@ def magezero_loadable(arch: dict | None) -> bool:
     a = full_arch(arch)
     return (a["type"] == "transformer" and a["layers"] == 2 and a["width"] == 512 and a["ff"] == 1024
             and a["heads"] == 4 and a["head_hidden"] == 256 and a["policy_width"] == im.A_DIM
-            and not a["norm_first"] and not extended_transformer(a))
+            and not a["norm_first"] and not extended_transformer(a) and not a["value_detach"])
 
 
 def _table_spec(t: dict, i: int) -> dict:
@@ -403,6 +407,11 @@ def _head(d_in: int, hidden: int, out: int, tanh: bool = False) -> nn.Sequential
     return nn.Sequential(*mods, nn.Tanh()) if tanh else nn.Sequential(*mods)
 
 
+class _Detach(nn.Module):
+    def forward(self, x):
+        return x.detach()
+
+
 class _HeadsMixin:
     def _make_heads(self, d: int, a: dict) -> None:
         h, p = a["head_hidden"], a["policy_width"]
@@ -411,6 +420,8 @@ class _HeadsMixin:
         self.target_head = _head(d, h, p)
         self.binary_head = _head(d, h, 2)
         self.value_head = _head(d, h, 1, tanh=True)
+        if a["value_detach"]:          # the value loss trains its head only, never the shared features
+            self.value_head = nn.Sequential(_Detach(), *self.value_head)
 
     def _outputs(self, emb):
         return (self.player_priority_head(emb), self.opponent_priority_head(emb), self.target_head(emb),
@@ -557,6 +568,25 @@ class _Tower(nn.Module):
         return self.dropout(p)
 
 
+class _BagTower(nn.Module):
+    """The MLP arm's trunk as a tower (a mean-pooled EmbeddingBag and residual MLP blocks): a value
+    tower at a fraction of a transformer tower's cost."""
+
+    def __init__(self, num_embeddings: int, a: dict, layers: int):
+        super().__init__()
+        d = a["width"]
+        self.embedding = nn.EmbeddingBag(num_embeddings, d, mode="mean")
+        self.blocks = nn.ModuleList([_MLPBlock(d, a["ff"], a["dropout"]) for _ in range(layers)])
+        self.norm = nn.LayerNorm(d) if layers else nn.Identity()
+        self.dropout = nn.Dropout(a["pool_dropout"])
+
+    def forward(self, indices, offsets, pad_to=None):
+        x = self.embedding(indices % self.embedding.num_embeddings, offsets)
+        for b in self.blocks:
+            x = b(x)
+        return self.dropout(self.norm(x))
+
+
 class _Slice(nn.Module):
     def __init__(self, a: int, b: int):
         super().__init__()
@@ -578,7 +608,12 @@ class TransformerNetX(_HeadsMixin, nn.Module):
         d = a["width"]
         self.tower = _Tower(num_embeddings, a, a["layers"])
         self.embedding = self.tower.embedding           # the policy tower's: embedding init, embed_dim
-        self.value_tower = _Tower(num_embeddings, a, a["value_layers"] or a["layers"]) if a["value_tower"] else None
+        if not a["value_tower"]:
+            self.value_tower = None
+        elif a["value_tower_type"] == "mlp":
+            self.value_tower = _BagTower(num_embeddings, a, 2 if a["value_layers"] is None else a["value_layers"])
+        else:
+            self.value_tower = _Tower(num_embeddings, a, a["value_layers"] or a["layers"])
         self._make_heads(d, a)
         if self.value_tower is not None:
             for name in ("player_priority_head", "opponent_priority_head", "target_head", "binary_head"):

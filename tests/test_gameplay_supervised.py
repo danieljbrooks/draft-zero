@@ -388,6 +388,37 @@ def test_extended_transformer_trains_with_a_value_tower(tables, tmp_path):
     assert isinstance(m2, sv.TransformerNetX) and meta["aux"] is not None and meta["arch"]["value_tower"]
 
 
+def test_value_detach_keeps_the_value_loss_out_of_the_shared_features(tables, tmp_path):
+    arch = {**TINY, "norm_first": True, "value_detach": True}
+    m = sv.build_model(arch, 40)
+    assert isinstance(m, sv.TransformerNet) and not sv.magezero_loadable(arch)
+    idx, off = torch.tensor([0, 5, 7, 1, 2, 9]), torch.tensor([0, 2, 4])
+    sv.value_logit(m, sv.encode(m, idx, off)).sum().backward()
+    assert m.embedding.weight.grad is None or not m.embedding.weight.grad.any()   # no gradient into the trunk
+    assert m.value_head[1].weight.grad.abs().sum() > 0                             # ... but the head learns
+    m.zero_grad()
+    m.player_priority_head(sv.encode(m, idx, off)).sum().backward()
+    assert m.embedding.weight.grad.abs().sum() > 0
+    s = sv.train(tiny_cfg(tables, max_steps=10, arch=arch), tmp_path / "d", log=lambda *_: None)
+    assert s["step"] == 10
+    m2, _, meta = sv.load_any_checkpoint(tmp_path / "d" / "final.pt.gz")
+    assert meta["arch"]["value_detach"] and isinstance(m2.value_head[0], sv._Detach)
+
+
+def test_mlp_value_tower_beside_a_transformer_policy_tower(tables, tmp_path):
+    vocab = _vocab(40)
+    arch = {**TINY, "norm_first": True, "value_tower": True, "value_tower_type": "mlp", "value_layers": 1}
+    m = sv.build_model(arch, len(vocab), vocab=vocab, emb_std=0.02)
+    assert isinstance(m, sv.TransformerNetX) and isinstance(m.value_tower, sv._BagTower)
+    assert torch.equal(m.embedding.weight, m.value_tower.embedding.weight)
+    idx, off = torch.tensor([0, 5, 7, 1, 2, 9]), torch.tensor([0, 2, 4])
+    assert sv.encode(m.eval(), idx, off).shape == (3, sv.emb_width(arch))
+    s = sv.train(tiny_cfg(tables, max_steps=10, emb_init_std=0.02, arch=arch), tmp_path / "v", log=lambda *_: None)
+    assert s["step"] == 10
+    m2, _, meta = sv.load_any_checkpoint(tmp_path / "v" / "final.pt.gz")
+    assert isinstance(m2.value_tower, sv._BagTower) and meta["arch"]["value_tower_type"] == "mlp"
+
+
 @pytest.mark.skipif(not GEN0_2B.exists(), reason="experiment #2b's checkpoint is not in the HF cache")
 def test_load_any_checkpoint_reads_pretrain_checkpoints():
     m, vocab, meta = sv.load_any_checkpoint(GEN0_2B)

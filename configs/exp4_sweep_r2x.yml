@@ -63,9 +63,17 @@ runs:
   # 22:44: the value tower gives the best policy at 10% (NLL 0.274, -0.012; targets +0.026), value unchanged: giving the
   # value its own layer frees the shared one for the policy. Does it stack with x3 on all three tables?
   - {name: x-vt-actall3, arch: {value_tower: true, value_layers: 1}, act_weights: {opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}, td_lambda: 0.99}
+  # 23:05 (Gemini, via Dan): keep the separation's policy gain at one tower's cost? A value head on the shared features
+  # with the gradient stopped (value_detach), and a cheap MLP value tower beside the transformer policy tower
+  # (value_tower_type: mlp; the MLP's value at 30% was AUC 0.759 against the transformer's 0.768)
+  - {name: x-vdetach, arch: {value_detach: true}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: x-vt-mlp, arch: {value_tower: true, value_tower_type: mlp, value_layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: m-base, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: m-lr-3e-4, lr: 3.0e-4, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: m-lr-1e-3, lr: 1.0e-3, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  # Gemini's third: a smaller value weight in the shared network (round 1's 0.1 on the unstable recipe: policy NLL -0.020,
+  # value AUC -0.070). 0.2 against the default 0.5
+  - {name: x-vweight-0.2, value_weight: 0.2, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: m-w1024, arch: {type: mlp, layers: 2, width: 1024}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: m-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: m-w2048, arch: {type: mlp, layers: 2, width: 2048}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
