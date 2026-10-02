@@ -79,6 +79,10 @@ runs:
   # helps with the right recipe). A throwaway result head on every position feeds the trunk the outcome signal
   # (every-position gave the best policy) while the value head keeps 16 positions.
   - {name: l5e5-vpg16-auxres, lr: 5.0e-5, value_per_game: 16, aux_targets: [result], aux_weight: 0.5}
+  # 18:07: the leader's second seed puts the policy noise at ~0.003 (twice: ~0.006): TD's policy gain (+0.0065 top-1,
+  # −0.008 NLL against the seeds' mean) is probably real, cosine-from-1e-4's value gain (log-loss −0.015) borderline.
+  # Combine them:
+  - {name: v16-td-cosine-1e-4, lr: 1.0e-4, lr_schedule: cosine, value_per_game: 16, value_target: td}
   # capacity on the leader's recipe (pre-LN, std 0.02, lr 5e-5, 16 value positions)
   - {name: v16-w1024, lr: 5.0e-5, value_per_game: 16, arch: {width: 1024}}
   - {name: v16-l2, lr: 5.0e-5, value_per_game: 16, arch: {layers: 2}}
