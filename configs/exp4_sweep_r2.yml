@@ -64,37 +64,29 @@ runs:
   # 14:49: 32 value positions overfits the value head too (log-loss 0.591 at half an epoch, 0.648 at the end) for a
   # policy gain within noise: 16 is the value head's sweet spot. Decouple: a throwaway "result" head on every
   # position feeds the trunk the outcome signal (as every-position did for the policy), the value head keeps 16.
-  # PAUSED (Dan, 15:10: don't change the pipeline yet; needs the new trainer code and a sweep restart):
-  # - {name: l5e5-vpg16-auxres, lr: 5.0e-5, value_per_game: 16, aux_targets: [result], aux_weight: 0.5}
   # 15:45 (Dan: a mid-game value is a fraction, not ±1): TD(0.95) targets bootstrap from the network's own values,
   # so they are fractions with far less variance than the result. Round 1's TD run was at the unstable 3e-4;
   # retest it on the leader (an existing option: no pipeline change).
   - {name: v16-td, lr: 5.0e-5, value_per_game: 16, value_target: td}
-  # the rest re-based on the leader, l5e5-vpg16 (lr 5e-5, 16 value positions a game)
+  # 16:00 (Dan: the result head approved; the goal is a recipe that works at full scale, and whether capacity
+  # helps with the right recipe). A throwaway result head on every position feeds the trunk the outcome signal
+  # (every-position gave the best policy) while the value head keeps 16 positions.
+  - {name: l5e5-vpg16-auxres, lr: 5.0e-5, value_per_game: 16, aux_targets: [result], aux_weight: 0.5}
+  # capacity on the leader's recipe (pre-LN, std 0.02, lr 5e-5, 16 value positions)
   - {name: v16-w1024, lr: 5.0e-5, value_per_game: 16, arch: {width: 1024}}
-  - {name: v16-w128, lr: 5.0e-5, value_per_game: 16, arch: {width: 128}}
+  - {name: v16-l2, lr: 5.0e-5, value_per_game: 16, arch: {layers: 2}}
+  - {name: v16-l4, lr: 5.0e-5, value_per_game: 16, arch: {layers: 4}}
+  # the MLP on the recipe, and a big one (they are fast)
   - {name: v16-mlp-lr-1e-4, lr: 1.0e-4, value_per_game: 16, arch: {type: mlp, layers: 2}}
-  - {name: v16-mlp-lr-1e-3, lr: 1.0e-3, value_per_game: 16, arch: {type: mlp, layers: 2}}
   - {name: v16-mlp-w1024-b4, lr: 1.0e-4, value_per_game: 16, arch: {type: mlp, layers: 4, width: 1024}}
-  - {name: v16-mlp-b4, lr: 1.0e-4, value_per_game: 16, arch: {type: mlp, layers: 4}}
-  - {name: v16-mlp-nodrop, lr: 1.0e-4, value_per_game: 16, token_dropout: 0.1, arch: {type: mlp, layers: 2, dropout: 0.0, pool_dropout: 0.0}}
-  - {name: v16-value-tower, lr: 5.0e-5, value_per_game: 16, arch: {value_tower: true, value_layers: 1}}
-  - {name: v16-swiglu-attnpool, lr: 5.0e-5, value_per_game: 16, arch: {ffn: swiglu, pool: attn}}
-  - {name: v16-token-dropout-0.1, lr: 5.0e-5, value_per_game: 16, token_dropout: 0.1}
+  # the noise band for the leader
   - {name: v16-seed1, lr: 5.0e-5, value_per_game: 16, seed: 1}
-  # superseded (re-based above), kept as backstop at lr 5e-5 with 4 value positions
-  - {name: l5e5-w1024, lr: 5.0e-5, arch: {width: 1024}}
-  - {name: l5e5-w128, lr: 5.0e-5, arch: {width: 128}}
-  # ---- the backstop: the original plan at lr 3e-4
-  - {name: c0-w256, arch: {width: 256}}
-  - {name: c0-w128, arch: {width: 128}}
-  - {name: c0-w1024, arch: {width: 1024}}
-  - {name: c0-w256-lr-6e-4, arch: {width: 256}, lr: 6.0e-4}
-  - {name: l2-w256, arch: {layers: 2, width: 256}}
-  - {name: c0-token-dropout-0.1, token_dropout: 0.1}
-  - {name: c0-value-tower, arch: {value_tower: true, value_layers: 1}}
-  - {name: c0-swiglu-attnpool, arch: {ffn: swiglu, pool: attn}}
-  - {name: c0-cosine-6e-4, lr: 6.0e-4, lr_schedule: cosine}
-  - {name: c0-seed1, role: default, seed: 1}
-  - {name: mz-shape-lr-1e-4, arch: {layers: 2, norm_first: false}, lr: 1.0e-4, warmup_steps: 300}
-  - {name: c0-w64, arch: {width: 64}}
+  # ---- deferred (16:00): after the 30%-data scale check (configs/exp4_sweep_s30.yml)
+  # - {name: v16-w128, lr: 5.0e-5, value_per_game: 16, arch: {width: 128}}
+  # - {name: v16-mlp-lr-1e-3, lr: 1.0e-3, value_per_game: 16, arch: {type: mlp, layers: 2}}
+  # - {name: v16-mlp-b4, lr: 1.0e-4, value_per_game: 16, arch: {type: mlp, layers: 4}}
+  # - {name: v16-mlp-nodrop, lr: 1.0e-4, value_per_game: 16, token_dropout: 0.1, arch: {type: mlp, layers: 2, dropout: 0.0, pool_dropout: 0.0}}
+  # - {name: v16-value-tower, lr: 5.0e-5, value_per_game: 16, arch: {value_tower: true, value_layers: 1}}
+  # - {name: v16-swiglu-attnpool, lr: 5.0e-5, value_per_game: 16, arch: {ffn: swiglu, pool: attn}}
+  # - {name: v16-token-dropout-0.1, lr: 5.0e-5, value_per_game: 16, token_dropout: 0.1}
+  # ---- dropped (Dan, 16:00): the original lr-3e-4 backstop
