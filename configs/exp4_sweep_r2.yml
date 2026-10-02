@@ -50,6 +50,11 @@ runs:
   - {name: l1e4-vpg16, lr: 1.0e-4, value_per_game: 16}
   # 12:14: lr 5e-5 leads (non-Pass 0.776, NLL 0.305, attack 0.803, value AUC 0.737): lower keeps winning
   - {name: c0-lr-2e-5, lr: 2.0e-5}
+  # 12:41: 16 value positions a game (lr 1e-4) gives the best policy of any run (non-Pass 0.784, NLL 0.295,
+  # target 0.574) and the best value log-loss (0.617): the result is a useful signal for the shared trunk
+  # once training is stable. Combine it with lr 5e-5, and push it to every position.
+  - {name: l5e5-vpg16, lr: 5.0e-5, value_per_game: 16}
+  - {name: l5e5-vpg-all, lr: 5.0e-5, value_per_game: null}
   # the width probes and the tricks, re-based on the leader (lr 5e-5)
   - {name: l5e5-w256, lr: 5.0e-5, arch: {width: 256}}
   - {name: l5e5-w1024, lr: 5.0e-5, arch: {width: 1024}}
