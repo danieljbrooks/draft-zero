@@ -660,3 +660,20 @@ def test_a_runs_own_aux_targets_train_on_data_loaded_without_them(tables, tmp_pa
     ev = sv.read_evals(tmp_path / "a" / "evals.jsonl")
     assert ev[-1]["train/aux"] > 0
     assert all("result" in t.aux and "turns_left" in t.aux for t in data.train)
+
+
+def test_act_weights_upweight_acted_rows_in_a_per_run_copy(tables, tmp_path):
+    base = tiny_cfg(tables, max_steps=4)
+    data = sv.load_data(sv.resolve_config(base), log=lambda *_: None)
+    t0 = next(t for t in data.train if t.kind in sv.POLICY_KINDS and t.set_indptr is not None)
+    acted = sv.acted_rows(t0)
+    assert acted.any() and not acted.all()
+    w_before = t0.w.copy()
+    d2 = sv.with_act_weights(data, {t0.name: 3.0}, log=lambda *_: None)
+    t2 = next(t for t in d2.train if t.name == t0.name)
+    assert np.allclose(t2.w[acted], 3 * w_before[acted]) and np.allclose(t2.w[~acted], w_before[~acted])
+    assert np.array_equal(t0.w, w_before) and d2.val is data.val              # the shared data are untouched
+    s = sv.train({**base, "act_weights": {t0.name: 3.0}}, tmp_path / "a", data=data, log=lambda *_: None)
+    assert s["step"] == 4 and np.array_equal(t0.w, w_before)
+    with pytest.raises(ValueError):
+        sv.with_act_weights(data, {"no_such_table": 2.0})

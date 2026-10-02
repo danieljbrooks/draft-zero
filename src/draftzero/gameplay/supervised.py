@@ -117,7 +117,7 @@ import signal
 import sys
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -186,6 +186,8 @@ DEFAULTS: dict[str, Any] = {
     "kl_ref": None,                # the reference network (default: init_checkpoint)
     "freeze": [],                  # any of trunk, policy, value: kept as they are
     "group_shares": {},            # table group -> fixed share of the training samples
+    "act_weights": {},             # table name -> policy-loss weight multiplier on its training rows where the human
+                                   # acted (a non-Pass play in the label set): against the networks' passivity
     # optimisation
     "lr": 3e-4, "warmup_steps": 300, "lr_schedule": "constant", "lr_min_frac": 0.1,
     "emb_init_std": None,          # embedding rows' initial std (None: MageZero's N(0, 1) keyed rows; scaled otherwise)
@@ -1082,6 +1084,32 @@ def _turns_left_proxy(tables: list) -> None:
             t.notes.append("turns_left = last recorded turn of the game - turn (proxy: no meta/num_turns)")
 
 
+def acted_rows(t: Table) -> np.ndarray:
+    """Rows whose label set holds a non-Pass play (the human acted)."""
+    if t.set_indptr is None:
+        return np.zeros(t.n, bool)
+    cs = np.r_[0, np.cumsum(t.set_idx != PASS_IDX)]
+    return (cs[t.set_indptr[1:]] - cs[t.set_indptr[:-1]]) > 0
+
+
+def with_act_weights(data: Data, weights: dict, log=print) -> Data:
+    """A copy of `data` whose named training tables weight their acted rows' policy loss by
+    weights[name] (the shared tables, and every validation table, are left as they are)."""
+    unknown = set(weights) - {t.name for t in data.train}
+    if unknown:
+        raise ValueError(f"act_weights names tables not in the data: {sorted(unknown)}")
+    train = []
+    for t in data.train:
+        f = weights.get(t.name)
+        if f is None or f == 1:
+            train.append(t)
+            continue
+        a = acted_rows(t)
+        train.append(replace(t, w=np.where(a, t.w * float(f), t.w).astype(np.float32)))
+        log(f"supervised: {t.name}: policy weight x{f:g} on {int(a.sum())} of {t.n} rows where the human acted")
+    return Data(vocab=data.vocab, train=train, val=data.val, info=data.info)
+
+
 def ensure_aux(tables: list, names: list, log=print) -> None:
     """The derived aux targets `names` asks for, on every table that lacks them: turns_left (a proxy, see
     _turns_left_proxy) and result (the game's result). A sweep loads its data once, with the base config,
@@ -1838,6 +1866,8 @@ class Trainer:
             vocab = data.vocab if data is not None else None
         self.data = data or load_data(cfg, vocab=vocab, log=self.log)
         ensure_aux(self.data.train + self.data.val, cfg["aux_targets"], log=self.log)
+        if cfg["act_weights"]:
+            self.data = with_act_weights(self.data, cfg["act_weights"], log=self.log)
         self.vocab = self.data.vocab
         init = cfg["init_checkpoint"] if latest is None else None
         self.model = build_model(cfg["arch"], len(self.vocab), vocab=None if (latest or init) else self.vocab,
