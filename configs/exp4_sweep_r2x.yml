@@ -35,6 +35,11 @@ base:
 runs:
   - {name: hw-ref, role: default}                               # = round 2's v16-td-cosine-1e-4
   - {name: act-opp-3, act_weights: {opp_priority: 3.0}}
+  # 20:45 (Dan): TD(lambda) around the leader's 0.95 (lower: more bootstrapping, smoother, more bias; higher: closer
+  # to the plain result)
+  - {name: td-0.90, td_lambda: 0.90}
+  - {name: td-0.975, td_lambda: 0.975}
+  - {name: td-0.99, td_lambda: 0.99}
   - {name: act-opp-10, act_weights: {opp_priority: 10.0}}
   - {name: act-all-3, act_weights: {opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}}
   # 20:30: the hardware check passed (every measure within 0.001 of round 2's run, except targets 0.007), and this
