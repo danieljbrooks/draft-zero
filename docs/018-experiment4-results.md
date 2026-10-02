@@ -300,7 +300,8 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `ep3` | the leader for three epochs of the 10% subset (the 30% run's step count): data or steps? | three epochs of 10% against one of 30% (the same steps): non-Pass 0.807 / 0.808, NLL 0.269 / 0.262, targets 0.619 / 0.618, value AUC 0.747 / 0.758, log-loss 0.597 / 0.569 | the policy wants steps (repeats recover most of its gain), the value head wants new games (repeats give it nothing): stage 3 can run 2–3 epochs, taking the value checkpoint early |
 | `act3-td99, act3-td975` | do the passivity fix and TD(0.99) stack? (0.975 alongside; 0.99 also at 30% as `s30-l1-act3-td99`, the candidate stage-3 recipe) | act3-td99 against the passivity fix alone / TD 0.99 alone: non-Pass 0.791 / 0.796 / 0.786, NLL 0.285 / 0.281 / 0.292, value AUC **0.749** / 0.740 / 0.749, log-loss **0.582** / 0.597 / 0.583, Pass on top (opp. turn) 0.937 / 0.938 / 0.973; act3-td975: non-Pass 0.794, NLL 0.283, value AUC 0.746, log-loss 0.587 (the same trade as without the fix, within noise) | **the new leader:** they stack. TD 0.99's value, the fix's passing, and most of the fix's policy gain (NLL 0.292 → 0.285) |
 | `act-opp-10, act-all-3` | the passivity fix stronger (×10), and on all three priority tables (×3) (re-based at 21:52 on act3-td99) | against act3-td99: ×10 on the opponent's turn: NLL 0.301 (+0.015), Pass on top 0.894 (humans 0.934); ×3 on all three priority tables: non-Pass **0.802** (+0.011), NLL **0.280** (−0.006), targets 0.545 (−0.007), value unchanged (AUC 0.748, log-loss 0.583), Pass on top 0.938 | ×10 overshoots. ×3 on all three tables is **the new leader** at 10% (non-Pass ~2× the noise band); checked at 30% next (`s30-l1-actall3-td99`) |
-| `x-l2, x-l4, x-mlp, x-mlp-w1024-b4` | capacity on the current leader's recipe (re-based at 21:52 on act3-td99) | *queued* |  |
+| `x-value-tower` | a separate value layer (TransformerNetX value tower), on act3-td99: the value head overfits; give it its own layer | non-Pass 0.798 (+0.007), NLL **0.274** (−0.012), targets **0.578** (+0.026), attack +0.003, block +0.005; value unchanged (AUC 0.748, log-loss 0.581); inference 2,585 a second against 5,154 | **the best policy at 10%**, at half the inference speed: the value's own layer frees the shared one for the policy. Checked at 30% (`s30-vt-act3-td99`) and with ×3 on all tables (`x-vt-actall3`) |
+| `x-swiglu-attnpool, m-*` | SwiGLU + attention pooling; then an MLP tuning scan (lr, width, depth, dropout, act weights) for the CPU-search model (Dan, 22:55) | *running / queued* |  |
 
 **Overfitting checks** (Dan asked, 15:10): every curve and leaderboard number is on the validation split
 (held out by draft; never trained on); the test split is untouched until stage 3's network is scored.
@@ -448,6 +449,19 @@ of the data is about the transformer's at 10%. The search is CPU-bound on the en
   the humans' 0.666: the networks were a little passive there too. At the turn start it overshoots a little
   (Pass on top 0.017 against the humans' 0.051), where the networks were already about right (0.047). It runs at 30% next
   (`s30-l1-actall3-td99`, in place of 4 layers) before stage 3 takes it.
+
+**A value tower gives the best policy at 10% (22:43).** `x-value-tower` gives the value head its own transformer
+layer on top of the shared one (`TransformerNetX`, built for round 2 but never run), on `act3-td99`: non-Pass
+0.798 (+0.007), set NLL **0.274** (−0.012, twice the noise band), targets **0.578** (+0.026), attack and block
++0.003 and +0.005, with the value unchanged (AUC 0.748, log-loss 0.581). Two shared layers lost at 10% and 30%;
+one shared layer plus the value's own wins, so the gain is the separation, not the depth: the shared layer no
+longer serves the value's gradient. It halves the inference speed (2,585 evaluations a second against 5,154).
+It runs at 30% next (`s30-vt-act3-td99`) and with ×3 on all three tables at 10% (`x-vt-actall3`).
+
+**Stage 3 trains two models (Dan, 22:55):** the transformer for quality, and an MLP for fast search on CPUs. On
+one CPU core of the second machine the MLP takes 0.39 ms an evaluation (8,300 a second at batch 32), the 1-layer
+transformer ~80 ms. An MLP tuning scan runs at 10% (`m-*` in `configs/exp4_sweep_r2x.yml`): learning rates
+3e-4 and 1e-3, widths 1024 and 2048, 4 blocks, no dropout, and ×3 on all three tables.
 
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
 30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):
