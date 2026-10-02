@@ -1082,6 +1082,24 @@ def _turns_left_proxy(tables: list) -> None:
             t.notes.append("turns_left = last recorded turn of the game - turn (proxy: no meta/num_turns)")
 
 
+def ensure_aux(tables: list, names: list, log=print) -> None:
+    """The derived aux targets `names` asks for, on every table that lacks them: turns_left (a proxy, see
+    _turns_left_proxy) and result (the game's result). A sweep loads its data once, with the base config,
+    so a run whose own config adds aux targets gets them here (before this, such runs trained an aux
+    head with no targets and so no loss)."""
+    if "turns_left" in names and any("turns_left" not in t.aux for t in tables):
+        _turns_left_proxy([t for t in tables if t.split == "train"])
+        _turns_left_proxy([t for t in tables if t.split != "train"])
+    if "result" in names:
+        for t in tables:
+            if "result" not in t.aux:
+                t.aux["result"] = t.z.astype(np.float32)
+    for a in names:
+        if not any(a in t.aux for t in tables):
+            log(f"supervised: WARNING aux target {a} is in no table (life_diff needs a meta/final_life_diff column): "
+                f"its head gets no loss")
+
+
 def load_data(cfg: dict, *, vocab=None, splits: tuple = ("train", "val"), log=print) -> Data:
     """The training rows (a `fraction` of the training games), the feature vocab built on them
     (unless given), and the validation rows (whole games, `val_rows` per table), for every table."""
@@ -1129,16 +1147,7 @@ def load_data(cfg: dict, *, vocab=None, splits: tuple = ("train", "val"), log=pr
         vs = _val_selection(games, cfg["val_rows"], cfg["val_seed"])
         for s in specs:
             val.append(load_table(table_path(cfg, s, split), s, split, vs[s["name"]], vocab, cache=cache, log=log))
-    if "turns_left" in cfg["aux_targets"]:
-        _turns_left_proxy(train)
-        _turns_left_proxy(val)
-    if "result" in cfg["aux_targets"]:
-        for t in train + val:
-            t.aux["result"] = t.z.astype(np.float32)
-    for a in cfg["aux_targets"]:
-        if not any(a in t.aux for t in train + val):
-            log(f"supervised: WARNING aux target {a} is in no table (life_diff needs a meta/final_life_diff column): "
-                f"its head gets no loss")
+    ensure_aux(train + val, cfg["aux_targets"], log=log)
     for t in train + val:
         info["tables"][f"{t.name}_{t.split}"] = {"rows": t.n, "games": int(len(np.unique(t.game))),
                                                  "mean_len": round(float(np.diff(t.ptr).mean()) if t.n else 0, 1),
@@ -1828,6 +1837,7 @@ class Trainer:
         else:
             vocab = data.vocab if data is not None else None
         self.data = data or load_data(cfg, vocab=vocab, log=self.log)
+        ensure_aux(self.data.train + self.data.val, cfg["aux_targets"], log=self.log)
         self.vocab = self.data.vocab
         init = cfg["init_checkpoint"] if latest is None else None
         self.model = build_model(cfg["arch"], len(self.vocab), vocab=None if (latest or init) else self.vocab,

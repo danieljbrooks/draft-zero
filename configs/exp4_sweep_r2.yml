@@ -83,6 +83,11 @@ runs:
   # −0.008 NLL against the seeds' mean) is probably real, cosine-from-1e-4's value gain (log-loss −0.015) borderline.
   # Combine them:
   - {name: v16-td-cosine-1e-4, lr: 1.0e-4, lr_schedule: cosine, value_per_game: 16, value_target: td}
+  # 18:40: BUG FOUND: a run's own aux_targets got no targets (the sweep loads data with the base config), so
+  # l5e5-vpg16-aux, l5e5-vpg16-auxres (and round 1's value-aux, value-td-aux) trained aux heads with no loss.
+  # Fixed in the trainer (ensure_aux); the two experiments again:
+  - {name: v16-auxres-fixed, lr: 5.0e-5, value_per_game: 16, aux_targets: [result], aux_weight: 0.5}
+  - {name: v16-aux-turns-fixed, lr: 5.0e-5, value_per_game: 16, aux_targets: [turns_left]}
   # capacity on the leader's recipe (pre-LN, std 0.02, lr 5e-5, 16 value positions)
   - {name: v16-w1024, lr: 5.0e-5, value_per_game: 16, arch: {width: 1024}}
   - {name: v16-l2, lr: 5.0e-5, value_per_game: 16, arch: {layers: 2}}

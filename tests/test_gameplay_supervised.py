@@ -647,3 +647,16 @@ def test_result_aux_head_trains_on_every_row(tables, tmp_path):
     s = sv.train(cfg, tmp_path / "r", data=data, log=lambda *_: None)
     assert s["step"] == 6
     assert sv.load_any_checkpoint(tmp_path / "r" / "final.pt.gz")[2]["aux"].names == ["result"]
+
+
+def test_a_runs_own_aux_targets_train_on_data_loaded_without_them(tables, tmp_path):
+    """A sweep loads its data once with the base config: a run that adds aux targets must still get them
+    (they used to stay unset, so the aux head trained with no loss)."""
+    base = tiny_cfg(tables, max_steps=8, eval_every_steps=4)
+    data = sv.load_data(sv.resolve_config(base), log=lambda *_: None)
+    assert not any("result" in t.aux or "turns_left" in t.aux for t in data.train)
+    sv.train({**base, "aux_targets": ["result", "turns_left"], "aux_weight": 0.5}, tmp_path / "a", data=data,
+             log=lambda *_: None)
+    ev = sv.read_evals(tmp_path / "a" / "evals.jsonl")
+    assert ev[-1]["train/aux"] > 0
+    assert all("result" in t.aux and "turns_left" in t.aux for t in data.train)
