@@ -178,6 +178,59 @@ def test_play_op_with_closed_decklists(tmp_path):
         assert st["worldsBuilt"] == 8 * st["beliefCalls"] - st["worldsFailed"] and st["openFallbacks"] == 0
 
 
+def test_policy_bots_ask_for_policy_only_play():
+    play = tool("play")
+    o = play.seat_options("policy", 1000, 50052, 300, policy_fallback_budget=40)
+    assert o["policyOnly"] and o["policyTemp"] == 1.0 and o["budget"] == 40 and o["priors"]
+    assert play.seat_options("policy_greedy", 1000, 50052, 300)["policyTemp"] == 0.0
+    assert "policyOnly" not in play.seat_options("il_bc", 1000, 50052, 300)
+
+
+def test_gih_counts_seats_with_the_card_in_hand_and_ranks_against_17lands():
+    gih = tool("gih")
+    g = lambda w, a, b: {"winner": w, "seats": {"A": {"inHand": a}, "B": {"inHand": b}}}  # noqa: E731
+    games = [g("A", {"Stab": 2, "Plains": 3}, {"Refute": 1}), g("B", {"Stab": 1}, {"Refute": 1, "Stab": 1}),
+             {"winner": None, "seats": {"A": {"inHand": {"Stab": 1}}, "B": {"inHand": {}}}}, {"error": "x"}]
+    counts, seats = gih.gih_counts([x for x in games if not x.get("error")])
+    assert seats == 4 and counts["Stab"] == [3, 2] and counts["Refute"] == [2, 1] and counts["Plains"] == [1, 1]
+    ref = {"Stab": {"gih_wr": 0.55, "gih_games": 100}, "Refute": {"gih_wr": 0.60, "gih_games": 100},
+           "Plains": {"gih_wr": 0.5, "gih_games": 100}}
+    res = gih.compare(counts, ref, min_games=2)
+    assert [r["card"] for r in res["rows"]] == ["Refute", "Stab"]        # basics out
+    assert gih.spearman([1, 2, 3, 4], [10, 20, 30, 40]) == pytest.approx(1.0)
+    assert gih.spearman([1, 2, 3, 4], [4, 3, 2, 1]) == pytest.approx(-1.0)
+    assert list(gih.ranks(__import__("numpy").array([5.0, 1.0, 5.0]))) == [2.5, 1.0, 2.5]
+
+
+@needs_worker
+def test_play_op_policy_only_plays_the_networks_policy(tmp_path):
+    """policyOnly: one network call per decision with a head, no simulations there; inHand per seat."""
+    from test_search_bench import FakeNet
+    net = FakeNet()
+    decks = sorted(DECKS.glob("*.dck"))[:2]
+    b = bridge.Bridge("pytest_play_policy", heap="2g", runtime_root=tmp_path)
+    try:
+        seat = {"budget": 4, "policyOnly": True, "policyTemp": 1.0, "priors": True, "leaf": "net",
+                "evaluator": {"type": "remote", "host": "127.0.0.1", "port": net.port}}
+        greedy = {**seat, "policyTemp": 0.0}
+        r = b.request("play", None, deckA=str(decks[0]), deckB=str(decks[1]), seatA=seat, seatB=greedy,
+                      seed=5, maxTurns=8, timeout=900)
+        again = b.request("play", None, deckA=str(decks[0]), deckB=str(decks[1]), seatA=seat, seatB=greedy,
+                          seed=5, maxTurns=8, timeout=900)
+    finally:
+        b.close()
+        net.close()
+    assert r["winner"] in ("A", "B", None) and 1 <= r["turns"] <= 9
+    for s in ("A", "B"):
+        st = r["seats"][s]
+        assert st["policyDecisions"] > 0 and st["decisions"] == st["policyDecisions"] + st["policySearched"]
+        assert st["sims"] <= 4 * st["policySearched"]                    # only the headless decisions searched
+        assert st["inHand"] and all(k > 0 for k in st["inHand"].values())
+    # seeded sampling replays the same game
+    assert (again["winner"], again["turns"]) == (r["winner"], r["turns"])
+    assert again["seats"]["A"]["policyDecisions"] == r["seats"]["A"]["policyDecisions"]
+
+
 def _record_line(pair, swap, seat, result, recs):
     return {"pair": pair, "swap": swap, "seat": seat, "bot": "il_bc", "result": result, "records": recs}
 

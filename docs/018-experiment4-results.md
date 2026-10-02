@@ -53,6 +53,7 @@ has the stage estimates this doc tracks against.*
 | 5. Play | not started | | | |
 | 6. Follow-up checkpoints | not started | | | |
 | 7. Their evaluation | not started | | | |
+| 8. Policy-only evaluation | built and tested on the laptop (the last step: Dan, 2026-10-02) | | | no search: the 17lands games-in-hand comparison, likely on RunPod pods |
 | Failed pods | three Community pods that never started work | 1.0 | $0.22 | |
 
 ## Before the first pod
@@ -536,6 +537,44 @@ epochs of the 10% subset, the same 62k steps as `s30-l1`'s one epoch of 30%:
   the value head should peak in about the first. The trainer already keeps the best checkpoint per measure, so
   stage 3 can run 2–3 epochs (about 75 minutes each on the second machine) and take the policy and value
   checkpoints where each peaks, or lower the value positions per game after the first epoch.
+
+## Policy-only evaluation (the last step, planned)
+
+*Dan, 2026-10-02: plan on policy-only evaluation, likely on RunPod pods, as the last action item.*
+
+The game bots so far all search: about 1,000 simulations a decision, ~8 games an hour on a 3090 pod. A
+policy-only bot plays the network's own policy at every decision with a policy head (priority, target,
+binary): one network call on the live game, no simulations, no belief worlds. It answers whether the
+imitation policy plays like the 17lands humans it learned from, and it's cheap enough to play the tens of
+thousands of games the 17lands comparison needs.
+
+**Built (this commit):**
+- **The bridge** (`BenchPlayer`, `policyOnly` and `policyTemp` in a seat's options): the softmax of the
+  head's logits over MageZero's options, sampled (temperature 1) or the most likely (temperature 0);
+  options sharing an action index split its probability. Decisions without a head, or with an option that
+  has no action index, are searched as configured. MageZero's own root score, which policy-only play never
+  reads, comes from the heuristic, saving a network call a decision. Every seat now reports `inHand`, the
+  cards seen in its hand at its decisions (the opening hand and the draws: 17lands' "in hand").
+- **`play.py`:** bots `policy` (sampled) and `policy_greedy`, with `--policy-fallback-budget` (default 100)
+  for the headless decisions.
+- **`tools/imitation_scale/gih.py`:** each card's games-in-hand win rate from games.jsonl files, and the
+  Spearman correlation with 17lands' (`assets/reference/FDN_gih.json`), basic lands out. Judge it against
+  the noise ceiling at the same number of player-games: ~0.49 at 2,880, ~0.75 at 10,000, ~0.94 at 50,000.
+- **Tests:** the play op with a fake network (policy decisions only, seeded sampling replays the game,
+  `inHand` filled), the bots' seat options, and the win-rate counts and rank correlation.
+
+**Laptop smoke test** (round 1's 1-layer checkpoint, served on the laptop's CPU, `policy` against
+`policy_greedy`, open decklists, 8 games): every decision but 1–2 a game came from the policy. A game took
+50–450 s, nearly all of it the laptop CPU's transformer inference (~0.1–0.26 s a decision); the engine's
+share was about 4 s for ~480 decisions (~8 ms a decision). On a GPU pod the network costs a few
+milliseconds a call (mostly the server's Python), so a game should take seconds and a 32-vCPU pod should
+play hundreds to a few thousand an hour; measure it first. Two of the first six games reached the
+40-turn cap with no winner, and the games ran 13–40 turns (mean 27) against the humans' ~17: that early
+network plays passively. Watch the no-winner share with stage 3's networks.
+
+**Plan:** with stage 3's two networks, policy (sampled) against policy on the eval pool's deck pairs,
+then `gih.py` on the games; the transformer against the MLP, and each against the heuristic bot. Quote
+the pods before starting.
 
 ## Stage 4: cheap evaluation (sb-v2)
 

@@ -13,6 +13,17 @@ nodes and IS-MCTS policies per actor and decision type:
     il_heur      the network's policy as the prior, the heuristic at the leaves
     bc           the default prior, the network's value at the leaves
 
+and two with no search (docs/018, policy-only evaluation): at every decision with a policy head
+(priority, target, binary) the network's own policy over the options, read once on the live game,
+with no simulations and no belief worlds. Decisions without a head are searched as il_bc, at
+--policy-fallback-budget simulations.
+
+    policy        sampled from the policy (temperature 1): plays like the humans it imitates
+    policy_greedy the policy's most likely option
+
+Every game's seats carry inHand (the cards seen in each player's hand), for the games-in-hand win
+rate against 17lands (tools/imitation_scale/gih.py).
+
 A network bot needs a MageZero inference server (tools/search_bench/serve.py, which returns the
 policy heads); --ports spreads the games over several replicas.
 
@@ -49,13 +60,17 @@ BOTS = {
     "il_bc": {"evaluator": "remote", "priors": True, "leaf": "net"},
     "il_heur": {"evaluator": "remote", "priors": True, "leaf": "heuristic"},
     "bc": {"evaluator": "remote", "priors": False, "leaf": "net"},
+    "policy": {"evaluator": "remote", "priors": True, "leaf": "net", "policy_temp": 1.0},
+    "policy_greedy": {"evaluator": "remote", "priors": True, "leaf": "net", "policy_temp": 0.0},
 }
 
 
 def seat_options(bot: str, budget: int, port: int | None, timeout_s: float, belief_port: int | None = None,
-                 opponent_deck: str | None = None) -> dict:
+                 opponent_deck: str | None = None, policy_fallback_budget: int = 100) -> dict:
     b = BOTS[bot]
     s = {"budget": budget, "leaf": b["leaf"], "timeoutSec": timeout_s}
+    if "policy_temp" in b:
+        s.update(budget=policy_fallback_budget, policyOnly=True, policyTemp=b["policy_temp"])
     if belief_port is not None:
         s["belief"] = {"port": belief_port, "exclude": opponent_deck, "worlds": 8}
     if b["evaluator"] == "remote":
@@ -134,6 +149,8 @@ def main(argv=None) -> int:
     ap.add_argument("--pairs", type=int, default=100)
     ap.add_argument("--seed", type=int, default=20261001)
     ap.add_argument("--budget", type=int, default=1000)
+    ap.add_argument("--policy-fallback-budget", type=int, default=100,
+                    help="policy bots: simulations for the decisions without a policy head")
     ap.add_argument("--bot1", choices=sorted(BOTS), required=True)
     ap.add_argument("--bot2", choices=sorted(BOTS), required=True)
     ap.add_argument("--ports", default="50052", help="inference servers, comma-separated (network bots)")
@@ -189,8 +206,8 @@ def main(argv=None) -> int:
         deck_a, deck_b = t["deck1"], t["deck2"]
         opts = dict(deckA=str(dzpaths.deck_path(deck_a, Path(a.deck_root)).resolve()),
                     deckB=str(dzpaths.deck_path(deck_b, Path(a.deck_root)).resolve()),
-                    seatA=seat_options(bot_a, a.budget, port, a.search_timeout, belief, deck_b),
-                    seatB=seat_options(bot_b, a.budget, port, a.search_timeout, belief, deck_a),
+                    seatA=seat_options(bot_a, a.budget, port, a.search_timeout, belief, deck_b, a.policy_fallback_budget),
+                    seatB=seat_options(bot_b, a.budget, port, a.search_timeout, belief, deck_a, a.policy_fallback_budget),
                     seed=t["game_seed"], starting="A", maxTurns=a.max_turns, record=a.record)
         g = {**t, "botA": bot_a, "botB": bot_b, "budget": a.budget, "closed_decklists": belief is not None}
         ts = time.time()

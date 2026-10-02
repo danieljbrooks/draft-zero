@@ -37,6 +37,11 @@ import java.util.function.Function;
  * and the search's root value (StateEncoder.addLabeledState).
  *
  * No tree reuse: every decision is a fresh search with `cfg.budget` new simulations.
+ *
+ * Policy-only play (cfg.policyOnly, docs/018): a decision with a policy head (priority, target, binary)
+ * plays the network's own policy over MageZero's options, read once on the live game: no search, no
+ * belief worlds, no training record. Options sharing an action index split its probability. Decisions
+ * without a head, or with an option that has no action index, are searched as configured.
  */
 public class BenchPlayer extends ComputerPlayerMCTS2 {
 
@@ -45,6 +50,11 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
     /** per-search statistics, summed over the game */
     public transient BenchSearch.Stats stats = new BenchSearch.Stats();
     public transient int decisions, singleOption, fallbacks;
+    /** policy-only play: decisions the policy played, and those it handed to the search */
+    public transient int policyDecisions, policySearched;
+    /** every card seen in the player's hand at one of its decisions (id -> name): 17lands' "in hand"
+     *  (the opening hand and the cards drawn), for the games-in-hand win rate (docs/018) */
+    public final transient Map<UUID, String> seenInHand = new LinkedHashMap<>();
     /** priority choices the engine could not carry out (MageZero's "failed to activate chosen
      *  ability"): the player passed instead */
     public transient int activationFailures;
@@ -153,6 +163,7 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
 
     @Override
     protected MCTSNode calculateActions(Game game, ActionEncoder.ActionType action) {
+        for (Card c : getHand().getCards(game)) seenInHand.putIfAbsent(c.getId(), c.getName());
         MCTSNode2 r = root;
         List<MCTSNode> kids = r.getChildren();
         if (kids.isEmpty()) return null;
@@ -161,6 +172,11 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
             return kids.get(0);
         }
         if (rng == null) rng = new Random(cfg.seed ^ getId().getMostSignificantBits());
+        if (cfg.policyOnly) {
+            MCTSNode chosen = policyChoice(game, action, r, kids);
+            if (chosen != null) return chosen;
+            policySearched++;
+        }
         UUID me = getId();
         // keys of MageZero's options, before the search re-deals the root's game
         Map<String, MCTSNode> byKey = new LinkedHashMap<>();
@@ -228,6 +244,61 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
                     GameStateEvaluator3.evaluateNormalized(getId(), game)));
         }
         return best;
+    }
+
+    // ------------------------------------------------------------------ policy-only play
+
+    /** The policy's option (cfg.policyOnly), or null when the decision has no head or an option no index. */
+    private MCTSNode policyChoice(Game game, ActionEncoder.ActionType action, MCTSNode2 r, List<MCTSNode> kids) {
+        boolean mine = getId().equals(r.playerId);
+        if (!BenchSearch.policyAllowed(action, mine, cfg) || r.stateVector == null) return null;
+        int n = kids.size();
+        int[] idx = new int[n];
+        for (int k = 0; k < n; k++) {
+            try {
+                idx[k] = kids.get(k).getActionIndex(game);
+            } catch (RuntimeException e) {
+                return null;
+            }
+            if (idx[k] < 0) return null;
+        }
+        long t0 = System.nanoTime();
+        long[] feats = new long[r.stateVector.size()];
+        int i = 0;
+        for (int f : r.stateVector) feats[i++] = f;
+        float[] pol = BenchSearch.head(cfg.nn.infer(feats), action, mine);
+        stats.netEvals++;
+        searchNanos += System.nanoTime() - t0;
+        if (pol == null) return null;
+        // softmax over the distinct action indices (the network's view), shared equally by their options
+        Map<Integer, Integer> share = new HashMap<>();
+        for (int a : idx) share.merge(a % pol.length, 1, Integer::sum);
+        double mx = Double.NEGATIVE_INFINITY;
+        for (int a : share.keySet()) mx = Math.max(mx, pol[a]);
+        int best = 0;
+        double[] p = new double[n];
+        double sum = 0.0;
+        for (int k = 0; k < n; k++) {
+            int a = idx[k] % pol.length;
+            if (pol[a] > pol[idx[best] % pol.length]) best = k;
+            double t = cfg.policyTemp > 0 ? Math.exp((pol[a] - mx) / cfg.policyTemp) : 0.0;
+            p[k] = t / share.get(a);
+            sum += p[k];
+        }
+        int pick = best;
+        if (cfg.policyTemp > 0 && sum > 0) {
+            double u = rng.nextDouble() * sum;
+            for (int k = 0; k < n; k++) {
+                u -= p[k];
+                if (u <= 0) {
+                    pick = k;
+                    break;
+                }
+            }
+        }
+        decisions++;
+        policyDecisions++;
+        return kids.get(pick);
     }
 
     // ------------------------------------------------------------------ closed decklists

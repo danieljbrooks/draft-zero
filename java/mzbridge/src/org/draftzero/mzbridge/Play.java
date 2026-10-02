@@ -40,7 +40,9 @@ import java.util.*;
  *            seatA, seatB   each seat's search, the bench op's settings (Bench.config): budget,
  *                           priors, priorTemp, priorBonus, leaf, leafMix, opponentPriors,
  *                           isPolicyPerWorld, discount, discountUnit, cPuct, timeoutSec (default 300
- *                           here), evaluator {type offline | remote, host, port}, and belief
+ *                           here), policyOnly and policyTemp (policy-only play, BenchPlayer: the
+ *                           search settings then apply only to decisions without a policy head),
+ *                           evaluator {type offline | remote, host, port}, and belief
  *                           {port, exclude, worlds}: closed decklists, the opponent's hidden cards
  *                           sampled by tools/imitation_scale/belief_server.py (`exclude`: the deck
  *                           file stem of the deck played against, whose draft leaves the pool;
@@ -53,7 +55,8 @@ import java.util.*;
  *                           the turn, each legal option's action index and visit count, the
  *                           search's root value)
  *   response winner ("A", "B", or null), turns, seats {A, B: decisions, singleOption, fallbacks,
- *            sims, evals, netEvals, engineSteps, searchSeconds, timedOut}, records when asked,
+ *            policyDecisions, policySearched, inHand {card name: copies seen in hand at the seat's
+ *            decisions}, sims, evals, netEvals, engineSteps, searchSeconds, timedOut}, records when asked,
  *            timing_ms
  */
 final class Play {
@@ -133,9 +136,10 @@ final class Play {
         cfg.seed = seed;
         p.cfg = cfg;
         // MageZero scores its root before the search (getNextAction): with the network when one is
-        // configured, offline otherwise
-        p.nn = cfg.nn;
-        p.offlineMode = cfg.nn == null;
+        // configured, offline otherwise. Policy-only play never reads that score: offline, one network
+        // call a decision fewer
+        p.nn = cfg.policyOnly ? null : cfg.nn;
+        p.offlineMode = p.nn == null;
         p.allowMulligans = false;
         p.noNoise = true;
         JsonObject bel = seat == null ? null : Worker.optObject(seat, "belief");
@@ -191,6 +195,13 @@ final class Play {
         s.addProperty("decisions", p.decisions);
         s.addProperty("singleOption", p.singleOption);
         s.addProperty("fallbacks", p.fallbacks);
+        s.addProperty("policyDecisions", p.policyDecisions);
+        s.addProperty("policySearched", p.policySearched);
+        JsonObject seen = new JsonObject();
+        Map<String, Integer> byName = new TreeMap<>();
+        for (String n : p.seenInHand.values()) byName.merge(n, 1, Integer::sum);
+        for (Map.Entry<String, Integer> e : byName.entrySet()) seen.addProperty(e.getKey(), e.getValue());
+        s.add("inHand", seen);
         s.addProperty("activationFailures", p.activationFailures);
         s.addProperty("sims", p.stats.sims);
         s.addProperty("evals", p.stats.evals);

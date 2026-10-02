@@ -95,6 +95,13 @@ public final class BenchSearch {
         public double timeoutSec = 900;
         /** 0: 4 x budget + 200 */
         public int maxIterations = 0;
+        /**
+         * Policy-only play (BenchPlayer, docs/018): every decision with a policy head plays the network's
+         * own policy over the options, no search, no belief worlds: sampled from softmax(logit / policyTemp),
+         * the most likely option at policyTemp 0. Decisions without a head are searched as configured.
+         */
+        public boolean policyOnly = false;
+        public double policyTemp = 1.0;
 
         /** A copy with another seed (the game player searches each decision with its own). */
         public Config copyWithSeed(long newSeed) {
@@ -108,6 +115,8 @@ public final class BenchSearch {
             c.redeal = redeal;
             c.timeoutSec = timeoutSec;
             c.maxIterations = maxIterations;
+            c.policyOnly = policyOnly;
+            c.policyTemp = policyTemp;
             c.priors = priors;
             c.priorTemp = priorTemp;
             c.priorBonus = priorBonus;
@@ -130,6 +139,8 @@ public final class BenchSearch {
             if (!(leafMix >= 0.0 && leafMix <= 1.0)) throw new IllegalArgumentException("leafMix must be in [0, 1], got " + leafMix);
             if (!List.of("net", "uniform").contains(opponentPriors)) throw new IllegalArgumentException("opponentPriors must be net or uniform, got '" + opponentPriors + "'");
             if (priors && nn == null) throw new IllegalArgumentException("priors need a network (evaluator.type remote)");
+            if (policyOnly && nn == null) throw new IllegalArgumentException("policyOnly needs a network (evaluator.type remote)");
+            if (!(policyTemp >= 0.0)) throw new IllegalArgumentException("policyTemp must be >= 0, got " + policyTemp);
         }
     }
 
