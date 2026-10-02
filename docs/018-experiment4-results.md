@@ -276,6 +276,7 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `l5e5-vpg16-aux` | a turns-left head (a target that varies within a game, so it can't be memorised per game) helps the shared trunk too | every measure within ±0.004 of l5e5-vpg16 (non-Pass 0.786, NLL 0.295, value AUC 0.743) | neutral: a within-game target adds nothing at this budget |
 | `l5e5-vpg16-auxres` | decouple: a throwaway result head on every position (aux weight 0.5) gives the trunk every-position's policy gain while the value head keeps 16 positions and stays calibrated (needs a trainer change and a sweep restart, 7016b66) | *paused (Dan, 15:10: no pipeline changes for now; it needs new trainer code and a sweep restart)* |  |
 | `v16-w1024` | 1 layer has headroom above width 512 at the leader's recipe | *running* |  |
+| `v16-td` | TD(0.95) targets (fractions bootstrapped from the network's own values: lower variance than the ±1 result) help the value head once training is stable (round 1 tested them only at the unstable 3e-4) | *queued (next)* |  |
 
 **Overfitting checks** (Dan asked, 15:10): every curve and leaderboard number is on the validation split
 (held out by draft; never trained on); the test split is untouched until stage 3's network is scored.
