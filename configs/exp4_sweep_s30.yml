@@ -34,6 +34,7 @@ base:
 runs:
   - {name: s30-l1, role: default}
   - {name: s30-l2, arch: {layers: 2}}
+  - {name: s30-l1-act3, act_weights: {opp_priority: 3.0}}   # 20:42: the passivity fix (x3 on the opponent's-turn acted rows) at scale
   - {name: s30-l1-w1024, arch: {width: 1024}}
   - {name: s30-mlp, arch: {type: mlp, layers: 2}}
   - {name: s30-l4, arch: {layers: 4}}
