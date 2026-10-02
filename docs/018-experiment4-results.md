@@ -303,7 +303,7 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `act-opp-10, act-all-3` | the passivity fix stronger (×10), and on all three priority tables (×3) (re-based at 21:52 on act3-td99) | against act3-td99: ×10 on the opponent's turn: NLL 0.301 (+0.015), Pass on top 0.894 (humans 0.934); ×3 on all three priority tables: non-Pass **0.802** (+0.011), NLL **0.280** (−0.006), targets 0.545 (−0.007), value unchanged (AUC 0.748, log-loss 0.583), Pass on top 0.938 | ×10 overshoots. ×3 on all three tables is **the new leader** at 10% (non-Pass ~2× the noise band); checked at 30% next (`s30-l1-actall3-td99`) |
 | `x-value-tower` | the network split into a policy tower and a value tower (TransformerNetX: each with its own embeddings, layer and pooling), on act3-td99: no value gradient in the policy's features | non-Pass 0.798 (+0.007), NLL **0.274** (−0.012), targets **0.578** (+0.026), attack +0.003, block +0.005; value unchanged (AUC 0.748, log-loss 0.581); inference 2,585 a second against 5,154 | **the best policy at 10%**, at half the inference speed: the gain is the separation (two shared layers lost). Checked at 30% (`s30-vt-act3-td99`) and with ×3 on all tables (`x-vt-actall3`) |
 | `x-swiglu-attnpool, x-vt-actall3` | SwiGLU + attention pooling; the value tower with ×3 on all three tables | SwiGLU + attention pooling: NLL 0.279 (−0.007), value log-loss 0.576 (−0.006), non-Pass −0.001, inference 4,117 a second (−20%). Value tower + all tables: non-Pass **0.804** (+0.013), NLL **0.273** (−0.012), targets 0.573 (+0.021), value unchanged | SwiGLU + attention pooling: small gains on both heads, borderline. The value tower and ×3 on all tables stack on non-Pass (the best 10% run) |
-| `x-vdetach, x-vt-mlp, x-vweight-0.2` | Gemini (23:05): keep the value tower's policy gain at one tower's cost | *queued* |  |
+| `x-vdetach, x-vt-mlp, x-vweight-0.2` | Gemini (23:05): keep the value tower's policy gain at one tower's cost | x-vdetach: NLL 0.274 (−0.011), non-Pass 0.799 (+0.008), 5,131 evaluations a second, but value AUC 0.618 (−0.131); x-vt-mlp and x-vweight-0.2 queued | the stop-gradient keeps the policy gain but the policy's features can't carry the value: the value needs its own features |
 
 **Overfitting checks** (Dan asked, 15:10): every curve and leaderboard number is on the validation split
 (held out by draft; never trained on); the test split is untouched until stage 3's network is scored.
@@ -495,6 +495,17 @@ cost the value 0.070 AUC.
   `s30-vt-actor3-td99` at 30%, with the value tower).
 - **The MLP's base** (`m0`, 10%): non-Pass 0.762, set NLL 0.327, value AUC 0.746, Pass on top in the opponent's
   turn 0.980: the passivity fix barely moves it.
+
+**Results at 23:37:**
+- **A stop-gradient value head gives the value tower's policy gain at full speed, but the value collapses**
+  (`x-vdetach`: set NLL 0.274, −0.011; non-Pass 0.799, +0.008; 5,131 evaluations a second; value AUC
+  **0.618**, −0.131, log-loss 0.651). The policy's features don't carry what the value needs. It confirms the
+  value tower's mechanism: the value loss was costing the policy ~0.011 NLL in the shared network. The cheap
+  MLP value tower beside the transformer (`x-vt-mlp`) runs next.
+- **The MLP's learning rate:** 3e-4, 1e-3 and 3e-3 against `m0`'s 1e-4: set NLL 0.326, 0.329 and 0.335
+  against 0.327, non-Pass −0.009, −0.016 and −0.020, targets +0.008, +0.020 and +0.016. A higher rate
+  doesn't help the MLP's policy. The first BatchNorm run stopped on a one-row batch (fixed in 265c4d3); the
+  MLP sweep resumed at 23:40.
 
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
 30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):
