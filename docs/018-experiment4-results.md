@@ -231,6 +231,29 @@ every quarter epoch, so the points don't all line up.*
 | 2 | 15 runs, `configs/exp4_sweep_r2.yml` | the fixes combined: a new reference in MageZero's shape at lr 1e-4 with the 0.02 init (two seeds), and around it a value tower, pre-LN at 1e-4 and 5e-4, 1 layer and width 256, two MLPs (lr 1e-3; width 1024 with 4 blocks), lr 2e-4 and a cosine schedule, 10% and no token dropout, SwiGLU with attention pooling, 4 pre-LN layers | ~19:30 |
 | 3 | the top 3–4 | the same comparison on 30% of the data, to check the ranking holds with more data before stage 3 picks a network | ~midnight |
 
+### Round 2: a hill climb around 1 layer (live log)
+
+*Running from ~10:00 UTC on 2 October, for 10+ hours at Dan's request. The run queue is
+`configs/exp4_sweep_r2.yml`, run with `sweep --follow`, which re-reads it before every run.*
+
+**How the loop works:**
+- **The base is `c0`, round 1's leaders combined:** 1 layer, width 512, pre-LN, embedding std 0.02,
+  3k warm-up, lr 3e-4. Every run trains one epoch of the 10% subset, as in round 1.
+- **A check-in every 20–30 minutes,** or when a run finishes: read the leaderboard, form a
+  hypothesis from the best run, and put the run that tests it at the **top** of the queue. The
+  sweep always takes the first unfinished run, so the newest promising ideas go first, and the
+  earlier plan stays below as a backstop.
+- **What's kept:**
+  - every change to the queue is pushed to main;
+  - each check-in sends the new runs' configs, curves, summaries and best weights to the
+    project's private HF repo (`exp4/sweep_r2/`);
+  - the metrics also go to the laptop;
+  - this log records each run's hypothesis and verdict.
+
+| Run | Hypothesis | Result against `c0` | Verdict |
+|---|---|---|---|
+| `c0` | the round-1 fixes stack on 1 layer | *pending* | |
+
 **The budget changed to an equal number of samples** (f9157fa). docs/017 §6.3 gave every run the
 same 25 minutes. A faster network then sees more data: the 1-layer run would have trained 46% more
 samples than the default, and the 4-layer one about half as many. The two default seeds were
