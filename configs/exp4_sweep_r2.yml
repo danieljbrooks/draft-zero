@@ -48,20 +48,22 @@ runs:
   # wants small constant steps. Maybe it's starved of data instead: it trains on only 4 positions a game
   # an epoch (value_per_game), ~58k value samples in this epoch. Give it 4x as many on the leader.
   - {name: l1e4-vpg16, lr: 1.0e-4, value_per_game: 16}
-  # the width probes and the tricks, re-based on the leader (lr 1e-4)
-  - {name: l1e4-w256, lr: 1.0e-4, arch: {width: 256}}
-  - {name: l1e4-w1024, lr: 1.0e-4, arch: {width: 1024}}
-  - {name: l1e4-w128, lr: 1.0e-4, arch: {width: 128}}
-  # MLPs (mean-pooled bag of features + residual blocks; ~24x the transformer's inference speed)
+  # 12:14: lr 5e-5 leads (non-Pass 0.776, NLL 0.305, attack 0.803, value AUC 0.737): lower keeps winning
+  - {name: c0-lr-2e-5, lr: 2.0e-5}
+  # the width probes and the tricks, re-based on the leader (lr 5e-5)
+  - {name: l5e5-w256, lr: 5.0e-5, arch: {width: 256}}
+  - {name: l5e5-w1024, lr: 5.0e-5, arch: {width: 1024}}
+  - {name: l5e5-w128, lr: 5.0e-5, arch: {width: 128}}
+  # MLPs, bracketing the learning rate both ways (the transformers want a low one)
+  - {name: mlp-lr-1e-4, arch: {type: mlp, layers: 2}, lr: 1.0e-4}
   - {name: mlp-lr-1e-3, arch: {type: mlp, layers: 2}, lr: 1.0e-3}
-  - {name: mlp-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}}
-  - {name: mlp-w256-lr-1e-3, arch: {type: mlp, layers: 2, width: 256}, lr: 1.0e-3}
-  - {name: mlp-b4-lr-1e-3, arch: {type: mlp, layers: 4}, lr: 1.0e-3}
-  - {name: mlp-nodrop-lr-1e-3, arch: {type: mlp, layers: 2, dropout: 0.0, pool_dropout: 0.0}, lr: 1.0e-3, token_dropout: 0.1}
-  - {name: l1e4-value-tower, lr: 1.0e-4, arch: {value_tower: true, value_layers: 1}}
-  - {name: l1e4-swiglu-attnpool, lr: 1.0e-4, arch: {ffn: swiglu, pool: attn}}
-  - {name: l1e4-token-dropout-0.1, lr: 1.0e-4, token_dropout: 0.1}
-  - {name: l1e4-seed1, lr: 1.0e-4, seed: 1}
+  - {name: mlp-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}, lr: 1.0e-4}
+  - {name: mlp-b4, arch: {type: mlp, layers: 4}, lr: 1.0e-4}
+  - {name: mlp-nodrop, arch: {type: mlp, layers: 2, dropout: 0.0, pool_dropout: 0.0}, lr: 1.0e-4, token_dropout: 0.1}
+  - {name: l5e5-value-tower, lr: 5.0e-5, arch: {value_tower: true, value_layers: 1}}
+  - {name: l5e5-swiglu-attnpool, lr: 5.0e-5, arch: {ffn: swiglu, pool: attn}}
+  - {name: l5e5-token-dropout-0.1, lr: 5.0e-5, token_dropout: 0.1}
+  - {name: l5e5-seed1, lr: 5.0e-5, seed: 1}
   # ---- the backstop: the original plan at lr 3e-4
   - {name: c0-w256, arch: {width: 256}}
   - {name: c0-w128, arch: {width: 128}}
