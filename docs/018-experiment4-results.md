@@ -296,8 +296,9 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `v16-seed1` | the noise band for the leader | seed 1 against seed 0: non-Pass +0.003, NLL −0.003, attack −0.009, block +0.007, value AUC +0.001, log-loss +0.007 | the noise band on this recipe: ~0.006 on the policy (twice the difference), ~0.014 on value log-loss; TD's policy gain is probably real, cosine's value gain borderline |
 | `hw-ref (second machine)` | the leader rerun on the second machine: does other hardware reproduce round 2? | every measure within 0.001 of `v16-td-cosine-1e-4`, except targets (0.554 against 0.547); 3.4× the training speed | passed: results from the two machines mix |
 | `act-opp-3` | the passivity fix: ×3 on the policy loss of the opponent's-turn rows where the human acted | Pass on top in the opponent's turn 0.938 (humans 0.934, leader 0.971); non-Pass 0.796 (+0.004), NLL 0.281 (−0.007), other heads unchanged | **the new leader:** human-like passing and a better policy; tested at 30% next (`s30-l1-act3`) |
-| `td-0.90, td-0.975, td-0.99` | TD(λ) around the leader's 0.95 (Dan, 20:45): lower bootstraps more, higher is closer to the plain result | value AUC / log-loss / set NLL by λ: 0.90: 0.732 / 0.610 / 0.285; 0.95 (leader): 0.739 / 0.599 / 0.287; 0.975: 0.745 / **0.587** / 0.289; 1 (the plain result, `v16-cosine-1e-4`): 0.749 / 0.592 / 0.297; 0.99 running | a clean trade: lower λ helps the policy a little, higher helps the value. 0.975 has the best value log-loss with the policy within noise of 0.95 |
+| `td-0.90, td-0.975, td-0.99` | TD(λ) around the leader's 0.95 (Dan, 20:45): lower bootstraps more, higher is closer to the plain result | value AUC / log-loss / set NLL / non-Pass by λ: 0.90: 0.732 / 0.610 / **0.285** / 0.793; 0.95 (leader): 0.739 / 0.599 / 0.287 / 0.792; 0.975: 0.745 / 0.587 / 0.289 / 0.792; 0.99: **0.749** / **0.583** / 0.292 / 0.786; 1 (the plain result, `v16-cosine-1e-4`): 0.749 / 0.592 / 0.297 / 0.787 | a clean, monotone trade: lower λ helps the policy, higher the value, and the plain result is worst on both ends' sum. 0.975 balances them (value log-loss −0.012, policy within noise); combined with the passivity fix next (`act3-td975`, and at 30%) |
 | `ep3` | the leader for three epochs of the 10% subset (the 30% run's step count): data or steps? | *queued* |  |
+| `act3-td975` | do the passivity fix and TD(0.975) stack? (also at 30% as `s30-l1-act3-td975`, the candidate stage-3 recipe) | *queued* |  |
 | `act-opp-10, act-all-3` | the passivity fix stronger (×10), and on all three priority tables (×3) | *queued* |  |
 | `x-l2, x-l4, x-mlp, x-mlp-w1024-b4` | capacity on the current leader's recipe | *queued* |  |
 
@@ -393,8 +394,24 @@ opponent's-turn rows where the human acted (`act_weights: {opp_priority: 3.0}`),
   exact labels (a Pass once nothing was left to play) slips from 0.994 to 0.977, the price of a less lopsided
   prior, and on the rows with plays (imputed order) it rises from 0.918 to 0.947.
 - **Next:** ×10 on the same table (`act-opp-10`) and ×3 on all three priority tables (`act-all-3`) are queued
-  after the TD(λ) runs, and the 30% check gets the fix too (`s30-l1-act3`, next after `s30-l2`). If it holds
-  at 30%, stage 3 trains with it.
+  after the TD(λ) runs, and the 30% check gets the fix too, with TD(0.975) (`s30-l1-act3-td975`, next after
+  `s30-l2`). If it holds at 30%, stage 3 trains with it.
+
+**TD(λ): a clean trade between the heads (21:13).** On the leader's recipe at 10%, with Dan's three values and
+the two already run (λ = 1 is the plain result):
+
+| λ | Value AUC | Value log-loss | Set NLL | Non-Pass top-1 |
+|---|---|---|---|---|
+| 0.90 | 0.732 | 0.610 | **0.285** | **0.793** |
+| 0.95 (the leader) | 0.739 | 0.599 | 0.287 | 0.792 |
+| 0.975 | 0.745 | 0.587 | 0.289 | 0.792 |
+| 0.99 | **0.749** | **0.583** | 0.292 | 0.786 |
+| 1 (`v16-cosine-1e-4`) | **0.749** | 0.592 | 0.297 | 0.787 |
+
+- **Lower λ helps the policy, higher λ the value,** monotonically. The plain result is the worst of the five for
+  the policy (NLL +0.010 against 0.95, beyond the noise).
+- **0.975 balances them:** value log-loss −0.012 against 0.95, with the policy within the noise. It joins the
+  passivity fix in the candidate recipe (`act3-td975` at 10%, `s30-l1-act3-td975` at 30%).
 
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
 30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):
