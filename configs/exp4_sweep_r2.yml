@@ -42,11 +42,12 @@ runs:
   # 10:54: the policy is flat across learning rates, the value/attack/block heads want a low one: a cosine
   # decay could give both (fast early learning, a low rate late)
   - {name: c0-cosine-3e-4, lr: 3.0e-4, lr_schedule: cosine}
+  # 11:21: lr 6e-4 is worse (NLL +0.020, attack −0.032): lower keeps winning, so try lower still next
+  - {name: c0-lr-5e-5, lr: 5.0e-5}
   # the width probes and the tricks, re-based on the leader (lr 1e-4)
   - {name: l1e4-w256, lr: 1.0e-4, arch: {width: 256}}
   - {name: l1e4-w1024, lr: 1.0e-4, arch: {width: 1024}}
   - {name: l1e4-w128, lr: 1.0e-4, arch: {width: 128}}
-  - {name: c0-lr-5e-5, lr: 5.0e-5}
   # MLPs (mean-pooled bag of features + residual blocks; ~24x the transformer's inference speed)
   - {name: mlp-lr-1e-3, arch: {type: mlp, layers: 2}, lr: 1.0e-3}
   - {name: mlp-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}}
