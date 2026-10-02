@@ -1,7 +1,7 @@
 # Experiment #4: results
 
 *October 2026. **Draft, in progress:** the results of experiment #4's stages 1–7, written as they
-run; this snapshot is from 00:12 UTC on 2 October, during stage 2. The plan, its reasoning and the
+run; this snapshot is from 08:30 UTC on 2 October, during stage 2. The plan, its reasoning and the
 decisions from review are in [docs/017](017-experiment4-scaling-up-imitation-learning.md); its §6.1
 has the stage estimates this doc tracks against.*
 
@@ -10,13 +10,14 @@ has the stage estimates this doc tracks against.*
 - **The data is built.** 161,206 top players' games became 12.1M decisions (10.9M for training),
   about 80× #2b's 132,603. Every turn was replayed, including the opponent's turns, timing stops and
   blocks (Stage 1).
-- **In the sweep, a 1-layer network beats MageZero's default 2-layer one on the same data.** After
-  one epoch of a 10% subset, it scores non-Pass top-1 0.760 against 0.703, set NLL 0.323 against
-  0.400, attack accuracy 0.764 against 0.715, and value AUC 0.717 against 0.648 (the default's two
-  seeds averaged). That's 3–4× docs/017 §6.3's bar of twice the seed-to-seed difference. A
-  4-layer network failed to learn its attack and value heads at all in that budget. So depth hurts
-  at this learning rate and budget. The learning-rate runs, still to come, should say whether
-  that's optimization or capacity (Stage 2).
+- **The sweep's first round: MageZero's default network trains unstably at its learning rate.**
+  - **The symptoms:** at lr 3e-4, bigger networks (4 layers, width 768) learn no attack or value
+    head in an epoch, while smaller ones (1 layer, width 256, an MLP) beat the default by 3–4×
+    the noise bar.
+  - **What fixes it:** lr 1e-4 helps every head; a smaller embedding init fixes the attack and
+    value heads; pre-LN helps the policy.
+  - **Round 2 combines the fixes,** and round 3 checks the best on 30% of the data before
+    stage 3 (Stage 2).
 - **Every network so far almost never acts in the opponent's turn.** Pass is its top choice 97.5–
   100% of the time, against 93.4% for the humans, though it ranks the right play first among the
   non-Pass options ~70% of the time when the human did act. It knows what to cast there but not
@@ -30,14 +31,14 @@ has the stage estimates this doc tracks against.*
 
 ## Status
 
-*Spend so far: $6.82 of the ~$36–44 planned (RunPod balance $82.58 → $75.76).*
+*Spend so far: $11.21 of the ~$36–44 planned (RunPod balance $82.58 → $71.37). Ask before total spend passes $65.*
 
 | Stage | Status | Pod-hours | Cost | Notes |
 |---|---|---|---|---|
 | 0. Engineering | done on the laptop (docs/017 §8.1), plus fixes below | – | – | 384 tests pass; 3 added since |
 | GPU check | done: the RTX 3090 | 1.5 (3 pods) | $1.30 | the L40 is no cheaper per evaluation; network search is CPU-bound |
 | 1. Build | done: 161,206 games, 12.1M rows (10.9M train) | 3.6 | $1.82 | estimate 5 pod-hours, $2.50 |
-| 2. Hyperparameter sweep | running: 4 of 13 runs done | 3.9 so far | $1.98 so far | an equal sample budget per run (below); ~9 pod-hours expected against 6 |
+| 2. Hyperparameter sweep | round 1: 16 of 18 done; rounds 2–3 queued (an extended search, at Dan's go-ahead) | 12.2 so far | $6.10 so far | ~24 pod-hours expected against 6: over by design |
 | 3. Large training | not started | | | |
 | 4. Cheap evaluation | heuristic bot at 300 done; at 3,000, half done | 4.6 | $1.01 | the pod's host rebooted; the rest runs with the network mixes |
 | 5. Play | not started | | | |
@@ -161,49 +162,86 @@ against about 84 in the smoke build (which counted both block tables).
 
 ## Stage 2: the hyperparameter sweep
 
-*Running: 4 of 13 runs done.*
+*Running: round 1 has 2 of 18 runs left; rounds 2 and 3 follow (below). Snapshot at 08:30 UTC on 2
+October.*
 
-**Each run trains one epoch of the same 10% subset** (1.10M rows; the same feature vocab and
-validation rows), one setting changed at a time around MageZero's default (2 layers, width 512,
-learning rate 3e-4). Validation at the end of each run:
+**Every run trains one epoch of the same 10% subset** (1.10M rows; the same feature vocab and
+validation rows) and is scored on the validation split: about 20,000 rows per table, whole games.
+Round 1 changes one setting at a time around MageZero's default network (2 post-LN layers, width
+512, embedding rows drawn N(0, 1), learning rate 3e-4, 300 warm-up steps).
 
-| Run | Non-Pass top-1 | Set NLL | Turn-start top-1 | Attack accuracy | Block top-1 | Target top-1 | Value AUC | Value log-loss | Opponent's turn: Pass on top | Training samples/s |
-|---|---|---|---|---|---|---|---|---|---|---|
-| default, seed 0 | 0.707 | 0.395 | 0.704 | 0.720 | 0.684 | 0.530 | 0.635 | 0.691 | 99.9% | 680 |
-| default, seed 1 | 0.699 | 0.404 | 0.699 | 0.710 | 0.680 | 0.542 | 0.660 | 0.649 | 99.7% | 681 |
-| **1 layer** | **0.760** | **0.323** | **0.754** | **0.764** | 0.691 | 0.546 | **0.717** | **0.635** | 97.5% | 1,017 |
-| 4 layers | 0.667 | 0.499 | 0.665 | 0.505 | 0.685 | 0.518 | 0.502 | 0.676 | 100% | 352 |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/018-sweep-r1-dark.png">
+  <img alt="Learning curves of round 1's runs over one epoch, in four rows (shape, learning rate, value target, initialisation and warm-up) and four columns (non-Pass top-1, set NLL, attack accuracy, value AUC), each against MageZero's default in grey dashes. The 1-layer, width-256 and MLP networks and lr 1e-4 lead on every measure; 4 layers and width 768 learn no attack or value head; lr 1e-3 is worse; pre-LN and the 0.02 embedding init each help." src="img/018-sweep-r1-light.png">
+</picture>
 
-*Humans passed in 93.4% of the opponent's-turn rows. Chance on the block rows is 0.456, on the
-target rows 0.328.*
+*Round 1's learning curves. The first runs were evaluated every 5 or 10 minutes, the later ones at
+every quarter epoch, so the points don't all line up.*
+
+**Round 1's leaderboard,** sorted by the policy's set NLL (lower is better):
+
+| # | Run | Non-Pass top-1 | Set NLL | Attack acc. | Block top-1 | Target top-1 | Value AUC | Value log-loss | Opp. turn: Pass on top | Inference evals/s (batch 32) | MageZero's shape |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1 layer | 0.760 | 0.323 | 0.764 | 0.691 | 0.546 | 0.717 | 0.635 | 97.5% | 2,194 | no |
+| 2 | width 256 | 0.744 | 0.324 | 0.766 | 0.690 | 0.547 | 0.722 | 0.622 | 97.9% | 2,972 | no |
+| 3 | lr 1e-4 | 0.733 | 0.347 | 0.747 | 0.684 | 0.534 | 0.716 | 0.620 | 99.9% | 1,391 | yes |
+| 4 | pre-LN | 0.722 | 0.360 | 0.723 | 0.687 | 0.535 | 0.670 | 0.633 | 99.9% | 1,135 | no |
+| 5 | MLP (bag of features, 2 residual blocks) | 0.742 | 0.365 | 0.759 | 0.686 | 0.540 | 0.724 | 0.654 | 99.9% | 32,986 | no |
+| 6 | value weight 0.1 (from 0.5) | 0.726 | 0.375 | 0.726 | 0.686 | 0.524 | 0.565 | 0.665 | 99.9% | 1,386 | yes |
+| 7 | TD + turns-left head | 0.724 | 0.377 | 0.722 | 0.686 | 0.522 | 0.605 | 0.659 | 99.9% | 1,374 | yes |
+| 8 | TD(0.95) value targets | 0.714 | 0.382 | 0.716 | 0.687 | 0.539 | 0.656 | 0.642 | 99.8% | 1,382 | yes |
+| 9 | MageZero's default: 2 post-LN layers, width 512, lr 3e-4 | 0.707 | 0.395 | 0.720 | 0.684 | 0.530 | 0.635 | 0.691 | 99.9% | 1,379 | yes |
+| 10 | + turns-left head | 0.715 | 0.395 | 0.711 | 0.685 | 0.526 | 0.635 | 0.676 | 99.9% | 1,374 | yes |
+| 11 | 3k warm-up steps (from 300) | 0.706 | 0.401 | 0.702 | 0.684 | 0.530 | 0.657 | 0.638 | 99.9% | 1,389 | yes |
+| 12 | embedding init std 0.02 (from 1) | 0.697 | 0.402 | 0.741 | 0.676 | 0.539 | 0.699 | 0.655 | 100.0% | 1,390 | yes |
+| 13 | default, seed 1 | 0.699 | 0.404 | 0.710 | 0.680 | 0.542 | 0.660 | 0.649 | 99.7% | 1,385 | yes |
+| 14 | width 768 | 0.698 | 0.420 | 0.624 | 0.684 | 0.525 | 0.521 | 0.678 | 99.9% | 574 | no |
+| 15 | lr 1e-3 | 0.694 | 0.454 | 0.613 | 0.685 | 0.516 | 0.527 | 0.668 | 100.0% | 1,390 | yes |
+| 16 | 4 layers | 0.667 | 0.499 | 0.505 | 0.685 | 0.518 | 0.502 | 0.676 | 100.0% | 584 | no |
+| – | pre-LN + std 0.02 + 3k warm-up *(at 0.50 epoch)* | 0.717 | 0.366 | 0.755 | 0.686 | 0.526 | 0.668 | 0.692 | 99.7% | – | no |
 
 - **The noise band** (twice the seed-to-seed difference, docs/017 §6.3's bar): about 0.016 in
-  non-Pass top-1, 0.018 in set NLL, 0.05 in value AUC and 0.08 in value log-loss. The value head is
-  noisy at this budget.
-- **1 layer clears the bar on both heads,** by 3–4× the bar on the policy. It also trains 50% faster. But
-  only MageZero's default shape loads into its inference server unchanged, so a 1-layer network
-  needs a small server change for stages 4–7.
-- **4 layers learned no attack or value head** (both at chance) in one epoch. With 1 layer best
-  and 4 worst, depth hurts at this learning rate and budget. The learning-rate runs (1e-4 and
-  1e-3, still to come) should say whether that's optimization or capacity.
-- **In the opponent's turn the networks almost never act.** When the human acted there, they rank
-  the right play first among the non-Pass options about 70% of the time. So they know what to cast
-  there but not when.
-- **Throughput:** the default trains at about 680 samples a second on this 3090; an evaluation of
-  the ~110k validation rows takes about 2 minutes. At full size that's ~4.5 hours an epoch, so
-  stage 3's 12-hour cap allows ~2.6 epochs of the default.
+  non-Pass top-1, 0.018 in set NLL, 0.05 in value AUC and 0.08 in value log-loss.
+- **MageZero's default trains unstably at lr 3e-4.** Each step up in learning rate (1e-4, 3e-4,
+  1e-3) is worse on every head. Bigger networks fail outright: 4 layers and width 768 learn no
+  attack or value head in an epoch. Smaller ones (1 layer, width 256, the MLP) beat the default
+  by 3–4× the bar.
+- **What fixes it, one setting at a time:**
+  - **lr 1e-4:** better on every head, and it keeps MageZero's shape.
+  - **The 0.02 embedding init:** fixes the attack and value heads (+0.026 and +0.05), not the
+    policy.
+  - **Pre-LN:** helps the policy (+0.019 top-1, −0.040 NLL). Inference is 18% slower, within
+    §6.3's 25%.
+  - **All three together** (`modern`) beat the default's whole epoch at a quarter epoch.
+  - **A longer warm-up alone does nothing.**
+- **The value targets don't help on their own** (TD(0.95), a turns-left head, both). Value weight
+  0.1 trades value for policy: +0.023 top-1, but −0.08 value AUC. So the shared trunk trades one
+  head against the other, which round 2's value tower tests.
+- **The networks almost never act in the opponent's turn:** Pass is their top choice 97.5–100% of
+  the time, against 93.4% for the humans. They rank the right play first among the non-Pass
+  options ~70% of the time when the human did act. So they know what to cast there but not when.
+- **The MLP's inference is ~24× the transformer's** (33k against 1.4k evaluations a second at batch
+  32). The network search is CPU-bound, so that matters less than it seems, but it's free speed.
+
+**What's left in the search:**
+
+| Round | Runs | What it tests | Expected end (UTC, 2 Oct) |
+|---|---|---|---|
+| 1 | `modern` (half done), 4 layers with `modern` | do the fixes stack; can depth train with them | ~10:00 |
+| 2 | 15 runs, `configs/exp4_sweep_r2.yml` | the fixes combined: a new reference in MageZero's shape at lr 1e-4 with the 0.02 init (two seeds), and around it a value tower, pre-LN at 1e-4 and 5e-4, 1 layer and width 256, two MLPs (lr 1e-3; width 1024 with 4 blocks), lr 2e-4 and a cosine schedule, 10% and no token dropout, SwiGLU with attention pooling, 4 pre-LN layers | ~19:30 |
+| 3 | the top 3–4 | the same comparison on 30% of the data, to check the ranking holds with more data before stage 3 picks a network | ~midnight |
 
 **The budget changed to an equal number of samples** (f9157fa). docs/017 §6.3 gave every run the
 same 25 minutes. A faster network then sees more data: the 1-layer run would have trained 46% more
 samples than the default, and the 4-layer one about half as many. The two default seeds were
 resumed from 0.92 to 1.0 epoch (an exact resume: the learning rate is constant after warm-up). The
-first 1-layer run, stopped at 1.08 epochs, was restarted. The time-budget runs, for the record:
+first 1-layer run, stopped at 1.08 epochs, was restarted.
 
-| Run | Epochs | Non-Pass top-1 | Set NLL | Turn-start top-1 | Attack accuracy | Block top-1 | Value AUC |
-|---|---|---|---|---|---|---|---|
-| default, seed 0 | 0.92 | 0.715 | 0.390 | 0.711 | 0.717 | 0.683 | 0.639 |
-| default, seed 1 | 0.92 | 0.702 | 0.408 | 0.699 | 0.716 | 0.684 | 0.640 |
-| 1 layer | 0.81 | 0.739 | 0.336 | 0.738 | 0.759 | 0.689 | 0.701 |
+**New trainer options for the search** (all tested):
+- `arch.norm_first` (pre-LN) and `emb_init_std` (26c0f63);
+- `TransformerNetX`: a SwiGLU feed-forward, attention pooling, and a value tower (032038b);
+- `value_server.py` serves any network the trainer saves (8c9afb9), so a network outside
+  MageZero's shape can still play in stages 4–7.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
@@ -236,7 +274,7 @@ Every pod's quote, what it actually had, and what it delivered (docs/005).
 | Pod | Stage | GPU, cloud | Quote | vCPU / RAM (cgroup) | Hours | Cost | Outcome |
 |---|---|---|---|---|---|---|---|
 | `qbptx0wvxlhstv` | – | CPU pod | $0.06/hr | – | ~0.03 | <$0.01 | tested that a pod's own API key can terminate it (GraphQL `podTerminate`): it can. The image's `runpodctl` 1.14 can't authenticate with that key, so docs/005's self-destruct line would fail silently. |
-| `cbrrtovvu7a1cc` | GPU check, 1, 2 | RTX 3090, Secure, CZ | $0.50/hr, 32 vCPU, 125 GB | 31.1 cores / 116 GB, EPYC 7H12 | 8.4 so far | $4.21 so far | running. `/workspace` is a network filesystem (MooseFS): writes ~570 MB/s, and `tar` must skip `chown` (`--no-same-owner`) |
+| `cbrrtovvu7a1cc` | GPU check, 1, 2 | RTX 3090, Secure, CZ | $0.50/hr, 32 vCPU, 125 GB | 31.1 cores / 116 GB, EPYC 7H12 | 16.8 so far | $8.38 so far | running. `/workspace` is a network filesystem (MooseFS): writes ~570 MB/s, and `tar` must skip `chown` (`--no-same-owner`) |
 | `5bdvhik7ea0kaz` | GPU check | L40, Secure, US | $0.82/hr, 32 vCPU, 250 GB | 27.2 cores / 250 GB | 0.37 | $0.30 | model and training speed only (no bridge); removed |
 | `2yod0kvnr108f7` | server test | L40S, Secure, US | $1.09/hr, 32 vCPU, 125 GB | 27.2 cores / 125 GB, EPYC 9554 | 0.72 | $0.78 | the inference-server comparison (no Secure 3090 or L40 left); removed |
 | `rizee0c3sfip6l` | 4 (heuristic bot) | RTX 3090, Community with public IP, CA | $0.22/hr, 32 vCPU, 62 GB | 27.2 cores / 62 GB, EPYC 7702 | 4.6 | $1.01 | setup took 6 minutes. 4 JVM crashes (SIGBUS); the host rebooted at ~18:51 and the pod sat idle until 22:02 (~$0.70 lost); removed |
