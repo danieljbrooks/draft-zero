@@ -286,8 +286,8 @@ first 1-layer run, stopped at 1.08 epochs, was restarted.
 | `v16-w1024` | 1 layer has headroom above width 512 at the leader's recipe | every measure within ±0.006 of l5e5-vpg16 (non-Pass 0.791, NLL 0.296, value AUC 0.740); inference 2.7x slower | a tie: width doesn't pay on 10% of the data; the 30% check retests it |
 | `v16-td` | TD(0.95) targets (fractions bootstrapped from the network's own values: lower variance than the ±1 result) help the value head once training is stable (round 1 tested them only at the unstable 3e-4) | non-Pass 0.794 (+0.008), NLL 0.286 (−0.009), block 0.706 (+0.009), target 0.557 (+0.010); value AUC 0.737 (−0.007), log-loss 0.617 (+0.014), its calibration swinging with each TD refresh (ECE 0.05–0.10) | the best policy yet, but within noise; the value scores slightly worse against results. The leader's second seed moves up to measure the noise |
 | `v16-td-cosine-1e-4` | the two small gains combine: TD for the policy, cosine from 1e-4 for the value | non-Pass 0.792 (+0.006), NLL 0.287 (−0.008), attack 0.813 (+0.005), block 0.704 (+0.007), value AUC 0.739 (−0.005), log-loss 0.599 (−0.004) against l5e5-vpg16 | **the new leader:** TD's policy gain (at or past the noise bar) with the value as good as before (cosine stops TD's log-loss slip, 0.617 to 0.599). The 30% check switches to this recipe |
-| `v16-auxres-fixed` | the result head, now actually trained: the trunk gets the outcome signal on every position while the value head keeps 16 | *running* (on the fixed trainer) |  |
-| `v16-aux-turns-fixed` | a turns-left head, now actually trained, helps the shared trunk | *queued* |  |
+| `v16-auxres-fixed` | the result head, now actually trained: the trunk gets the outcome signal on every position while the value head keeps 16 | non-Pass 0.785 (−0.001), NLL 0.302 (+0.007), value AUC 0.718 (−0.026), log-loss 0.677 (+0.074) against l5e5-vpg16 (the same recipe without it); its aux loss fell 0.36 to 0.27 (memorising) while the value log-loss rose from 0.613 | rejected: no policy gain, and the value overfits through the trunk (the trunk learns to recognise games) |
+| `v16-aux-turns-fixed` | a turns-left head, now actually trained, helps the shared trunk | *running* |  |
 | `v16-l2` | capacity: 2 layers help on the right recipe (round 1's 2 layers trained unstably) | *queued* |  |
 | `v16-l4` | capacity: 4 layers help on the right recipe | *queued* |  |
 | `v16-mlp-lr-1e-4, v16-mlp-w1024-b4` | the MLP on the recipe, and a big MLP (fast enough to afford) | *queued* |  |
@@ -320,13 +320,14 @@ so the winner's validation numbers are slightly optimistic.
 | 10 | `v16-w1024` | transformer, 1 layer, width 1024, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.791 | 0.296 | 0.809 | 0.696 | 0.551 | 0.740 | 0.608 | 97.6% | 774 |
 | 11 | `v16-cosine-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001 cosine, emb std 0.02, warm-up 3000 | 0.787 | 0.297 | 0.806 | 0.698 | 0.542 | 0.749 | 0.592 | 98.2% | 2,158 |
 | 12 | `v16-cosine-2e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0002 cosine, emb std 0.02, warm-up 3000 | 0.775 | 0.301 | 0.814 | 0.703 | 0.566 | 0.746 | 0.601 | 97.8% | 2,158 |
-| 13 | `c0-lr-5e-5` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.776 | 0.305 | 0.803 | 0.693 | 0.534 | 0.737 | 0.645 | 97.8% | 2,156 |
-| 14 | `c0-lr-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001, emb std 0.02, warm-up 3000 | 0.753 | 0.315 | 0.795 | 0.700 | 0.550 | 0.734 | 0.636 | 98.3% | 2,157 |
-| 15 | `c0` | transformer, 1 layer, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.760 | 0.316 | 0.780 | 0.688 | 0.554 | 0.701 | 0.655 | 97.8% | 2,144 |
-| 16 | `c0-cosine-3e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0003 cosine, emb std 0.02, warm-up 3000 | 0.766 | 0.319 | 0.792 | 0.691 | 0.551 | 0.712 | 0.654 | 99.8% | 2,151 |
-| 17 | `l5e5-w256` | transformer, 1 layer, width 256, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.771 | 0.320 | 0.791 | 0.694 | 0.542 | 0.731 | 0.671 | 99.5% | 5,374 |
-| 18 | `c0-lr-2e-5` | transformer, 1 layer, width 512, pre-LN, lr 2e-05, emb std 0.02, warm-up 3000 | 0.763 | 0.333 | 0.791 | 0.689 | 0.498 | 0.731 | 0.671 | 99.8% | 2,141 |
-| 19 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
+| 13 | `v16-auxres-fixed` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000, +result | 0.785 | 0.302 | 0.803 | 0.699 | 0.543 | 0.718 | 0.677 | 97.9% | 2,153 |
+| 14 | `c0-lr-5e-5` | transformer, 1 layer, width 512, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.776 | 0.305 | 0.803 | 0.693 | 0.534 | 0.737 | 0.645 | 97.8% | 2,156 |
+| 15 | `c0-lr-1e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0001, emb std 0.02, warm-up 3000 | 0.753 | 0.315 | 0.795 | 0.700 | 0.550 | 0.734 | 0.636 | 98.3% | 2,157 |
+| 16 | `c0` | transformer, 1 layer, width 512, pre-LN, lr 0.0003, emb std 0.02, warm-up 3000 | 0.760 | 0.316 | 0.780 | 0.688 | 0.554 | 0.701 | 0.655 | 97.8% | 2,144 |
+| 17 | `c0-cosine-3e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0003 cosine, emb std 0.02, warm-up 3000 | 0.766 | 0.319 | 0.792 | 0.691 | 0.551 | 0.712 | 0.654 | 99.8% | 2,151 |
+| 18 | `l5e5-w256` | transformer, 1 layer, width 256, pre-LN, lr 5e-05, emb std 0.02, warm-up 3000 | 0.771 | 0.320 | 0.791 | 0.694 | 0.542 | 0.731 | 0.671 | 99.5% | 5,374 |
+| 19 | `c0-lr-2e-5` | transformer, 1 layer, width 512, pre-LN, lr 2e-05, emb std 0.02, warm-up 3000 | 0.763 | 0.333 | 0.791 | 0.689 | 0.498 | 0.731 | 0.671 | 99.8% | 2,141 |
+| 20 | `c0-lr-6e-4` | transformer, 1 layer, width 512, pre-LN, lr 0.0006, emb std 0.02, warm-up 3000 | 0.757 | 0.335 | 0.763 | 0.684 | 0.556 | 0.701 | 0.634 | 99.5% | 2,167 |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/018-sweep-r2-dark.png">
