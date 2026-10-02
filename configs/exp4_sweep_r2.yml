@@ -57,18 +57,25 @@ runs:
   - {name: l5e5-vpg-all, lr: 5.0e-5, value_per_game: null}
   # the width probes and the tricks, re-based on the leader (lr 5e-5)
   - {name: l5e5-w256, lr: 5.0e-5, arch: {width: 256}}
+  # 14:02: the value loss on every position gives the best policy (non-Pass 0.792, NLL 0.288) but the value head
+  # memorises games (log-loss 0.606 at a quarter epoch, 0.846 at the end). Try the middle, and a within-game target.
+  - {name: l5e5-vpg32, lr: 5.0e-5, value_per_game: 32}
+  - {name: l5e5-vpg16-aux, lr: 5.0e-5, value_per_game: 16, aux_targets: [turns_left]}
+  # the rest re-based on the leader, l5e5-vpg16 (lr 5e-5, 16 value positions a game)
+  - {name: v16-w1024, lr: 5.0e-5, value_per_game: 16, arch: {width: 1024}}
+  - {name: v16-w128, lr: 5.0e-5, value_per_game: 16, arch: {width: 128}}
+  - {name: v16-mlp-lr-1e-4, lr: 1.0e-4, value_per_game: 16, arch: {type: mlp, layers: 2}}
+  - {name: v16-mlp-lr-1e-3, lr: 1.0e-3, value_per_game: 16, arch: {type: mlp, layers: 2}}
+  - {name: v16-mlp-w1024-b4, lr: 1.0e-4, value_per_game: 16, arch: {type: mlp, layers: 4, width: 1024}}
+  - {name: v16-mlp-b4, lr: 1.0e-4, value_per_game: 16, arch: {type: mlp, layers: 4}}
+  - {name: v16-mlp-nodrop, lr: 1.0e-4, value_per_game: 16, token_dropout: 0.1, arch: {type: mlp, layers: 2, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: v16-value-tower, lr: 5.0e-5, value_per_game: 16, arch: {value_tower: true, value_layers: 1}}
+  - {name: v16-swiglu-attnpool, lr: 5.0e-5, value_per_game: 16, arch: {ffn: swiglu, pool: attn}}
+  - {name: v16-token-dropout-0.1, lr: 5.0e-5, value_per_game: 16, token_dropout: 0.1}
+  - {name: v16-seed1, lr: 5.0e-5, value_per_game: 16, seed: 1}
+  # superseded (re-based above), kept as backstop at lr 5e-5 with 4 value positions
   - {name: l5e5-w1024, lr: 5.0e-5, arch: {width: 1024}}
   - {name: l5e5-w128, lr: 5.0e-5, arch: {width: 128}}
-  # MLPs, bracketing the learning rate both ways (the transformers want a low one)
-  - {name: mlp-lr-1e-4, arch: {type: mlp, layers: 2}, lr: 1.0e-4}
-  - {name: mlp-lr-1e-3, arch: {type: mlp, layers: 2}, lr: 1.0e-3}
-  - {name: mlp-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}, lr: 1.0e-4}
-  - {name: mlp-b4, arch: {type: mlp, layers: 4}, lr: 1.0e-4}
-  - {name: mlp-nodrop, arch: {type: mlp, layers: 2, dropout: 0.0, pool_dropout: 0.0}, lr: 1.0e-4, token_dropout: 0.1}
-  - {name: l5e5-value-tower, lr: 5.0e-5, arch: {value_tower: true, value_layers: 1}}
-  - {name: l5e5-swiglu-attnpool, lr: 5.0e-5, arch: {ffn: swiglu, pool: attn}}
-  - {name: l5e5-token-dropout-0.1, lr: 5.0e-5, token_dropout: 0.1}
-  - {name: l5e5-seed1, lr: 5.0e-5, seed: 1}
   # ---- the backstop: the original plan at lr 3e-4
   - {name: c0-w256, arch: {width: 256}}
   - {name: c0-w128, arch: {width: 128}}
