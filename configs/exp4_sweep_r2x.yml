@@ -57,9 +57,19 @@ runs:
   # the leader: a separate value tower (the value head overfits; give it its own layer), and SwiGLU + attention pooling
   - {name: x-value-tower, arch: {value_tower: true, value_layers: 1}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
   - {name: x-swiglu-attnpool, arch: {ffn: swiglu, pool: attn}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  # 20:30: the hardware check passed (every measure within 0.001 of round 2's run, except targets 0.007), and this
-  # machine is ~3.6x faster: round 2's remaining capacity runs move here, on the current leader's recipe
-  - {name: x-l2, arch: {layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: x-mlp, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: x-mlp-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
-  - {name: x-l4, arch: {layers: 4}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  # 22:55 (Dan): stage 3 trains two models to completion, the transformer for quality and an MLP for fast CPU search
+  # (one CPU core: MLP 0.39 ms an evaluation, the 1-layer transformer ~80 ms). The MLP has only ever run on the
+  # transformer's recipe: tune it. On the leader's recipe (TD 0.99, act x3 on the opponent's turn) unless noted.
+  - {name: m-base, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: m-lr-3e-4, lr: 3.0e-4, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: m-lr-1e-3, lr: 1.0e-3, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: m-w1024, arch: {type: mlp, layers: 2, width: 1024}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: m-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: m-w2048, arch: {type: mlp, layers: 2, width: 2048}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: m-nodrop, arch: {type: mlp, layers: 2, dropout: 0.0, pool_dropout: 0.0}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  - {name: m-actall3, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}, td_lambda: 0.99}
+  # ---- superseded at 22:55 by the MLP tuning above (2 layers lost at 30%; the MLP runs moved up)
+  # - {name: x-l2, arch: {layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  # - {name: x-mlp, arch: {type: mlp, layers: 2}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  # - {name: x-mlp-w1024-b4, arch: {type: mlp, layers: 4, width: 1024}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
+  # - {name: x-l4, arch: {layers: 4}, act_weights: {opp_priority: 3.0}, td_lambda: 0.99}
