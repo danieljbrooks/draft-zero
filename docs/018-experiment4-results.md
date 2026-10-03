@@ -96,6 +96,7 @@ pairs, both seats per pair, capped at 50 turns; games with no winner are left ou
 | **C2** search | `il_bc@100`, `@300`, `@1000` each against `heuristic@100`, 100 games each | closed (belief service) | ~10–20 pod-hours |
 | **C2 anchor** | `il_bc@1000` against `heuristic@1000`, 100 games (equal budgets) | closed | ~8–17 pod-hours |
 | **C3** 17lands | each card's games-in-hand win rate from C1's self-play, against 17lands' (`tools/imitation_scale/gih.py`), judged against the noise ceiling at the same number of player-games (~0.75 at 10k, ~0.94 at 50k); the most over- and under-rated cards | – | laptop |
+| **C4** sb-v2 (Dan, 03:58) | agreement with the 1,000 held-out human decisions (docs/016's measure, balanced score, plus the root value's AUC against the result), stage 3's network at 0 (the policy alone), 100, 300, 1,000, 3,000 and 10,000 simulations (`run.py --grid policy`, then `--grid priors --methods ismcts --leaf net`); the heuristic bot at 100, 1,000 and 3,000 alongside the 300 already run | – | ~15 pod-hours for the network (10,000 alone ~11, with 16 GB heaps), ~1.5 for the heuristic: ~$4–9 |
 
 The C2 estimates scale the GPU check's measured 3.19 pod-seconds a decision (IS-MCTS 1,000 with the network's
 priors, on a 3090 pod) by docs/016's cost ratios between budgets (100: ~0.35, 300: ~0.94, 3,000: ~10), at 70–150
