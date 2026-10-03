@@ -49,3 +49,8 @@ runs:
   - {name: m3-max-swiglu-drop0-actor3, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, arch: {type: mlp, layers: 2, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
   - {name: m3-max-swiglu-drop0-w1024, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
   - {name: m3-max-swiglu-drop0-tok0.1, token_dropout: 0.1, arch: {type: mlp, layers: 2, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  # 08:25: wave 4. Max pooling + SwiGLU + no dropout with token dropout 0.1 is the best MLP (set NLL 0.274, under the
+  # 10% transformer's 0.285); combine it with width 1024 and the passivity fix, and go wider
+  - {name: m4-best, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m4-best-w2048, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, arch: {type: mlp, layers: 2, width: 2048, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m4-best-b4, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, arch: {type: mlp, layers: 4, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}

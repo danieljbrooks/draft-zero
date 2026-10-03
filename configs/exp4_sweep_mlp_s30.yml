@@ -1,0 +1,38 @@
+# Experiment #4, stage 2: the MLP's scale check (docs/018): the MLP sweeps' best at 30% of the training games, against the
+# transformer's s30-l1-actor3-td99 (set NLL 0.256) and the plain MLP's s30-mlp (0.281). Base as exp4_sweep_s30.yml.
+# Round 2's best recipe (TD + cosine from 1e-4, 16 value positions) at 30% of the training games (3.3M rows,
+# 3x round 2's subset), one epoch each, to see whether the ranking holds with more data and whether capacity
+# starts to pay: the goal is a recipe that works at full scale (stage 3: all 10.9M rows, several epochs).
+# The validation rows are round 1's and 2's (val_rows and val_seed unchanged), so the numbers compare directly.
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_mlp_s30.yml --out runs/exp4/sweep_mlp_s30 \
+#       --tables-dir data/imitation_scale/h5 --follow --follow-idle 10800
+title: "Experiment #4 sweep: the best MLP on 30% of the training games"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.3
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 21600        # a cap only
+  eval_every_s: null
+  eval_every_steps: 15506     # quarter epochs (an epoch of 30% is ~62k steps)
+  ckpt_every_s: null
+  latest_every_s: 600
+  patience_epochs: null
+  # round 2's leader (19:08), v16-td-cosine-1e-4: TD(0.95) value targets, warm-up + cosine from 1e-4
+  arch: {layers: 1, norm_first: true}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
+  value_per_game: 16
+runs:
+  - {name: s30-mlp-m3best, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: s30-mlp-m3best-w1024, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
