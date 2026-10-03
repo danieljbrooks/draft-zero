@@ -6,7 +6,7 @@ newest summary is first). A shorter, polished account of what we learned will fo
 reasoning and the decisions from review are in [docs/017](017-experiment4-scaling-up-imitation-learning.md); its
 §6.1 has the stage estimates this log tracks against.*
 
-## Where things stand (3 October, 19:15 UTC)
+## Where things stand (3 October, 21:00 UTC)
 
 - **The stage-3 transformer is trained and published** (HF `exp4/stage3/`, `ImitationNet` loads it): 1 layer,
   width 512, 40.6M parameters, 3 epochs of all 10.9M training decisions. Test split: non-Pass top-1 0.825, set NLL
@@ -33,8 +33,10 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
   undervalues spells that need a target or a moment (Burst Lightning 83rd of 90 commons, 17lands' 2nd).
 - **The MLP** (2 blocks, width 1024, max pooling) matches the 30% transformer (set NLL 0.247 against 0.256) and is
   8-30x faster on CPU, but max pooling freezes its feature embeddings (they move 1-4% from their random start). The
-  follow-ups for rarely seen decisions run on the second machine; best so far keeps rarer features with the table
-  at 30x the learning rate (set NLL 0.262 against the seed repeat's 0.266) (The MLP: its bottlenecks).
+  follow-ups for rarely seen decisions: the best combination (features seen in > 3 states, max + mean pooling, the
+  table at 30x the learning rate, heads 1024) reaches set NLL 0.258 at 10% against the base's 0.266-0.268, and
+  +3.5 points on rarely chosen moves; more data helps rare moves far more (+8-15 points). Wave D checks it at 30%
+  (The MLP: its bottlenecks).
 - **Spend: $59.43 of the $65 cap, no pod running.** The second machine costs nothing.
 
 ### Earlier summary (2 October, during stage 2)
@@ -86,7 +88,7 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
 | 6. Follow-up checkpoints | deferred | | | |
 | 7. Their evaluation | deferred | | | |
 | 8. Policy-only evaluation | **done** (C1, C3) | | | greedy and sampled, against the baseline and in self-play |
-| MLP follow-ups | the bottleneck probes done; the rare-decision waves running on the second machine | | $0 | The MLP: its bottlenecks |
+| MLP follow-ups | waves A, B, B2, C done (25 runs) and scored on rare decisions; wave D (30%) running on the second machine | | $0 | The MLP: its bottlenecks |
 | Failed pods | six Community pods that never started work (three before stage 3, three for C0) | 2.05 | $0.47 | |
 
 ## The plan from here (Dan, 2026-10-03, 02:20 UTC)
@@ -1140,10 +1142,11 @@ loss is already a softmax over the legal moves); compositional sub-feature embed
 feature parts (the names are hashed in Java before Python sees them), a larger later step; inverse-frequency loss
 weighting and unknown-feature hash buckets are next if waves A and B leave rare decisions behind.
 
-### Follow-ups: first results (19:11 UTC on 3 October; 13 of 19 runs)
+### Follow-ups: results of waves A, B, B2 and C (20:55 UTC on 3 October)
 
-10% of the games, one epoch, validation (lower set NLL and log-loss are better). The two seeds of the base give
-the noise: ~0.0025 set NLL, ~0.003 non-Pass, ~0.007 targets, ~0.02 value log-loss.
+All on 10% of the games, one epoch, validation (lower set NLL and log-loss are better). Two seeds of the base give
+the noise: ~0.0025 set NLL, ~0.003 non-Pass, ~0.007 targets, ~0.02 value log-loss. Waves k3 and k1 are wave B's
+`vocab_k` runs in their own sweeps (a sweep loads its data once); wave C combines the winners.
 
 | Run | Change | Set NLL | Non-Pass | Attack | Block | Targets | Value AUC | Value log-loss |
 |---|---|---|---|---|---|---|---|---|
@@ -1154,23 +1157,59 @@ the noise: ~0.0025 set NLL, ~0.003 non-Pass, ~0.007 targets, ~0.02 value log-los
 | `a3-emblr100` | 100x | 0.267 | 0.804 | 0.799 | 0.702 | 0.591 | 0.741 | 0.632 |
 | `a5-adagrad-1e-2` | Adagrad for the table, lr 1e-2 | 0.267 | 0.803 | 0.790 | 0.700 | 0.585 | 0.749 | 0.609 |
 | `a5b-adagrad-1e-1` | Adagrad, lr 1e-1 | 0.266 | 0.803 | 0.794 | 0.707 | 0.574 | 0.754 | 0.584 |
-| `a6-maxmean` | max + mean pooling | 0.265 | 0.803 | **0.809** | 0.700 | 0.588 | 0.749 | 0.624 |
+| `a6-maxmean` | max + mean pooling | 0.265 | 0.803 | 0.809 | 0.700 | 0.588 | 0.749 | 0.624 |
+| `a6b-maxmean-emblr30` | max + mean, the table at 30x | 0.261 | 0.805 | 0.829 | 0.711 | 0.587 | 0.751 | 0.610 |
+| `a7c-w512` | width 512, random embeddings | 0.279 | 0.799 | 0.781 | 0.699 | 0.572 | 0.748 | 0.595 |
+| `a7-w512-from-transformer` | width 512, embeddings from stage 3 | 0.267 | 0.800 | 0.801 | 0.707 | 0.589 | 0.754 | 0.583 |
 | `b4-heads512` | head hidden 512 | 0.268 | 0.802 | 0.792 | 0.702 | 0.594 | 0.746 | 0.614 |
-| `b5-heads1024` | head hidden 1024 | 0.267 | 0.804 | 0.797 | 0.703 | **0.601** | 0.744 | 0.615 |
+| `b5-heads1024` | head hidden 1024 | 0.267 | 0.804 | 0.797 | 0.703 | 0.601 | 0.744 | 0.615 |
 | `b1-vocab-k3` | keep features seen in > 3 states (not > 10) | 0.267 | 0.801 | 0.789 | 0.695 | 0.574 | 0.746 | 0.619 |
-| **`b1b-vocab-k3-emblr30`** | **the same, the table at 30x** | **0.262** | **0.804** | 0.801 | 0.703 | 0.582 | 0.753 | 0.593 |
+| `b1b-vocab-k3-emblr30` | the same, the table at 30x | 0.262 | 0.804 | 0.801 | 0.703 | 0.582 | 0.753 | 0.593 |
+| `b2-vocab-k1` | keep features seen in > 1 state | 0.269 | 0.799 | 0.794 | 0.695 | 0.565 | 0.747 | 0.609 |
+| `b2b-vocab-k1-emblr30` | the same, the table at 30x | 0.265 | 0.800 | 0.799 | 0.699 | 0.576 | 0.752 | 0.593 |
+| `b6-rare0.5` | rare-move loss weight, beta 0.5 | 0.292 | 0.777 | 0.792 | 0.570 | 0.553 | 0.743 | 0.617 |
+| `b6b-rare1.0` | beta 1.0 | 0.383 | 0.687 | 0.792 | 0.526 | 0.580 | 0.742 | 0.620 |
+| `b6c-rare0.5-emblr30` | beta 0.5, the table at 30x | 0.289 | 0.782 | 0.803 | 0.578 | 0.551 | 0.752 | 0.595 |
+| `c1-k3-maxmean-emblr30` | > 3 states, max + mean, 30x | 0.260 | 0.805 | 0.826 | 0.713 | 0.605 | 0.754 | 0.603 |
+| **`c2-k3-maxmean-emblr30-heads1024`** | **the same, heads 1024** | **0.258** | **0.807** | **0.827** | 0.711 | **0.617** | 0.751 | 0.609 |
+| `c3-...-heads1024-seed1` | c2, seed 1 | 0.259 | 0.807 | 0.823 | 0.715 | 0.617 | 0.744 | 0.617 |
 
-- **The table at 30x makes the embeddings learn** (rows of common features move 127% from their init, rare ones
-  18%, against 4% and 1%; tools/imitation_scale/emb_drift.py), but on its own gains only ~0.002 set NLL (the noise)
-  and a little value AUC (+0.007). 100x overshoots (value log-loss +0.03). The learned change stays high-rank
-  (90% in ~630 of 1,024 dimensions, against the transformer's 121 of 512).
-- **Rarer features help only when the embeddings learn:** keeping features seen in > 3 states does nothing with
-  near-frozen embeddings (0.267) and gives the best run so far with the table at 30x (0.262, ~1.5x the seed noise
-  below the base). That fits: a rare feature's random code tells the network nothing.
-- **Wider heads help targets** (0.601 at 1024, ~3x the noise); max + mean pooling helps attacks (0.809).
-- Still running: max + mean at 30x, the width-512 pair (from the transformer's embeddings, from random), keep
-  features seen in > 1 state (alone and at 30x), and the rare-move loss weights (beta 0.5, 1.0, 0.5 at 30x). Then
-  every run's rare-decision scores (deploy/exp4_rare_eval.sh → runs/exp4/rare_eval/).
+**Rare decisions** (tools/imitation_scale/rare_eval.py, 20,000 validation rows a table: non-Pass top-1 on the
+priority and target tables, bucketed by how often the human's move is chosen in the training split; the 30% MLP and
+stage 3's transformer for scale):
+
+| Network | All | Move chosen < 1k times (n 2,500) | 1k-10k (12,627) | 10k-100k (7,514) | 100k+ (13,672) | States with the most unknown features (top quarter) |
+|---|---|---|---|---|---|---|
+| `m4-best` (base) | 0.715 | 0.542 | 0.586 | 0.749 | 0.847 | 0.675 |
+| `a0-seed1` (base) | 0.712 | 0.552 | 0.593 | 0.727 | 0.844 | 0.675 |
+| `a2-emblr30` | 0.716 | 0.556 | 0.586 | 0.741 | 0.851 | 0.681 |
+| `a6b-maxmean-emblr30` | 0.716 | 0.548 | 0.592 | 0.744 | 0.847 | 0.684 |
+| `a7-w512-from-transformer` | 0.715 | 0.560 | 0.594 | 0.746 | 0.838 | 0.683 |
+| `b5-heads1024` | 0.720 | 0.554 | 0.601 | 0.748 | 0.845 | 0.688 |
+| `b6-rare0.5` | 0.688 | **0.679** | 0.584 | 0.694 | 0.783 | 0.657 |
+| `c2-...-heads1024` | 0.727 | 0.568 | 0.620 | 0.741 | 0.847 | 0.693 |
+| `c3-...-seed1` | 0.729 | 0.584 | 0.630 | 0.723 | 0.849 | 0.689 |
+| 30% MLP (`s30-mlp-m3best-w1024`) | 0.754 | 0.631 | 0.665 | 0.758 | 0.856 | 0.727 |
+| Stage 3's transformer (all games, 3 epochs) | 0.775 | 0.702 | 0.699 | 0.765 | 0.865 | 0.752 |
+
+- **The combination is the best 10% MLP, on both seeds:** set NLL 0.258 against the base's 0.266-0.268 (~3.5x the
+  noise), attack +3.5 points, targets +4, blocks +1, and on the rarer moves +3.5 points (chosen 1k-10k times:
+  0.62-0.63 against 0.59) and +2-4 points (under 1k). Its parts: the table at 30x makes the embeddings learn; max +
+  mean pooling gives every feature a gradient (attack accuracy: 0.829); keeping features seen in > 3 states pays only
+  once they learn; wider heads help targets.
+- **Data does far more for rare decisions than any of these:** the 30% MLP (the old recipe) is +8-9 points on both
+  rare buckets over the 10% base, stage 3's transformer +15. The 10% runs' changes are a few points.
+- **The rare-move loss weight buys rare moves at everything else's cost:** under 1k jumps 0.54 → 0.68, but common
+  moves fall 0.85 → 0.78 and blocks collapse (0.70 → 0.57: no-block, the most common answer, is down-weighted).
+  Not adopted.
+- **Learned codes are worth a lot:** width 512 starting from stage 3's embeddings (all 32,924 features matched)
+  beats width 512 from random by 0.012 set NLL, as good as the base at width 1024. An upper bound (stage 3 saw all
+  the games), but evidence that feature codes, not the body, hold much of what's learnable.
+- Adagrad for the table is no better than AdamW at 30x; 100x overshoots (value log-loss +0.03).
+
+**Wave D** (configs/exp4_sweep_rare_d.yml, running): the combination on 30% of the games against
+`s30-mlp-m3best-w1024` (0.247), with a seed repeat. Not built yet: the per-feature low-rank embedding (Dan's
+hypothesis that features need fewer dimensions than the state) and unknown-feature hash buckets.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
