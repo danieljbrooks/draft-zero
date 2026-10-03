@@ -454,6 +454,36 @@ def test_feature_stats_caps_the_vocab_at_the_most_frequent_ids():
     assert list(st.kept(0, max_n=100)) == list(full)
 
 
+def test_rowstore_slices_back_the_true_rows():
+    r = np.array([3, 70000, 5, 65535, 65534, 90000, 1], np.int64)
+    st = sv.RowStore.from_parts([r[:3], r[3:]])
+    assert len(st) == 7 and st.low.dtype == np.uint16 and list(st.over_pos) == [1, 3, 5]
+    for a in range(7):
+        for b in range(a, 8):
+            assert list(st[a:b]) == list(r[a:b])
+    with pytest.raises(TypeError):
+        st[np.array([0, 1])]
+
+
+def test_a_vocab_past_16_bits_keeps_every_feature(tables, tmp_path, monkeypatch):
+    """Past U16_ROWS rows the vocab is ordered by frequency and the tables are RowStores: the same
+    features in every row as the plain 16-bit path, from a fresh load and from the cache, and it trains."""
+    base = sv.load_data(sv.resolve_config(tiny_cfg(tables)), log=lambda *_: None)
+    monkeypatch.setattr(sv, "U16_ROWS", 20)                  # the tiny vocab (~80 features) is "wide"
+    for cache in (None, tmp_path / "cache", tmp_path / "cache"):    # the second cached load reads the .npz
+        wide = sv.load_data(sv.resolve_config(tiny_cfg(tables, data_cache=str(cache) if cache else None)),
+                            log=lambda *_: None)
+        assert len(wide.vocab) == len(base.vocab) > 20 and sorted(wide.vocab.ids) == sorted(base.vocab.ids)
+        for tb, tw in zip(base.train + base.val, wide.train + wide.val):
+            assert isinstance(tw.rows, sv.RowStore) and len(tw.rows.over_pos) > 0
+            for i in range(tb.n):
+                a, b = tb.ptr[i], tb.ptr[i + 1]
+                assert list(base.vocab.ids[tb.rows[a:b]]) == list(wide.vocab.ids[tw.rows[a:b]])
+    s = sv.train(tiny_cfg(tables, max_steps=8, value_target="td", td_start_epochs=0.01), tmp_path / "w",
+                 log=lambda *_: None)
+    assert s["step"] == 8
+
+
 def test_imitation_net_loads_a_checkpoint_and_evaluates_states(tables, tmp_path):
     from draftzero.gameplay.imitation_net import ImitationNet, resolve
     arch = {**TINY, "norm_first": True}

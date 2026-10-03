@@ -169,8 +169,10 @@ DEFAULTS: dict[str, Any] = {
     "val_seed": 12345,
     "vocab_k": 10,                 # MageZero's ignore rule: drop features in <= k training states
     "vocab_max_rows": None,        # build the vocab on a random sample of this many training rows
-    "vocab_max_features": None,    # keep at most this many features, the most frequent: 65,535 stores the
-                                   # mapped tables as uint16 (half of int32's memory: ~18 GB for all exp #4's rows)
+    "vocab_max_features": None,    # a MEMORY CEILING, not a modelling choice: keep only the most frequent features
+                                   # when the embedding table or the tables don't fit (GPU memory, an OOM). The
+                                   # vocab is unbounded by default, and a vocab past 65,535 features already
+                                   # stores the tables in ~16 bits (RowStore), so this should rarely be needed
     "data_cache": None,            # a directory: mapped tables are cached there (fast resume)
     # model
     "arch": ARCH_DEFAULT,
@@ -884,8 +886,9 @@ class FeatureStats:
                                                           cat(3, self.cnt))
         self.parts, self.pending = [], 0
 
-    def kept(self, k: int = 10, max_n: int | None = None) -> np.ndarray:
-        """max_n: at most this many ids, the ones in the most states (ties: the smallest id)."""
+    def kept(self, k: int = 10, max_n: int | None = None, by_frequency: bool = False) -> np.ndarray:
+        """The kept ids in ascending order, or with `by_frequency` in descending order of the states they
+        are in (ties: the smallest id first). max_n: at most this many, the ones in the most states."""
         self._merge()
         m = self.cnt > k
         ids, cnt, h1, h2 = self.ids[m], self.cnt[m], self.h1[m], self.h2[m]
@@ -893,14 +896,59 @@ class FeatureStats:
         c, a, b = cnt[order], h1[order], h2[order]
         first = np.r_[True, (c[1:] != c[:-1]) | (a[1:] != a[:-1]) | (b[1:] != b[:-1])] if len(c) else c.astype(bool)
         ids, cnt = ids[order][first], c[first]
+        by_count = np.lexsort((ids, -cnt))
         if max_n is not None and len(ids) > max_n:
-            ids = ids[np.lexsort((ids, -cnt))[:max_n]]
-        return np.sort(ids)
+            by_count = by_count[:max_n]
+        return ids[by_count] if by_frequency else np.sort(ids[by_count])
 
 
 # ================================================================================================
 # tables
 # ================================================================================================
+
+U16_ROWS = int(np.iinfo(np.uint16).max)   # vocab rows below this are stored in 16 bits
+
+
+class RowStore:
+    """A table's mapped features (the CSR values) in 16 bits for a vocab of more than 65,535 rows: `low`
+    holds every token, with rows >= U16_ROWS as U16_ROWS; `over_pos` (sorted) and `over_val` hold those
+    tokens' positions and true rows. A vocab that big is in descending order of frequency (load_data), so
+    the overflow is only the rarest features' tokens. Slicing returns the true rows (int64), so
+    imitation._batch reads it as it reads an array: no feature is dropped, at about half int32's memory."""
+
+    def __init__(self, low: np.ndarray, over_pos: np.ndarray, over_val: np.ndarray):
+        self.low, self.over_pos, self.over_val = low, over_pos, over_val
+
+    @classmethod
+    def from_parts(cls, parts: list[np.ndarray]) -> "RowStore":
+        lows, pos, val, n = [], [], [], 0
+        for r in parts:
+            r = np.asarray(r, np.int64)
+            big = np.flatnonzero(r >= U16_ROWS)
+            lows.append(np.minimum(r, U16_ROWS).astype(np.uint16))
+            pos.append(big + n)
+            val.append(r[big].astype(np.int32))
+            n += len(r)
+        cat = lambda xs, dt: np.concatenate(xs).astype(dt) if xs else np.zeros(0, dt)   # noqa: E731
+        return cls(cat(lows, np.uint16), cat(pos, np.int64), cat(val, np.int32))
+
+    def __len__(self) -> int:
+        return len(self.low)
+
+    @property
+    def nbytes(self) -> int:
+        return self.low.nbytes + self.over_pos.nbytes + self.over_val.nbytes
+
+    def __getitem__(self, s: slice) -> np.ndarray:
+        if not isinstance(s, slice):
+            raise TypeError("RowStore takes slices (a row's ptr[i]:ptr[i + 1])")
+        a, b, _ = s.indices(len(self.low))
+        out = self.low[a:b].astype(np.int64)
+        i, j = np.searchsorted(self.over_pos, [a, b])
+        if j > i:
+            out[self.over_pos[i:j] - a] = self.over_val[i:j]
+        return out
+
 
 @dataclass
 class Table:
@@ -1065,20 +1113,28 @@ def load_table(path: Path, spec: dict, split: str, sel: np.ndarray, vocab, *, ca
             d = {k: z[k] for k in z.files}
             meta = json.loads(str(d.pop("__meta__")))
             aux = {k[5:]: d.pop(k) for k in list(d) if k.startswith("aux__")}
+            if "rows_over_pos" in d:
+                d["rows"] = RowStore(d["rows"], d.pop("rows_over_pos"), d.pop("rows_over_val"))
             return Table(name=spec["name"], kind=spec["kind"], split=split, spec=spec, aux=aux,
                          lk_names=meta["lk_names"], mapped_share=meta["mapped_share"], notes=meta["notes"],
-                         **{k: (v if v.shape != () else None) for k, v in d.items()})
-    dtype = np.uint16 if len(vocab) <= np.iinfo(np.uint16).max else np.int32
+                         **{k: (None if isinstance(v, np.ndarray) and v.shape == () else v) for k, v in d.items()})
+    wide = len(vocab) > U16_ROWS        # a RowStore: 16 bits plus the rarest features' overflow
     with h5py.File(path, "r") as f:
         lab = _read_labels(f, spec, sel)
         off = f["offsets"][:]
         parts, lens, raw = [], [], 0
         for _, idx, ln in _iter_blocks(f, off, sel):
             r, p = vocab.map_csr(idx, np.r_[0, np.cumsum(ln)])
-            parts.append(r.astype(dtype))
+            parts.append(RowStore.from_parts([r]) if wide else r.astype(np.uint16))
             lens.append(np.diff(p))
             raw += len(idx)
-    rows = np.concatenate(parts) if parts else np.zeros(0, dtype)
+    if wide:
+        n = np.cumsum([0] + [len(x) for x in parts])
+        rows = RowStore(np.concatenate([x.low for x in parts]) if parts else np.zeros(0, np.uint16),
+                        np.concatenate([x.over_pos + n[i] for i, x in enumerate(parts)]) if parts else np.zeros(0, np.int64),
+                        np.concatenate([x.over_val for x in parts]) if parts else np.zeros(0, np.int32))
+    else:
+        rows = np.concatenate(parts) if parts else np.zeros(0, np.uint16)
     ptr = np.r_[0, np.cumsum(np.concatenate(lens) if lens else [])].astype(np.int64)
     t = Table(name=spec["name"], kind=spec["kind"], split=split, spec=spec, file_rows=sel, rows=rows, ptr=ptr,
               game=lab["game"], turn=lab["turn"], z=lab["z"], w=lab["w"],
@@ -1093,6 +1149,8 @@ def load_table(path: Path, spec: dict, split: str, sel: np.ndarray, vocab, *, ca
         arrs = {k: getattr(t, k) for k in ("file_rows", "rows", "ptr", "game", "turn", "z", "w", "legal_indptr",
                                             "legal_idx", "set_indptr", "set_idx", "y", "lk", "zv", "set_p", "atype")}
         arrs = {k: (np.asarray(0) if v is None else v) for k, v in arrs.items()}
+        if isinstance(t.rows, RowStore):
+            arrs.update(rows=t.rows.low, rows_over_pos=t.rows.over_pos, rows_over_val=t.rows.over_val)
         arrs.update({f"aux__{k}": v for k, v in t.aux.items()})
         arrs["__meta__"] = np.asarray(json.dumps({"lk_names": t.lk_names, "mapped_share": t.mapped_share,
                                                   "notes": t.notes}))
@@ -1239,7 +1297,10 @@ def load_data(cfg: dict, *, vocab=None, splits: tuple = ("train", "val"), log=pr
                     off = f["offsets"][:]
                     for _, idx, ln in _iter_blocks(f, off, vsel[s["name"]]):
                         stats.add(idx, ln)
-            vocab = FeatureVocab(stats.kept(cfg["vocab_k"], cfg["vocab_max_features"]), feature_hash_bins=GLOBAL_MAX)
+            ids = stats.kept(cfg["vocab_k"], cfg["vocab_max_features"])
+            if len(ids) > U16_ROWS:   # rows by frequency, so the 16-bit tables' overflow is the rarest features'
+                ids = stats.kept(cfg["vocab_k"], cfg["vocab_max_features"], by_frequency=True)
+            vocab = FeatureVocab(ids, feature_hash_bins=GLOBAL_MAX)
             info.update(vocab_rows_built_on=int(stats.n_states))
             log(f"supervised: vocab {len(vocab)} features (k={cfg['vocab_k']}) from {stats.n_states} training "
                 f"states ({time.monotonic() - t0:.0f} s)")
