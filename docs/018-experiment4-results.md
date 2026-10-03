@@ -515,6 +515,12 @@ cost the value 0.070 AUC.
   0.723 (−0.038 against `m0`), set NLL 0.363 (+0.036), attack −0.035, value AUC −0.017. Heavy dropout suits a
   pick model with a few hundred inputs; this MLP pools ~800 tokens and already drops 30% of them.
 
+**The value tower at 30% (00:01):** `s30-vt-act3-td99` against `s30-l1-act3-td99`: non-Pass 0.810 (−0.001), set NLL
+**0.255** (−0.005), attack 0.831 (+0.003), block 0.720 (+0.002), targets **0.628** (+0.013), value AUC 0.765
+(−0.003), log-loss 0.561 (+0.004). The policy gain shrinks with data (−0.012 NLL at 10%, −0.005 at 30%, inside the
+noise band; targets +0.013 stay outside it), and it trains at 1,478 samples a second against 3,338 (2.3× the time).
+At 10%, lr 1e-2 in the statistical-drafting style was worse still for the MLP (`m-sd-1e-2`: set NLL 0.419).
+
 **The first 30% run: three times the games beat every recipe change (20:49).** `s30-l1`, the leader's recipe on
 30% of the training games for one epoch (62.8k steps, 22.7 minutes), against the same recipe on 10% (`hw-ref`):
 
