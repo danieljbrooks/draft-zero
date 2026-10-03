@@ -98,6 +98,12 @@ how many cards in hand) that the encoder writes as separate occurrence features,
 (queued on both GPUs) combines max or sum pooling with SwiGLU and no dropout, wider, with the passivity fix, and
 with token dropout 0.1.
 
+**Wave 3 (08:25): the best MLP matches the 10% transformer's policy.** Max pooling, SwiGLU, no dropout and token
+dropout 0.1 (`m3-max-swiglu-drop0-tok0.1`): set NLL **0.274** (−0.053 against `m0`; the transformer's `act3-td99` at
+10%: 0.285), non-Pass 0.798, value AUC 0.746, but attack 0.786 against the transformer's 0.810. Width 1024: 0.277;
+the passivity fix: 0.280; sum pooling with the same: 0.296. Wave 4 (the best combined with width 1024 and the fix,
+wider, deeper) runs at 10%, and the best at 30% of the games (`configs/exp4_sweep_mlp_s30.yml`, a third sweep).
+
 ### C. Games and 17lands statistics (on RunPod)
 
 The bots: the transformer's policy alone (`policy`, sampled at temperature 1); the transformer with IS-MCTS
