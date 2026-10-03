@@ -48,13 +48,70 @@ has the stage estimates this doc tracks against.*
 | GPU check | done: the RTX 3090 | 1.5 (3 pods) | $1.30 | the L40 is no cheaper per evaluation; network search is CPU-bound |
 | 1. Build | done: 161,206 games, 12.1M rows (10.9M train) | 3.6 | $1.82 | estimate 5 pod-hours, $2.50 |
 | 2. Hyperparameter sweep | rounds 1 and 2 done on the RunPod 3090 (40 runs); round 2x and the 30% check continue on the second machine | 25.1 | $12.55 | ~24 pod-hours expected against 6: over by design. The second machine adds none |
-| 3. Large training | ready: starts by itself after the 30% checks (~01:00 UTC on 3 October), 4–5 hours on the second machine | | $0 | the single-tower transformer (Stage 3) |
+| 3. Large training | **running** on the second machine since 02:08 UTC on 3 October (the full vocab, 72,404 features), done ~06:00 | | $0 | the single-tower transformer (Stage 3); the first launch was killed by the 40 GiB limit while loading (fixed: RowStore) |
 | 4. Cheap evaluation | heuristic bot at 300 done; at 3,000, half done | 4.6 | $1.01 | the pod's host rebooted; the rest runs with the network mixes |
-| 5. Play | not started | | | |
-| 6. Follow-up checkpoints | not started | | | |
-| 7. Their evaluation | not started | | | |
+| 5. Play | replaced by phase C (the plan from here): C0–C3 on RunPod | | | |
+| 6. Follow-up checkpoints | deferred | | | |
+| 7. Their evaluation | deferred | | | |
 | 8. Policy-only evaluation | built and tested on the laptop (the last step: Dan, 2026-10-02) | | | no search: the 17lands games-in-hand comparison, likely on RunPod pods |
 | Failed pods | three Community pods that never started work | 1.0 | $0.22 | |
+
+## The plan from here (Dan, 2026-10-03, 02:20 UTC)
+
+*"I'd like to empower you to run end-to-end as needed." Priorities, in order: the stage-3 transformer and its
+report; the MLP's further runs deferred; then many games of the transformer, policy-only and with search, and its
+17lands statistics. Spend stays under the $65 cap.*
+
+### A. The stage-3 transformer: training and report
+
+- **Training** (`deploy/exp4_stage3.sh` on the second machine's GPU 1) started at 02:08 UTC with the full
+  vocabulary (72,404 features: Stage 3). It runs at ~26k steps every 8 minutes, so about 65 minutes an epoch; with
+  the three TD recomputations it should finish around **06:00 UTC**. At a quarter epoch its set NLL was already
+  0.259 (the 30% run's final: 0.256).
+- **Then:** test-split measures of `best_policy` and `best_value` (automatic); the run copied off the machine;
+  weights and model card published to HF (`exp4/stage3/`); the report here: learning curves, test measures,
+  against the 10% and 30% runs, and the value head across the epochs.
+
+### B. The MLP: further runs deferred
+
+The MLP sweep (`configs/exp4_sweep_mlp.yml`) stopped after 11 of 24 single-setting runs. So far: no dropout and
+SwiGLU or GELU help (set NLL −0.005 to −0.011); BatchNorm, heavy dropout (0.3–0.6, the statistical-drafting style)
+and higher learning rates hurt; the base (lr 1e-4, LayerNorm, ReLU) still leads among the rest. Next, when it
+resumes: the rest of the single settings, then the winners combined, a 30% check and a full run. It resumes on the
+second machine's GPUs once stage 3 is done (they are free and can't host many game JVMs in 40 GiB).
+
+### C. Games and 17lands statistics (on RunPod)
+
+The bots: the transformer's policy alone (`policy`, sampled at temperature 1); the transformer with IS-MCTS
+(`il_bc@N`: its policy as the prior, its value at the leaves, N simulations a decision); and the **baseline**, the
+heuristic bot at 100 simulations (`heuristic@100`: uniform priors, the heuristic at the leaves). A heuristic needs
+some search to choose a move (it scores positions); 100 simulations look about a quarter of a turn ahead and cost
+0.09 pod-seconds a decision (docs/016), and played about as well as 300 on sb-v2. All games on the eval pool's deck
+pairs, both seats per pair, capped at 50 turns; games with no winner are left out of the rates.
+
+| Step | Games | Decklists | Estimate |
+|---|---|---|---|
+| **C0** throughput | a few dozen of each kind below, with the 30% recipe's network | as below | one Community 3090, ~30 min, ~$0.15 |
+| **C1** policy only | `policy` against itself, ~10k games (for the 17lands statistics); `policy` against `heuristic@100`, 10k games | open (no search) | self-play: a few pod-hours; against the heuristic: ~17–60 pod-hours, its search the cost |
+| **C2** search | `il_bc@100`, `@300`, `@1000` each against `heuristic@100`, 100 games each | closed (belief service) | ~10–20 pod-hours |
+| **C2 anchor** | `il_bc@1000` against `heuristic@1000`, 100 games (equal budgets) | closed | ~8–17 pod-hours |
+| **C3** 17lands | each card's games-in-hand win rate from C1's self-play, against 17lands' (`tools/imitation_scale/gih.py`), judged against the noise ceiling at the same number of player-games (~0.75 at 10k, ~0.94 at 50k); the most over- and under-rated cards | – | laptop |
+
+The C2 estimates scale the GPU check's measured 3.19 pod-seconds a decision (IS-MCTS 1,000 with the network's
+priors, on a 3090 pod) by docs/016's cost ratios between budgets (100: ~0.35, 300: ~0.94, 3,000: ~10), at 70–150
+searched decisions a seat a game. C0 replaces them with measurements before the big runs, and the runs are sized
+from it. Community 3090s cost $0.22 an hour (32 vCPU, 62 GB); expected total ~$15–25.
+
+**How they run:** `deploy/exp4_games_setup.sh` (the XMage bundle, its card database, the eval decks and
+`decks.jsonl`, the network, the bridge) and `deploy/exp4_games_run.sh` (inference servers on the GPU, the belief
+service, `play.py`, games uploaded to HF every 10 minutes: `exp4/games/runs/<name>/`). Several pods split a run by
+deck pair (`--shard i/n`). Every pod carries a rolling self-destruct (`deploy/runpod_arm.sh`) and is removed, not
+stopped, once its games are on HF; each pod's quote and delivery go in the pods table.
+
+### Babysitting
+
+Check-ins every ~15–20 minutes: stage 3's evaluations and memory, the pods' progress and costs, the self-destructs,
+and this document. Problems get fixed and pushed to main as they come.
 
 ## Before the first pod
 
