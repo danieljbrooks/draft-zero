@@ -32,7 +32,9 @@ lr_schedule: cosine
 value_target: td
 td_lambda: 0.99
 value_per_game: 16
-act_weights: {opp_priority: 3.0}   # set from the 30% check (s30-l1-actall3-td99) at launch
+act_weights: {opp_priority: 3.0, replay_priority: 3.0}   # x3 on the rows where the human acted; deploy/exp4_stage3.sh adds the
+                                                        # turn start if the 30% check favours it (tools/imitation_scale/stage3_choice.py)
+value_weight: 0.5           # the value loss's weight; 0.2 if its 30% check passes (stage3_choice.py)
 time_budget_s: 43200        # a 12-hour cap; max_epochs stops it first
 max_epochs: 3
 eval_every_s: null

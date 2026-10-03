@@ -231,6 +231,21 @@ def test_play_op_policy_only_plays_the_networks_policy(tmp_path):
     assert again["seats"]["A"]["policyDecisions"] == r["seats"]["A"]["policyDecisions"]
 
 
+def test_stage3_choice_rules():
+    ch = tool("stage3_choice")
+    d = {"replay_priority/set_nll": 0.240, "policy/set_nll": 0.258, "policy/top1_nonpass": 0.814,
+         "value/auc": 0.767, "value/logloss": 0.558}
+    a_close = {**d, "replay_priority/set_nll": 0.238}
+    a_far = {**d, "replay_priority/set_nll": 0.235}
+    v_good = {**d, "policy/set_nll": 0.253, "policy/top1_nonpass": 0.816, "value/auc": 0.764, "value/logloss": 0.562}
+    v_value_cost = {**v_good, "value/auc": 0.760}
+    assert ch.choose(d, a_close, d)["sets"] == []                                   # the config's defaults
+    assert ch.choose(d, a_far, v_good)["sets"] == [
+        "act_weights={opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}", "value_weight=0.2"]
+    assert ch.choose(d, a_close, v_value_cost)["sets"] == []                        # the value pays too much
+    assert len(ch.choose(d, a_close, d)["why"]) == 2
+
+
 def _record_line(pair, swap, seat, result, recs):
     return {"pair": pair, "swap": swap, "seat": seat, "bot": "il_bc", "result": result, "records": recs}
 

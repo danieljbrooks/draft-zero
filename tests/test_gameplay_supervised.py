@@ -438,6 +438,34 @@ def test_mlp_activation_norm_and_pooling_options(tables, tmp_path, ffn, norm, ba
     assert sv.encode(m, torch.tensor([0, 5]), torch.tensor([0])).shape[0] == 1    # a one-row batch trains too
 
 
+def test_imitation_net_loads_a_checkpoint_and_evaluates_states(tables, tmp_path):
+    from draftzero.gameplay.imitation_net import ImitationNet, resolve
+    arch = {**TINY, "norm_first": True}
+    sv.train(tiny_cfg(tables, max_steps=6, arch=arch, emb_init_std=0.02), tmp_path / "r", log=lambda *_: None)
+    net = ImitationNet.load(tmp_path / "r" / "final.pt.gz", device="cpu")
+    assert "TransformerNet" in net.describe() and net.info["config"]["arch"]["norm_first"]
+    pool = 1_000_000 + np.arange(80) * 7919
+    states = [pool[:20].tolist(), pool[30:55].tolist(), [5, 6, 7]]          # the last: no known feature
+    out = net.evaluate(states, batch=2)
+    assert len(out) == 3 and out[2]["value"] == 0.0 and not out[2]["policy_player"].any()
+    w = net.arch["policy_width"]
+    for o in out[:2]:
+        assert o["policy_player"].shape == (w,) and o["policy_target"].shape == (w,) and o["policy_binary"].shape == (2,)
+        assert -1.0 <= o["value"] <= 1.0
+    # the same numbers as the network on the mapped rows, one state at a time
+    rows, _ = net.vocab.map_bags(states[1], [0])
+    with torch.no_grad():
+        pa, *_, v = net.model(torch.as_tensor(np.asarray(rows, np.int64)), torch.tensor([0]))
+    assert np.allclose(out[1]["policy_player"], pa[0].numpy(), atol=1e-5) and abs(out[1]["value"] - float(v.reshape(-1)[0])) < 1e-5
+    p = ImitationNet.policy_over(out[0]["policy_player"], [0, 5, 9])
+    assert p.shape == (3,) and abs(p.sum() - 1) < 1e-9
+    assert ImitationNet.policy_over(np.array([0.0, 2.0, 1.0]), [0, 1, 2], temperature=0).tolist() == [0, 1, 0]
+    assert ImitationNet.win_probability(0.5) == 0.75
+    assert resolve(tmp_path / "x.pt.gz") == tmp_path / "x.pt.gz"
+    with pytest.raises(ValueError):
+        resolve("hf://owner-only")
+
+
 @pytest.mark.skipif(not GEN0_2B.exists(), reason="experiment #2b's checkpoint is not in the HF cache")
 def test_load_any_checkpoint_reads_pretrain_checkpoints():
     m, vocab, meta = sv.load_any_checkpoint(GEN0_2B)
