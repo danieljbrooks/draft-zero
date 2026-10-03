@@ -1,0 +1,40 @@
+# Experiment #4: the MLP's feature-embedding dimension, apart from its width (Dan, 2026-10-03 16:50; docs/018).
+# arch.emb_dim = e: features embedded and max-pooled at size e, then one linear layer to the width (1024, fixed).
+# The recipe is the best MLP's (wave 4's m4-best / s30-mlp-m3best-w1024): 2 blocks, width 1024, max pooling,
+# SwiGLU, no dropout, token dropout 0.1, the passivity fix on both own-turn tables, TD(0.99). e = 1024 is the
+# control: no projection, the same network as m4-best. 30% of the games, one epoch each, queued with the 10% sweep to confirm it; the e = 1024 control is
+# s30-mlp-m3best-w1024 (runs/exp4/sweep_mlp_s30).
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_emb_s30.yml --out runs/exp4/sweep_emb_s30 \
+#       --tables-dir data/imitation_scale/h5 --follow --follow-idle 1800
+title: "Experiment #4 sweep: the MLP's embedding dimension (30%)"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.3
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 21600        # a cap only
+  eval_every_s: null
+  eval_every_steps: 15506     # quarter epochs (an epoch of 30% is ~62k steps)
+  ckpt_every_s: null
+  latest_every_s: 600
+  patience_epochs: null
+  # round 2's leader (19:08), v16-td-cosine-1e-4: TD(0.95) value targets, warm-up + cosine from 1e-4
+  arch: {layers: 1, norm_first: true}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
+  value_per_game: 16
+runs:
+  - {name: s30-e256, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, emb_dim: 256}}
+  - {name: s30-e512, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, emb_dim: 512}}
+  - {name: s30-e128, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, emb_dim: 128}}
+  - {name: s30-e2048, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, emb_dim: 2048}}

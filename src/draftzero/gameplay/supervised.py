@@ -153,7 +153,9 @@ ARCH_DEFAULT = {"type": "transformer", "layers": 2, "width": 512, "ff": None, "h
                 "value_tower_type": "transformer",   # transformer | mlp (a pooled EmbeddingBag + MLP blocks: cheap)
                 "value_detach": False,  # the value head reads the shared features with the gradient stopped
                 "mlp_norm": "layer",    # the MLP's blocks: layer | batch (BatchNorm1d) | none
-                "bag_mode": "mean"}     # the MLP's token pooling: mean | sum | max
+                "bag_mode": "mean",     # the MLP's token pooling: mean | sum | max
+                "emb_dim": None}        # the feature embeddings' size (null = width). The MLP pools at this size and
+                                        # one linear layer projects the pooled vector to width (the transformer: not yet)
 DEFAULT_TABLES = [{"name": "turnstart", "kind": "priority_set"},
                   {"name": "replay_priority", "kind": "priority_set"},
                   {"name": "replay_attack", "kind": "binary"}]
@@ -236,7 +238,7 @@ def full_arch(arch: dict | None, materialize: bool = True) -> dict:
         raise ValueError(f"arch.type must be transformer or mlp, not {a['type']!r}")
     if a["ff"] is None and materialize:
         a["ff"] = 2 * int(a["width"])
-    for k in ("layers", "width", "ff", "heads", "head_hidden", "policy_width", "value_layers"):
+    for k in ("layers", "width", "ff", "heads", "head_hidden", "policy_width", "value_layers", "emb_dim"):
         if a[k] is not None:
             a[k] = int(a[k])
     if a["ffn"] not in ("relu", "swiglu", "gelu") or a["pool"] not in ("mean", "attn"):
@@ -246,6 +248,8 @@ def full_arch(arch: dict | None, materialize: bool = True) -> dict:
     if a["mlp_norm"] not in ("layer", "batch", "none") or a["bag_mode"] not in ("mean", "sum", "max"):
         raise ValueError(f"arch.mlp_norm must be layer, batch or none and arch.bag_mode mean, sum or max: "
                          f"{a['mlp_norm']!r}, {a['bag_mode']!r}")
+    if a["emb_dim"] is not None and a["type"] != "mlp":
+        raise ValueError("arch.emb_dim is implemented for the MLP only so far")
     if a["value_tower_type"] not in ("transformer", "mlp"):
         raise ValueError(f"arch.value_tower_type must be transformer or mlp, not {a['value_tower_type']!r}")
     return a
@@ -507,7 +511,10 @@ class BagMLPNet(_HeadsMixin, nn.Module):
         super().__init__()
         a = full_arch(arch)
         d = a["width"]
-        self.embedding = nn.EmbeddingBag(num_embeddings, d, mode=a["bag_mode"])
+        e = a["emb_dim"] or d
+        self.embedding = nn.EmbeddingBag(num_embeddings, e, mode=a["bag_mode"])
+        # emb_dim != width: the pooled e-vector is projected to the blocks' width (pooling happens at size e)
+        self.emb_proj = nn.Linear(e, d) if e != d else None
         self.blocks = nn.ModuleList([_MLPBlock(d, a["ff"], a["dropout"], a["ffn"], a["mlp_norm"])
                                      for _ in range(a["layers"])])
         self.norm = _norm1d(a["mlp_norm"], d) if a["layers"] else nn.Identity()
@@ -516,6 +523,8 @@ class BagMLPNet(_HeadsMixin, nn.Module):
 
     def encode(self, indices, offsets):
         x = self.embedding(indices % self.embedding.num_embeddings, offsets)
+        if self.emb_proj is not None:
+            x = self.emb_proj(x)
         for b in self.blocks:
             x = b(x)
         return self.embedding_dropout(self.norm(x))
@@ -705,7 +714,7 @@ def build_model(arch: dict, num_embeddings: int, vocab=None, emb_std: float | No
     if vocab is not None:
         from magezero.vocab import initial_rows
         with torch.no_grad():
-            rows = torch.as_tensor(initial_rows(vocab.ids, a["width"]))
+            rows = torch.as_tensor(initial_rows(vocab.ids, m.embedding.weight.shape[1]))
             rows = rows * float(emb_std) if emb_std is not None else rows
             m.embedding.weight.copy_(rows)
             if getattr(m, "value_tower", None) is not None:

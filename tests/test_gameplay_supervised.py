@@ -438,6 +438,23 @@ def test_mlp_activation_norm_and_pooling_options(tables, tmp_path, ffn, norm, ba
     assert sv.encode(m, torch.tensor([0, 5]), torch.tensor([0])).shape[0] == 1    # a one-row batch trains too
 
 
+def test_mlp_embedding_dimension_separate_from_the_width(tables, tmp_path):
+    """emb_dim: features embedded (and pooled) at size e, then one linear layer to the width."""
+    arch = {**TINY, "type": "mlp", "bag_mode": "max", "ffn": "swiglu", "emb_dim": 8}
+    m = sv.build_model(arch, 40)
+    assert m.embedding.weight.shape == (40, 8) and m.emb_proj.in_features == 8 and m.emb_proj.out_features == 32
+    idx, off = torch.tensor([0, 5, 7, 1, 2, 9]), torch.tensor([0, 2, 4])
+    assert sv.encode(m.eval(), idx, off).shape == (3, 32)
+    assert sv.build_model({**arch, "emb_dim": 32}, 40).emb_proj is None          # e = width: no projection
+    assert sv.build_model({**TINY, "type": "mlp"}, 40).emb_proj is None           # the default: e = width
+    s = sv.train(tiny_cfg(tables, max_steps=6, emb_init_std=0.02, arch=arch), tmp_path / "e", log=lambda *_: None)
+    assert s["step"] == 6
+    m2, _, meta = sv.load_any_checkpoint(tmp_path / "e" / "final.pt.gz")
+    assert meta["arch"]["emb_dim"] == 8 and m2.embedding.weight.shape[1] == 8
+    with pytest.raises(ValueError):
+        sv.full_arch({"type": "transformer", "emb_dim": 128})
+
+
 def test_feature_stats_caps_the_vocab_at_the_most_frequent_ids():
     st = sv.FeatureStats(seed=0)
     rng = np.random.default_rng(0)
