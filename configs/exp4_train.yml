@@ -23,6 +23,8 @@ tables:
   # - {name: block, kind: target}                 # the first block question of each attack: overlaps opp_block
 fraction: 1.0
 val_rows: 20000
+vocab_max_features: 65535   # the most frequent features: the mapped rows fit uint16 (~18 GB for all the rows, not ~36 as
+                            # int32; all the data's k=10 vocab is 72,404 features, and int32 overran a 40 GiB machine)
 data_cache: data/cache/supervised        # mapped tables, so a resume skips the vocab mapping
 arch: {type: transformer, layers: 1, width: 512, norm_first: true}
 emb_init_std: 0.02

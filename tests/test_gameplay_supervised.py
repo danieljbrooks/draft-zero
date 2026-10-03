@@ -438,6 +438,22 @@ def test_mlp_activation_norm_and_pooling_options(tables, tmp_path, ffn, norm, ba
     assert sv.encode(m, torch.tensor([0, 5]), torch.tensor([0])).shape[0] == 1    # a one-row batch trains too
 
 
+def test_feature_stats_caps_the_vocab_at_the_most_frequent_ids():
+    st = sv.FeatureStats(seed=0)
+    rng = np.random.default_rng(0)
+    for _ in range(3):
+        lens = np.full(50, 4)
+        idx = np.concatenate([np.sort(rng.choice([10, 20, 30, 40, 50, 60], 4, replace=False, p=[.3, .3, .2, .1, .05, .05]))
+                              for _ in lens])
+        st.add(idx, lens)
+    full = st.kept(0)
+    cnt = {i: 0 for i in full}
+    assert len(full) >= 5
+    top = st.kept(0, max_n=3)
+    assert len(top) == 3 and set(top) <= set(full.tolist()) and list(top) == sorted(top)
+    assert list(st.kept(0, max_n=100)) == list(full)
+
+
 def test_imitation_net_loads_a_checkpoint_and_evaluates_states(tables, tmp_path):
     from draftzero.gameplay.imitation_net import ImitationNet, resolve
     arch = {**TINY, "norm_first": True}

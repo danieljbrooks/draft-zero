@@ -169,6 +169,8 @@ DEFAULTS: dict[str, Any] = {
     "val_seed": 12345,
     "vocab_k": 10,                 # MageZero's ignore rule: drop features in <= k training states
     "vocab_max_rows": None,        # build the vocab on a random sample of this many training rows
+    "vocab_max_features": None,    # keep at most this many features, the most frequent: 65,535 stores the
+                                   # mapped tables as uint16 (half of int32's memory: ~18 GB for all exp #4's rows)
     "data_cache": None,            # a directory: mapped tables are cached there (fast resume)
     # model
     "arch": ARCH_DEFAULT,
@@ -214,7 +216,7 @@ DEFAULTS: dict[str, Any] = {
     "min_delta": 1e-4,
 }
 DATA_KEYS = ("tables_dir", "tables", "fraction", "subset_seed", "val_rows", "val_seed", "vocab_k",
-             "vocab_max_rows", "init_checkpoint")
+             "vocab_max_rows", "vocab_max_features", "init_checkpoint")
 
 
 # ================================================================================================
@@ -882,14 +884,18 @@ class FeatureStats:
                                                           cat(3, self.cnt))
         self.parts, self.pending = [], 0
 
-    def kept(self, k: int = 10) -> np.ndarray:
+    def kept(self, k: int = 10, max_n: int | None = None) -> np.ndarray:
+        """max_n: at most this many ids, the ones in the most states (ties: the smallest id)."""
         self._merge()
         m = self.cnt > k
         ids, cnt, h1, h2 = self.ids[m], self.cnt[m], self.h1[m], self.h2[m]
         order = np.lexsort((ids, h2, h1, cnt))       # identical state sets adjacent, smallest id first
         c, a, b = cnt[order], h1[order], h2[order]
         first = np.r_[True, (c[1:] != c[:-1]) | (a[1:] != a[:-1]) | (b[1:] != b[:-1])] if len(c) else c.astype(bool)
-        return np.sort(ids[order][first])
+        ids, cnt = ids[order][first], c[first]
+        if max_n is not None and len(ids) > max_n:
+            ids = ids[np.lexsort((ids, -cnt))[:max_n]]
+        return np.sort(ids)
 
 
 # ================================================================================================
@@ -1233,7 +1239,7 @@ def load_data(cfg: dict, *, vocab=None, splits: tuple = ("train", "val"), log=pr
                     off = f["offsets"][:]
                     for _, idx, ln in _iter_blocks(f, off, vsel[s["name"]]):
                         stats.add(idx, ln)
-            vocab = FeatureVocab(stats.kept(cfg["vocab_k"]), feature_hash_bins=GLOBAL_MAX)
+            vocab = FeatureVocab(stats.kept(cfg["vocab_k"], cfg["vocab_max_features"]), feature_hash_bins=GLOBAL_MAX)
             info.update(vocab_rows_built_on=int(stats.n_states))
             log(f"supervised: vocab {len(vocab)} features (k={cfg['vocab_k']}) from {stats.n_states} training "
                 f"states ({time.monotonic() - t0:.0f} s)")
