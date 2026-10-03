@@ -210,7 +210,14 @@ deck pairs, ~2 hours).
 | Policy | Games (with a winner or capped) | Score against `heuristic@100` [95% CI] |
 |---|---|---|
 | sampled, T=1 | 4,356 (141 engine errors left out) | **0.373** [0.359, 0.388] |
-| greedy, T=0 | running | – |
+| greedy, T=0 | 2,435 (65 engine errors left out) | **0.403** [0.384, 0.422] |
+
+**Greedy against sampled on the same games.** The greedy run reuses the sampled run's first 1,250 deck pairs and
+their shuffle seeds, so 2,384 games are identical but for the temperature (same decks, seats and shuffles): greedy
+0.404, sampled 0.374, **+2.9 ± 2.0 points** for greedy. Sampling costs the policy about 3 points; it was not the
+main weakness. Even at its best move every decision the policy loses six games in ten to a heuristic searching
+only 100 simulations, while the same network with search wins (C2: 0.55 at 100 simulations, 0.61 at 300, 0.62 at
+1,000). The policy lacks lookahead, not a temperature setting.
 
 **By colour pair (T=1).** Each deck's win rate by its main colours: in the sampled self-play (9,475 games), the
 policy's and the heuristic's when each pilots that pair against the other (4,352 games), and 17lands' FDN
@@ -235,7 +242,6 @@ Premier Draft games (all players, and the ≥60% win-rate bucket, closer to the 
 - **Not only the policy:** the heuristic also wins least with UR (0.52) and UB (0.57) and most with BG and WG
   (0.70), and its edge over the policy on the same pair is similar across pairs (0.21–0.33). Part of the
   spread looks like simple bots in this engine favouring creature decks over spell decks.
-- The greedy games will say how much of the gap is the sampling.
 
 **Greedy self-play (Dan, 14:00 UTC).** The 17lands comparison above also comes from sampled play. "The goal of
 this project and evals is to play the game well": an eval needs no variety of play, and a high temperature with
