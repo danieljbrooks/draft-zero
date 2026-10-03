@@ -1,0 +1,46 @@
+# Experiment #4: the MLP's follow-ups for rarely seen features and decisions (Dan, 2026-10-03 18:20; docs/018).
+# Base: the best MLP (m4-best: 2 blocks, width 1024, max pooling, SwiGLU, no dropout, token dropout 0.1, the
+# passivity fix on both own-turn tables, TD(0.99)) on 10% of the games, one epoch. Max pooling barely moves the
+# feature embeddings (1-4% of their random start, against 23-38% under mean pooling): the network runs on near-random
+# feature codes, so rare features never get a learned meaning.
+# Wave F (Dan, 22:40): small dropout on the leading recipe over 3 epochs (every earlier MLP run was one epoch, where
+# dropout only slowed learning; the full run repeats each decision). Dropout in the blocks and on the pooled vector at
+# 0.1 and 0.2, against 0 (the leader's) at the same 3 epochs. The winner joins d1-s30-combined's recipe for the
+# full-data run.
+# Wave C (19:25): waves A and B's winners together: features seen in > 3 states (b1b: 0.262), max + mean pooling with
+# the table at 30x (a6b: 0.2605, attack 0.829), heads 1024 (b5: targets 0.601); a seed repeat of the combination.
+# (Wave B's note:) keep rarer features (vocab_k: drop features seen in <= k training states; 10 drops 38% of a state's
+# tokens at 30%), and wider heads (each squeezes the state to 256; the value head uses ~7 dimensions, 54 dead units).
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_rare_f1.yml --out runs/exp4/sweep_rare_f1 \
+#       --tables-dir data/imitation_scale/h5 --follow --follow-idle 600
+title: "Experiment #4 sweep: rare features and decisions (wave F: dropout over 3 epochs)"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.1
+  vocab_k: 3
+  val_rows: 20000
+  max_epochs: 3.0
+  time_budget_s: 14400
+  eval_every_s: null
+  eval_every_steps: 7100
+  ckpt_every_s: null
+  latest_every_s: 300
+  patience_epochs: null
+  arch: {type: mlp, layers: 2}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
+  td_lambda: 0.99
+  value_per_game: 16
+  act_weights: {opp_priority: 3.0}
+runs:
+  - {name: f1-3ep-drop0.1, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_lr_mult: 30.0, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.1, pool_dropout: 0.1, head_hidden: 1024}}
