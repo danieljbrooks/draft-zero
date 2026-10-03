@@ -37,6 +37,9 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
   table at 30x the learning rate, heads 1024) reaches set NLL 0.258 at 10% against the base's 0.266-0.268, and
   +3.5 points on rarely chosen moves; more data helps rare moves far more (+8-15 points). Wave D checks it at 30%
   (The MLP: its bottlenecks).
+- **The full-data MLP is training** (from 4 October ~00:00 UTC, 10 epochs, 6.5-11 hours): the leading recipe plus
+  weight decay 0.1 and 4 value positions a game, after 3-epoch tests showed the recipe overfitting from the second
+  pass (The full-data MLP).
 - **Spend: $59.43 of the $65 cap, no pod running.** The second machine costs nothing.
 
 ### Earlier summary (2 October, during stage 2)
@@ -1346,6 +1349,72 @@ layer, 10%), 0.256 (30%), and stage 3 (all the games, three epochs) 0.234.
 | 69 | `b6b-rare1.0` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), rare-move wt 1.0 | 0.3832 | 0.687 | 0.792 | 0.526 | 0.580 | 0.742 | 0.620 | 0.570 / 0.643 |
 | 70 | `m-nonorm` | mean pool, relu, w512, dropout 0.1, none norm, act x3 (opp) | 0.3954 | 0.713 | 0.762 | 0.687 | 0.528 | 0.722 | 0.594 | – |
 | 71 | `m-sd-1e-2` | mean pool, gelu, w512, dropout 0.6, batch norm, act x3 (opp), lr 0.01 | 0.4193 | 0.713 | 0.758 | 0.685 | 0.519 | 0.729 | 0.585 | – |
+
+## The full-data MLP: overfitting, the plan, the run (from 3 October, 22:30 UTC)
+
+*Dan, 22:40: train the leading MLP (`d1-s30-combined`) on the full dataset for 10 epochs; check dropout first. 23:55:
+"This plan looks good"; stop the sweeps, skip the rehearsal, run phases 2 and 3, with a dashboard and a check-in every
+20 minutes.*
+
+### Every earlier MLP run was one epoch: three epochs overfit (waves F, G, H)
+
+The same recipe on 10% of the games for 3 epochs (configs/exp4_sweep_rare_f0.yml ... _h.yml), each a single change
+against the control. Set NLL (lower is better):
+
+| Run | Change | Best set NLL (epoch) | Set NLL at 3 epochs | Value log-loss at the end | Seconds an epoch |
+|---|---|---|---|---|---|
+| `f0-3ep-drop0` | the control (dropout 0) | 0.2674 (1.26) | 0.3228 | 0.95 | 201 |
+| `f1-3ep-drop0.1` | dropout 0.1 (blocks and pooled vector) | 0.2712 (1.26) | 0.3288 (2.77) | 1.01 | 209 |
+| `g1-3ep-wd0.01` | weight decay 0.01 | 0.2646 (1.76) | 0.3071 | 0.91 | 331 |
+| **`g2-3ep-wd0.1`** | **weight decay 0.1** | **0.2591 (2.77)** | **0.2605** | **0.66** | 337 |
+| `g3-3ep-tok0.3` | token dropout 0.3 | 0.2627 (1.37) | 0.2827 | 0.76 | 225 |
+| `g4-3ep-table10` | the table at 10x, not 30x | 0.2678 (1.26) | 0.3277 (2.77) | 0.93 | 272 |
+| `g5-3ep-vpg4` | 4 value positions a game, not 16 (stopped at 2.26) | 0.2660 (1.76) | 0.2848 (2.26) | 0.67 (2.26) | – |
+| `h1-3ep-wd0.1-tok0.3` | weight decay 0.1 + token dropout 0.3 (stopped at 0.34) | – | – | – | – |
+
+- **The leading recipe overfits after ~1.25 passes:** set NLL 0.267 → 0.323, value log-loss 0.59 → 0.95, accuracy
+  peaking at 0.809 and falling back. Dropout doesn't touch it (the overfitting isn't in the blocks); a slower table
+  doesn't either.
+- **Weight decay 0.1 stops it:** still improving at the third pass and ending below the control's best; the value head
+  holds (0.58-0.66). AdamW's decay scales with each group's rate, so the table (30x) is pulled back hardest: the rows
+  that only memorise. It learns more slowly early (0.290 after one pass against 0.268) and costs 0.5-2.5 points of
+  accuracy, attack and targets against the control's best. Any weight decay made training ~1.6x slower an epoch
+  (331-337 s against ~205 s); not yet explained.
+- **Fewer value positions a game protect the value head, and the policy a little:** the value head sees each game's
+  result 4 times an epoch instead of 16 (value AUC 0.757, the best of any run; the policy's set NLL rose 0.266 → 0.285
+  by 2.26 passes against the control's 0.267 → 0.309). What the value head memorises is game results, and the
+  sightings of each result are positions a game x epochs: 16 x 10 = 160 in a 10-epoch run, against stage 3's 48
+  (its value head peaked at ~38). 4 x 10 = 40.
+
+### The plan (decision rules fixed before the last results)
+
+**Phase 0, the recipe:** `d1-s30-combined` + **weight decay 0.1** (0.03 untested: the rule kept 0.1) + **4 value
+positions a game** (rule: its value log-loss stayed <= 0.80 at the third pass: 0.67) + token dropout 0.1 (0.3 would
+have joined only if the pair beat weight decay alone by 0.002: not measured, the run stopped early). The two changes
+were each tested alone, not together. Config: configs/exp4_train_mlp.yml.
+
+**Phase 1, a 10-pass rehearsal on 10% of the games:** skipped (Dan).
+
+**Phase 2, the full run** (deploy/exp4_mlp_full.sh, GPU 0 of the second machine):
+- all 10,947,614 training decisions (145,898 games); checkpoints chosen on val (8,248 games, 602,555 decisions; 20,000
+  rows a table); test (7,052 games, 531,406 decisions) scored once, after training. No game is in two splits; sb-v1's
+  drafts are held out; sb-v2's 541 games are all in test. Every MLP comparison so far used val only.
+- 10 epochs, warm-up over 3,000 steps, cosine to 10%: the body 1e-4 → 1e-5, the table 3e-3 → 3e-4. ~288k steps an
+  epoch (~38 decisions a step), an evaluation every quarter epoch (40), TD(0.99) value targets recomputed every epoch.
+- best_policy and best_value kept apart (each chosen on val), a snapshot every 30 minutes, resume state every 10
+  minutes (a restart resumes).
+- Time: ~22 minutes to load all the data, then 35-40 minutes an epoch without the weight-decay slowdown, 55-65 with it:
+  **6.5-11 hours.**
+
+**Phase 3, after training** (the launcher, then by hand): the test split for best_policy and best_value; the rare
+decisions (val); the head-to-head on test against stage 3's transformer; the learning curves (where each head
+peaks); HF upload beside the transformer, with a model card; this log.
+
+**Housekeeping:** the 115 sweep runs' resume files (`latest.pt`, 48 GB) were deleted before the launch (every run
+keeps its best and final checkpoints); 88 GB free.
+
+**Babysitting:** a dashboard (an artifact, refreshed every 20 minutes) and a check-in every 20 minutes while the
+laptop session is open; the run itself needs neither.
 
 ## Stage 4: cheap evaluation (sb-v2)
 

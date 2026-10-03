@@ -1,6 +1,9 @@
 # Experiment #4: the full-data MLP (Dan, 2026-10-03 22:40; docs/018): the leading recipe, d1-s30-combined (set NLL
-# 0.241 on 30% of the games, ahead of the 30% transformer's 0.256), on all the training games for 10 epochs, with the
-# dropout wave F chose (configs/exp4_sweep_rare_f0.yml, _f1.yml: 0 / 0.1 / 0.2 over 3 epochs on 10%).
+# 0.241 on 30% of the games, ahead of the 30% transformer's 0.256), on all the training games for 10 epochs, with what
+# waves F and G found against multi-epoch overfitting (3 epochs on 10% of the games; docs/018): no dropout (0.1 was
+# worse), weight decay 0.1 (the only change that stopped it: set NLL still falling at 3 epochs, 0.2591, against the
+# control's 0.267 -> 0.323), and 4 value positions a game (value log-loss 0.62-0.67 through 2.26 epochs against the
+# control's 0.59 -> 0.89; 4 x 10 epochs = 40 sightings of each game's result, near stage 3's value peak at ~38).
 #
 # Splits (tools/imitation_scale/build.py splits): train 145,898 games (10.95M decisions), val 8,248 games (602,555),
 # test 7,052 games (531,406), split by draft component, no game in two splits; sb-v1's drafts held out; sb-v2's 541
@@ -27,13 +30,14 @@ data_cache: data/cache/supervised        # mapped tables, so a resume skips the 
 arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}
 emb_init_std: 0.02
 emb_lr_mult: 30.0           # the feature-embedding table at 30x the body's rate (peak 3e-3): max pooling barely moves it otherwise
+weight_decay: 0.1           # AdamW, every parameter; the table's decay scales with its 30x rate: against memorising rare rows
 token_dropout: 0.1
 warmup_steps: 3000
 lr: 1.0e-4
 lr_schedule: cosine         # over the 10 epochs, to 10% of the peak
 value_target: td
 td_lambda: 0.99
-value_per_game: 16
+value_per_game: 4           # value positions a game an epoch: 4 x 10 epochs = 40 sightings of each game's result
 value_weight: 0.5
 act_weights: {opp_priority: 3.0, replay_priority: 3.0}   # the passivity fix: x3 on the rows where the human acted
 time_budget_s: 50400        # a 14-hour cap; max_epochs stops it first (~35-40 minutes an epoch)
