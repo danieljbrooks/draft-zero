@@ -153,7 +153,7 @@ ARCH_DEFAULT = {"type": "transformer", "layers": 2, "width": 512, "ff": None, "h
                 "value_tower_type": "transformer",   # transformer | mlp (a pooled EmbeddingBag + MLP blocks: cheap)
                 "value_detach": False,  # the value head reads the shared features with the gradient stopped
                 "mlp_norm": "layer",    # the MLP's blocks: layer | batch (BatchNorm1d) | none
-                "bag_mode": "mean",     # the MLP's token pooling: mean | sum | max
+                "bag_mode": "mean",     # the MLP's token pooling: mean | sum | max | maxmean (max + mean, added)
                 "emb_dim": None}        # the feature embeddings' size (null = width). The MLP pools at this size and
                                         # one linear layer projects the pooled vector to width (the transformer: not yet)
 DEFAULT_TABLES = [{"name": "turnstart", "kind": "priority_set"},
@@ -201,6 +201,12 @@ DEFAULTS: dict[str, Any] = {
     # optimisation
     "lr": 3e-4, "warmup_steps": 300, "lr_schedule": "constant", "lr_min_frac": 0.1,
     "emb_init_std": None,          # embedding rows' initial std (None: MageZero's N(0, 1) keyed rows; scaled otherwise)
+    "emb_lr_mult": 1.0,            # the feature-embedding table's learning rate = lr x this (max pooling barely moves
+                                   # the table at the body's rate: docs/018, the MLP's bottlenecks)
+    "emb_optimizer": "adamw",      # the table's optimizer: adamw (with the rest) | adagrad (its own: per-row steps that
+                                   # shrink with each row's accumulated gradient, a frequency-aware learning rate)
+    "emb_init_from": None,         # a checkpoint whose feature embeddings start this run's (matched by feature id,
+                                   # same embedding size; rows it lacks keep their own init). A fresh run only
     "weight_decay": 0.0, "grad_clip": 1.0,
     "token_dropout": 0.3,
     "batch_tokens": 64 * 768,      # padded tokens per batch: rows <= batch_tokens // padded length L ...
@@ -245,9 +251,11 @@ def full_arch(arch: dict | None, materialize: bool = True) -> dict:
         raise ValueError(f"arch.ffn must be relu, swiglu or gelu and arch.pool mean or attn: {a['ffn']!r}, {a['pool']!r}")
     if a["type"] == "transformer" and a["ffn"] == "gelu":
         raise ValueError("arch.ffn gelu is for the MLP only")
-    if a["mlp_norm"] not in ("layer", "batch", "none") or a["bag_mode"] not in ("mean", "sum", "max"):
+    if a["mlp_norm"] not in ("layer", "batch", "none") or a["bag_mode"] not in ("mean", "sum", "max", "maxmean"):
         raise ValueError(f"arch.mlp_norm must be layer, batch or none and arch.bag_mode mean, sum or max: "
                          f"{a['mlp_norm']!r}, {a['bag_mode']!r}")
+    if a["bag_mode"] == "maxmean" and (a["type"] != "mlp" or a["value_tower"]):
+        raise ValueError("arch.bag_mode maxmean is for the MLP (no value tower)")
     if a["emb_dim"] is not None and a["type"] != "mlp":
         raise ValueError("arch.emb_dim is implemented for the MLP only so far")
     if a["value_tower_type"] not in ("transformer", "mlp"):
@@ -310,7 +318,7 @@ def resolve_config(*layers: dict | None) -> dict:
     if cfg["tables_dir"] is None:
         cfg["tables_dir"] = str(im.OUT_DIR / "h5")
     checks = {"value_loss": ("bce", "mse"), "value_target": ("result", "td"), "lr_schedule": ("constant", "cosine"),
-              "amp": ("auto", "bf16", "fp16", "off")}
+              "amp": ("auto", "bf16", "fp16", "off"), "emb_optimizer": ("adamw", "adagrad")}
     for k, ok in checks.items():
         if cfg[k] not in ok:
             raise ValueError(f"{k} must be one of {ok}, not {cfg[k]!r}")
@@ -512,7 +520,9 @@ class BagMLPNet(_HeadsMixin, nn.Module):
         a = full_arch(arch)
         d = a["width"]
         e = a["emb_dim"] or d
-        self.embedding = nn.EmbeddingBag(num_embeddings, e, mode=a["bag_mode"])
+        # maxmean: the max pool plus the mean pool of the same rows (the mean gives every token a gradient each step)
+        self.add_mean = a["bag_mode"] == "maxmean"
+        self.embedding = nn.EmbeddingBag(num_embeddings, e, mode="max" if self.add_mean else a["bag_mode"])
         # emb_dim != width: the pooled e-vector is projected to the blocks' width (pooling happens at size e)
         self.emb_proj = nn.Linear(e, d) if e != d else None
         self.blocks = nn.ModuleList([_MLPBlock(d, a["ff"], a["dropout"], a["ffn"], a["mlp_norm"])
@@ -522,7 +532,10 @@ class BagMLPNet(_HeadsMixin, nn.Module):
         self._make_heads(d, a)
 
     def encode(self, indices, offsets):
-        x = self.embedding(indices % self.embedding.num_embeddings, offsets)
+        idx = indices % self.embedding.num_embeddings
+        x = self.embedding(idx, offsets)
+        if self.add_mean:
+            x = x + F.embedding_bag(idx, self.embedding.weight, offsets, mode="mean")
         if self.emb_proj is not None:
             x = self.emb_proj(x)
         for b in self.blocks:
@@ -2027,10 +2040,22 @@ class Trainer:
                 self.aux.load_state_dict(meta0["aux"].state_dict())
             del m0
             self.log(f"supervised: starting from {init}")
+        if cfg["emb_init_from"] and latest is None and not init:
+            self._embeddings_from(cfg["emb_init_from"])
         for name, p in self.model.named_parameters():
             p.requires_grad_(param_part(name) not in cfg["freeze"])
-        params = [p for p in self.model.parameters() if p.requires_grad] + (list(self.aux.parameters()) if self.aux else [])
-        self.opt = torch.optim.AdamW(params, lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+        emb = [p for n, p in self.model.named_parameters() if p.requires_grad and n.endswith("embedding.weight")]
+        rest = [p for n, p in self.model.named_parameters() if p.requires_grad and not n.endswith("embedding.weight")]
+        rest += list(self.aux.parameters()) if self.aux else []
+        # param groups carry lr_mult: the step sets lr = schedule x lr_mult
+        if cfg["emb_optimizer"] == "adagrad":
+            self.opt = torch.optim.AdamW([{"params": rest, "lr_mult": 1.0}], lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+            self.opt_emb = torch.optim.Adagrad([{"params": emb, "lr_mult": float(cfg["emb_lr_mult"])}], lr=cfg["lr"])
+        else:
+            groups = [{"params": rest, "lr_mult": 1.0}] + ([{"params": emb, "lr_mult": float(cfg["emb_lr_mult"])}] if emb else [])
+            self.opt = torch.optim.AdamW(groups, lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+            self.opt_emb = None
+        self.opts = [o for o in (self.opt, self.opt_emb) if o is not None]
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.dtype == torch.float16 and self.dev.type == "cuda")
         self.sampler = Sampler(self.data, cfg)
         self.epoch_len = self.sampler.epoch_len
@@ -2052,12 +2077,28 @@ class Trainer:
                  + (f"; frozen: {cfg['freeze']}" if cfg["freeze"] else "")
                  + (f"; KL weight {cfg['kl_weight']} -> {cfg['kl_weight_end']}" if self.has_ref else ""))
 
+    def _embeddings_from(self, path) -> None:
+        """emb_init_from: copy another checkpoint's feature embeddings into this fresh model, row by feature id."""
+        m0, v0, _ = load_any_checkpoint(path)
+        src = m0.embedding.weight.detach()
+        dst = self.model.embedding.weight
+        if src.shape[1] != dst.shape[1]:
+            raise ValueError(f"emb_init_from {path}: embedding size {src.shape[1]}, this model's {dst.shape[1]}")
+        rows = v0.lookup(self.vocab.ids)
+        have = rows >= 0
+        with torch.no_grad():
+            dst[torch.as_tensor(np.nonzero(have)[0], device=dst.device)] = src[torch.as_tensor(rows[have])].to(dst.device, dst.dtype)
+        self.log(f"supervised: {int(have.sum())} of {len(rows)} embedding rows from {path}")
+        del m0
+
     # ---------------------------------------------------------------------------------- state
     def _restore(self, ck: dict) -> None:
         self.model.load_state_dict(ck["model"])
         if self.aux is not None and ck.get("aux"):
             self.aux.load_state_dict(ck["aux"])
         self.opt.load_state_dict(ck["opt"])
+        if self.opt_emb is not None and ck.get("opt_emb"):
+            self.opt_emb.load_state_dict(ck["opt_emb"])
         if ck.get("scaler"):
             self.scaler.load_state_dict(ck["scaler"])
         self.sampler.load_state_dict(ck["sampler"])
@@ -2077,7 +2118,8 @@ class Trainer:
     def save_latest(self) -> None:
         ck = {"model": {k: v.detach().cpu() for k, v in self.model.state_dict().items()},
               "aux": {k: v.detach().cpu() for k, v in self.aux.state_dict().items()} if self.aux else None,
-              "opt": self.opt.state_dict(), "scaler": self.scaler.state_dict() if self.scaler.is_enabled() else None,
+              "opt": self.opt.state_dict(), "opt_emb": self.opt_emb.state_dict() if self.opt_emb is not None else None,
+              "scaler": self.scaler.state_dict() if self.scaler.is_enabled() else None,
               "sampler": self.sampler_state, "counters": dict(self.c), "best": self.best,
               "td": None if self.td is None else torch.from_numpy(self.td),
               "torch_rng": torch.get_rng_state(),
@@ -2224,14 +2266,17 @@ class Trainer:
                 parts["aux"] = la
                 loss = loss + cfg["aux_weight"] * la
         lr = self.lr_at(self.c["step"], self.c["seen"])
-        for g in self.opt.param_groups:
-            g["lr"] = lr
-        self.opt.zero_grad(set_to_none=True)
+        for o in self.opts:
+            for g in o.param_groups:
+                g["lr"] = lr * g.get("lr_mult", 1.0)
+            o.zero_grad(set_to_none=True)
         self.scaler.scale(loss).backward()
         if cfg["grad_clip"]:
-            self.scaler.unscale_(self.opt)
-            torch.nn.utils.clip_grad_norm_([p for g in self.opt.param_groups for p in g["params"]], cfg["grad_clip"])
-        self.scaler.step(self.opt)
+            for o in self.opts:
+                self.scaler.unscale_(o)
+            torch.nn.utils.clip_grad_norm_([p for o in self.opts for g in o.param_groups for p in g["params"]], cfg["grad_clip"])
+        for o in self.opts:
+            self.scaler.step(o)
         self.scaler.update()
         self.c["step"] += 1
         self.c["seen"] = int(b["state"]["seen"])

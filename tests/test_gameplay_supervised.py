@@ -455,6 +455,34 @@ def test_mlp_embedding_dimension_separate_from_the_width(tables, tmp_path):
         sv.full_arch({"type": "transformer", "emb_dim": 128})
 
 
+@pytest.mark.parametrize("opt", ["adamw", "adagrad"])
+def test_embedding_learning_rate_optimizer_and_maxmean_pooling(tables, tmp_path, opt):
+    """emb_lr_mult / emb_optimizer: the table trains at its own rate (and optimizer); bag_mode maxmean adds the mean
+    pool to the max pool; the run resumes with both optimizers' state; emb_init_from copies rows by feature id."""
+    arch = {**TINY, "type": "mlp", "bag_mode": "maxmean", "ffn": "swiglu"}
+    m = sv.build_model(arch, 40)
+    idx, off = torch.tensor([0, 5, 7, 1, 2, 9]), torch.tensor([0, 2, 4])
+    want = m.embedding(idx, off) + torch.nn.functional.embedding_bag(idx, m.embedding.weight, off, mode="mean")
+    assert m.add_mean and m.embedding.mode == "max"
+    x = m.embedding(idx, off) + torch.nn.functional.embedding_bag(idx, m.embedding.weight, off, mode="mean")
+    assert torch.allclose(x, want)
+    cfg = tiny_cfg(tables, max_steps=6, emb_init_std=0.02, arch=arch, emb_lr_mult=30.0, emb_optimizer=opt)
+    tr = sv.Trainer(cfg, tmp_path / "a", log=lambda *_: None)
+    lrs = {id(p): g["lr_mult"] for o in tr.opts for g in o.param_groups for p in g["params"]}
+    assert lrs[id(tr.model.embedding.weight)] == 30.0 and lrs[id(tr.model.blocks[0].fc1.weight)] == 1.0
+    assert (tr.opt_emb is not None) == (opt == "adagrad")
+    s = sv.train(cfg, tmp_path / "b", log=lambda *_: None)
+    assert s["step"] == 6
+    s = sv.train({**cfg, "max_steps": 8}, tmp_path / "b", resume=True, log=lambda *_: None)   # both optimizers resume
+    assert s["step"] == 8
+    m2, _, meta = sv.load_any_checkpoint(tmp_path / "b" / "final.pt.gz")
+    assert meta["arch"]["bag_mode"] == "maxmean"
+    c = sv.Trainer({**cfg, "emb_init_from": str(tmp_path / "b" / "final.pt.gz")}, tmp_path / "c", log=lambda *_: None)
+    assert torch.equal(c.model.embedding.weight.cpu(), m2.embedding.weight.cpu())
+    with pytest.raises(ValueError):
+        sv.full_arch({"type": "transformer", "bag_mode": "maxmean"})
+
+
 def test_feature_stats_caps_the_vocab_at_the_most_frequent_ids():
     st = sv.FeatureStats(seed=0)
     rng = np.random.default_rng(0)
