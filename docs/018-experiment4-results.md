@@ -796,6 +796,10 @@ Every pod's quote, what it actually had, and what it delivered (docs/005).
 | `ubn5t7kjbu12l4` | 2–3 (meant) | RTX 3090, Community with public IP, CA | $0.22/hr, 16 vCPU, 62 GB | – | 0.35 | $0.08 | still pulling the image after 20 minutes; removed |
 | `4gm8oz4v2pa7qv` | 2–3 (meant) | RTX 3090, Community with public IP, FR | $0.22/hr, 8 vCPU, 30 GB | – | ~0 | ~$0 | too little RAM for stage 3; removed at once |
 | `47ojn7gvz1wub8` | 2–3 (meant) | RTX 3090, Community with public IP, CA | $0.22/hr, 16 vCPU, 62 GB | – | 0.63 | $0.14 | created with GraphQL `podFindAndDeployOnDemand` (`minMemoryInGb: 60`); still pulling the image after 38 minutes; removed. The sweep ran on the Secure pod instead |
+| `ja65dr1lyq1nn6` | C0 (meant) | RTX 3090, Community, US | $0.22/hr, 32 vCPU, 62 GB | – | 0.35 | $0.08 | 3 October: still pulling the image after 21 minutes; removed |
+| `uhwjxh9rgl5rrk` | C0 (meant) | RTX 3090, Community, US | $0.22/hr, 32 vCPU, 62 GB | – | 0.35 | $0.08 | the same, 21 minutes; removed |
+| `n70wjxme676f14` | C0 (meant) | RTX 3090 Ti, Community, CA | $0.27/hr, 32 vCPU, 54 GB | – | 0.35 | $0.09 | the same, 21 minutes; removed |
+| `ijkduwvrwiokxh` | C0 | RTX 3090, Secure, CZ | $0.50/hr, 32 vCPU, 125 GB | – | running | | SSH in 90 s, set up (deploy/exp4_games_setup.sh) in 2.5 minutes; the throughput runs |
 
 **Community 3090s with a public IP were $0.22/hr** on 2026-10-01, with 8–32 vCPU and 30–62
 GB, less than half the Secure price (docs/005 found no Community host with a public IP on
