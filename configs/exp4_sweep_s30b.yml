@@ -1,0 +1,36 @@
+# Experiment #4, stage 2: the scale check on the second GPU (docs/018), with configs/exp4_sweep_s30.yml's base: 30% of the
+# training games, one epoch, round 1-2's validation rows.
+# 00:20: at 10% a value-loss weight of 0.2 (against 0.5) gave the single tower set NLL -0.008 and non-Pass +0.007 for value AUC
+# -0.006 (x-vweight-0.2): less value gradient in the shared trunk, as the value tower showed. Checked at 30% beside the
+# stage-3 recipe's own check (s30-l1-actor3-td99 in exp4_sweep_s30.yml) before stage 3 takes it.
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_s30b.yml --out runs/exp4/sweep_s30b \
+#       --tables-dir data/imitation_scale/h5 --follow --follow-idle 600
+title: "Experiment #4 sweep, scale check (second GPU): a value-loss weight of 0.2"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.3
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 21600        # a cap only
+  eval_every_s: null
+  eval_every_steps: 15506     # quarter epochs (an epoch of 30% is ~62k steps)
+  ckpt_every_s: null
+  latest_every_s: 600
+  patience_epochs: null
+  # round 2's leader (19:08), v16-td-cosine-1e-4: TD(0.95) value targets, warm-up + cosine from 1e-4
+  arch: {layers: 1, norm_first: true}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
+  value_per_game: 16
+runs:
+  - {name: s30-l1-actor3-vw02, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, value_weight: 0.2}

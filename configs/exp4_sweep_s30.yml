@@ -53,4 +53,4 @@ runs:
   # 2.3x the training time, and at 10% an MLP value tower beside the transformer (x-vt-mlp) kept most of the policy gain
   # (NLL -0.011) at 4,788 evaluations a second. The stage-3 candidates, exactly:
   - {name: s30-l1-actor3-td99, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99}
-  - {name: s30-vtmlp-actor3-td99, arch: {value_tower: true, value_tower_type: mlp, value_layers: 2}, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99}
+  # - {name: s30-vtmlp-actor3-td99, arch: {value_tower: true, value_tower_type: mlp, value_layers: 2}, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99}   # dropped 00:20 (Dan chose the single tower)
