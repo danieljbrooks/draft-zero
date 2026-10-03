@@ -48,7 +48,7 @@ has the stage estimates this doc tracks against.*
 | GPU check | done: the RTX 3090 | 1.5 (3 pods) | $1.30 | the L40 is no cheaper per evaluation; network search is CPU-bound |
 | 1. Build | done: 161,206 games, 12.1M rows (10.9M train) | 3.6 | $1.82 | estimate 5 pod-hours, $2.50 |
 | 2. Hyperparameter sweep | rounds 1 and 2 done on the RunPod 3090 (40 runs); round 2x and the 30% check continue on the second machine | 25.1 | $12.55 | ~24 pod-hours expected against 6: over by design. The second machine adds none |
-| 3. Large training | **running** on the second machine since 02:08 UTC on 3 October (the full vocab, 72,404 features), done ~06:00 | | $0 | the single-tower transformer (Stage 3); the first launch was killed by the 40 GiB limit while loading (fixed: RowStore) |
+| 3. Large training | **done** 06:28 UTC on 3 October: 3 epochs, 4.3 hours on the second machine; on HF (`exp4/stage3/`) | | $0 | test: non-Pass 0.825, set NLL 0.234, value AUC 0.781 (Stage 3: results) |
 | 4. Cheap evaluation | heuristic bot at 300 done; at 3,000, half done | 4.6 | $1.01 | the pod's host rebooted; the rest runs with the network mixes |
 | 5. Play | replaced by phase C (the plan from here): C0–C3 on RunPod | | | |
 | 6. Follow-up checkpoints | deferred | | | |
@@ -744,6 +744,42 @@ The run writes `runs/exp4/main/`: `best_policy.pt.gz` (**the one to use**), `bes
   MageZero's protocol; `play.py --bot1 policy` (no search), `il_bc` (IS-MCTS with its policy and value), and
   sb-v2's search bench read it from there.
 - **Action indices** are MageZero's; `assets/vocab/FDN_SPG.tsv` names them.
+
+## Stage 3: results (finished 06:28 UTC on 3 October)
+
+*Weights and model card: `hf://danbrooks/draftzero-checkpoints/exp4/stage3/` (`best_policy.pt.gz` for play and search).
+Live curves while it ran: the artifact "Stage 3 Live Curves".*
+
+The single-tower transformer trained for its 3 epochs from scratch: 628,638 steps, 32.8M rows, 14,859 s of training
+(4.1 hours; 4.3 with the three TD recomputations and the evaluations) at 2,984 rows a second on the second
+machine's GPU 1, with the full vocabulary (72,404 features; 40.6M parameters, 37.1M of them embeddings) in 28 GiB.
+
+| | Non-Pass top-1 | Set NLL | Attack | Block | Targets | Value AUC | Value log-loss |
+|---|---|---|---|---|---|---|---|
+| 10%, one epoch (`act3-td99`), validation | 0.791 | 0.285 | 0.810 | 0.699 | 0.552 | 0.749 | 0.582 |
+| 30%, one epoch (`s30-l1-actor3-td99`), validation | 0.815 | 0.256 | 0.827 | 0.713 | 0.617 | 0.767 | 0.558 |
+| **All, three epochs, validation (end)** | **0.829** | **0.234** | **0.856** | **0.741** | **0.708** | **0.781** | 0.559 |
+| All, three epochs, **test** (`best_policy`) | 0.825 | 0.234 | 0.863 | 0.748 | 0.709 | 0.781 | 0.555 |
+| All, three epochs, test (`best_value`, 2.36 epochs) | 0.824 | 0.236 | 0.860 | 0.746 | 0.702 | 0.780 | **0.549** |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/018-stage3-dark.png">
+  <img alt="Stage 3's validation curves against training rows seen: its six measures rise (or fall, for the losses) past the finished 30% and 10% runs during the first epoch and flatten through epochs 2 and 3." src="img/018-stage3-light.png">
+</picture>
+
+- **All the data beat 30% of it on every measure,** most on spell targets (+0.09) and attack and block (+0.03).
+  The test split agrees with validation within 0.007 everywhere, so nothing was fitted to the validation rows.
+- **Most of the gain came in the first epoch.** Set NLL was 0.240 after one epoch, 0.235 after two, 0.234 after
+  three: repeats help less each time, as `ep3` predicted. The cosine's last epoch at a low rate added ~0.002 non-Pass.
+- **The value head peaked at 2.36 epochs** (validation log-loss 0.554; `best_value`), and its log-loss moved
+  up a little after each TD recomputation (0.25, 1.25, 2.25 epochs) before settling. AUC held at ~0.78 from the
+  second epoch on. The `best_value` checkpoint is ~0.006 better on log-loss and no worse elsewhere.
+- **Passing, on the test split** (Pass ranked first, network against humans): the opponent's turn 0.928 against
+  0.935, the player's later stops 0.653 against 0.661, the turn start 0.035 against 0.048. The passivity fix holds
+  at scale, slightly past the humans at the turn start and in the opponent's turn.
+- **Two launches before it:** the first was killed by the machine's 40 GiB limit while loading (int32 tables for a
+  72k vocab); the second used a vocab capped at 65,535 and was stopped at Dan's request for the full vocabulary,
+  which RowStore (16-bit tables plus the rarest features' overflow) now fits in ~18 GB of tokens.
 
 ## Policy-only evaluation (the last step, planned)
 
