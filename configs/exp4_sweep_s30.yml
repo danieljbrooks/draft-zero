@@ -48,4 +48,9 @@ runs:
   # 23:20: x3 on all tables at 30%: the player's own later stops gain (Pass on top 0.658 against the humans' 0.666, set NLL
   # -0.009) but the turn start overshoots (0.021 against 0.051). The candidate stage-3 recipe: the value tower with x3 on
   # the opponent's turn and the player's later stops, none at the turn start
-  - {name: s30-vt-actor3-td99, arch: {value_tower: true, value_layers: 1}, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99}
+  # - {name: s30-vt-actor3-td99, arch: {value_tower: true, value_layers: 1}, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99}
+  # 00:06: stopped at the start for the two cheaper candidates: the value tower at 30% (s30-vt-act3-td99) gained NLL -0.005 at
+  # 2.3x the training time, and at 10% an MLP value tower beside the transformer (x-vt-mlp) kept most of the policy gain
+  # (NLL -0.011) at 4,788 evaluations a second. The stage-3 candidates, exactly:
+  - {name: s30-l1-actor3-td99, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99}
+  - {name: s30-vtmlp-actor3-td99, arch: {value_tower: true, value_tower_type: mlp, value_layers: 2}, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99}
