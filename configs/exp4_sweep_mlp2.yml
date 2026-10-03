@@ -1,0 +1,47 @@
+# Experiment #4, stage 2: the MLP's own sweep, second wave (docs/018): the first wave's winners combined. Same base as
+# configs/exp4_sweep_mlp.yml (m0). First wave, against m0 (set NLL 0.327): no dropout 0.316, SwiGLU 0.317, GELU 0.323;
+# BatchNorm, no norm, heavy dropout and higher learning rates worse.
+# Stage 3 trains two models (Dan, 22:55): the transformer for
+# quality and an MLP for fast search on CPUs (one core: 0.39 ms an evaluation against the transformer's ~80 ms). The
+# MLP has only run on the transformer's recipe so far. The same 10% subset, validation rows and budget as round 2;
+# the base, m0, is the transformer's recipe on MageZero's bag-of-tokens MLP (2 residual blocks, width 512, LayerNorm,
+# ReLU, dropout 0.1, pooling dropout 0.2, token dropout 0.3). One setting at a time first, combinations next.
+# Reference: Dan's statistical-drafting MLP (Linear -> GELU -> Dropout 0.6 -> BatchNorm, Adam at lr 0.03).
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_mlp2.yml --out runs/exp4/sweep_mlp2 \
+#       --tables-dir data/imitation_scale/h5 --follow --follow-idle 10800
+title: "Experiment #4 sweep: the MLP, second wave (the winners combined)"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.1
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 7200
+  eval_every_s: null
+  eval_every_steps: 5169
+  ckpt_every_s: null
+  latest_every_s: 300
+  patience_epochs: null
+  arch: {type: mlp, layers: 2}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
+  td_lambda: 0.99
+  value_per_game: 16
+  act_weights: {opp_priority: 3.0}
+runs:
+  - {name: m2-swiglu-drop0, arch: {type: mlp, layers: 2, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m2-gelu-drop0, arch: {type: mlp, layers: 2, ffn: gelu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m2-swiglu-drop0-w1024, arch: {type: mlp, layers: 2, width: 1024, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m2-swiglu-drop0-b4, arch: {type: mlp, layers: 4, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m2-swiglu-drop0-tok0.1, token_dropout: 0.1, arch: {type: mlp, layers: 2, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m2-swiglu-drop0-lr3e-4, lr: 3.0e-4, arch: {type: mlp, layers: 2, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m2-swiglu-drop0-actor3, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, arch: {type: mlp, layers: 2, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
