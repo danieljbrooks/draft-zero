@@ -1,0 +1,47 @@
+# Experiment #4: the MLP's follow-ups for rarely seen features and decisions (Dan, 2026-10-03 18:20; docs/018).
+# Base: the best MLP (m4-best: 2 blocks, width 1024, max pooling, SwiGLU, no dropout, token dropout 0.1, the
+# passivity fix on both own-turn tables, TD(0.99)) on 10% of the games, one epoch. Max pooling barely moves the
+# feature embeddings (1-4% of their random start, against 23-38% under mean pooling): the network runs on near-random
+# feature codes, so rare features never get a learned meaning.
+# Wave E (21:10, after Dan liked the Adagrad idea): wave C's combination with Adagrad for the table at lr 0.1, 0.3,
+# 1.0 in place of AdamW at 30x (wave A's Adagrad runs used plain max pooling and lr <= 0.1: the rare rows moved relatively
+# twice as far as under AdamW, but the table moved less overall and accuracy matched the base).
+# Wave C (19:25): waves A and B's winners together: features seen in > 3 states (b1b: 0.262), max + mean pooling with
+# the table at 30x (a6b: 0.2605, attack 0.829), heads 1024 (b5: targets 0.601); a seed repeat of the combination.
+# (Wave B's note:) keep rarer features (vocab_k: drop features seen in <= k training states; 10 drops 38% of a state's
+# tokens at 30%), and wider heads (each squeezes the state to 256; the value head uses ~7 dimensions, 54 dead units).
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_rare_e.yml --out runs/exp4/sweep_rare_e \
+#       --tables-dir data/imitation_scale/h5 --follow --follow-idle 600
+title: "Experiment #4 sweep: rare features and decisions (wave E: Adagrad in the combination)"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.1
+  vocab_k: 3
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 7200
+  eval_every_s: null
+  eval_every_steps: 5169
+  ckpt_every_s: null
+  latest_every_s: 300
+  patience_epochs: null
+  arch: {type: mlp, layers: 2}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
+  td_lambda: 0.99
+  value_per_game: 16
+  act_weights: {opp_priority: 3.0}
+runs:
+  - {name: e1-combined-adagrad-0.3, emb_lr_mult: 3000.0, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_optimizer: adagrad, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}
+  - {name: e2-combined-adagrad-1.0, emb_lr_mult: 10000.0, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_optimizer: adagrad, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}
+  - {name: e3-combined-adagrad-0.1, emb_lr_mult: 1000.0, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_optimizer: adagrad, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}
