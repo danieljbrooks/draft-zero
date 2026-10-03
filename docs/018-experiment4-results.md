@@ -936,6 +936,80 @@ network plays passively. Watch the no-winner share with stage 3's networks.
 then `gih.py` on the games; the transformer against the MLP, and each against the heuristic bot. Quote
 the pods before starting.
 
+## The MLP: its bottlenecks, and rare decisions (3 October, afternoon)
+
+### The embedding dimension apart from the width (`arch.emb_dim`, configs/exp4_sweep_emb*.yml)
+
+Features embedded and max-pooled at size e, then one linear layer to the width (1024, fixed); the best MLP's recipe,
+one epoch. e = 1024 is the control (no projection, the same network as `m4-best` / `s30-mlp-m3best-w1024`):
+
+| e | 10%: set NLL | 10%: non-Pass | 30%: set NLL | 30%: non-Pass | Params (all games' vocab) | CPU, 1 thread, 1 state |
+|---|---|---|---|---|---|---|
+| 64 | 0.350 | 0.739 | – | – | 15.2M | 1.72 ms |
+| 128 | 0.335 | 0.770 | 0.281 | 0.797 | 19.9M | 1.76 ms |
+| 256 | 0.288 | 0.788 | 0.267 | 0.805 | 29.3M | 1.82 ms |
+| 512 | 0.299 | 0.786 | 0.260 | 0.804 | 48.1M | 1.99 ms |
+| **1024 (no projection)** | **0.267** | **0.802** | **0.247** | **0.816** | 84.6M | 2.14 ms |
+| 2048 | 0.332 | 0.740 | 0.275 | 0.789 | 160.9M | 2.94 ms |
+
+Every projected size loses to the control, e = 2048 included, and the projected runs learn slowly from the start
+(set NLL 0.41-0.45 at a fifth of an epoch against the control's 0.335). The next section explains why: under max
+pooling the embeddings barely train, so these runs compare numbers of near-random channels, not embedding sizes.
+A smaller e buys little CPU time for one state at a time (the body and heads dominate), 3x in batches of 32.
+
+### Where the MLP squeezes information (tools/imitation_scale/mlp_bottlenecks.py, emb_drift.py)
+
+The 30% MLP on 6,000 validation states (1,000 a decision table):
+
+| Stage | Measure | Result |
+|---|---|---|
+| Vocabulary | features known | 919 of the state's 1,492 (62%): the rest were seen in <= 10 training states and are dropped |
+| **Feature embeddings** | how far each row moved from its random init | **1-7%** (features in every state 7%; rare ones 1-2%). Stage 3's transformer: ~240% |
+| Max pooling | features winning >= 1 channel | 68%: a third of a state's features never reach the network (nor get a gradient) from that state; half the channels are won by one feature in most states |
+| Pooled vector | dimensions for 90% / 99% of the variance | 397 / 826 |
+| State vector (after the blocks) | the same | ~25-29 / ~300-355 |
+| Head hidden layers (256) | the same | value 7 (54 dead units), target 13, attack 16, priority 23 and 51 |
+
+**Max pooling is what freezes the table.** The same measure on wave 1's MLPs: mean pooling moves the rows 23-38%
+(rare features the most), sum pooling 26-38%, max pooling 1-4%. Yet max pooling scored best (set NLL 0.291 against
+0.327): max over near-random codes still encodes which features are present, like a hashed set, while a mean over
+~900 features washes each one out. The cost is that no feature, rare ones least of all, gets a learned meaning.
+
+**Dan's hypothesis: features are simpler than the state.** In the transformer (whose embeddings did train) the
+learned change, the trained rows minus their keyed init, is low-rank: 90% of it in 121 of 512 dimensions, half in 24
+(the init: 392 for 90%). Under mean pooling the MLP's change is lower still: 52 dimensions for 90%. So a feature's
+learned information fits in ~100-200 dimensions while the state needs a wide vector: the case for a small per-feature
+embedding feeding a wide state, which the emb_dim sweep above could not test with frozen embeddings.
+
+**The output side.** Actions are not embedded on the input side; each is an output slot (644 named actions, 530
+targets named by card, a hashed tail, 1,024 slots a head) with a 256-number vector in its head's last layer, the
+move's score its dot product with the head's state vector. Two copies of one card share a slot.
+
+### Follow-ups for rare decisions (Dan, 18:20: run on the second machine)
+
+**The measure** (tools/imitation_scale/rare_eval.py): non-Pass top-1 by how often the human's move is chosen in
+training, and by the share of the state's features outside stage 3's vocabulary. The 10% baseline (`m4-best`, 1,000
+rows a table): 0.84 when the human's move is chosen 100k+ times in training, 0.74 at 10k-100k, 0.57 at 1k-10k, **0.53
+under 1k**; 0.62 in the quarter of states with the most unknown features against ~0.70 in the rest.
+
+**Wave A** (configs/exp4_sweep_rare_a.yml, GPU 0): make the embeddings learn under max pooling. A seed repeat of the
+base (the noise band); the table's own learning rate at 10x, 30x, 100x the body's (`emb_lr_mult`); Adagrad for the
+table (`emb_optimizer`: per-row steps that shrink with each row's accumulated gradient, a frequency-aware rate) at
+1e-2 and 1e-1; max plus mean pooling (`bag_mode: maxmean`, a gradient for every feature), alone and with 30x; and width
+512 from the transformer's learned embeddings (`emb_init_from`, matched by feature id) against width 512 from random:
+an upper bound on what learned codes are worth (the transformer saw all the games).
+
+**Wave B** (configs/exp4_sweep_rare_b.yml, GPU 1): keep rarer features (`vocab_k` 3 and 1 instead of 10, alone and
+with the table at 30x) and wider heads (hidden 512, 1024).
+
+**Then** (deploy/exp4_rare_eval.sh, queued on the second machine): every run, the 10% and 30% best MLPs and stage 3's
+transformer through rare_eval.py (20,000 rows a table), and every run's embedding drift. Wave C combines the winners
+and tests the hypothesis (a per-feature low-rank embedding at rank 64-256, projected before pooling); wave D confirms
+at 30%. Gemini's other suggestions: negative sampling over the 75k does not apply (they are input features, and the
+loss is already a softmax over the legal moves); compositional sub-feature embeddings need the encoder to emit
+feature parts (the names are hashed in Java before Python sees them), a larger later step; inverse-frequency loss
+weighting and unknown-feature hash buckets are next if waves A and B leave rare decisions behind.
+
 ## Stage 4: cheap evaluation (sb-v2)
 
 *In progress. The heuristic bot needs no network, so it runs while stages 1–3 do.*
