@@ -1413,8 +1413,10 @@ peaks); HF upload beside the transformer, with a model card; this log.
 **Housekeeping:** the 115 sweep runs' resume files (`latest.pt`, 48 GB) were deleted before the launch (every run
 keeps its best and final checkpoints); 88 GB free.
 
-**Babysitting:** a dashboard (an artifact, refreshed every 20 minutes) and a check-in every 20 minutes while the
-laptop session is open; the run itself needs neither.
+**Babysitting:** the dashboard "MLP Full Run" (https://claude.ai/artifact/7kJutApcY1zfJtwn8gfGUT: private to Dan;
+the live validation curves against stage 3's transformer, refreshed at each check-in) and a check-in every 20 minutes
+(:07, :27 and :47 past the hour) while the laptop session is open; the run itself needs neither. **Launched 23:51 UTC
+on 3 October.**
 
 ## Stage 4: cheap evaluation (sb-v2)
 
