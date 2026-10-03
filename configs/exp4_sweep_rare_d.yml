@@ -1,0 +1,37 @@
+# Experiment #4: the MLP follow-ups' wave D (Dan, 2026-10-03; docs/018). Wave C's combination (features seen in > 3
+# states, max + mean pooling with the table at 30x the learning rate, heads 1024: set NLL 0.258 on both seeds at 10%
+# against the base's 0.266-0.268; non-Pass top-1 on moves chosen 1k-10k times in training 0.62-0.63 against 0.59) on
+# 30% of the games, against s30-mlp-m3best-w1024 (set NLL 0.247), with a seed repeat.
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_rare_d.yml --out runs/exp4/sweep_rare_d \
+#       --tables-dir data/imitation_scale/h5
+title: "Experiment #4 sweep: wave C's combination on 30% of the games (wave D)"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.3
+  vocab_k: 3
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 21600        # a cap only
+  eval_every_s: null
+  eval_every_steps: 15506     # quarter epochs (an epoch of 30% is ~62k steps)
+  ckpt_every_s: null
+  latest_every_s: 600
+  patience_epochs: null
+  # round 2's leader (19:08), v16-td-cosine-1e-4: TD(0.95) value targets, warm-up + cosine from 1e-4
+  arch: {layers: 1, norm_first: true}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
+  value_per_game: 16
+runs:
+  - {name: d1-s30-combined, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_lr_mult: 30.0, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}
+  - {name: d2-s30-combined-seed1, seed: 1, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_lr_mult: 30.0, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}
