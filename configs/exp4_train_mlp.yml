@@ -1,0 +1,45 @@
+# Experiment #4: the full-data MLP (Dan, 2026-10-03 22:40; docs/018): the leading recipe, d1-s30-combined (set NLL
+# 0.241 on 30% of the games, ahead of the 30% transformer's 0.256), on all the training games for 10 epochs, with the
+# dropout wave F chose (configs/exp4_sweep_rare_f0.yml, _f1.yml: 0 / 0.1 / 0.2 over 3 epochs on 10%).
+#
+# Splits (tools/imitation_scale/build.py splits): train 145,898 games (10.95M decisions), val 8,248 games (602,555),
+# test 7,052 games (531,406), split by draft component, no game in two splits; sb-v1's drafts held out; sb-v2's 541
+# games all in test. Training reads only *_train.h5; the checkpoints (best_policy, best_value) are chosen on val
+# (20,000 rows a table); deploy/exp4_mlp_full.sh scores test once, after training.
+#
+#   nohup deploy/exp4_mlp_full.sh 0 >> runs/exp4/mlp_full.log 2>&1 < /dev/null &
+#
+# Writes runs/exp4/mlp_full/: evals.jsonl, best_policy / best_value / best .pt.gz, ckpt/step*.pt.gz every 30 minutes,
+# latest.pt (resume state), final.pt.gz, summary.json; then test_*.json and the rare-decision scores.
+tables:
+  - {name: turnstart, kind: priority_set}         # the turn's first main-phase priority, set labels
+  - {name: replay_priority, kind: priority_set}   # the player's later stops in its own turn (timing)
+  - {name: opp_priority, kind: priority_set}      # the player's stops in the opponent's turn (timing)
+  - {name: replay_attack, kind: binary}           # "attack with X?"
+  - {name: replay_target, kind: target}           # spell targets the outcome settles
+  - {name: opp_block, kind: target}               # every block question, from the opponent's turn
+fraction: 1.0
+val_rows: 20000
+# Unbounded: every feature in more than vocab_k = 3 training states (62,231 on 30% of the games; more on all of them).
+# vocab_max_features is only a memory ceiling, for an OOM.
+vocab_k: 3
+data_cache: data/cache/supervised        # mapped tables, so a resume skips the vocab mapping
+arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}
+emb_init_std: 0.02
+emb_lr_mult: 30.0           # the feature-embedding table at 30x the body's rate (peak 3e-3): max pooling barely moves it otherwise
+token_dropout: 0.1
+warmup_steps: 3000
+lr: 1.0e-4
+lr_schedule: cosine         # over the 10 epochs, to 10% of the peak
+value_target: td
+td_lambda: 0.99
+value_per_game: 16
+value_weight: 0.5
+act_weights: {opp_priority: 3.0, replay_priority: 3.0}   # the passivity fix: x3 on the rows where the human acted
+time_budget_s: 50400        # a 14-hour cap; max_epochs stops it first (~35-40 minutes an epoch)
+max_epochs: 10
+eval_every_s: null
+eval_every_steps: 72000     # about a quarter epoch (~288k steps of ~38 rows)
+ckpt_every_s: 1800
+latest_every_s: 600
+patience_epochs: null       # the cosine schedule sets the length
