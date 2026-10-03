@@ -157,6 +157,45 @@ One Secure 3090 pod (three Community pods stalled pulling the image first), the 
   `@300` ~3, `@1000` ~6, the 1,000/1,000 anchor ~12), C4 ~15: ~64 pod-hours, ~$14 on Community pods or ~$32 on
   Secure ones; with the $19.38 spent, under the $65 cap either way. Community first, Secure when they stall.
 
+### C1 and C3: the policy's self-play against 17lands (09:47 UTC on 3 October)
+
+10,000 games of stage 3's policy against itself (sampled at temperature 1, no search, open decklists, the eval
+pool's deck pairs): 9,598 finished (402 engine crashes, "Error in unit tests", and heap errors), 123 at the 50-turn
+cap with no winner, 18,950 player-games with a winner. In 5.5 pod-hours on one Secure L40 (~1,800 games an hour).
+
+Each card's games-in-hand (GIH) win rate in these games against 17lands' (791k human player-games), cards with
+30+ games in hand, judged against the noise ceiling: 17lands' own games, sampled to the same 18,950 player-games
+(`tools/imitation_scale/gih_ceiling.py`, docs/004's method, 40 samples):
+
+| Cards | Cards | Spearman | Noise ceiling at 18,950 [5–95%] | Share of the ceiling |
+|---|---|---|---|---|
+| **Commons** (experiment #1's measure) | 90 | **0.27** | 0.84 [0.77, 0.89] | 32% |
+| Uncommons | 99 | 0.44 | 0.80 [0.71, 0.86] | 56% |
+| Rares and mythics | 78 | 0.48 | 0.78 [0.69, 0.84] | 61% |
+| Every non-basic card | 267 | **0.45** | 0.80 [0.77, 0.84] | 56% |
+| *Experiment #1 (self-play, 2,880 deck results), commons* | | *0.28* | *0.51* | *55%* |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/018-gih-dark.png">
+  <img alt="Two scatter plots of simulated against 17lands games-in-hand win rates: commons on the left (Spearman 0.27, labelled outliers such as Burst Lightning and Involuntary Employment far below the trend and Hare Apparent above it), every non-basic card by rarity on the right (Spearman 0.45)." src="img/018-gih-light.png">
+</picture>
+
+- **The gap is systematic, not noise.** At this game count 17lands' own games would agree at ~0.80–0.84; the
+  policy's games agree at 0.27 on commons, the same level as experiment #1's search bot (0.28), with 6.6× the
+  games. Across all cards the agreement is better (0.45), carried by the rares' and uncommons' larger spread of
+  strength.
+- **What the policy undervalues is spells; what it overvalues is creatures.** The commons furthest below 17lands
+  are instants and sorceries that need a target and a moment: Involuntary Employment (sim 0.38, 17lands 0.56),
+  Burst Lightning (0.42 / 0.58), Thrill of Possibility, Fake Your Own Death, Incinerating Blast, Eaten Alive, Sure
+  Strike (simulated rates sit ~0.05 lower overall, self-play being zero-sum, against 17lands' ~0.55 mean). The
+  ones furthest above are creatures: Treetop Snarespinner (0.60 / 0.55), Beast-Kin Ranger, Vanguard Seraph,
+  Cackling Prowler, Apothecary Stomper, Hare Apparent. Experiment #1 found the same split (docs/003, §6.6:
+  removal underperforms). The policy plays creatures like the humans; it casts removal and tricks less well,
+  though its target head picks the human's target 71% of the time.
+- **For the plan:** the GIH comparison is a measure of play, and on spells the imitation policy is not yet
+  human-like in its timing. Search should help here (C2: search lifts the policy from 0.35 to 0.5–0.6 against
+  the heuristic); a self-play GIH run with search would test whether it closes this gap.
+
 ### Babysitting
 
 Check-ins every ~15–20 minutes: stage 3's evaluations and memory, the pods' progress and costs, the self-destructs,
