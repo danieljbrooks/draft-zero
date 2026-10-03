@@ -563,6 +563,27 @@ epochs of the 10% subset, the same 62k steps as `s30-l1`'s one epoch of 30%:
   stage 3 can run 2–3 epochs (about 75 minutes each on the second machine) and take the policy and value
   checkpoints where each peaks, or lower the value positions per game after the first epoch.
 
+## Stage 3: the large training (planned)
+
+*Dan, 2026-10-03: the single-tower transformer with ×3 on human plays (all three priority tables, or the
+opponent's turn and the player's later stops: whichever the 30% check favours). The MLP's own recipe follows
+from its sweep.*
+
+`configs/exp4_train.yml`: 1-layer transformer (width 512, pre-LN, embedding std 0.02), TD(0.99) value targets
+on 16 positions a game, all 10.9M training rows for 3 epochs (~630k steps of ~52 rows), the same validation
+rows as every sweep run, the best policy and value checkpoints kept apart. About 4–5 hours on the second
+machine's GPU.
+
+**The learning rate:** a linear warm-up over 3,000 steps, then a cosine over the whole run down to 10% of the
+peak (the trainer's `lr_min_frac`): 1e-4 at the start, 7.75e-5 after the first epoch, 3.25e-5 after the second,
+1e-5 at the end. Every sweep run had the same shape over its one epoch; `ep3` (three epochs of the 10% subset)
+had exactly this one, and its policy kept improving to the end.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/018-lr-schedule-dark.png">
+  <img alt="Stage 3's learning rate: a linear warm-up to 1e-4 over the first 3,000 steps, then a cosine down to 1e-5 over 3 epochs, with the TD targets recomputed at 0.25, 1.25 and 2.25 epochs." src="img/018-lr-schedule-light.png">
+</picture>
+
 ## Policy-only evaluation (the last step, planned)
 
 *Dan, 2026-10-02: plan on policy-only evaluation, likely on RunPod pods, as the last action item.*
