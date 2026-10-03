@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Pod setup for experiment #4's games (docs/018, phase C): the v0.2 XMage bundle and its card database, the
-# bridge, the eval pool's decks with the belief service's decks.jsonl, and a network, all from the project's HF
+# Pod setup for experiment #4's games and search bench (docs/018, phase C): the v0.2 XMage bundle and its card
+# database, the bridge, the eval pool's decks with the belief service's decks.jsonl, sb-v2's items, and a network, all from the project's HF
 # repo. About 5 minutes on a RunPod pod (from the repo root).
 #   HF_TOKEN=<read token> bash deploy/exp4_games_setup.sh [<checkpoint in the HF repo>]
 # The checkpoint defaults to stage 3's best_policy; it lands in models/exp4/ under its repo path.
@@ -26,6 +26,10 @@ if not os.path.exists("xmage/db/cards.h2.mv.db"):
 if not os.path.exists("data/pools/eval.txt"):          # play.py's default pool; its order fixes the deck pairs
     os.makedirs("data/pools", exist_ok=True)
     shutil.copy(get("exp4/games/eval.txt"), "data/pools/eval.txt")
+for f in ("items.jsonl.gz", "build.json"):            # sb-v2: the 1,000 held-out decisions (tools/search_bench/run.py)
+    if not os.path.exists(f"data/search_bench/sb-v2/{f}"):
+        os.makedirs("data/search_bench/sb-v2", exist_ok=True)
+        shutil.copy(get(f"exp4/games/sb-v2/{f}"), f"data/search_bench/sb-v2/{f}")
 root = "data/deckgen/FDN_PremierDraft_wr60"
 if not os.path.exists(f"{root}/decks.jsonl"):
     os.makedirs(root, exist_ok=True)
