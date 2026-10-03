@@ -1,0 +1,42 @@
+# Experiment #4: the MLP's follow-ups for rarely seen features and decisions (Dan, 2026-10-03 18:20; docs/018).
+# Base: the best MLP (m4-best: 2 blocks, width 1024, max pooling, SwiGLU, no dropout, token dropout 0.1, the
+# passivity fix on both own-turn tables, TD(0.99)) on 10% of the games, one epoch. Max pooling barely moves the
+# feature embeddings (1-4% of their random start, against 23-38% under mean pooling): the network runs on near-random
+# feature codes, so rare features never get a learned meaning.
+# Wave B2 (Dan, 18:45): weight each acted row's policy loss by how rare the human's move is (rare_move_weight beta:
+# x (n / median n)^-beta, n = the move's training count, capped at 10x and 1/10, mean 1). Chained after wave A on GPU 0
+# by deploy/exp4_rare_chain.sh after wave A on GPU 0 (memory: two 10% sweeps fill most of the box's 40 GB).
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_rare_b2.yml --out runs/exp4/sweep_rare_b2 \
+#       --tables-dir data/imitation_scale/h5 --follow --follow-idle 600
+title: "Experiment #4 sweep: weighting rare moves (wave B2)"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.1
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 7200
+  eval_every_s: null
+  eval_every_steps: 5169
+  ckpt_every_s: null
+  latest_every_s: 300
+  patience_epochs: null
+  arch: {type: mlp, layers: 2}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
+  td_lambda: 0.99
+  value_per_game: 16
+  act_weights: {opp_priority: 3.0}
+runs:
+  - {name: b6-rare0.5, rare_move_weight: 0.5, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: b6b-rare1.0, rare_move_weight: 1.0, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: b6c-rare0.5-emblr30, rare_move_weight: 0.5, emb_lr_mult: 30.0, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}

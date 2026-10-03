@@ -1,5 +1,5 @@
 #!/bin/bash
-# After the MLP follow-up waves (configs/exp4_sweep_rare_a.yml, _b.yml) finish on the second machine: the rare-decision
+# After the MLP follow-up waves (configs/exp4_sweep_rare_a.yml, _b, _k3, _k1, _b2) finish on the second machine: the rare-decision
 # evaluation (tools/imitation_scale/rare_eval.py) of every run and of the baselines (the 10% and 30% best MLPs, stage
 # 3's transformer), and how far each run's feature embeddings moved from their init (tools/imitation_scale/emb_drift.py).
 # Waits (up to 6 hours) for every run's summary.json, then evaluates what exists; finished outputs are skipped on a rerun.
@@ -10,7 +10,7 @@ export MZ_ACTION_VOCAB=$PWD/assets/vocab/FDN_SPG.tsv PATH=~/venv/bin:$PATH
 OUT=runs/exp4/rare_eval; mkdir -p $OUT
 RUNS=$(python -c "
 import yaml
-for w in 'ab':
+for w in ('a', 'b', 'k3', 'k1', 'b2'):
     for r in yaml.safe_load(open(f'configs/exp4_sweep_rare_{w}.yml'))['runs']: print(f'runs/exp4/sweep_rare_{w}/runs/' + r['name'])
 ")
 for i in $(seq 1 72); do

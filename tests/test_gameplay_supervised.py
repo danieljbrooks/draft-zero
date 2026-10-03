@@ -483,6 +483,25 @@ def test_embedding_learning_rate_optimizer_and_maxmean_pooling(tables, tmp_path,
         sv.full_arch({"type": "transformer", "bag_mode": "maxmean"})
 
 
+def test_rare_move_weight_upweights_rarely_chosen_moves(tables, tmp_path):
+    """rare_move_weight: acted rows weighted by (n / median n)^-beta, capped, mean 1; other rows untouched."""
+    cfg = tiny_cfg(tables, max_steps=4, arch={**TINY, "type": "mlp", "bag_mode": "max"})
+    base = sv.Trainer(cfg, tmp_path / "a", log=lambda *_: None).data
+    lines = []
+    d = sv.with_rare_weights(base, 0.5, 4.0, log=lines.append)
+    assert lines
+    for t0, t1 in zip(base.train, d.train):
+        if t0.set_idx is None:
+            assert t1.w is t0.w
+            continue
+        a = sv.acted_rows(t0)
+        assert np.array_equal(t1.w[~a], t0.w[~a])
+        r = t1.w[a & (t0.w > 0)] / t0.w[a & (t0.w > 0)]
+        assert r.min() >= 0.25 / 1.5 and r.max() <= 4.0 * 1.5
+    s = sv.train({**cfg, "rare_move_weight": 0.5}, tmp_path / "b", log=lambda *_: None)
+    assert s["step"] == 4
+
+
 def test_feature_stats_caps_the_vocab_at_the_most_frequent_ids():
     st = sv.FeatureStats(seed=0)
     rng = np.random.default_rng(0)

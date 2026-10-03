@@ -6,9 +6,9 @@
 # Wave B: keep rarer features (vocab_k: drop features seen in <= k training states; 10 drops 38% of a state's
 # tokens at 30%), and wider heads (each squeezes the state to 256; the value head uses ~7 dimensions, 54 dead units).
 #
-#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_rare_b.yml --out runs/exp4/sweep_rare_b \
-#       --tables-dir data/imitation_scale/h5 --follow --follow-idle 3600
-title: "Experiment #4 sweep: rare features and decisions (wave B)"
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_rare_k3.yml --out runs/exp4/sweep_rare_k3 \
+#       --tables-dir data/imitation_scale/h5 --follow --follow-idle 600
+title: "Experiment #4 sweep: rare features and decisions (wave B, vocab_k 3)"
 base:
   tables:
     - {name: turnstart, kind: priority_set}
@@ -18,6 +18,7 @@ base:
     - {name: replay_target, kind: target}
     - {name: opp_block, kind: target}
   fraction: 0.1
+  vocab_k: 3
   val_rows: 20000
   max_epochs: 1.0
   time_budget_s: 7200
@@ -35,7 +36,6 @@ base:
   td_lambda: 0.99
   value_per_game: 16
   act_weights: {opp_priority: 3.0}
-# The vocab_k runs moved to exp4_sweep_rare_k3.yml / _k1.yml: a sweep loads its data once, so runs can't change it.
 runs:
-  - {name: b4-heads512, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 512}}
-  - {name: b5-heads1024, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}
+  - {name: b1-vocab-k3, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: b1b-vocab-k3-emblr30, emb_lr_mult: 30.0, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}

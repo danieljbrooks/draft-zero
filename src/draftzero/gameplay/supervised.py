@@ -196,6 +196,8 @@ DEFAULTS: dict[str, Any] = {
     "kl_ref": None,                # the reference network (default: init_checkpoint)
     "freeze": [],                  # any of trunk, policy, value: kept as they are
     "group_shares": {},            # table group -> fixed share of the training samples
+    "rare_move_weight": 0.0,       # beta: on rows where the human acted, the policy loss x (n / median n)^-beta, n = how
+    "rare_move_cap": 10.0,         # often the human's move is chosen in training; capped at cap and 1/cap, mean 1
     "act_weights": {},             # table name -> policy-loss weight multiplier on its training rows where the human
                                    # acted (a non-Pass play in the label set): against the networks' passivity
     # optimisation
@@ -1265,6 +1267,49 @@ def with_act_weights(data: Data, weights: dict, log=print) -> Data:
     return Data(vocab=data.vocab, train=train, val=data.val, info=data.info)
 
 
+def with_rare_weights(data: Data, beta: float, cap: float = 10.0, log=print) -> Data:
+    """A copy of `data` whose training rows where the human acted weight their policy loss by how rare the human's
+    move is: (n / median n)^-beta, n = the training count of the move's action slot in the human's label sets (the
+    most frequent slot of the set, so a row counts as rare only when every acceptable move is), per head (priority
+    tables share one count, target tables another). Clipped to [1/cap, cap], then scaled to mean 1 over those rows."""
+    fam = lambda t: "priority" if t.kind in ("priority_set", "priority_onehot") else "target" if t.kind == "target" else None  # noqa: E731
+    counts = {}
+    for t in data.train:
+        f = fam(t)
+        if f is None or t.set_idx is None:
+            continue
+        s = t.set_idx[t.set_idx != PASS_IDX] % im.A_DIM
+        counts[f] = counts.get(f, np.zeros(im.A_DIM, np.int64)) + np.bincount(s, minlength=im.A_DIM)
+    freq_by, acted_by = {}, {}
+    for i, t in enumerate(data.train):
+        f = fam(t)
+        if f not in counts:
+            continue
+        per = np.where(t.set_idx != PASS_IDX, counts[f][t.set_idx % im.A_DIM], 0)
+        n_set = np.diff(t.set_indptr)
+        freq = np.zeros(t.n, np.int64)
+        has = n_set > 0
+        freq[has] = np.maximum.reduceat(per, t.set_indptr[:-1][has])
+        a = acted_rows(t) & (freq > 0)
+        freq_by[i], acted_by[i] = freq, a
+    if not freq_by:
+        return data
+    med = float(np.median(np.concatenate([freq_by[i][acted_by[i]] for i in freq_by])))
+    facs = {i: np.clip((np.maximum(freq_by[i], 1) / med) ** -float(beta), 1 / cap, cap) for i in freq_by}
+    norm = float(np.mean(np.concatenate([facs[i][acted_by[i]] for i in freq_by])))
+    train = []
+    for i, t in enumerate(data.train):
+        if i not in facs:
+            train.append(t)
+            continue
+        fac = facs[i] / norm
+        train.append(replace(t, w=np.where(acted_by[i], t.w * fac, t.w).astype(np.float32)))
+        a = acted_by[i]
+        log(f"supervised: {t.name}: rare-move weight (beta {beta:g}) on {int(a.sum())} acted rows, "
+            f"x{fac[a].min():.2f}-{fac[a].max():.2f} (median x{np.median(fac[a]):.2f})")
+    return Data(vocab=data.vocab, train=train, val=data.val, info=data.info)
+
+
 def ensure_aux(tables: list, names: list, log=print) -> None:
     """The derived aux targets `names` asks for, on every table that lacks them: turns_left (a proxy, see
     _turns_left_proxy) and result (the game's result). A sweep loads its data once, with the base config,
@@ -2026,6 +2071,8 @@ class Trainer:
         ensure_aux(self.data.train + self.data.val, cfg["aux_targets"], log=self.log)
         if cfg["act_weights"]:
             self.data = with_act_weights(self.data, cfg["act_weights"], log=self.log)
+        if cfg["rare_move_weight"]:
+            self.data = with_rare_weights(self.data, cfg["rare_move_weight"], cfg["rare_move_cap"], log=self.log)
         self.vocab = self.data.vocab
         init = cfg["init_checkpoint"] if latest is None else None
         self.model = build_model(cfg["arch"], len(self.vocab), vocab=None if (latest or init) else self.vocab,
