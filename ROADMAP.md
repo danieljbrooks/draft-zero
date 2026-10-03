@@ -464,7 +464,7 @@ replays and Arena logs now map onto XMage states; the next steps are:
       HashSet, and determinization in search (`shuffleUnknowns` is never called).
 - [ ] Add the behavioural fingerprint (`dz gameplay fingerprints`) to the loop as a per-generation
       monitor: the exp #2 pilot's gen 1 missed land drops with a land in hand on 16–25% of turns 1–3.
-- [ ] **Policy-only evaluation** (experiment #4's last step, [docs/018](docs/018-experiment4-results.md); Dan,
+- [ ] **Policy-only evaluation** (experiment #4's last step, [docs/018](docs/018-experiment4-run-log.md); Dan,
       2026-10-02), likely on RunPod pods. Stage 3's networks play each other and the heuristic bot
       with no search: `play.py --bot1 policy` (sampled from the policy) or `policy_greedy`. Then
       `tools/imitation_scale/gih.py` compares each card's simulated games-in-hand win rate with

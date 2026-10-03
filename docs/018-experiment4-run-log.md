@@ -1,11 +1,43 @@
-# Experiment #4: results
+# Experiment #4: detailed run log
 
-*October 2026. **Draft, in progress:** the results of experiment #4's stages 1–7, written as they
-run; this snapshot is from 08:30 UTC on 2 October, during stage 2. The plan, its reasoning and the
-decisions from review are in [docs/017](017-experiment4-scaling-up-imitation-learning.md); its §6.1
-has the stage estimates this doc tracks against.*
+*October 2026. **The detailed run log** of experiment #4: every stage, sweep, pod and decision as it happened,
+with the numbers behind them, written as the runs went (so earlier sections can be superseded by later ones; the
+newest summary is first). A shorter, polished account of what we learned will follow as docs/019. The plan, its
+reasoning and the decisions from review are in [docs/017](017-experiment4-scaling-up-imitation-learning.md); its
+§6.1 has the stage estimates this log tracks against.*
 
-## Preliminary results
+## Where things stand (3 October, 19:15 UTC)
+
+- **The stage-3 transformer is trained and published** (HF `exp4/stage3/`, `ImitationNet` loads it): 1 layer,
+  width 512, 40.6M parameters, 3 epochs of all 10.9M training decisions. Test split: non-Pass top-1 0.825, set NLL
+  0.234, attack 0.863, block 0.748, targets 0.709, value AUC 0.781 (Stage 3: results).
+- **Its strength against the baseline** (the heuristic bot at 100 simulations; C1, C2):
+
+  | The transformer as | Valid games | Score [95% CI] |
+  |---|---|---|
+  | Policy alone, sampled (temperature 1) | 4,356 | 0.373 [0.359, 0.388] |
+  | Policy alone, **greedy** (temperature 0) | 2,435 | **0.403** [0.384, 0.422] |
+  | Search, 100 simulations | 116 | 0.552 [0.461, 0.639] |
+  | Search, 300 simulations | 99 | 0.606 [0.51, 0.70] |
+  | Search, 1,000 simulations | 98 | 0.622 [0.52, 0.71] |
+  | Search, 1,000, against the heuristic at 1,000 | 95 | 0.558 [0.46, 0.65] |
+
+  Greedy beats sampled by 2.9 ± 2.0 points on identical games; the policy's weakness is no lookahead, not its
+  temperature. Search turns a 40% policy into a 55-62% player.
+- **Agreement with held-out human decisions falls as the transformer searches** (C4, sb-v2's balanced score):
+  0.775 with no search, 0.748 at 100 simulations, 0.719 at 3,000 (all 1,000 decisions); 0.739 at 10,000 on a 200-
+  decision subset. The heuristic rises with search (0.641 → 0.658 at 3,000; 0.700 at 10,000 on the subset) and stays
+  below the transformer at every budget.
+- **17lands' card win rates** (C3, games in hand, Spearman against 17lands): greedy self-play 0.41 on commons and
+  0.43 on all cards against noise ceilings of 0.82 and 0.79 (sampled self-play: 0.27 and 0.45). The policy
+  undervalues spells that need a target or a moment (Burst Lightning 83rd of 90 commons, 17lands' 2nd).
+- **The MLP** (2 blocks, width 1024, max pooling) matches the 30% transformer (set NLL 0.247 against 0.256) and is
+  8-30x faster on CPU, but max pooling freezes its feature embeddings (they move 1-4% from their random start). The
+  follow-ups for rarely seen decisions run on the second machine; best so far keeps rarer features with the table
+  at 30x the learning rate (set NLL 0.262 against the seed repeat's 0.266) (The MLP: its bottlenecks).
+- **Spend: $59.43 of the $65 cap, no pod running.** The second machine costs nothing.
+
+### Earlier summary (2 October, during stage 2)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/018-recipe-dark.png">
@@ -40,7 +72,7 @@ has the stage estimates this doc tracks against.*
 
 ## Status
 
-*Spend so far: $19.38 of the ~$36–44 planned, before phase C's games (RunPod balance $82.58 → $63.20 at 05:46 UTC on 3 October, with no pod running). Storage and rounding account for the ~$0.80 the rows below don't. Ask before total spend passes $65. The second machine costs the project nothing.*
+*Spend: **$59.43** (RunPod balance $82.58 → $23.15 at 19:00 UTC on 3 October, no pod running): $19.38 through C0 (05:46 UTC), $39.10 for the rest of phase C's 12 pods (Pods). Storage and rounding account for the ~$1 the rows don't. Dan's cap is $65. The second machine costs the project nothing.*
 
 | Stage | Status | Pod-hours | Cost | Notes |
 |---|---|---|---|---|
@@ -49,12 +81,13 @@ has the stage estimates this doc tracks against.*
 | 1. Build | done: 161,206 games, 12.1M rows (10.9M train) | 3.6 | $1.82 | estimate 5 pod-hours, $2.50 |
 | 2. Hyperparameter sweep | rounds 1 and 2 done on the RunPod 3090 (40 runs); round 2x and the 30% check continue on the second machine | 25.1 | $12.55 | ~24 pod-hours expected against 6: over by design. The second machine adds none |
 | 3. Large training | **done** 06:28 UTC on 3 October: 3 epochs, 4.3 hours on the second machine; on HF (`exp4/stage3/`) | | $0 | test: non-Pass 0.825, set NLL 0.234, value AUC 0.781 (Stage 3: results) |
-| 4. Cheap evaluation | heuristic bot at 300 done; at 3,000, half done | 4.6 | $1.01 | the pod's host rebooted; the rest runs with the network mixes |
-| 5. Play | replaced by phase C (the plan from here): C0–C3 on RunPod | | | |
+| 4. Cheap evaluation | **done** as C4: the transformer at 0-3,000 simulations and the heuristic at 100-3,000 on sb-v2's 1,000 decisions; both at 10,000 on 200 | 4.6 + ~12 | $1.01 + ~$8 | C4 below |
+| 5. Play | **done** as phase C: C0 (88 games), C1 (10,000 self-play games at each temperature, 4,356 sampled and 2,435 greedy games against the baseline), C2 (408 valid search games), C3 (17lands) | 61.4 | $32.41 | C0-C3 below; the Pods table |
 | 6. Follow-up checkpoints | deferred | | | |
 | 7. Their evaluation | deferred | | | |
-| 8. Policy-only evaluation | built and tested on the laptop (the last step: Dan, 2026-10-02) | | | no search: the 17lands games-in-hand comparison, likely on RunPod pods |
-| Failed pods | three Community pods that never started work | 1.0 | $0.22 | |
+| 8. Policy-only evaluation | **done** (C1, C3) | | | greedy and sampled, against the baseline and in self-play |
+| MLP follow-ups | the bottleneck probes done; the rare-decision waves running on the second machine | | $0 | The MLP: its bottlenecks |
+| Failed pods | six Community pods that never started work (three before stage 3, three for C0) | 2.05 | $0.47 | |
 
 ## The plan from here (Dan, 2026-10-03, 02:20 UTC)
 
@@ -249,10 +282,107 @@ no search makes suboptimal choices. So the 10,000 self-play games rerun with `po
 same deck pairs and settings (`c1-selfplay-t0-s0`, `-s1`, two 3090 pods, ~2.5 hours, ~$2.50), and C3's
 games-in-hand comparison, the commons table and the colour pairs are redone on them.
 
+### C3 again: greedy self-play against 17lands (17:00 UTC on 3 October)
+
+10,000 games of the greedy policy against itself (`c1-selfplay-t0-s0`, `-s1`: the same deck pairs and settings as
+the sampled run): 9,431 finished, **572 at the 50-turn cap with no winner** (sampled: 123; a deterministic mirror
+stalls more often), 17,718 player-games with a winner, 2.6 hours on two Secure 3090s.
+
+| Cards | Cards (30+ games in hand) | Greedy (T=0) Spearman | Sampled (T=1) | Noise ceiling at 17,718 [5-95%] | Greedy's share of the ceiling |
+|---|---|---|---|---|---|
+| **Commons** | 90 | **0.41** | 0.27 | 0.82 [0.74, 0.86] | 50% (sampled: 32%) |
+| Uncommons | 98 | 0.45 | 0.44 | – | |
+| Rares and mythics | 79 | 0.42 | 0.48 | – | |
+| Every non-basic card | 267 | **0.43** | 0.45 | 0.79 [0.74, 0.82] | 55% |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/018-gih-t0-dark.png">
+  <img alt="Two scatter plots of greedy self-play's games-in-hand win rates against 17lands': commons on the left (Spearman 0.41) and every non-basic card by rarity on the right (Spearman 0.43); Burst Lightning, Gorehorn Raider and Involuntary Employment sit far below the trend, Hare Apparent and Gleaming Barrier above it." src="img/018-gih-t0-light.png">
+</picture>
+
+**17lands' top 15 commons** (games-in-hand win rate, and the rank among the 90 commons):
+
+| 17lands rank | Card | 17lands | Greedy (rank) | Sampled (rank) |
+|---|---|---|---|---|
+| 1 | Bake into a Pie | 58.0% | 50.0% (44) | 47.8% (63) |
+| 2 | Burst Lightning | 57.9% | 42.3% (83) | 41.5% (84) |
+| 3 | Stab | 57.9% | 50.1% (43) | 48.2% (60) |
+| 4 | Dazzling Angel | 57.8% | 60.6% (1) | 60.9% (1) |
+| 5 | Luminous Rebuke | 57.7% | 55.6% (10) | 53.2% (23) |
+| 6 | Refute | 57.6% | 52.6% (21) | 49.2% (51) |
+| 7 | Healer's Hawk | 57.5% | 58.4% (5) | 57.0% (8) |
+| 8 | Helpful Hunter | 57.4% | 54.4% (15) | 55.1% (14) |
+| 9 | Banishing Light | 57.4% | 59.2% (3) | 58.0% (6) |
+| 10 | Felidar Savior | 57.4% | 57.3% (6) | 58.8% (3) |
+| 11 | Bigfin Bouncer | 57.1% | 55.1% (11) | 52.6% (27) |
+| 12 | Llanowar Elves | 57.1% | 50.8% (37) | 55.9% (9) |
+| 13 | Infestation Sage | 56.7% | 48.5% (55) | 50.8% (44) |
+| 14 | Gorehorn Raider | 56.7% | 45.8% (74) | 44.3% (78) |
+| 15 | Think Twice | 56.6% | 51.0% (36) | 49.8% (48) |
+
+- **Greedy play moves the spells up:** Refute 51st → 21st, Bigfin Bouncer 27th → 11th, Luminous Rebuke 23rd → 10th,
+  Bake into a Pie 63rd → 44th, Stab 60th → 43rd. Sampling had been throwing away the policy's better spell timing.
+- **Burn stays at the bottom:** Burst Lightning (83rd) and Gorehorn Raider (74th) barely move; whatever the policy
+  does with "deal damage to any target" is wrong at its best move too.
+- **Colour pairs, greedy self-play** (deck win rate by main colours; sampled and 17lands' top players in brackets):
+  WU 0.59 (0.55, 0.66), WG 0.54 (0.59, 0.65), WB 0.53 (0.53, 0.63), RG 0.51 (0.53, 0.65), WR 0.50 (0.50, 0.65),
+  UB 0.49 (0.48, 0.64), UG 0.48 (0.51, 0.62), BG 0.48 (0.51, 0.61), UR 0.45 (0.42, 0.64), BR 0.40 (0.40, 0.64). The
+  spread stays about four times the humans' (0.40-0.59 against 0.61-0.66), black-red still last.
+
+### C2: search against the baseline (finished 15:56 UTC on 3 October)
+
+The transformer searching with IS-MCTS (`il_bc@N`: its policy as the prior, its value at the leaves, closed
+decklists with the belief service) against the baseline `heuristic@100`, on the eval pool's deck pairs, both seats
+a pair. A searching bot plays its most-visited option (greedy; no temperature). Dan asked for at least 100 valid
+games a budget (engine errors don't count), so `il_bc@100` was topped up from 50 to 60 deck pairs:
+
+| Transformer | Opponent | Games played | Valid | Score [95% CI] | Median game, one worker |
+|---|---|---|---|---|---|
+| policy alone, greedy | `heuristic@100` | 2,500 | 2,435 | 0.403 [0.384, 0.422] | 3.4 min |
+| `il_bc@100` | `heuristic@100` | 122 | 116 | 0.552 [0.461, 0.639] | 9.1 min |
+| `il_bc@300` | `heuristic@100` | 100 | 99 | 0.606 [0.51, 0.70] | 26 min |
+| `il_bc@1000` | `heuristic@100` | 99 (the last stopped after hours) | 98 | 0.622 [0.52, 0.71] | 113 min |
+| `il_bc@1000` | `heuristic@1000` (equal budgets) | 98 (two unfinished when stopped) | 95 | 0.558 [0.46, 0.65] | 110 min |
+
+- **Search is where the strength comes from:** 100 simulations lift the transformer 15 points over its greedy
+  policy, and gains flatten from 300. At equal budgets (1,000 each) it still edges the heuristic.
+- The intervals are wide at ~100 games: the order 100 < 300 ≈ 1,000 is clear only against the policy alone.
+
+### C4: agreement with held-out human decisions, 0 to 10,000 simulations (finished 18:56 UTC on 3 October)
+
+sb-v2's 1,000 held-out human decisions (docs/016's measure: the balanced score, the mean of three balanced
+accuracies for cast-or-pass, attack and block; a constant answer scores 0.50). 10,000 simulations ran on a fixed
+random 200 of them (`run.py --limit 200`, seed 1); the 200 column scores every budget on those same decisions:
+
+| Bot | Simulations | Balanced, all 1,000 [95% CI] | Balanced, the 200 | Cast / attack / block (1,000) | Pod-s a decision |
+|---|---|---|---|---|---|
+| Transformer | 0 (policy alone) | **0.775** [0.748, 0.797] | 0.795 | 0.903 / 0.827 / 0.596 | 0.01 |
+| Transformer | 100 | 0.748 [0.721, 0.773] | 0.747 | 0.847 / 0.788 / 0.608 | 0.24 |
+| Transformer | 300 | 0.732 [0.708, 0.761] | 0.735 | 0.831 / 0.775 / 0.591 | 0.46 |
+| Transformer | 1,000 | 0.729 [0.703, 0.757] | 0.730 | 0.812 / 0.750 / 0.624 | 1.61 |
+| Transformer | 3,000 | 0.719 [0.695, 0.745] | 0.711 | 0.806 / 0.728 / 0.623 | 8.6 |
+| Transformer | 10,000 | – | 0.739 [0.68, 0.81] | – | 72.8 (8 workers) |
+| Heuristic | 100 | 0.641 [0.616, 0.668] | 0.619 | 0.719 / 0.608 / 0.597 | 0.17 |
+| Heuristic | 1,000 | 0.642 [0.617, 0.668] | 0.646 | 0.734 / 0.616 / 0.575 | 1.13 |
+| Heuristic | 3,000 | 0.658 [0.629, 0.686] | 0.684 | 0.725 / 0.634 / 0.615 | 5.6 |
+| Heuristic | 10,000 | – | 0.700 [0.63, 0.76] | – | 21 (20 workers) |
+
+- **The transformer agrees with humans most when it doesn't search,** and each step of search moves its choices
+  away from theirs (mostly on casting and attacking); 10,000 simulations sit back near 1,000 on the subset, within
+  the noise. In games, the same search is what wins (C2): searching makes it stronger and less human.
+- **The heuristic rises slowly with search** and never reaches the transformer's policy at any budget.
+
 ### Babysitting
 
 Check-ins every ~15–20 minutes: stage 3's evaluations and memory, the pods' progress and costs, the self-destructs,
 and this document. Problems get fixed and pushed to main as they come.
+
+**What went wrong, 3 October:** check-ins lapsed from 08:41 to 13:03, and three pods (C1's self-play L40, C2's
+first pod and C4's L40) sat idle after their jobs, ~$5.70 wasted. From then on a reaper removed each pod when its
+job wrote `JOB_DONE`; once the laptop had to close, each pod got its own watcher instead (it terminates the pod
+two minutes after its job, through the self-destruct's GraphQL call). Two smaller lessons: a `pkill -f` whose
+pattern is in the SSH command line kills the session itself (kill by PID), and the 10,000-simulation heuristic run
+used 8 of a pod's 32 vCPUs until Dan noticed the low load (restarted at 20 workers; `run.py` resumes).
 
 ## Before the first pod
 
@@ -897,7 +1027,7 @@ machine's GPU 1, with the full vocabulary (72,404 features; 40.6M parameters, 37
   72k vocab); the second used a vocab capped at 65,535 and was stopped at Dan's request for the full vocabulary,
   which RowStore (16-bit tables plus the rarest features' overflow) now fits in ~18 GB of tokens.
 
-## Policy-only evaluation (the last step, planned)
+## Policy-only evaluation (built 2 October; run as C1 and C3)
 
 *Dan, 2026-10-02: plan on policy-only evaluation, likely on RunPod pods, as the last action item.*
 
@@ -1010,9 +1140,42 @@ loss is already a softmax over the legal moves); compositional sub-feature embed
 feature parts (the names are hashed in Java before Python sees them), a larger later step; inverse-frequency loss
 weighting and unknown-feature hash buckets are next if waves A and B leave rare decisions behind.
 
+### Follow-ups: first results (19:11 UTC on 3 October; 13 of 19 runs)
+
+10% of the games, one epoch, validation (lower set NLL and log-loss are better). The two seeds of the base give
+the noise: ~0.0025 set NLL, ~0.003 non-Pass, ~0.007 targets, ~0.02 value log-loss.
+
+| Run | Change | Set NLL | Non-Pass | Attack | Block | Targets | Value AUC | Value log-loss |
+|---|---|---|---|---|---|---|---|---|
+| `m4-best` | the base (seed 0) | 0.268 | 0.801 | 0.793 | 0.697 | 0.581 | 0.744 | 0.620 |
+| `a0-seed1` | the base, seed 1 | 0.266 | 0.804 | 0.790 | 0.702 | 0.574 | 0.746 | 0.599 |
+| `a1-emblr10` | the table at 10x the learning rate | 0.265 | 0.804 | 0.803 | 0.701 | 0.581 | 0.753 | 0.598 |
+| `a2-emblr30` | 30x | 0.264 | 0.803 | 0.797 | 0.706 | 0.580 | 0.753 | 0.591 |
+| `a3-emblr100` | 100x | 0.267 | 0.804 | 0.799 | 0.702 | 0.591 | 0.741 | 0.632 |
+| `a5-adagrad-1e-2` | Adagrad for the table, lr 1e-2 | 0.267 | 0.803 | 0.790 | 0.700 | 0.585 | 0.749 | 0.609 |
+| `a5b-adagrad-1e-1` | Adagrad, lr 1e-1 | 0.266 | 0.803 | 0.794 | 0.707 | 0.574 | 0.754 | 0.584 |
+| `a6-maxmean` | max + mean pooling | 0.265 | 0.803 | **0.809** | 0.700 | 0.588 | 0.749 | 0.624 |
+| `b4-heads512` | head hidden 512 | 0.268 | 0.802 | 0.792 | 0.702 | 0.594 | 0.746 | 0.614 |
+| `b5-heads1024` | head hidden 1024 | 0.267 | 0.804 | 0.797 | 0.703 | **0.601** | 0.744 | 0.615 |
+| `b1-vocab-k3` | keep features seen in > 3 states (not > 10) | 0.267 | 0.801 | 0.789 | 0.695 | 0.574 | 0.746 | 0.619 |
+| **`b1b-vocab-k3-emblr30`** | **the same, the table at 30x** | **0.262** | **0.804** | 0.801 | 0.703 | 0.582 | 0.753 | 0.593 |
+
+- **The table at 30x makes the embeddings learn** (rows of common features move 127% from their init, rare ones
+  18%, against 4% and 1%; tools/imitation_scale/emb_drift.py), but on its own gains only ~0.002 set NLL (the noise)
+  and a little value AUC (+0.007). 100x overshoots (value log-loss +0.03). The learned change stays high-rank
+  (90% in ~630 of 1,024 dimensions, against the transformer's 121 of 512).
+- **Rarer features help only when the embeddings learn:** keeping features seen in > 3 states does nothing with
+  near-frozen embeddings (0.267) and gives the best run so far with the table at 30x (0.262, ~1.5x the seed noise
+  below the base). That fits: a rare feature's random code tells the network nothing.
+- **Wider heads help targets** (0.601 at 1024, ~3x the noise); max + mean pooling helps attacks (0.809).
+- Still running: max + mean at 30x, the width-512 pair (from the transformer's embeddings, from random), keep
+  features seen in > 1 state (alone and at 30x), and the rare-move loss weights (beta 0.5, 1.0, 0.5 at 30x). Then
+  every run's rare-decision scores (deploy/exp4_rare_eval.sh → runs/exp4/rare_eval/).
+
 ## Stage 4: cheap evaluation (sb-v2)
 
-*In progress. The heuristic bot needs no network, so it runs while stages 1–3 do.*
+*The heuristic bot at 300 simulations, run during stages 1–3. The full comparison, the transformer at 0–10,000
+simulations and the heuristic at 100–10,000, is C4 above.*
 
 | Mix | Simulations | Balanced score [95% CI] | Cast or pass / attack / block | Root value's AUC against the result [95% CI] | Pod-s a decision |
 |---|---|---|---|---|---|
@@ -1051,7 +1214,22 @@ Every pod's quote, what it actually had, and what it delivered (docs/005).
 | `ja65dr1lyq1nn6` | C0 (meant) | RTX 3090, Community, US | $0.22/hr, 32 vCPU, 62 GB | – | 0.35 | $0.08 | 3 October: still pulling the image after 21 minutes; removed |
 | `uhwjxh9rgl5rrk` | C0 (meant) | RTX 3090, Community, US | $0.22/hr, 32 vCPU, 62 GB | – | 0.35 | $0.08 | the same, 21 minutes; removed |
 | `n70wjxme676f14` | C0 (meant) | RTX 3090 Ti, Community, CA | $0.27/hr, 32 vCPU, 54 GB | – | 0.35 | $0.09 | the same, 21 minutes; removed |
-| `ijkduwvrwiokxh` | C0 | RTX 3090, Secure, CZ | $0.50/hr, 32 vCPU, 125 GB | 32 vCPU / 125 GB | 2.70 | $1.35 | SSH in 90 s, set up (deploy/exp4_games_setup.sh) in 2.5 minutes; C0's four runs (88 games); results on HF (`exp4/games/runs/c0-*`); removed |
+| `ijkduwvrwiokxh` | C0 | RTX 3090, Secure, CZ | $0.50/hr, 32 vCPU, 125 GB | 32 vCPU / 125 GB | 2.70 | $1.35 | SSH in 90 s, set up (deploy/exp4_games_setup.sh) in 2.5 minutes; C0's four runs (88 games); results on HF (`exp4/games/runs/c0-*`); removed
+| `js9103qucu7lcp` | C4 | L40, Secure | $0.82/hr, 32 vCPU, 250 GB | – | 6.47 | $5.30 | C4: the transformer at 0–3,000 and the heuristic at 100–3,000 simulations on sb-v2 (`exp4/c4` on HF). Named `exp4- c2c0 c2c1 c4` by a zsh word-splitting slip; idle after its job during the lapsed check-ins; removed |
+| `r9fe1lx3gnnkl7` | C2 | RTX 3090, Secure | $0.50/hr | – | 6.52 | $3.26 | `il_bc@100` and `@300` against the baseline (100 games each); idle after its job during the lapsed check-ins; removed |
+| `1m8mgfqlgct92p` | C2 anchor | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | 6.68 | $3.34 | `il_bc@1000` against `heuristic@1000`, shard 0 (49 games); removed before its last game |
+| `c1p6tqqcynwpzm` | C2 anchor | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | 6.70 | $3.35 | the same, shard 1 (49 games); removed before its last game |
+| `bp2rbuighpww8m` | C1 | L40, Secure | $0.82/hr, 32 vCPU, 250 GB | – | 5.47 | $4.48 | 10,000 sampled self-play games (~1,800 an hour); idle after its job during the lapsed check-ins; removed |
+| `nm4k3j00yoggsf` | C2 | RTX 3090, Secure | $0.50/hr | – | 9.34 | $4.67 | `il_bc@1000` against the baseline (99 games; the last stopped after hours); removed by the reaper |
+| `265asdf5a8jhwt` | C1, C2 | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | 8.31 | $4.15 | sampled policy against the baseline, shard 0 (2,385 games), then greedy shard 1 (834), then the `il_bc@100` top-up (22); removed by the reaper |
+| `hkn9isbuu9kjnd` | C1 | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | 8.19 | $4.09 | sampled policy against the baseline, shard 1 (2,112 games), then greedy shard 2 (832); removed by the reaper |
+| `mhdhg1q7fnf3zo` | C4 | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | 5.48 | $2.74 | both bots at 10,000 simulations on 200 sb-v2 decisions (`exp4/c4x`); the heuristic restarted from 8 to 20 workers; removed |
+| `gh0lhv99sro0mj` | C1 | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | 2.31 | $1.15 | greedy policy against the baseline, shard 0 (834 games); removed by the reaper |
+| `hp9ft8e6cf6gqt` | C1 | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | ~2.8 | ~$1.38 | greedy self-play, shard 0 (5,000 games); removed |
+| `tp17e5cfnrmpc6` | C1 | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | 2.38 | $1.19 | greedy self-play, shard 1 (5,000 games); removed by the reaper |
+
+Phase C after C0 (3 October): 12 pods, 70.7 pod-hours, $39.10 (uptime x price). Community pods stalled pulling the
+image in C0, so every later pod was Secure ($0.50/hr for a 3090, $0.82 for an L40). |
 
 **Community 3090s with a public IP were $0.22/hr** on 2026-10-01, with 8–32 vCPU and 30–62
 GB, less than half the Secure price (docs/005 found no Community host with a public IP on
