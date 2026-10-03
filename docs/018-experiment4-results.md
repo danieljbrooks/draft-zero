@@ -80,6 +80,24 @@ and higher learning rates hurt; the base (lr 1e-4, LayerNorm, ReLU) still leads 
 resumes: the rest of the single settings, then the winners combined, a 30% check and a full run. It resumes on the
 second machine's GPUs once stage 3 is done (they are free and can't host many game JVMs in 40 GiB).
 
+**The MLP sweeps resumed on the second machine after stage 3 (06:30), both GPUs** (the first wave's rest on GPU 0,
+the second wave, `configs/exp4_sweep_mlp2.yml`, on GPU 1). At 07:00, against `m0` (set NLL 0.327, non-Pass 0.762):
+
+| MLP change, 10% of the games | Set NLL | Non-Pass top-1 |
+|---|---|---|
+| **max pooling** (`bag_mode: max`) | **0.291** (−0.036) | 0.790 |
+| sum pooling | 0.304 (−0.024) | **0.794** |
+| SwiGLU, no dropout, token dropout 0.1 | 0.301 (−0.026) | 0.784 |
+| SwiGLU, no dropout, width 1024 | 0.305 (−0.022) | 0.791 |
+| ×3 on all three tables | 0.313 (−0.014) | 0.785 |
+| no dropout; SwiGLU (each alone) | 0.316; 0.317 | 0.780; 0.780 |
+| width 1024 or 2048, 4 blocks, weight decay | 0.327–0.331 (no gain) | 0.747–0.762 |
+
+The token pooling is the MLP's big lever: the mean of ~800 token embeddings loses the counts (how many creatures,
+how many cards in hand) that the encoder writes as separate occurrence features, and max or sum keeps them. Wave 3
+(queued on both GPUs) combines max or sum pooling with SwiGLU and no dropout, wider, with the passivity fix, and
+with token dropout 0.1.
+
 ### C. Games and 17lands statistics (on RunPod)
 
 The bots: the transformer's policy alone (`policy`, sampled at temperature 1); the transformer with IS-MCTS
