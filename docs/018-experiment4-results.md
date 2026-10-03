@@ -119,7 +119,7 @@ pairs, both seats per pair, capped at 50 turns; games with no winner are left ou
 | Step | Games | Decklists | Estimate |
 |---|---|---|---|
 | **C0** throughput | a few dozen of each kind below, with the 30% recipe's network | as below | one Community 3090, ~30 min, ~$0.15 |
-| **C1** policy only | `policy_sampled` (T=1) against itself, ~10k games (for the 17lands statistics); against `heuristic@100`: 4,497 games at T=1, stopped, then **`policy_greedy` (T=0), 2,500 games** (Dan, 13:40: the strength test plays the policy's best move) | open (no search) | self-play: a few pod-hours; against the heuristic: ~17–60 pod-hours, its search the cost |
+| **C1** policy only | `policy_sampled` (T=1) against itself, ~10k games (for the 17lands statistics), then **`policy_greedy` (T=0) against itself, 10k games** on the same pairs (Dan, 14:00: an eval wants the policy's best play, not variety); against `heuristic@100`: 4,497 games at T=1, stopped, then **`policy_greedy` (T=0), 2,500 games** (Dan, 13:40: the strength test plays the policy's best move) | open (no search) | self-play: a few pod-hours; against the heuristic: ~17–60 pod-hours, its search the cost |
 | **C2** search | `il_bc@100`, `@300`, `@1000` each against `heuristic@100`, 100 games each | closed (belief service) | ~10–20 pod-hours |
 | **C2 anchor** | `il_bc@1000` against `heuristic@1000`, 100 games (equal budgets) | closed | ~8–17 pod-hours |
 | **C3** 17lands | each card's games-in-hand win rate from C1's self-play, against 17lands' (`tools/imitation_scale/gih.py`), judged against the noise ceiling at the same number of player-games (~0.75 at 10k, ~0.94 at 50k); the most over- and under-rated cards | – | laptop |
@@ -236,6 +236,12 @@ Premier Draft games (all players, and the ≥60% win-rate bucket, closer to the 
   (0.70), and its edge over the policy on the same pair is similar across pairs (0.21–0.33). Part of the
   spread looks like simple bots in this engine favouring creature decks over spell decks.
 - The greedy games will say how much of the gap is the sampling.
+
+**Greedy self-play (Dan, 14:00 UTC).** The 17lands comparison above also comes from sampled play. "The goal of
+this project and evals is to play the game well": an eval needs no variety of play, and a high temperature with
+no search makes suboptimal choices. So the 10,000 self-play games rerun with `policy_greedy` for both seats on the
+same deck pairs and settings (`c1-selfplay-t0-s0`, `-s1`, two 3090 pods, ~2.5 hours, ~$2.50), and C3's
+games-in-hand comparison, the commons table and the colour pairs are redone on them.
 
 ### Babysitting
 
