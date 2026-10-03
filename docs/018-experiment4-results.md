@@ -40,7 +40,7 @@ has the stage estimates this doc tracks against.*
 
 ## Status
 
-*Spend so far: $17.70 of the ~$36–44 planned (RunPod balance $82.58 → $64.88 at 20:50 UTC on 2 October, with no pod running). Storage and rounding account for the ~$0.80 the rows below don't. Ask before total spend passes $65. The second machine costs the project nothing.*
+*Spend so far: $19.38 of the ~$36–44 planned, before phase C's games (RunPod balance $82.58 → $63.20 at 05:46 UTC on 3 October, with no pod running). Storage and rounding account for the ~$0.80 the rows below don't. Ask before total spend passes $65. The second machine costs the project nothing.*
 
 | Stage | Status | Pod-hours | Cost | Notes |
 |---|---|---|---|---|
@@ -108,6 +108,30 @@ from it. Community 3090s cost $0.22 an hour (32 vCPU, 62 GB); expected total ~$1
 service, `play.py`, games uploaded to HF every 10 minutes: `exp4/games/runs/<name>/`). Several pods split a run by
 deck pair (`--shard i/n`). Every pod carries a rolling self-destruct (`deploy/runpod_arm.sh`) and is removed, not
 stopped, once its games are on HF; each pod's quote and delivery go in the pods table.
+
+### C0: throughput, and a first read on strength (03:10–05:43 UTC on 3 October)
+
+One Secure 3090 pod (three Community pods stalled pulling the image first), the 30% recipe's network
+(`s30-l1-actor3-td99`, not stage 3's), open decklists for the policy-only games, closed for the search games:
+
+| Run | Games | Transformer's score [95% CI] | Median game, one worker | Turns | Searched decisions a seat |
+|---|---|---|---|---|---|
+| `policy` against itself | 38 of 40 | – | 35 s (max 119) | 20 | 106 |
+| `policy` against `heuristic@100` | 30 | **0.27** [0.14, 0.45] | 192 s | 17.5 | 66 |
+| `il_bc@300` against `heuristic@100` | 12 | **0.50** [0.25, 0.75] | 1,070 s | 14.5 | 56 |
+| `il_bc@1000` against `heuristic@100` | 8 | **0.63** [0.31, 0.86] | 3,667 s | 14.5 | 50 |
+
+- **The policy alone loses to the cheap heuristic about three games in four;** search lifts the transformer to
+  even at 300 simulations and ahead at 1,000. Small samples, but the direction is clear: imitation picks human
+  moves, and even a shallow search catches the tactical mistakes it makes. C2 measures this properly.
+- **Throughput per 32-vCPU pod** (these runs were short, so the slowest games set the wall time): self-play
+  ~2,000 games an hour at steady state, policy against `heuristic@100` ~450, `il_bc@300` ~35–40, `il_bc@1000`
+  ~15. Search games have fewer searched decisions than assumed (50–56 a seat against 70–150).
+- **Two failures in 88 games:** one MageZero "Error in unit tests" crash and one Java heap error at 1.5 GB; the
+  big runs use 2.5 GB heaps.
+- **So the plan's pod-hours:** C1 ~27 (10k self-play ~5, 10k against the heuristic ~22), C2 ~22 (`@100` ~1,
+  `@300` ~3, `@1000` ~6, the 1,000/1,000 anchor ~12), C4 ~15: ~64 pod-hours, ~$14 on Community pods or ~$32 on
+  Secure ones; with the $19.38 spent, under the $65 cap either way. Community first, Secure when they stall.
 
 ### Babysitting
 
@@ -800,7 +824,7 @@ Every pod's quote, what it actually had, and what it delivered (docs/005).
 | `ja65dr1lyq1nn6` | C0 (meant) | RTX 3090, Community, US | $0.22/hr, 32 vCPU, 62 GB | – | 0.35 | $0.08 | 3 October: still pulling the image after 21 minutes; removed |
 | `uhwjxh9rgl5rrk` | C0 (meant) | RTX 3090, Community, US | $0.22/hr, 32 vCPU, 62 GB | – | 0.35 | $0.08 | the same, 21 minutes; removed |
 | `n70wjxme676f14` | C0 (meant) | RTX 3090 Ti, Community, CA | $0.27/hr, 32 vCPU, 54 GB | – | 0.35 | $0.09 | the same, 21 minutes; removed |
-| `ijkduwvrwiokxh` | C0 | RTX 3090, Secure, CZ | $0.50/hr, 32 vCPU, 125 GB | – | running | | SSH in 90 s, set up (deploy/exp4_games_setup.sh) in 2.5 minutes; the throughput runs |
+| `ijkduwvrwiokxh` | C0 | RTX 3090, Secure, CZ | $0.50/hr, 32 vCPU, 125 GB | 32 vCPU / 125 GB | 2.70 | $1.35 | SSH in 90 s, set up (deploy/exp4_games_setup.sh) in 2.5 minutes; C0's four runs (88 games); results on HF (`exp4/games/runs/c0-*`); removed |
 
 **Community 3090s with a public IP were $0.22/hr** on 2026-10-01, with 8–32 vCPU and 30–62
 GB, less than half the Secure price (docs/005 found no Community host with a public IP on
