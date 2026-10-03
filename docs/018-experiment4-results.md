@@ -617,6 +617,19 @@ sweep keeps GPU 0. A rerun of the script resumes from `latest.pt`.
 
 The script writes its reasons to `runs/exp4/main/choice.json`.
 
+**The turn start, settled (00:54):** the recipe at 30% (`s30-l1-actor3-td99`) is the best single tower: non-Pass
+0.815, set NLL **0.256**, attack 0.827, block 0.713, targets 0.617, value AUC 0.767, log-loss 0.558, Pass on top in
+the opponent's turn 0.931. By table, against ×3 on all three tables and on the opponent's turn alone:
+
+| 30% | Turn start: Pass on top (humans 0.051) | set NLL | Later stops: Pass on top (humans 0.666) | set NLL | Opponent's turn: Pass on top (humans 0.934) | set NLL |
+|---|---|---|---|---|---|---|
+| ×3 opponent's turn (`act3`) | 0.045 | 0.443 | 0.691 | 0.245 | 0.933 | 0.093 |
+| ×3 all three tables (`actall3`) | 0.021 | 0.446 | 0.658 | 0.237 | 0.933 | 0.093 |
+| ×3 opponent's turn + later stops (`actor3`, the recipe) | 0.029 | **0.441** | 0.660 | **0.235** | 0.931 | 0.093 |
+
+The recipe keeps all of the later stops' gain with less of the turn-start overshoot, so it stays (the rule:
+all three tables only if they were 0.003 better at the later stops; they are 0.0014 worse).
+
 ### What to watch
 
 - **The value head in epochs 2–3:** three epochs of the 10% subset made it memorise games (training loss far
