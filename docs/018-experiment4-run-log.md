@@ -88,7 +88,7 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
 | 6. Follow-up checkpoints | deferred | | | |
 | 7. Their evaluation | deferred | | | |
 | 8. Policy-only evaluation | **done** (C1, C3) | | | greedy and sampled, against the baseline and in self-play |
-| MLP follow-ups | waves A, B, B2, C done (25 runs) and scored on rare decisions; wave D (30%) running on the second machine | | $0 | The MLP: its bottlenecks |
+| MLP follow-ups | waves A-E done (30 runs) and scored on rare decisions; the combination leads at 30% (set NLL 0.241) | | $0 | The MLP: its bottlenecks |
 | Failed pods | six Community pods that never started work (three before stage 3, three for C0) | 2.05 | $0.47 | |
 
 ## The plan from here (Dan, 2026-10-03, 02:20 UTC)
@@ -1207,102 +1207,126 @@ stage 3's transformer for scale):
   the games), but evidence that feature codes, not the body, hold much of what's learnable.
 - Adagrad for the table is no better than AdamW at 30x; 100x overshoots (value log-loss +0.03).
 
-**Wave D** (configs/exp4_sweep_rare_d.yml, running): the combination on 30% of the games against
-`s30-mlp-m3best-w1024` (0.247), with a seed repeat. Not built yet: the per-feature low-rank embedding (Dan's
-hypothesis that features need fewer dimensions than the state) and unknown-feature hash buckets.
+**Wave D, the combination on 30% of the games (done 21:45):** set NLL 0.241 and 0.243 on two seeds against the 30%
+base's 0.247, and ahead of the 30% transformer on every policy measure:
 
-### MLP leaderboard: every run (21:20 UTC on 3 October)
+| 30% of the games, one epoch | Set NLL | Non-Pass | Attack | Block | Targets | Value AUC | Value log-loss | Rare (< 1k / 1k-10k) |
+|---|---|---|---|---|---|---|---|---|
+| **MLP, the combination** (`d1`, `d2`) | **0.241 / 0.243** | **0.820 / 0.821** | **0.855 / 0.851** | **0.728 / 0.727** | 0.673 / 0.665 | **0.775 / 0.776** | 0.571 / 0.573 | 0.649 / 0.668, 0.645 / 0.668 |
+| MLP, the base (`s30-mlp-m3best-w1024`) | 0.247 | 0.816 | 0.825 | 0.715 | 0.673 | 0.769 | 0.573 | 0.631 / 0.665 |
+| Transformer (`s30-l1-actor3-td99`) | 0.256 | 0.815 | 0.827 | 0.713 | 0.617 | 0.767 | 0.558 | – |
+| *Stage 3's transformer (all the games, 3 epochs)* | *0.234* | *0.829* | *0.856* | *0.741* | *0.708* | *0.781* | *0.559* | *0.702 / 0.699* |
+
+At 30% the combination's gain is mostly attacks (+3 points) and blocks (+1); rare moves gain ~1.5 points under 1k
+and nothing at 1k-10k (more data already lifted them). Its value log-loss trails the transformers' (0.571 against
+0.558).
+
+**Wave E, Adagrad for the table inside the combination (done 21:45):** lr 0.1: set NLL 0.259 (a tie with AdamW at 30x,
+0.258); lr 0.3: 0.263; lr 1.0: 0.262. Adagrad does what it promises to the rows (at 0.3, rare rows move 1.8x as far
+as common ones: 11.9x their init against 6.5x; under AdamW at 30x with max + mean pooling, 9.8x against 8.6x), and
+at 0.3 it lifts targets (0.628) and rare moves a little (0.580 / 0.633 against 0.568-0.584 / 0.620-0.630, within
+the noise), but the value head suffers (log-loss 0.66-0.68 against 0.61). Not adopted: AdamW at 30x stays.
+
+Not built yet: the per-feature low-rank embedding (Dan's hypothesis that features need fewer dimensions than the
+state) and unknown-feature hash buckets.
+
+### MLP leaderboard: every run (22:00 UTC on 3 October)
 
 Every MLP run of experiment #4 on the second machine: wave 1 (`m-*`, configs/exp4_sweep_mlp.yml), waves 2-4
 (`m2-*`, `m3-*`, `m4-*`), the embedding-dimension sweep (`e*`, `s30-e*`), and the rare-decision follow-ups
-(`a*`, `b*`, `c*`). Validation at the end of one epoch; all at lr 1e-4 with a cosine schedule and TD(0.99) value
-targets unless the recipe says otherwise; wave 1's base `m0` is mean pooling, ReLU, width 512, dropout 0.1, token
-dropout 0.3. The seed repeats put the noise at ~0.0025 set NLL. For scale, the transformers: 0.285 (1 layer, 10%)
-and 0.256 (30%). Waves D (the combination at 30%) and E (Adagrad in the combination) are running.
+(`a*`, `b*`, `c*`, `d*`, `e1-e3`). Validation at the end of one epoch; all at lr 1e-4 with a cosine schedule and
+TD(0.99) value targets unless the recipe says otherwise; wave 1's base `m0` is mean pooling, ReLU, width 512, dropout
+0.1, token dropout 0.3. The seed repeats put the noise at ~0.0025 set NLL. For scale, the transformers: 0.285 (1
+layer, 10%), 0.256 (30%), and stage 3 (all the games, three epochs) 0.234.
 
-**10% of the games** (68 runs, ranked by set NLL; rare = non-Pass top-1 on moves chosen < 1k / 1k-10k times in training):
+**30% of the games** (8 runs, ranked by set NLL; rare = non-Pass top-1 on moves chosen < 1k / 1k-10k times in training):
+
+| # | Run | Recipe | Set NLL | Non-Pass | Attack | Block | Targets | Value AUC | Value log-loss | Rare |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `d1-s30-combined` | max+mean pool, swiglu, w1024, heads 1024, token drop 0.1, act x3 (both), table x30, vocab_k 3 | 0.2409 | 0.820 | 0.855 | 0.728 | 0.673 | 0.775 | 0.571 | 0.649 / 0.668 |
+| 2 | `d2-s30-combined-seed1` | max+mean pool, swiglu, w1024, heads 1024, token drop 0.1, act x3 (both), table x30, vocab_k 3, seed 1 | 0.2432 | 0.821 | 0.851 | 0.727 | 0.665 | 0.776 | 0.573 | 0.645 / 0.668 |
+| 3 | `s30-mlp-m3best-w1024` | max pool, swiglu, w1024, token drop 0.1, act x3 (both) | 0.2469 | 0.816 | 0.825 | 0.715 | 0.673 | 0.769 | 0.573 | 0.631 / 0.665 |
+| 4 | `s30-mlp-m3best` | max pool, swiglu, w512, token drop 0.1, act x3 (both) | 0.2510 | 0.810 | 0.805 | 0.710 | 0.645 | 0.768 | 0.567 | – |
+| 5 | `s30-e512` | max pool, swiglu, w1024, emb 512 + proj, token drop 0.1, act x3 (both) | 0.2600 | 0.804 | 0.803 | 0.702 | 0.592 | 0.764 | 0.571 | – |
+| 6 | `s30-e256` | max pool, swiglu, w1024, emb 256 + proj, token drop 0.1, act x3 (both) | 0.2670 | 0.805 | 0.795 | 0.702 | 0.602 | 0.757 | 0.576 | – |
+| 7 | `s30-e2048` | max pool, swiglu, w1024, emb 2048 + proj, token drop 0.1, act x3 (both) | 0.2750 | 0.789 | 0.809 | 0.700 | 0.585 | 0.767 | 0.566 | – |
+| 8 | `s30-e128` | max pool, swiglu, w1024, emb 128 + proj, token drop 0.1, act x3 (both) | 0.2813 | 0.797 | 0.778 | 0.704 | 0.586 | 0.747 | 0.581 | – |
+
+**10% of the games** (71 runs, ranked by set NLL; rare = non-Pass top-1 on moves chosen < 1k / 1k-10k times in training):
 
 | # | Run | Recipe | Set NLL | Non-Pass | Attack | Block | Targets | Value AUC | Value log-loss | Rare |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | `c2-k3-maxmean-emblr30-heads1024` | max+mean pool, swiglu, w1024, heads 1024, token drop 0.1, act x3 (both), table x30, vocab_k 3 | 0.2583 | 0.807 | 0.827 | 0.711 | 0.617 | 0.751 | 0.609 | 0.568 / 0.620 |
 | 2 | `c3-k3-maxmean-emblr30-heads1024-seed1` | max+mean pool, swiglu, w1024, heads 1024, token drop 0.1, act x3 (both), table x30, vocab_k 3, seed 1 | 0.2586 | 0.807 | 0.823 | 0.715 | 0.617 | 0.744 | 0.617 | 0.584 / 0.630 |
-| 3 | `c1-k3-maxmean-emblr30` | max+mean pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30, vocab_k 3 | 0.2597 | 0.805 | 0.826 | 0.713 | 0.605 | 0.754 | 0.603 | 0.540 / 0.615 |
-| 4 | `a6b-maxmean-emblr30` | max+mean pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30 | 0.2605 | 0.805 | 0.829 | 0.711 | 0.587 | 0.751 | 0.610 | 0.548 / 0.592 |
-| 5 | `b1b-vocab-k3-emblr30` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30, vocab_k 3 | 0.2617 | 0.804 | 0.801 | 0.703 | 0.582 | 0.753 | 0.593 | 0.536 / 0.590 |
-| 6 | `a2-emblr30` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30 | 0.2636 | 0.803 | 0.797 | 0.706 | 0.580 | 0.753 | 0.591 | 0.556 / 0.586 |
-| 7 | `a6-maxmean` | max+mean pool, swiglu, w1024, token drop 0.1, act x3 (both) | 0.2648 | 0.803 | 0.809 | 0.700 | 0.588 | 0.749 | 0.624 | 0.540 / 0.594 |
-| 8 | `a1-emblr10` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x10 | 0.2648 | 0.803 | 0.803 | 0.701 | 0.581 | 0.753 | 0.598 | 0.539 / 0.583 |
-| 9 | `b2b-vocab-k1-emblr30` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30, vocab_k 1 | 0.2651 | 0.800 | 0.799 | 0.699 | 0.575 | 0.752 | 0.593 | 0.545 / 0.588 |
-| 10 | `a0-seed1` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), seed 1 | 0.2658 | 0.804 | 0.790 | 0.702 | 0.574 | 0.746 | 0.599 | 0.552 / 0.593 |
-| 11 | `a5b-adagrad-1e-1` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), Adagrad table 0.1 | 0.2664 | 0.803 | 0.794 | 0.707 | 0.574 | 0.754 | 0.584 | 0.540 / 0.582 |
-| 12 | `b1-vocab-k3` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), vocab_k 3 | 0.2667 | 0.801 | 0.789 | 0.695 | 0.574 | 0.746 | 0.619 | 0.537 / 0.588 |
-| 13 | `a3-emblr100` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x100 | 0.2667 | 0.804 | 0.799 | 0.702 | 0.591 | 0.741 | 0.632 | 0.553 / 0.596 |
-| 14 | `a7-w512-from-transformer` | max pool, swiglu, w512, token drop 0.1, act x3 (both), table from stage 3 | 0.2669 | 0.800 | 0.801 | 0.707 | 0.589 | 0.754 | 0.583 | 0.560 / 0.594 |
-| 15 | `e1024` | max pool, swiglu, w1024, emb 1024 (no proj: the control), token drop 0.1, act x3 (both) | 0.2669 | 0.802 | 0.792 | 0.699 | 0.574 | 0.741 | 0.622 | – |
-| 16 | `a5-adagrad-1e-2` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), Adagrad table 0.01 | 0.2671 | 0.803 | 0.790 | 0.699 | 0.585 | 0.749 | 0.609 | 0.536 / 0.591 |
-| 17 | `b5-heads1024` | max pool, swiglu, w1024, heads 1024, token drop 0.1, act x3 (both) | 0.2672 | 0.804 | 0.797 | 0.703 | 0.601 | 0.744 | 0.615 | 0.554 / 0.601 |
-| 18 | `m4-best-w2048` | max pool, swiglu, w2048, token drop 0.1, act x3 (both) | 0.2678 | 0.807 | 0.805 | 0.699 | 0.576 | 0.737 | 0.652 | – |
-| 19 | `b4-heads512` | max pool, swiglu, w1024, heads 512, token drop 0.1, act x3 (both) | 0.2681 | 0.802 | 0.792 | 0.702 | 0.594 | 0.746 | 0.614 | 0.559 / 0.594 |
-| 20 | `m4-best` | max pool, swiglu, w1024, token drop 0.1, act x3 (both) | 0.2683 | 0.801 | 0.793 | 0.697 | 0.581 | 0.744 | 0.620 | 0.542 / 0.586 |
-| 21 | `b2-vocab-k1` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), vocab_k 1 | 0.2690 | 0.799 | 0.794 | 0.695 | 0.565 | 0.747 | 0.609 | 0.538 / 0.579 |
-| 22 | `m3-max-swiglu-drop0-tok0.1` | max pool, swiglu, w512, token drop 0.1, act x3 (opp) | 0.2738 | 0.798 | 0.786 | 0.699 | 0.569 | 0.746 | 0.599 | – |
-| 23 | `m4-best-b4` | max pool, swiglu, w1024, 4 blocks, token drop 0.1, act x3 (both) | 0.2760 | 0.800 | 0.790 | 0.694 | 0.555 | 0.738 | 0.631 | – |
-| 24 | `m3-max-swiglu-drop0-w1024` | max pool, swiglu, w1024, act x3 (opp) | 0.2765 | 0.798 | 0.785 | 0.700 | 0.565 | 0.749 | 0.589 | – |
-| 25 | `a7c-w512` | max pool, swiglu, w512, token drop 0.1, act x3 (both) | 0.2793 | 0.799 | 0.781 | 0.699 | 0.572 | 0.748 | 0.594 | 0.542 / 0.581 |
-| 26 | `m3-max-swiglu-drop0-actor3` | max pool, swiglu, w512, act x3 (both) | 0.2803 | 0.795 | 0.775 | 0.695 | 0.554 | 0.736 | 0.591 | – |
-| 27 | `m3-max-swiglu-drop0` | max pool, swiglu, w512, act x3 (opp) | 0.2847 | 0.793 | 0.773 | 0.696 | 0.554 | 0.737 | 0.594 | – |
-| 28 | `m3-max-gelu-drop0` | max pool, gelu, w512, act x3 (opp) | 0.2860 | 0.794 | 0.775 | 0.695 | 0.554 | 0.741 | 0.591 | – |
-| 29 | `e256` | max pool, swiglu, w1024, emb 256 + proj, token drop 0.1, act x3 (both) | 0.2878 | 0.788 | 0.764 | 0.697 | 0.540 | 0.733 | 0.596 | – |
-| 30 | `b6c-rare0.5-emblr30` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30, rare-move wt 0.5 | 0.2890 | 0.782 | 0.803 | 0.578 | 0.551 | 0.751 | 0.595 | 0.679 / 0.579 |
-| 31 | `m-max` | max pool, relu, w512, dropout 0.1, act x3 (opp) | 0.2910 | 0.790 | 0.771 | 0.696 | 0.547 | 0.743 | 0.590 | – |
-| 32 | `b6-rare0.5` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), rare-move wt 0.5 | 0.2918 | 0.777 | 0.792 | 0.570 | 0.553 | 0.742 | 0.617 | 0.679 / 0.584 |
-| 33 | `m3-sum-swiglu-drop0` | sum pool, swiglu, w512, act x3 (opp) | 0.2961 | 0.797 | 0.792 | 0.704 | 0.593 | 0.747 | 0.611 | – |
-| 34 | `e512` | max pool, swiglu, w1024, emb 512 + proj, token drop 0.1, act x3 (both) | 0.2991 | 0.786 | 0.769 | 0.697 | 0.537 | 0.741 | 0.585 | – |
-| 35 | `m2-swiglu-drop0-actor3` | mean pool, swiglu, w512, act x3 (both) | 0.2991 | 0.796 | 0.787 | 0.693 | 0.542 | 0.747 | 0.591 | – |
-| 36 | `m2-swiglu-drop0-tok0.1` | mean pool, swiglu, w512, token drop 0.1, act x3 (opp) | 0.3007 | 0.784 | 0.791 | 0.691 | 0.544 | 0.740 | 0.632 | – |
-| 37 | `m-sum` | sum pool, relu, w512, dropout 0.1, act x3 (opp) | 0.3035 | 0.794 | 0.789 | 0.701 | 0.571 | 0.749 | 0.586 | – |
-| 38 | `m2-swiglu-drop0-w1024` | mean pool, swiglu, w1024, act x3 (opp) | 0.3049 | 0.791 | 0.788 | 0.690 | 0.547 | 0.745 | 0.591 | – |
-| 39 | `m2-swiglu-drop0` | mean pool, swiglu, w512, act x3 (opp) | 0.3095 | 0.786 | 0.788 | 0.694 | 0.545 | 0.746 | 0.592 | – |
-| 40 | `m-actall3` | mean pool, relu, w512, dropout 0.1, act x3 (both) | 0.3128 | 0.785 | 0.786 | 0.686 | 0.546 | 0.746 | 0.588 | – |
-| 41 | `m2-swiglu-drop0-b4` | mean pool, swiglu, w512, 4 blocks, act x3 (opp) | 0.3135 | 0.783 | 0.790 | 0.689 | 0.553 | 0.743 | 0.594 | – |
-| 42 | `m2-gelu-drop0` | mean pool, gelu, w512, act x3 (opp) | 0.3139 | 0.783 | 0.785 | 0.693 | 0.552 | 0.746 | 0.583 | – |
-| 43 | `m-drop-0` | mean pool, relu, w512, act x3 (opp) | 0.3161 | 0.780 | 0.789 | 0.689 | 0.549 | 0.747 | 0.586 | – |
-| 44 | `m-swiglu` | mean pool, swiglu, w512, dropout 0.1, act x3 (opp) | 0.3165 | 0.780 | 0.785 | 0.690 | 0.537 | 0.746 | 0.594 | – |
-| 45 | `m2-swiglu-drop0-lr3e-4` | mean pool, swiglu, w512, act x3 (opp), lr 0.0003 | 0.3201 | 0.762 | 0.787 | 0.691 | 0.553 | 0.744 | 0.589 | – |
-| 46 | `m-tokdrop-0` | mean pool, relu, w512, dropout 0.1, token drop 0.0, act x3 (opp) | 0.3201 | 0.752 | 0.794 | 0.684 | 0.543 | 0.751 | 0.595 | – |
-| 47 | `m-gelu` | mean pool, gelu, w512, dropout 0.1, act x3 (opp) | 0.3228 | 0.773 | 0.784 | 0.687 | 0.544 | 0.744 | 0.584 | – |
-| 48 | `m-lr-3e-4` | mean pool, relu, w512, dropout 0.1, act x3 (opp), lr 0.0003 | 0.3256 | 0.752 | 0.785 | 0.685 | 0.552 | 0.745 | 0.587 | – |
-| 49 | `m-wd-0.01` | mean pool, relu, w512, dropout 0.1, act x3 (opp), wd 0.01 | 0.3268 | 0.762 | 0.786 | 0.687 | 0.542 | 0.746 | 0.589 | – |
-| 50 | `m0` | mean pool, relu, w512, dropout 0.1, act x3 (opp) | 0.3273 | 0.762 | 0.785 | 0.686 | 0.543 | 0.746 | 0.588 | – |
-| 51 | `m-wd-0.1` | mean pool, relu, w512, dropout 0.1, act x3 (opp), wd 0.1 | 0.3275 | 0.760 | 0.785 | 0.688 | 0.543 | 0.747 | 0.587 | – |
-| 52 | `m-w2048` | mean pool, relu, w2048, dropout 0.1, act x3 (opp) | 0.3286 | 0.760 | 0.785 | 0.686 | 0.545 | 0.744 | 0.589 | – |
-| 53 | `m-lr-1e-3` | mean pool, relu, w512, dropout 0.1, act x3 (opp), lr 0.001 | 0.3291 | 0.745 | 0.784 | 0.687 | 0.563 | 0.742 | 0.591 | – |
-| 54 | `m-w1024` | mean pool, relu, w1024, dropout 0.1, act x3 (opp) | 0.3301 | 0.754 | 0.786 | 0.686 | 0.540 | 0.746 | 0.586 | – |
-| 55 | `m-w1024-b4` | mean pool, relu, w1024, 4 blocks, dropout 0.1, act x3 (opp) | 0.3315 | 0.747 | 0.784 | 0.685 | 0.543 | 0.746 | 0.588 | – |
-| 56 | `m-b4` | mean pool, relu, w512, 4 blocks, dropout 0.1, act x3 (opp) | 0.3315 | 0.747 | 0.786 | 0.686 | 0.538 | 0.747 | 0.589 | – |
-| 57 | `e2048` | max pool, swiglu, w1024, emb 2048 + proj, token drop 0.1, act x3 (both) | 0.3323 | 0.740 | 0.772 | 0.687 | 0.535 | 0.741 | 0.584 | – |
-| 58 | `m-drop-0.3` | mean pool, relu, w512, dropout 0.3, act x3 (opp) | 0.3330 | 0.750 | 0.785 | 0.687 | 0.540 | 0.745 | 0.598 | – |
-| 59 | `m-lr-3e-3` | mean pool, relu, w512, dropout 0.1, act x3 (opp), lr 0.003 | 0.3345 | 0.742 | 0.784 | 0.684 | 0.559 | 0.739 | 0.591 | – |
-| 60 | `e128` | max pool, swiglu, w1024, emb 128 + proj, token drop 0.1, act x3 (both) | 0.3352 | 0.770 | 0.751 | 0.691 | 0.542 | 0.716 | 0.610 | – |
-| 61 | `m-batchnorm` | mean pool, relu, w512, dropout 0.1, batch norm, act x3 (opp) | 0.3373 | 0.775 | 0.788 | 0.692 | 0.536 | 0.733 | 0.592 | – |
-| 62 | `m-tokdrop-0.5` | mean pool, relu, w512, dropout 0.1, token drop 0.5, act x3 (opp) | 0.3373 | 0.748 | 0.772 | 0.687 | 0.540 | 0.742 | 0.581 | – |
-| 63 | `m-drop-0.5` | mean pool, relu, w512, dropout 0.5, act x3 (opp) | 0.3427 | 0.736 | 0.783 | 0.688 | 0.524 | 0.744 | 0.589 | – |
-| 64 | `e64` | max pool, swiglu, w1024, emb 64 + proj, token drop 0.1, act x3 (both) | 0.3505 | 0.739 | 0.745 | 0.688 | 0.544 | 0.692 | 0.619 | – |
-| 65 | `m-sd-1e-3` | mean pool, gelu, w512, dropout 0.6, batch norm, act x3 (opp), lr 0.001 | 0.3629 | 0.723 | 0.750 | 0.683 | 0.541 | 0.730 | 0.585 | – |
-| 66 | `b6b-rare1.0` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), rare-move wt 1.0 | 0.3832 | 0.687 | 0.792 | 0.526 | 0.580 | 0.742 | 0.620 | 0.570 / 0.643 |
-| 67 | `m-nonorm` | mean pool, relu, w512, dropout 0.1, none norm, act x3 (opp) | 0.3954 | 0.713 | 0.762 | 0.687 | 0.528 | 0.722 | 0.594 | – |
-| 68 | `m-sd-1e-2` | mean pool, gelu, w512, dropout 0.6, batch norm, act x3 (opp), lr 0.01 | 0.4193 | 0.713 | 0.758 | 0.685 | 0.519 | 0.729 | 0.585 | – |
-
-**30% of the games** (6 runs, ranked by set NLL; rare = non-Pass top-1 on moves chosen < 1k / 1k-10k times in training):
-
-| # | Run | Recipe | Set NLL | Non-Pass | Attack | Block | Targets | Value AUC | Value log-loss | Rare |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `s30-mlp-m3best-w1024` | max pool, swiglu, w1024, token drop 0.1, act x3 (both) | 0.2469 | 0.816 | 0.825 | 0.715 | 0.673 | 0.769 | 0.573 | 0.631 / 0.665 |
-| 2 | `s30-mlp-m3best` | max pool, swiglu, w512, token drop 0.1, act x3 (both) | 0.2510 | 0.810 | 0.805 | 0.710 | 0.645 | 0.768 | 0.567 | – |
-| 3 | `s30-e512` | max pool, swiglu, w1024, emb 512 + proj, token drop 0.1, act x3 (both) | 0.2600 | 0.804 | 0.803 | 0.702 | 0.592 | 0.764 | 0.571 | – |
-| 4 | `s30-e256` | max pool, swiglu, w1024, emb 256 + proj, token drop 0.1, act x3 (both) | 0.2670 | 0.805 | 0.795 | 0.702 | 0.602 | 0.757 | 0.576 | – |
-| 5 | `s30-e2048` | max pool, swiglu, w1024, emb 2048 + proj, token drop 0.1, act x3 (both) | 0.2750 | 0.789 | 0.809 | 0.700 | 0.585 | 0.767 | 0.566 | – |
-| 6 | `s30-e128` | max pool, swiglu, w1024, emb 128 + proj, token drop 0.1, act x3 (both) | 0.2813 | 0.797 | 0.778 | 0.704 | 0.586 | 0.747 | 0.581 | – |
+| 3 | `e3-combined-adagrad-0.1` | max+mean pool, swiglu, w1024, heads 1024, token drop 0.1, act x3 (both), Adagrad table 0.1, vocab_k 3 | 0.2590 | 0.806 | 0.820 | 0.708 | 0.596 | 0.748 | 0.622 | 0.558 / 0.600 |
+| 4 | `c1-k3-maxmean-emblr30` | max+mean pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30, vocab_k 3 | 0.2597 | 0.805 | 0.826 | 0.713 | 0.605 | 0.754 | 0.603 | 0.540 / 0.615 |
+| 5 | `a6b-maxmean-emblr30` | max+mean pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30 | 0.2605 | 0.805 | 0.829 | 0.711 | 0.587 | 0.751 | 0.610 | 0.548 / 0.592 |
+| 6 | `b1b-vocab-k3-emblr30` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30, vocab_k 3 | 0.2617 | 0.804 | 0.801 | 0.703 | 0.582 | 0.753 | 0.593 | 0.536 / 0.590 |
+| 7 | `e2-combined-adagrad-1.0` | max+mean pool, swiglu, w1024, heads 1024, token drop 0.1, act x3 (both), Adagrad table 1, vocab_k 3 | 0.2620 | 0.807 | 0.822 | 0.710 | 0.624 | 0.735 | 0.681 | 0.573 / 0.628 |
+| 8 | `e1-combined-adagrad-0.3` | max+mean pool, swiglu, w1024, heads 1024, token drop 0.1, act x3 (both), Adagrad table 0.3, vocab_k 3 | 0.2632 | 0.810 | 0.821 | 0.708 | 0.628 | 0.741 | 0.659 | 0.580 / 0.633 |
+| 9 | `a2-emblr30` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30 | 0.2636 | 0.803 | 0.797 | 0.706 | 0.580 | 0.753 | 0.591 | 0.556 / 0.586 |
+| 10 | `a6-maxmean` | max+mean pool, swiglu, w1024, token drop 0.1, act x3 (both) | 0.2648 | 0.803 | 0.809 | 0.700 | 0.588 | 0.749 | 0.624 | 0.540 / 0.594 |
+| 11 | `a1-emblr10` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x10 | 0.2648 | 0.803 | 0.803 | 0.701 | 0.581 | 0.753 | 0.598 | 0.539 / 0.583 |
+| 12 | `b2b-vocab-k1-emblr30` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30, vocab_k 1 | 0.2651 | 0.800 | 0.799 | 0.699 | 0.575 | 0.752 | 0.593 | 0.545 / 0.588 |
+| 13 | `a0-seed1` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), seed 1 | 0.2658 | 0.804 | 0.790 | 0.702 | 0.574 | 0.746 | 0.599 | 0.552 / 0.593 |
+| 14 | `a5b-adagrad-1e-1` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), Adagrad table 0.1 | 0.2664 | 0.803 | 0.794 | 0.707 | 0.574 | 0.754 | 0.584 | 0.540 / 0.582 |
+| 15 | `b1-vocab-k3` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), vocab_k 3 | 0.2667 | 0.801 | 0.789 | 0.695 | 0.574 | 0.746 | 0.619 | 0.537 / 0.588 |
+| 16 | `a3-emblr100` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x100 | 0.2667 | 0.804 | 0.799 | 0.702 | 0.591 | 0.741 | 0.632 | 0.553 / 0.596 |
+| 17 | `a7-w512-from-transformer` | max pool, swiglu, w512, token drop 0.1, act x3 (both), table from stage 3 | 0.2669 | 0.800 | 0.801 | 0.707 | 0.589 | 0.754 | 0.583 | 0.560 / 0.594 |
+| 18 | `e1024` | max pool, swiglu, w1024, emb 1024 (no proj: the control), token drop 0.1, act x3 (both) | 0.2669 | 0.802 | 0.792 | 0.699 | 0.574 | 0.741 | 0.622 | – |
+| 19 | `a5-adagrad-1e-2` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), Adagrad table 0.01 | 0.2671 | 0.803 | 0.790 | 0.699 | 0.585 | 0.749 | 0.609 | 0.536 / 0.591 |
+| 20 | `b5-heads1024` | max pool, swiglu, w1024, heads 1024, token drop 0.1, act x3 (both) | 0.2672 | 0.804 | 0.797 | 0.703 | 0.601 | 0.744 | 0.615 | 0.554 / 0.601 |
+| 21 | `m4-best-w2048` | max pool, swiglu, w2048, token drop 0.1, act x3 (both) | 0.2678 | 0.807 | 0.805 | 0.699 | 0.576 | 0.737 | 0.652 | – |
+| 22 | `b4-heads512` | max pool, swiglu, w1024, heads 512, token drop 0.1, act x3 (both) | 0.2681 | 0.802 | 0.792 | 0.702 | 0.594 | 0.746 | 0.614 | 0.559 / 0.594 |
+| 23 | `m4-best` | max pool, swiglu, w1024, token drop 0.1, act x3 (both) | 0.2683 | 0.801 | 0.793 | 0.697 | 0.581 | 0.744 | 0.620 | 0.542 / 0.586 |
+| 24 | `b2-vocab-k1` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), vocab_k 1 | 0.2690 | 0.799 | 0.794 | 0.695 | 0.565 | 0.747 | 0.609 | 0.538 / 0.579 |
+| 25 | `m3-max-swiglu-drop0-tok0.1` | max pool, swiglu, w512, token drop 0.1, act x3 (opp) | 0.2738 | 0.798 | 0.786 | 0.699 | 0.569 | 0.746 | 0.599 | – |
+| 26 | `m4-best-b4` | max pool, swiglu, w1024, 4 blocks, token drop 0.1, act x3 (both) | 0.2760 | 0.800 | 0.790 | 0.694 | 0.555 | 0.738 | 0.631 | – |
+| 27 | `m3-max-swiglu-drop0-w1024` | max pool, swiglu, w1024, act x3 (opp) | 0.2765 | 0.798 | 0.785 | 0.700 | 0.565 | 0.749 | 0.589 | – |
+| 28 | `a7c-w512` | max pool, swiglu, w512, token drop 0.1, act x3 (both) | 0.2793 | 0.799 | 0.781 | 0.699 | 0.572 | 0.748 | 0.594 | 0.542 / 0.581 |
+| 29 | `m3-max-swiglu-drop0-actor3` | max pool, swiglu, w512, act x3 (both) | 0.2803 | 0.795 | 0.775 | 0.695 | 0.554 | 0.736 | 0.591 | – |
+| 30 | `m3-max-swiglu-drop0` | max pool, swiglu, w512, act x3 (opp) | 0.2847 | 0.793 | 0.773 | 0.696 | 0.554 | 0.737 | 0.594 | – |
+| 31 | `m3-max-gelu-drop0` | max pool, gelu, w512, act x3 (opp) | 0.2860 | 0.794 | 0.775 | 0.695 | 0.554 | 0.741 | 0.591 | – |
+| 32 | `e256` | max pool, swiglu, w1024, emb 256 + proj, token drop 0.1, act x3 (both) | 0.2878 | 0.788 | 0.764 | 0.697 | 0.540 | 0.733 | 0.596 | – |
+| 33 | `b6c-rare0.5-emblr30` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), table x30, rare-move wt 0.5 | 0.2890 | 0.782 | 0.803 | 0.578 | 0.551 | 0.751 | 0.595 | 0.679 / 0.579 |
+| 34 | `m-max` | max pool, relu, w512, dropout 0.1, act x3 (opp) | 0.2910 | 0.790 | 0.771 | 0.696 | 0.547 | 0.743 | 0.590 | – |
+| 35 | `b6-rare0.5` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), rare-move wt 0.5 | 0.2918 | 0.777 | 0.792 | 0.570 | 0.553 | 0.742 | 0.617 | 0.679 / 0.584 |
+| 36 | `m3-sum-swiglu-drop0` | sum pool, swiglu, w512, act x3 (opp) | 0.2961 | 0.797 | 0.792 | 0.704 | 0.593 | 0.747 | 0.611 | – |
+| 37 | `e512` | max pool, swiglu, w1024, emb 512 + proj, token drop 0.1, act x3 (both) | 0.2991 | 0.786 | 0.769 | 0.697 | 0.537 | 0.741 | 0.585 | – |
+| 38 | `m2-swiglu-drop0-actor3` | mean pool, swiglu, w512, act x3 (both) | 0.2991 | 0.796 | 0.787 | 0.693 | 0.542 | 0.747 | 0.591 | – |
+| 39 | `m2-swiglu-drop0-tok0.1` | mean pool, swiglu, w512, token drop 0.1, act x3 (opp) | 0.3007 | 0.784 | 0.791 | 0.691 | 0.544 | 0.740 | 0.632 | – |
+| 40 | `m-sum` | sum pool, relu, w512, dropout 0.1, act x3 (opp) | 0.3035 | 0.794 | 0.789 | 0.701 | 0.571 | 0.749 | 0.586 | – |
+| 41 | `m2-swiglu-drop0-w1024` | mean pool, swiglu, w1024, act x3 (opp) | 0.3049 | 0.791 | 0.788 | 0.690 | 0.547 | 0.745 | 0.591 | – |
+| 42 | `m2-swiglu-drop0` | mean pool, swiglu, w512, act x3 (opp) | 0.3095 | 0.786 | 0.788 | 0.694 | 0.545 | 0.746 | 0.592 | – |
+| 43 | `m-actall3` | mean pool, relu, w512, dropout 0.1, act x3 (both) | 0.3128 | 0.785 | 0.786 | 0.686 | 0.546 | 0.746 | 0.588 | – |
+| 44 | `m2-swiglu-drop0-b4` | mean pool, swiglu, w512, 4 blocks, act x3 (opp) | 0.3135 | 0.783 | 0.790 | 0.689 | 0.553 | 0.743 | 0.594 | – |
+| 45 | `m2-gelu-drop0` | mean pool, gelu, w512, act x3 (opp) | 0.3139 | 0.783 | 0.785 | 0.693 | 0.552 | 0.746 | 0.583 | – |
+| 46 | `m-drop-0` | mean pool, relu, w512, act x3 (opp) | 0.3161 | 0.780 | 0.789 | 0.689 | 0.549 | 0.747 | 0.586 | – |
+| 47 | `m-swiglu` | mean pool, swiglu, w512, dropout 0.1, act x3 (opp) | 0.3165 | 0.780 | 0.785 | 0.690 | 0.537 | 0.746 | 0.594 | – |
+| 48 | `m2-swiglu-drop0-lr3e-4` | mean pool, swiglu, w512, act x3 (opp), lr 0.0003 | 0.3201 | 0.762 | 0.787 | 0.691 | 0.553 | 0.744 | 0.589 | – |
+| 49 | `m-tokdrop-0` | mean pool, relu, w512, dropout 0.1, token drop 0.0, act x3 (opp) | 0.3201 | 0.752 | 0.794 | 0.684 | 0.543 | 0.751 | 0.595 | – |
+| 50 | `m-gelu` | mean pool, gelu, w512, dropout 0.1, act x3 (opp) | 0.3228 | 0.773 | 0.784 | 0.687 | 0.544 | 0.744 | 0.584 | – |
+| 51 | `m-lr-3e-4` | mean pool, relu, w512, dropout 0.1, act x3 (opp), lr 0.0003 | 0.3256 | 0.752 | 0.785 | 0.685 | 0.552 | 0.745 | 0.587 | – |
+| 52 | `m-wd-0.01` | mean pool, relu, w512, dropout 0.1, act x3 (opp), wd 0.01 | 0.3268 | 0.762 | 0.786 | 0.687 | 0.542 | 0.746 | 0.589 | – |
+| 53 | `m0` | mean pool, relu, w512, dropout 0.1, act x3 (opp) | 0.3273 | 0.762 | 0.785 | 0.686 | 0.543 | 0.746 | 0.588 | – |
+| 54 | `m-wd-0.1` | mean pool, relu, w512, dropout 0.1, act x3 (opp), wd 0.1 | 0.3275 | 0.760 | 0.785 | 0.688 | 0.543 | 0.747 | 0.587 | – |
+| 55 | `m-w2048` | mean pool, relu, w2048, dropout 0.1, act x3 (opp) | 0.3286 | 0.760 | 0.785 | 0.686 | 0.545 | 0.744 | 0.589 | – |
+| 56 | `m-lr-1e-3` | mean pool, relu, w512, dropout 0.1, act x3 (opp), lr 0.001 | 0.3291 | 0.745 | 0.784 | 0.687 | 0.563 | 0.742 | 0.591 | – |
+| 57 | `m-w1024` | mean pool, relu, w1024, dropout 0.1, act x3 (opp) | 0.3301 | 0.754 | 0.786 | 0.686 | 0.540 | 0.746 | 0.586 | – |
+| 58 | `m-w1024-b4` | mean pool, relu, w1024, 4 blocks, dropout 0.1, act x3 (opp) | 0.3315 | 0.747 | 0.784 | 0.685 | 0.543 | 0.746 | 0.588 | – |
+| 59 | `m-b4` | mean pool, relu, w512, 4 blocks, dropout 0.1, act x3 (opp) | 0.3315 | 0.747 | 0.786 | 0.686 | 0.538 | 0.747 | 0.589 | – |
+| 60 | `e2048` | max pool, swiglu, w1024, emb 2048 + proj, token drop 0.1, act x3 (both) | 0.3323 | 0.740 | 0.772 | 0.687 | 0.535 | 0.741 | 0.584 | – |
+| 61 | `m-drop-0.3` | mean pool, relu, w512, dropout 0.3, act x3 (opp) | 0.3330 | 0.750 | 0.785 | 0.687 | 0.540 | 0.745 | 0.598 | – |
+| 62 | `m-lr-3e-3` | mean pool, relu, w512, dropout 0.1, act x3 (opp), lr 0.003 | 0.3345 | 0.742 | 0.784 | 0.684 | 0.559 | 0.739 | 0.591 | – |
+| 63 | `e128` | max pool, swiglu, w1024, emb 128 + proj, token drop 0.1, act x3 (both) | 0.3352 | 0.770 | 0.751 | 0.691 | 0.542 | 0.716 | 0.610 | – |
+| 64 | `m-batchnorm` | mean pool, relu, w512, dropout 0.1, batch norm, act x3 (opp) | 0.3373 | 0.775 | 0.788 | 0.692 | 0.536 | 0.733 | 0.592 | – |
+| 65 | `m-tokdrop-0.5` | mean pool, relu, w512, dropout 0.1, token drop 0.5, act x3 (opp) | 0.3373 | 0.748 | 0.772 | 0.687 | 0.540 | 0.742 | 0.581 | – |
+| 66 | `m-drop-0.5` | mean pool, relu, w512, dropout 0.5, act x3 (opp) | 0.3427 | 0.736 | 0.783 | 0.688 | 0.524 | 0.744 | 0.589 | – |
+| 67 | `e64` | max pool, swiglu, w1024, emb 64 + proj, token drop 0.1, act x3 (both) | 0.3505 | 0.739 | 0.745 | 0.688 | 0.544 | 0.692 | 0.619 | – |
+| 68 | `m-sd-1e-3` | mean pool, gelu, w512, dropout 0.6, batch norm, act x3 (opp), lr 0.001 | 0.3629 | 0.723 | 0.750 | 0.683 | 0.541 | 0.730 | 0.585 | – |
+| 69 | `b6b-rare1.0` | max pool, swiglu, w1024, token drop 0.1, act x3 (both), rare-move wt 1.0 | 0.3832 | 0.687 | 0.792 | 0.526 | 0.580 | 0.742 | 0.620 | 0.570 / 0.643 |
+| 70 | `m-nonorm` | mean pool, relu, w512, dropout 0.1, none norm, act x3 (opp) | 0.3954 | 0.713 | 0.762 | 0.687 | 0.528 | 0.722 | 0.594 | – |
+| 71 | `m-sd-1e-2` | mean pool, gelu, w512, dropout 0.6, batch norm, act x3 (opp), lr 0.01 | 0.4193 | 0.713 | 0.758 | 0.685 | 0.519 | 0.729 | 0.585 | – |
 
 ## Stage 4: cheap evaluation (sb-v2)
 
