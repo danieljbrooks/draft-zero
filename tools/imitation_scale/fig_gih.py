@@ -2,7 +2,7 @@
 non-basic card by rarity on the right, each with its Spearman correlation. Cards with fewer than --min-games games in
 hand are left out; the commons furthest from their 17lands rank are labelled.
 
-    python tools/imitation_scale/fig_gih.py runs/exp4/games/c1-selfplay/games.jsonl --out docs/img/018-gih \\
+    python tools/imitation_scale/fig_gih.py runs/exp4/games/c1-selfplay-t1/games.jsonl --out docs/img/018-gih \\
         [--ceiling-common 0.839 --ceiling-all 0.804]
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ def main(argv=None) -> int:
     ap.add_argument("--label", type=int, default=6, help="commons to label at each end of the residual")
     ap.add_argument("--ceiling-common", type=float, default=None)
     ap.add_argument("--ceiling-all", type=float, default=None)
-    ap.add_argument("--title", default="Games-in-hand win rate: the stage-3 policy's self-play against 17lands")
+    ap.add_argument("--title", default="Games-in-hand win rate: the stage-3 policy's self-play (sampled, temperature 1) against 17lands")
     a = ap.parse_args(argv)
     gih = _gih()
     from draftzero.stats import load_rarity

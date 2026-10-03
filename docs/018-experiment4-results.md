@@ -106,7 +106,10 @@ wider, deeper) runs at 10%, and the best at 30% of the games (`configs/exp4_swee
 
 ### C. Games and 17lands statistics (on RunPod)
 
-The bots: the transformer's policy alone (`policy`, sampled at temperature 1); the transformer with IS-MCTS
+The bots: the transformer's policy alone, at one of two temperatures (every run's name and config.json now say
+which): **`policy_greedy`, temperature 0**, its most likely move at every decision, its strongest play and the
+one for strength tests; and **`policy_sampled`, temperature 1** (the old name `policy`), a move drawn from its
+distribution, which plays like the humans it imitates, their mistakes too. The transformer with IS-MCTS
 (`il_bc@N`: its policy as the prior, its value at the leaves, N simulations a decision); and the **baseline**, the
 heuristic bot at 100 simulations (`heuristic@100`: uniform priors, the heuristic at the leaves). A heuristic needs
 some search to choose a move (it scores positions); 100 simulations look about a quarter of a turn ahead and cost
@@ -116,7 +119,7 @@ pairs, both seats per pair, capped at 50 turns; games with no winner are left ou
 | Step | Games | Decklists | Estimate |
 |---|---|---|---|
 | **C0** throughput | a few dozen of each kind below, with the 30% recipe's network | as below | one Community 3090, ~30 min, ~$0.15 |
-| **C1** policy only | `policy` against itself, ~10k games (for the 17lands statistics); `policy` against `heuristic@100`, 10k games | open (no search) | self-play: a few pod-hours; against the heuristic: ~17–60 pod-hours, its search the cost |
+| **C1** policy only | `policy_sampled` (T=1) against itself, ~10k games (for the 17lands statistics); against `heuristic@100`: 4,497 games at T=1, stopped, then **`policy_greedy` (T=0), 2,500 games** (Dan, 13:40: the strength test plays the policy's best move) | open (no search) | self-play: a few pod-hours; against the heuristic: ~17–60 pod-hours, its search the cost |
 | **C2** search | `il_bc@100`, `@300`, `@1000` each against `heuristic@100`, 100 games each | closed (belief service) | ~10–20 pod-hours |
 | **C2 anchor** | `il_bc@1000` against `heuristic@1000`, 100 games (equal budgets) | closed | ~8–17 pod-hours |
 | **C3** 17lands | each card's games-in-hand win rate from C1's self-play, against 17lands' (`tools/imitation_scale/gih.py`), judged against the noise ceiling at the same number of player-games (~0.75 at 10k, ~0.94 at 50k); the most over- and under-rated cards | – | laptop |
@@ -140,8 +143,8 @@ One Secure 3090 pod (three Community pods stalled pulling the image first), the 
 
 | Run | Games | Transformer's score [95% CI] | Median game, one worker | Turns | Searched decisions a seat |
 |---|---|---|---|---|---|
-| `policy` against itself | 38 of 40 | – | 35 s (max 119) | 20 | 106 |
-| `policy` against `heuristic@100` | 30 | **0.27** [0.14, 0.45] | 192 s | 17.5 | 66 |
+| `policy_sampled` (T=1) against itself | 38 of 40 | – | 35 s (max 119) | 20 | 106 |
+| `policy_sampled` (T=1) against `heuristic@100` | 30 | **0.27** [0.14, 0.45] | 192 s | 17.5 | 66 |
 | `il_bc@300` against `heuristic@100` | 12 | **0.50** [0.25, 0.75] | 1,070 s | 14.5 | 56 |
 | `il_bc@1000` against `heuristic@100` | 8 | **0.63** [0.31, 0.86] | 3,667 s | 14.5 | 50 |
 
@@ -157,7 +160,7 @@ One Secure 3090 pod (three Community pods stalled pulling the image first), the 
   `@300` ~3, `@1000` ~6, the 1,000/1,000 anchor ~12), C4 ~15: ~64 pod-hours, ~$14 on Community pods or ~$32 on
   Secure ones; with the $19.38 spent, under the $65 cap either way. Community first, Secure when they stall.
 
-### C1 and C3: the policy's self-play against 17lands (09:47 UTC on 3 October)
+### C1 and C3: the sampled policy's self-play (temperature 1) against 17lands (09:47 UTC on 3 October)
 
 10,000 games of stage 3's policy against itself (sampled at temperature 1, no search, open decklists, the eval
 pool's deck pairs): 9,598 finished (402 engine crashes, "Error in unit tests", and heap errors), 123 at the 50-turn
@@ -195,6 +198,44 @@ Each card's games-in-hand (GIH) win rate in these games against 17lands' (791k h
 - **For the plan:** the GIH comparison is a measure of play, and on spells the imitation policy is not yet
   human-like in its timing. Search should help here (C2: search lifts the policy from 0.35 to 0.5–0.6 against
   the heuristic); a self-play GIH run with search would test whether it closes this gap.
+
+### C1: the policy's strength against `heuristic@100` (stopped at T=1, rerunning at T=0; 13:52 UTC on 3 October)
+
+The first 4,497 games played the policy **sampled at temperature 1** (`c1-pvh-t1-s0`, `-s1` on HF; renamed
+from `c1-pvh-s*`, as were `c1-selfplay` → `c1-selfplay-t1` and C0's policy runs → `-t1`). Dan's intent was a
+strength test, the policy's best move at every decision, so these stopped at 13:43 and the rest of the
+2,500-game budget plays **`policy_greedy`, temperature 0**, on three pods (`c1-pvh-t0-s0`, `-s1`, `-s2`: 1,250
+deck pairs, ~2 hours).
+
+| Policy | Games (with a winner or capped) | Score against `heuristic@100` [95% CI] |
+|---|---|---|
+| sampled, T=1 | 4,356 (141 engine errors left out) | **0.373** [0.359, 0.388] |
+| greedy, T=0 | running | – |
+
+**By colour pair (T=1).** Each deck's win rate by its main colours: in the sampled self-play (9,475 games), the
+policy's and the heuristic's when each pilots that pair against the other (4,352 games), and 17lands' FDN
+Premier Draft games (all players, and the ≥60% win-rate bucket, closer to the eval pool's top-player decks):
+
+| Pair | Self-play (T=1) | Policy piloting it, vs heuristic | Heuristic piloting it, vs policy | 17lands top players | 17lands all |
+|---|---|---|---|---|---|
+| WG | **0.590** | 0.442 | 0.703 | 0.646 | 0.543 |
+| WU | 0.551 | 0.419 | 0.632 | 0.656 | 0.560 |
+| RG | 0.527 | 0.452 | 0.675 | 0.653 | 0.558 |
+| WB | 0.527 | 0.396 | 0.670 | 0.634 | 0.551 |
+| UG | 0.511 | 0.317 | 0.658 | 0.622 | 0.525 |
+| BG | 0.509 | 0.417 | 0.705 | 0.612 | 0.518 |
+| WR | 0.496 | 0.378 | 0.593 | 0.650 | 0.556 |
+| UB | 0.477 | 0.328 | 0.566 | 0.640 | 0.548 |
+| UR | 0.416 | 0.299 | 0.522 | 0.638 | 0.529 |
+| BR | **0.403** | 0.316 | 0.590 | 0.639 | 0.551 |
+
+- **The simulation spreads the pairs four times wider than humans do** (0.40–0.59 against 0.61–0.66 for the
+  top players), and orders them differently (Spearman ~0.37 over the ten pairs). The red pairs sit at the
+  bottom (UR, BR; WR 7th), in line with Burst Lightning's 84th of 90 commons.
+- **Not only the policy:** the heuristic also wins least with UR (0.52) and UB (0.57) and most with BG and WG
+  (0.70), and its edge over the policy on the same pair is similar across pairs (0.21–0.33). Part of the
+  spread looks like simple bots in this engine favouring creature decks over spell decks.
+- The greedy games will say how much of the gap is the sampling.
 
 ### Babysitting
 
@@ -861,8 +902,9 @@ thousands of games the 17lands comparison needs.
   has no action index, are searched as configured. MageZero's own root score, which policy-only play never
   reads, comes from the heuristic, saving a network call a decision. Every seat now reports `inHand`, the
   cards seen in its hand at its decisions (the opening hand and the draws: 17lands' "in hand").
-- **`play.py`:** bots `policy` (sampled) and `policy_greedy`, with `--policy-fallback-budget` (default 100)
-  for the headless decisions.
+- **`play.py`:** bots `policy_greedy` (temperature 0) and `policy_sampled` (temperature 1; `policy` is its
+  old name), with `--policy-fallback-budget` (default 100) for the headless decisions. Each run's config.json
+  and summary.json record every bot's `policy_temp` (null for the searching bots).
 - **`tools/imitation_scale/gih.py`:** each card's games-in-hand win rate from games.jsonl files, and the
   Spearman correlation with 17lands' (`assets/reference/FDN_gih.json`), basic lands out. Judge it against
   the noise ceiling at the same number of player-games: ~0.49 at 2,880, ~0.75 at 10,000, ~0.94 at 50,000.

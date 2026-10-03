@@ -183,6 +183,11 @@ def test_policy_bots_ask_for_policy_only_play():
     o = play.seat_options("policy", 1000, 50052, 300, policy_fallback_budget=40)
     assert o["policyOnly"] and o["policyTemp"] == 1.0 and o["budget"] == 40 and o["priors"]
     assert play.seat_options("policy_greedy", 1000, 50052, 300)["policyTemp"] == 0.0
+    assert play.seat_options("policy_sampled", 1000, 50052, 300)["policyTemp"] == 1.0
+    assert play.policy_temp("policy_greedy") == 0.0 and play.policy_temp("policy") == 1.0
+    assert play.policy_temp("heuristic@100") is None
+    s = play.summarize([{"pair": 0, "winner_role": "bot1", "turns": 9, "seconds": 1.0}], "policy_greedy", "heuristic@100")
+    assert s["policy_temp"] == {"bot1": 0.0, "bot2": None}
     assert "policyOnly" not in play.seat_options("il_bc", 1000, 50052, 300)
     # a bot's own budget: name@simulations
     assert play.seat_options("heuristic@100", 1000, None, 300)["budget"] == 100

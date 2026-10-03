@@ -18,11 +18,15 @@ and two with no search (docs/018, policy-only evaluation): at every decision wit
 with no simulations and no belief worlds. Decisions without a head are searched as il_bc, at
 --policy-fallback-budget simulations.
 
-    policy        sampled from the policy (temperature 1): plays like the humans it imitates
-    policy_greedy the policy's most likely option
+    policy_greedy  the policy's most likely option (temperature 0): its strongest play, for strength tests
+    policy_sampled sampled from the policy (temperature 1): plays like the humans it imitates, mistakes too
+    policy         the old name of policy_sampled (temperature 1), kept so earlier runs' configs replay
+
+Every run records each bot's policy temperature (`policy_temp` in config.json and summary.json; null for
+the searching bots).
 
 A bot can carry its own budget, `name@simulations` (heuristic@100, il_bc@1000); without one it searches at
---budget. Experiment #4's games (docs/018): policy against heuristic@100, il_bc@100/300/1000 against
+--budget. Experiment #4's games (docs/018): policy_greedy against heuristic@100, il_bc@100/300/1000 against
 heuristic@100, and il_bc@1000 against heuristic@1000.
 
 Every game's seats carry inHand (the cards seen in each player's hand), for the games-in-hand win
@@ -64,9 +68,15 @@ BOTS = {
     "il_bc": {"evaluator": "remote", "priors": True, "leaf": "net"},
     "il_heur": {"evaluator": "remote", "priors": True, "leaf": "heuristic"},
     "bc": {"evaluator": "remote", "priors": False, "leaf": "net"},
-    "policy": {"evaluator": "remote", "priors": True, "leaf": "net", "policy_temp": 1.0},
     "policy_greedy": {"evaluator": "remote", "priors": True, "leaf": "net", "policy_temp": 0.0},
+    "policy_sampled": {"evaluator": "remote", "priors": True, "leaf": "net", "policy_temp": 1.0},
+    "policy": {"evaluator": "remote", "priors": True, "leaf": "net", "policy_temp": 1.0},   # = policy_sampled
 }
+
+
+def policy_temp(spec: str) -> float | None:
+    """A bot's policy temperature: 0 greedy, 1 sampled, None for a bot that searches every decision."""
+    return BOTS[parse_bot(spec)[0]].get("policy_temp")
 
 
 def parse_bot(spec: str) -> tuple[str, int | None]:
@@ -126,7 +136,8 @@ def summarize(games: list[dict], bot1: str, bot2: str) -> dict:
     by_pair = {}
     for g in done:
         by_pair.setdefault(g["pair"], []).append(pts(g))
-    return {"bot1": bot1, "bot2": bot2, "games": len(done), "errors": len(games) - len(done),
+    return {"bot1": bot1, "bot2": bot2, "policy_temp": {"bot1": policy_temp(bot1), "bot2": policy_temp(bot2)},
+            "games": len(done), "errors": len(games) - len(done),
             "bot1_score": score / len(done) if done else None, "ci95": [lo, hi],
             "no_winner": sum(g.get("winner_role") is None for g in done),
             "pairs_both_won_by_bot1": sum(1 for v in by_pair.values() if len(v) == 2 and sum(v) == 2),
@@ -201,8 +212,9 @@ def main(argv=None) -> int:
             if not g.get("error"):
                 done_keys.add((g["pair"], g["swap"]))
     todo = [t for t in tasks if (t["pair"], t["swap"]) not in done_keys]
-    (out / "config.json").write_text(json.dumps({**vars(a), "n_tasks": len(tasks)}, indent=1))
-    print(f"{len(tasks)} games, {len(todo)} to play", flush=True)
+    temps = {"bot1": policy_temp(a.bot1), "bot2": policy_temp(a.bot2)}
+    (out / "config.json").write_text(json.dumps({**vars(a), "policy_temp": temps, "n_tasks": len(tasks)}, indent=1))
+    print(f"{len(tasks)} games, {len(todo)} to play; policy temperature {temps}", flush=True)
 
     belief = None if a.open_decklists else a.belief_port
     if belief is not None:
