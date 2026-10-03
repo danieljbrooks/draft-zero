@@ -48,7 +48,7 @@ has the stage estimates this doc tracks against.*
 | GPU check | done: the RTX 3090 | 1.5 (3 pods) | $1.30 | the L40 is no cheaper per evaluation; network search is CPU-bound |
 | 1. Build | done: 161,206 games, 12.1M rows (10.9M train) | 3.6 | $1.82 | estimate 5 pod-hours, $2.50 |
 | 2. Hyperparameter sweep | rounds 1 and 2 done on the RunPod 3090 (40 runs); round 2x and the 30% check continue on the second machine | 25.1 | $12.55 | ~24 pod-hours expected against 6: over by design. The second machine adds none |
-| 3. Large training | next, on the second machine, after the 30% check | | | |
+| 3. Large training | ready: starts by itself after the 30% checks (~01:00 UTC on 3 October), 4–5 hours on the second machine | | $0 | the single-tower transformer (Stage 3) |
 | 4. Cheap evaluation | heuristic bot at 300 done; at 3,000, half done | 4.6 | $1.01 | the pod's host rebooted; the rest runs with the network mixes |
 | 5. Play | not started | | | |
 | 6. Follow-up checkpoints | not started | | | |
@@ -563,26 +563,92 @@ epochs of the 10% subset, the same 62k steps as `s30-l1`'s one epoch of 30%:
   stage 3 can run 2–3 epochs (about 75 minutes each on the second machine) and take the policy and value
   checkpoints where each peaks, or lower the value positions per game after the first epoch.
 
-## Stage 3: the large training (planned)
+## Stage 3: the large training (the plan, approved 2026-10-03)
 
-*Dan, 2026-10-03: the single-tower transformer with ×3 on human plays (all three priority tables, or the
-opponent's turn and the player's later stops: whichever the 30% check favours). The MLP's own recipe follows
-from its sweep.*
+*Dan, 2026-10-03: train the single-tower transformer to completion now (the quality model); the MLP (the fast
+model, for search on CPUs) follows from its own sweep. "This model is likely the one that we'll be using for
+various downstream applications."*
 
-`configs/exp4_train.yml`: 1-layer transformer (width 512, pre-LN, embedding std 0.02), TD(0.99) value targets
-on 16 positions a game, all 10.9M training rows for 3 epochs (~630k steps of ~52 rows), the same validation
-rows as every sweep run, the best policy and value checkpoints kept apart. About 4–5 hours on the second
-machine's GPU.
+**Starts by itself** when the two 30% checks below finish (about 01:00 UTC on 3 October):
+`deploy/exp4_stage3.sh` runs on the second machine's GPU 1, settles the two open settings, stops the
+scale-check sweeps to free their memory, trains, then scores the best checkpoints on the test split. The MLP
+sweep keeps GPU 0. A rerun of the script resumes from `latest.pt`.
 
-**The learning rate:** a linear warm-up over 3,000 steps, then a cosine over the whole run down to 10% of the
-peak (the trainer's `lr_min_frac`): 1e-4 at the start, 7.75e-5 after the first epoch, 3.25e-5 after the second,
-1e-5 at the end. Every sweep run had the same shape over its one epoch; `ep3` (three epochs of the 10% subset)
-had exactly this one, and its policy kept improving to the end.
+### The recipe (`configs/exp4_train.yml`)
+
+| | |
+|---|---|
+| Data | all six tables, 100% of the training games (10.9M rows from ~145k games); the same 20k validation rows a table as every sweep run |
+| Network | transformer, 1 layer, width 512 (feed-forward 1,024, 4 heads), pre-LN, embedding init std 0.02, mean pooling; dropout 0.1, pooling dropout 0.2, 30% of the input tokens dropped in training. One trunk, five heads |
+| Optimiser | AdamW (no weight decay), gradient clip 1.0, bf16; batches of up to 64 rows (~52 on average) |
+| Learning rate | warm-up over 3,000 steps to 1e-4, then a cosine to 1e-5 over 3 epochs (~630k steps); the figure below |
+| Value | TD(λ = 0.99) targets on 16 positions a game an epoch (the result for the first quarter epoch; recomputed from the network at 0.25, 1.25 and 2.25 epochs); value-loss weight 0.5, or 0.2 if its check passes |
+| Passivity fix | ×3 on the policy loss of the rows where the human acted, in the opponent's turn and the player's later stops; also at the turn start if its check favours it |
+| Checkpoints | every ~26k steps (an eighth of an epoch) the validation measures; `best_policy` (lowest set NLL), `best_value` (lowest value log-loss), `best` (combined), every 30 minutes a checkpoint, `latest.pt` every 10 minutes |
+| Time and memory | ~2.7 hours of training, ~1 hour of TD recomputation, ~20 minutes of evaluation: **4–5 hours**, ~27 GB of RAM, $0 |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="img/018-lr-schedule-dark.png">
   <img alt="Stage 3's learning rate: a linear warm-up to 1e-4 over the first 3,000 steps, then a cosine down to 1e-5 over 3 epochs, with the TD targets recomputed at 0.25, 1.25 and 2.25 epochs." src="img/018-lr-schedule-light.png">
 </picture>
+
+### Why this recipe (the evidence: Stage 2)
+
+- **1 layer, single tower.** 2 layers lost at 10% and 30%; at 30% the value tower's policy gain had shrunk to
+  set NLL −0.005 (−0.012 at 10%), inside the noise, for 2.3× the training time and a slightly worse value; the
+  single tower has the best value head at 30% (AUC 0.768, log-loss 0.557).
+- **More data matters most:** 30% of the games for one epoch beat every recipe change on 10%; three epochs of
+  10% recovered most of the policy's gain but none of the value's (`ep3`). Hence all the data, three epochs, the
+  value checkpoint kept apart.
+- **Warm-up + cosine from 1e-4** beat constant rates; **TD(0.99)** gives the value head's best log-loss, with
+  the policy within the noise of λ 0.95 (Dan: ~75 decisions a game).
+- **The passivity fix** brings the network's passing to the humans' (Pass on top in the opponent's turn 93.3%
+  against 93.4%; the player's later stops 65.8% against 66.6%) and improves the policy's NLL.
+
+### The two open settings, decided by rules fixed before the results (`tools/imitation_scale/stage3_choice.py`)
+
+- **The turn start:** `s30-l1-actor3-td99` (the recipe) against `s30-l1-actall3-td99` (×3 at the turn start
+  too). All three tables only if they beat the recipe on the player's later stops by more than 0.003 set NLL:
+  at the turn start they overshoot (Pass on top 2.1% against the humans' 5.1%).
+- **The value weight:** `s30-l1-actor3-vw02` (0.2) against the recipe (0.5). At 10%, 0.2 gave set NLL −0.008
+  and non-Pass +0.007 for value AUC −0.006 (`x-vweight-0.2`): less value gradient in the shared trunk, as the
+  value tower showed. 0.2 only if, at 30%, it lowers the set NLL by at least 0.004 with non-Pass no worse, and
+  costs the value at most 0.005 AUC and 0.008 log-loss.
+
+The script writes its reasons to `runs/exp4/main/choice.json`.
+
+### What to watch
+
+- **The value head in epochs 2–3:** three epochs of the 10% subset made it memorise games (training loss far
+  below validation). `best_value` keeps its peak; if the policy suffers late, the fallbacks are the value tower
+  or fewer value positions a game after the first epoch.
+- **The policy's NLL** should keep falling to the end, as `ep3`'s did.
+- The TD recomputations (~20 minutes each on all the data) and the machine's memory.
+
+### Using the stage-3 model
+
+The run writes `runs/exp4/main/`: `best_policy.pt.gz` (**the one to use**), `best_value.pt.gz`, `best.pt.gz`,
+`final.pt.gz`, `config.json`, `evals.jsonl` (the learning curves), `summary.json`, `choice.json`,
+`test_best_policy.json` and `test_best_value.json` (the held-out test split), `train.log`.
+
+- **Weights:** published to the project's Hugging Face model repo, `danbrooks/draftzero-checkpoints` under
+  `exp4/stage3/`, with a model card (`tools/imitation_scale/publish_stage3.py`, run from a machine with a write
+  token after copying `runs/exp4/main` there; the training machine's token is read-only).
+- **In Python** (`draftzero.gameplay.imitation_net`): one class loads any of the trainer's checkpoints, from a
+  path or `hf://`, and evaluates game states (MageZero StateEncoder feature ids) into the five heads, as the
+  inference server does:
+
+  ```python
+  from draftzero.gameplay.imitation_net import ImitationNet
+  net = ImitationNet.load("hf://danbrooks/draftzero-checkpoints/exp4/stage3/best_policy.pt.gz")
+  out = net.evaluate([features])[0]           # policy_player, policy_opponent, policy_target, policy_binary, value
+  p_win = net.win_probability(out["value"])   # (1 + v) / 2, the acting player's seat
+  probs = net.policy_over(out["policy_player"], legal_action_indices)
+  ```
+- **For search and games:** `tools/search_bench/value_server.py --model best_policy.pt.gz --policy` serves it with
+  MageZero's protocol; `play.py --bot1 policy` (no search), `il_bc` (IS-MCTS with its policy and value), and
+  sb-v2's search bench read it from there.
+- **Action indices** are MageZero's; `assets/vocab/FDN_SPG.tsv` names them.
 
 ## Policy-only evaluation (the last step, planned)
 
