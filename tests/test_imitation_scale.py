@@ -184,6 +184,14 @@ def test_policy_bots_ask_for_policy_only_play():
     assert o["policyOnly"] and o["policyTemp"] == 1.0 and o["budget"] == 40 and o["priors"]
     assert play.seat_options("policy_greedy", 1000, 50052, 300)["policyTemp"] == 0.0
     assert "policyOnly" not in play.seat_options("il_bc", 1000, 50052, 300)
+    # a bot's own budget: name@simulations
+    assert play.seat_options("heuristic@100", 1000, None, 300)["budget"] == 100
+    assert play.seat_options("il_bc@300", 1000, 50052, 300)["budget"] == 300
+    assert play.seat_options("il_bc", 1000, 50052, 300)["budget"] == 1000
+    assert play.parse_bot("policy") == ("policy", None)
+    for bad in ("nope", "il_bc@0", "il_bc@x"):
+        with pytest.raises(ValueError):
+            play.parse_bot(bad)
 
 
 def test_gih_counts_seats_with_the_card_in_hand_and_ranks_against_17lands():

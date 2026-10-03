@@ -21,6 +21,10 @@ with no simulations and no belief worlds. Decisions without a head are searched 
     policy        sampled from the policy (temperature 1): plays like the humans it imitates
     policy_greedy the policy's most likely option
 
+A bot can carry its own budget, `name@simulations` (heuristic@100, il_bc@1000); without one it searches at
+--budget. Experiment #4's games (docs/018): policy against heuristic@100, il_bc@100/300/1000 against
+heuristic@100, and il_bc@1000 against heuristic@1000.
+
 Every game's seats carry inHand (the cards seen in each player's hand), for the games-in-hand win
 rate against 17lands (tools/imitation_scale/gih.py).
 
@@ -65,8 +69,20 @@ BOTS = {
 }
 
 
+def parse_bot(spec: str) -> tuple[str, int | None]:
+    """'il_bc@1000' -> ('il_bc', 1000); 'heuristic' -> ('heuristic', None)."""
+    name, _, budget = spec.partition("@")
+    if name not in BOTS:
+        raise ValueError(f"unknown bot {name!r}: one of {sorted(BOTS)}, optionally @<simulations>")
+    if budget and (not budget.isdigit() or int(budget) < 1):
+        raise ValueError(f"bad budget in {spec!r}")
+    return name, int(budget) if budget else None
+
+
 def seat_options(bot: str, budget: int, port: int | None, timeout_s: float, belief_port: int | None = None,
                  opponent_deck: str | None = None, policy_fallback_budget: int = 100) -> dict:
+    bot, own = parse_bot(bot)
+    budget = own or budget
     b = BOTS[bot]
     s = {"budget": budget, "leaf": b["leaf"], "timeoutSec": timeout_s}
     if "policy_temp" in b:
@@ -151,8 +167,8 @@ def main(argv=None) -> int:
     ap.add_argument("--budget", type=int, default=1000)
     ap.add_argument("--policy-fallback-budget", type=int, default=100,
                     help="policy bots: simulations for the decisions without a policy head")
-    ap.add_argument("--bot1", choices=sorted(BOTS), required=True)
-    ap.add_argument("--bot2", choices=sorted(BOTS), required=True)
+    ap.add_argument("--bot1", required=True, help=f"one of {sorted(BOTS)}, optionally @<simulations>")
+    ap.add_argument("--bot2", required=True, help="as --bot1")
     ap.add_argument("--ports", default="50052", help="inference servers, comma-separated (network bots)")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--heap", default="3g")
@@ -165,6 +181,11 @@ def main(argv=None) -> int:
     ap.add_argument("--shard", default=None, metavar="I/N", help="play only deck pairs with pair %% N == I (one pod of N)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
+    for spec in (a.bot1, a.bot2):
+        try:
+            parse_bot(spec)
+        except ValueError as e:
+            ap.error(str(e))
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
