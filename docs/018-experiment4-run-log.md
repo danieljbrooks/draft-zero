@@ -1230,6 +1230,25 @@ the noise), but the value head suffers (log-loss 0.66-0.68 against 0.61). Not ad
 Not built yet: the per-feature low-rank embedding (Dan's hypothesis that features need fewer dimensions than the
 state) and unknown-feature hash buckets.
 
+### MLP learning curves (tools/imitation_scale/fig_mlp_curves.py)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/018-mlp-curves-10-dark.png">
+  <img alt="Six panels of validation curves over one epoch on 10% of the games for the 1-layer transformer, the MLP base, the table at 30x, max+mean pooling with the table at 30x, the combination (two seeds) and the combination with Adagrad. Every MLP is below the transformer on set NLL throughout; the combination leads from the first evaluation; the max+mean runs gain about 3 points of attack accuracy early and keep it; Adagrad leads on targets but has the worst value log-loss." src="img/018-mlp-curves-10-light.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/018-mlp-curves-30-dark.png">
+  <img alt="The same six panels on 30% of the games for the transformer, the MLP base and the combination (two seeds). The combination leads on set NLL, non-Pass top-1, attack accuracy and value AUC from the first evaluation; targets match the MLP base and beat the transformer; value log-loss is noisy and ends best for the transformer." src="img/018-mlp-curves-30-light.png">
+</picture>
+
+- **The combination leads from the first evaluation** and keeps the gap, at both data sizes, so it is a better
+  recipe, not a faster one. The set NLL curves are still falling at the end of the epoch: more data or epochs will
+  help.
+- **Max + mean pooling's attack gain comes early:** ~3 points by a third of an epoch, held to the end.
+- **Value log-loss is the noisy measure** (the TD targets are recomputed at a quarter epoch); the transformer ends
+  best on it at 30%, Adagrad worst at 10%.
+
 ### MLP leaderboard: every run (22:00 UTC on 3 October)
 
 Every MLP run of experiment #4 on the second machine: wave 1 (`m-*`, configs/exp4_sweep_mlp.yml), waves 2-4
