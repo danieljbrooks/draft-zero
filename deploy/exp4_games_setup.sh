@@ -23,6 +23,9 @@ if not os.path.isdir("xmage/lib"):
 os.makedirs("xmage/db", exist_ok=True)
 if not os.path.exists("xmage/db/cards.h2.mv.db"):
     shutil.copy(get("exp4/games/cards.h2.mv.db"), "xmage/db/cards.h2.mv.db")
+if not os.path.exists("data/pools/eval.txt"):          # play.py's default pool; its order fixes the deck pairs
+    os.makedirs("data/pools", exist_ok=True)
+    shutil.copy(get("exp4/games/eval.txt"), "data/pools/eval.txt")
 root = "data/deckgen/FDN_PremierDraft_wr60"
 if not os.path.exists(f"{root}/decks.jsonl"):
     os.makedirs(root, exist_ok=True)
