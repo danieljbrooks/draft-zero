@@ -45,3 +45,7 @@ runs:
   - {name: m2-swiglu-drop0-tok0.1, token_dropout: 0.1, arch: {type: mlp, layers: 2, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
   - {name: m2-swiglu-drop0-lr3e-4, lr: 3.0e-4, arch: {type: mlp, layers: 2, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
   - {name: m2-swiglu-drop0-actor3, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, arch: {type: mlp, layers: 2, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  # 07:00: wave 3 (see exp4_sweep_mlp.yml): max pooling with the winners, wider, the passivity fix, token dropout 0.1
+  - {name: m3-max-swiglu-drop0-actor3, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, arch: {type: mlp, layers: 2, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m3-max-swiglu-drop0-w1024, arch: {type: mlp, layers: 2, width: 1024, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m3-max-swiglu-drop0-tok0.1, token_dropout: 0.1, arch: {type: mlp, layers: 2, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}

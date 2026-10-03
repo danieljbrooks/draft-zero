@@ -66,3 +66,8 @@ runs:
   - {name: m-wd-0.01, weight_decay: 0.01}
   - {name: m-wd-0.1, weight_decay: 0.1}
   - {name: m-actall3, act_weights: {opp_priority: 3.0, replay_priority: 3.0, turnstart: 3.0}}
+  # 07:00: wave 3. Pooling is the big lever (max: set NLL 0.291, -0.036; sum: 0.304, -0.024: the mean loses counts),
+  # combined with the second wave's winners (SwiGLU, no dropout)
+  - {name: m3-max-swiglu-drop0, arch: {type: mlp, layers: 2, bag_mode: max, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m3-sum-swiglu-drop0, arch: {type: mlp, layers: 2, bag_mode: sum, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0}}
+  - {name: m3-max-gelu-drop0, arch: {type: mlp, layers: 2, bag_mode: max, ffn: gelu, dropout: 0.0, pool_dropout: 0.0}}
