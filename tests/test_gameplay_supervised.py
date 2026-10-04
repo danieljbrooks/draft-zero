@@ -543,6 +543,24 @@ def test_lazy_adamw_and_the_table_weight_decay_in_training(tables, tmp_path):
     assert wd == {1.0: 0.1, 30.0: 0.3}
 
 
+def test_ema_weights_are_what_is_evaluated_saved_and_resumed(tables, tmp_path):
+    """ema_decay: the average of the weights is evaluated and saved (best/final checkpoints), the live weights keep
+    training, and both survive a resume."""
+    arch = {**TINY, "type": "mlp", "bag_mode": "maxmean", "ffn": "swiglu"}
+    cfg = tiny_cfg(tables, max_steps=6, emb_init_std=0.02, arch=arch, ema_decay=0.9)
+    tr = sv.Trainer(cfg, tmp_path / "a", log=lambda *_: None)
+    tr.run()
+    live = [q.detach().clone() for q in tr.model.parameters()]
+    m, _, _ = sv.load_any_checkpoint(tmp_path / "a" / "final.pt.gz")
+    saved = list(m.parameters())
+    assert all(torch.allclose(s.cpu(), e.cpu()) for s, e in zip(saved, tr.ema))
+    assert any(not torch.allclose(s.cpu(), x.cpu()) for s, x in zip(saved, live))
+    s = sv.train({**cfg, "max_steps": 8}, tmp_path / "a", resume=True, log=lambda *_: None)
+    assert s["step"] == 8
+    with pytest.raises(ValueError):
+        sv.resolve_config({**cfg, "ema_decay": 1.5})
+
+
 def test_feature_stats_caps_the_vocab_at_the_most_frequent_ids():
     st = sv.FeatureStats(seed=0)
     rng = np.random.default_rng(0)

@@ -9,7 +9,8 @@
 # appearances, and the decay scales with the learning rate. Here, against f0-3ep-drop0 (no decay: overfits after ~1.25
 # passes) and g2-3ep-wd0.1 (dense decay: stable, slow): lazy AdamW for the table (moments, bias correction and decay
 # only on the rows a step used) at decay 0, 0.1 and 0.3; dense decay on the body only (the table undecayed); and a lower
-# peak learning rate with dense decay 0.1. Value positions stay at 16, as in the controls.
+# peak learning rate with dense decay 0.1; and lazy decay 0.1 with an average of the weights (ema_decay 0.999, a
+# ~1,000-step window) evaluated and saved. Value positions stay at 16, as in the controls.
 # Wave G (Dan, 22:55): wave F showed the leading recipe overfitting after ~1.25 epochs on 10% of the games (set NLL
 # 0.267 -> 0.323 at 2.77 epochs, value log-loss 0.59 -> 0.95), and dropout 0.1 didn't slow it. One change each against
 # f0-3ep-drop0 (the control, same 3 epochs): weight decay 0.01 / 0.1 (AdamW, every parameter; the table's decay
@@ -56,3 +57,4 @@ base:
 runs:
   - {name: i2-3ep-lazy-wd0.3, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_lr_mult: 30.0, emb_optimizer: lazy_adamw, weight_decay: 0.1, emb_weight_decay: 0.3, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}
   - {name: i4-3ep-bodywd0.1-tablewd0, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_lr_mult: 30.0, weight_decay: 0.1, emb_weight_decay: 0.0, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}
+  - {name: i6-3ep-lazy-wd0.1-ema, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_lr_mult: 30.0, emb_optimizer: lazy_adamw, weight_decay: 0.1, ema_decay: 0.999, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}

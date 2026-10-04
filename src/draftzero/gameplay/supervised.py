@@ -210,6 +210,8 @@ DEFAULTS: dict[str, Any] = {
                                    # lazy_adamw (its own: Adam's moments, bias correction and weight decay applied only
                                    # to the rows a step's batch used, so a rare feature decays per use, not per step)
     "emb_weight_decay": None,      # the table's weight decay (null: weight_decay, as the rest)
+    "ema_decay": None,             # an exponential moving average of the weights (e.g. 0.9995: a ~2,000-step window) is
+                                   # what's evaluated, chosen and saved; the live weights train on (null: off)
     "emb_init_from": None,         # a checkpoint whose feature embeddings start this run's (matched by feature id,
                                    # same embedding size; rows it lacks keep their own init). A fresh run only
     "weight_decay": 0.0, "grad_clip": 1.0,
@@ -322,6 +324,8 @@ def resolve_config(*layers: dict | None) -> dict:
     cfg["tables"] = [_table_spec(t, i) for i, t in enumerate(cfg["tables"])]
     if cfg["tables_dir"] is None:
         cfg["tables_dir"] = str(im.OUT_DIR / "h5")
+    if cfg["ema_decay"] is not None and not 0 < float(cfg["ema_decay"]) < 1:
+        raise ValueError(f"ema_decay must be in (0, 1) or null, not {cfg['ema_decay']!r}")
     checks = {"value_loss": ("bce", "mse"), "value_target": ("result", "td"), "lr_schedule": ("constant", "cosine"),
               "amp": ("auto", "bf16", "fp16", "off"), "emb_optimizer": ("adamw", "adagrad", "lazy_adamw")}
     for k, ok in checks.items():
@@ -2158,6 +2162,8 @@ class Trainer:
             self.opt = torch.optim.AdamW(groups, lr=cfg["lr"], weight_decay=cfg["weight_decay"])
             self.opt_emb = None
         self.opts = [o for o in (self.opt, self.opt_emb) if o is not None]
+        self.ema = [q.detach().clone() for q in self.model.parameters()] if cfg["ema_decay"] else None
+        self._ema_on = False
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.dtype == torch.float16 and self.dev.type == "cuda")
         self.sampler = Sampler(self.data, cfg)
         self.epoch_len = self.sampler.epoch_len
@@ -2201,6 +2207,10 @@ class Trainer:
         self.opt.load_state_dict(ck["opt"])
         if self.opt_emb is not None and ck.get("opt_emb"):
             self.opt_emb.load_state_dict(ck["opt_emb"])
+        if self.ema is not None and ck.get("ema"):
+            with torch.no_grad():
+                for e, x in zip(self.ema, ck["ema"]):
+                    e.copy_(x.to(e.device))
         if ck.get("scaler"):
             self.scaler.load_state_dict(ck["scaler"])
         self.sampler.load_state_dict(ck["sampler"])
@@ -2221,6 +2231,7 @@ class Trainer:
         ck = {"model": {k: v.detach().cpu() for k, v in self.model.state_dict().items()},
               "aux": {k: v.detach().cpu() for k, v in self.aux.state_dict().items()} if self.aux else None,
               "opt": self.opt.state_dict(), "opt_emb": self.opt_emb.state_dict() if self.opt_emb is not None else None,
+              "ema": [e.detach().cpu() for e in self.ema] if self.ema is not None else None,
               "scaler": self.scaler.state_dict() if self.scaler.is_enabled() else None,
               "sampler": self.sampler_state, "counters": dict(self.c), "best": self.best,
               "td": None if self.td is None else torch.from_numpy(self.td),
@@ -2237,8 +2248,29 @@ class Trainer:
 
     def save(self, name: str, metrics: dict | None = None) -> Path:
         p = self.out / name
-        save_weights(p, self.model, self.vocab, self.cfg["arch"], self._info(metrics), self.aux)
+        with self._ema_weights():
+            save_weights(p, self.model, self.vocab, self.cfg["arch"], self._info(metrics), self.aux)
         return p
+
+    @contextlib.contextmanager
+    def _ema_weights(self):
+        """ema_decay: put the averaged weights in the model (to evaluate or save them), then the live ones back."""
+        if self.ema is None or self._ema_on:
+            yield
+            return
+        params = list(self.model.parameters())
+        live = [q.detach().clone() for q in params]
+        with torch.no_grad():
+            for q, e in zip(params, self.ema):
+                q.copy_(e)
+        self._ema_on = True
+        try:
+            yield
+        finally:
+            with torch.no_grad():
+                for q, x in zip(params, live):
+                    q.copy_(x)
+            self._ema_on = False
 
     # ---------------------------------------------------------------------------------- schedule
     def progress(self) -> float:
@@ -2380,6 +2412,11 @@ class Trainer:
         for o in self.opts:
             self.scaler.step(o)
         self.scaler.update()
+        if self.ema is not None:   # the average starts short and lengthens to ema_decay's window
+            d = min(float(cfg["ema_decay"]), (1 + self.c["step"]) / (10 + self.c["step"]))
+            with torch.no_grad():
+                torch._foreach_mul_(self.ema, d)
+                torch._foreach_add_(self.ema, [q.detach() for q in self.model.parameters()], alpha=1 - d)
         self.c["step"] += 1
         self.c["seen"] = int(b["state"]["seen"])
         self.sampler_state = b["state"]
@@ -2389,7 +2426,8 @@ class Trainer:
     def do_eval(self, running: dict, t_since: float, n_since: int) -> dict:
         t0 = time.monotonic()
         self.c["last_eval_t"] = self.c["train_time_s"]       # the eval schedule restarts from here, resumed or not
-        ev = evaluate(self.model, self.data.val, self.cfg, self.dev, self.dtype, aux=self.aux, shares=self.shares)
+        with self._ema_weights():
+            ev = evaluate(self.model, self.data.val, self.cfg, self.dev, self.dtype, aux=self.aux, shares=self.shares)
         rec = {"step": self.c["step"], "seen": self.c["seen"], "epoch": round(self.c["seen"] / self.epoch_len, 4),
                "train_time_s": round(self.c["train_time_s"], 1), "time": round(time.time(), 1),
                "lr": self.lr_at(self.c["step"], self.c["seen"]),
