@@ -206,7 +206,10 @@ DEFAULTS: dict[str, Any] = {
     "emb_lr_mult": 1.0,            # the feature-embedding table's learning rate = lr x this (max pooling barely moves
                                    # the table at the body's rate: docs/018, the MLP's bottlenecks)
     "emb_optimizer": "adamw",      # the table's optimizer: adamw (with the rest) | adagrad (its own: per-row steps that
-                                   # shrink with each row's accumulated gradient, a frequency-aware learning rate)
+                                   # shrink with each row's accumulated gradient, a frequency-aware learning rate) |
+                                   # lazy_adamw (its own: Adam's moments, bias correction and weight decay applied only
+                                   # to the rows a step's batch used, so a rare feature decays per use, not per step)
+    "emb_weight_decay": None,      # the table's weight decay (null: weight_decay, as the rest)
     "emb_init_from": None,         # a checkpoint whose feature embeddings start this run's (matched by feature id,
                                    # same embedding size; rows it lacks keep their own init). A fresh run only
     "weight_decay": 0.0, "grad_clip": 1.0,
@@ -320,7 +323,7 @@ def resolve_config(*layers: dict | None) -> dict:
     if cfg["tables_dir"] is None:
         cfg["tables_dir"] = str(im.OUT_DIR / "h5")
     checks = {"value_loss": ("bce", "mse"), "value_target": ("result", "td"), "lr_schedule": ("constant", "cosine"),
-              "amp": ("auto", "bf16", "fp16", "off"), "emb_optimizer": ("adamw", "adagrad")}
+              "amp": ("auto", "bf16", "fp16", "off"), "emb_optimizer": ("adamw", "adagrad", "lazy_adamw")}
     for k, ok in checks.items():
         if cfg[k] not in ok:
             raise ValueError(f"{k} must be one of {ok}, not {cfg[k]!r}")
@@ -2012,6 +2015,52 @@ def load_any_checkpoint(path: Path, device="cpu"):
 # training
 # ================================================================================================
 
+class LazyAdamW(torch.optim.Optimizer):
+    """AdamW for embedding tables, row by row and only on the rows a step used (those with a nonzero gradient row):
+    their first and second moments, a per-row step count for the bias correction, and the decoupled weight decay.
+    A row the batch didn't touch is left exactly as it was, so a rare feature isn't worn away by decay (or moved by
+    stale momentum) between its appearances: it decays once per use, as a common feature does per example.
+    (torch.optim.SparseAdam has the moment semantics but needs sparse gradients, which EmbeddingBag's max mode can't
+    give, and has no weight decay.)"""
+
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0):
+        super().__init__(params, dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay))
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = closure() if closure is not None else None
+        for g in self.param_groups:
+            b1, b2 = g["betas"]
+            for p in g["params"]:
+                if p.grad is None:
+                    continue
+                if p.grad.is_sparse:
+                    raise RuntimeError("LazyAdamW takes dense gradients")
+                grad = p.grad.view(p.shape[0], -1)
+                rows = torch.nonzero(grad.abs().amax(dim=1) > 0).squeeze(1)
+                if rows.numel() == 0:
+                    continue
+                st = self.state[p]
+                if not st:
+                    st["exp_avg"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    st["exp_avg_sq"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    st["row_step"] = torch.zeros(p.shape[0], dtype=torch.float32, device=p.device)
+                w = p.view(p.shape[0], -1)
+                m, v = st["exp_avg"].view(p.shape[0], -1), st["exp_avg_sq"].view(p.shape[0], -1)
+                gr = grad[rows].float()
+                st["row_step"][rows] += 1
+                n = st["row_step"][rows].unsqueeze(1)
+                mr = m[rows].mul_(b1).add_(gr, alpha=1 - b1)
+                vr = v[rows].mul_(b2).addcmul_(gr, gr, value=1 - b2)
+                m[rows], v[rows] = mr, vr
+                upd = (mr / (1 - b1 ** n)) / ((vr / (1 - b2 ** n)).sqrt() + g["eps"])
+                wr = w[rows]
+                if g["weight_decay"]:
+                    wr = wr * (1 - g["lr"] * g["weight_decay"])
+                w[rows] = (wr - g["lr"] * upd).to(w.dtype)
+        return loss
+
+
 class _Log:
     def __init__(self, path: Path | None, echo=print):
         self.path, self.echo = path, echo
@@ -2095,11 +2144,17 @@ class Trainer:
         rest = [p for n, p in self.model.named_parameters() if p.requires_grad and not n.endswith("embedding.weight")]
         rest += list(self.aux.parameters()) if self.aux else []
         # param groups carry lr_mult: the step sets lr = schedule x lr_mult
+        emb_wd = cfg["weight_decay"] if cfg["emb_weight_decay"] is None else float(cfg["emb_weight_decay"])
         if cfg["emb_optimizer"] == "adagrad":
             self.opt = torch.optim.AdamW([{"params": rest, "lr_mult": 1.0}], lr=cfg["lr"], weight_decay=cfg["weight_decay"])
             self.opt_emb = torch.optim.Adagrad([{"params": emb, "lr_mult": float(cfg["emb_lr_mult"])}], lr=cfg["lr"])
+        elif cfg["emb_optimizer"] == "lazy_adamw":
+            self.opt = torch.optim.AdamW([{"params": rest, "lr_mult": 1.0}], lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+            self.opt_emb = LazyAdamW([{"params": emb, "lr_mult": float(cfg["emb_lr_mult"])}], lr=cfg["lr"], weight_decay=emb_wd)
         else:
-            groups = [{"params": rest, "lr_mult": 1.0}] + ([{"params": emb, "lr_mult": float(cfg["emb_lr_mult"])}] if emb else [])
+            groups = [{"params": rest, "lr_mult": 1.0}]
+            if emb:
+                groups.append({"params": emb, "lr_mult": float(cfg["emb_lr_mult"]), "weight_decay": emb_wd})
             self.opt = torch.optim.AdamW(groups, lr=cfg["lr"], weight_decay=cfg["weight_decay"])
             self.opt_emb = None
         self.opts = [o for o in (self.opt, self.opt_emb) if o is not None]

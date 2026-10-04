@@ -502,6 +502,47 @@ def test_rare_move_weight_upweights_rarely_chosen_moves(tables, tmp_path):
     assert s["step"] == 4
 
 
+def test_lazy_adamw_touches_only_the_rows_a_step_used_and_matches_adamw_when_every_row_is_used():
+    torch.manual_seed(0)
+    w0 = torch.randn(5, 3)
+    p = torch.nn.Parameter(w0.clone())
+    opt = sv.LazyAdamW([p], lr=0.1, weight_decay=0.5)
+    g = torch.zeros(5, 3)
+    g[1], g[3] = torch.tensor([1.0, -2.0, 0.5]), torch.tensor([0.3, 0.0, -0.1])
+    p.grad = g.clone()
+    opt.step()
+    for r in (0, 2, 4):                         # untouched rows: no decay, no momentum
+        assert torch.equal(p.data[r], w0[r])
+    assert not torch.allclose(p.data[1], w0[1]) and not torch.allclose(p.data[3], w0[3])
+    p.grad = torch.zeros(5, 3)                  # a step with no rows used: nothing moves (AdamW would keep going)
+    before = p.data.clone()
+    opt.step()
+    assert torch.equal(p.data, before)
+    a = torch.nn.Parameter(w0.clone()); b = torch.nn.Parameter(w0.clone())
+    oa = torch.optim.AdamW([a], lr=0.01, weight_decay=0.1); ob = sv.LazyAdamW([b], lr=0.01, weight_decay=0.1)
+    for _ in range(4):
+        gg = torch.randn(5, 3)
+        a.grad, b.grad = gg.clone(), gg.clone()
+        oa.step(); ob.step()
+    assert torch.allclose(a.data, b.data, atol=1e-6)
+
+
+def test_lazy_adamw_and_the_table_weight_decay_in_training(tables, tmp_path):
+    arch = {**TINY, "type": "mlp", "bag_mode": "maxmean", "ffn": "swiglu"}
+    cfg = tiny_cfg(tables, max_steps=6, emb_init_std=0.02, arch=arch, emb_lr_mult=30.0, emb_optimizer="lazy_adamw",
+                   weight_decay=0.1, emb_weight_decay=0.3)
+    tr = sv.Trainer(cfg, tmp_path / "a", log=lambda *_: None)
+    assert isinstance(tr.opt_emb, sv.LazyAdamW) and tr.opt_emb.param_groups[0]["weight_decay"] == 0.3
+    assert tr.opt.param_groups[0]["weight_decay"] == 0.1
+    s = sv.train(cfg, tmp_path / "b", log=lambda *_: None)
+    assert s["step"] == 6
+    s = sv.train({**cfg, "max_steps": 8}, tmp_path / "b", resume=True, log=lambda *_: None)
+    assert s["step"] == 8
+    d = sv.Trainer({**cfg, "emb_optimizer": "adamw"}, tmp_path / "c", log=lambda *_: None)
+    wd = {g["lr_mult"]: g["weight_decay"] for g in d.opt.param_groups}
+    assert wd == {1.0: 0.1, 30.0: 0.3}
+
+
 def test_feature_stats_caps_the_vocab_at_the_most_frequent_ids():
     st = sv.FeatureStats(seed=0)
     rng = np.random.default_rng(0)
