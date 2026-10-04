@@ -259,6 +259,18 @@ def test_stage3_choice_rules():
     assert len(ch.choose(d, a_close, d)["why"]) == 2
 
 
+def test_extend_rule_stops_at_the_first_epoch_without_a_clear_gain():
+    ex = tool("extend_rule")
+    r = lambda nll, vll=0.553: {"policy/set_nll": nll, "value/logloss": vll}   # noqa: E731
+    assert ex.decide([r(0.2271)], 20)[:2] == ("continue", 0)
+    assert ex.decide([r(0.2271), r(0.2255), r(0.2240)], 20)[:2] == ("continue", 2)
+    assert ex.decide([r(0.2271), r(0.2255), r(0.2249)], 20)[:2] == ("stop", 1)      # +0.0006 < 0.001
+    assert ex.decide([r(0.2271), r(0.2285)], 20)[:2] == ("stop", 0)                 # worse
+    assert ex.decide([r(0.2271), r(0.2256, 0.570)], 20)[:2] == ("stop", 0)          # the value pays for +0.0015
+    assert ex.decide([r(0.2271), r(0.2240, 0.570)], 20)[:2] == ("continue", 1)      # +0.0031 covers it
+    assert ex.decide([r(0.2271 - 0.0011 * i) for i in range(20)], 20)[:2] == ("stop", 19)   # the cap
+
+
 def _record_line(pair, swap, seat, result, recs):
     return {"pair": pair, "swap": swap, "seat": seat, "bot": "il_bc", "result": result, "records": recs}
 

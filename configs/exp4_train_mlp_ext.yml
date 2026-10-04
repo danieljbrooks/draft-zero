@@ -1,0 +1,43 @@
+# Experiment #4: extending the full-data MLP (run 2) one epoch at a time (Dan, Sat 3 October ~10:50 PM PT; docs/018,
+# "Extending run 2"). deploy/exp4_mlp_extend.sh runs each extra epoch as a new run from the previous epoch's final
+# (averaged) weights, `--set init_checkpoint=...`, with wave K's winning peak rate and weight decay (`--set lr=...
+# --set weight_decay=...`); tools/imitation_scale/extend_rule.py decides after each epoch whether to go on.
+#
+# The same data, splits and network as run 2 (configs/exp4_train_mlp_1ep.yml; the vocabulary comes from the
+# checkpoint). What changes for a continuation: a fresh optimiser with a 1,000-step warm-up and a cosine to 10%
+# inside the epoch; TD value targets from the first step (results as targets on games seen before are memorised:
+# wave K's false start); 4 value positions a game, not 16 (each extra epoch re-shows every game's result).
+tables:
+  - {name: turnstart, kind: priority_set}
+  - {name: replay_priority, kind: priority_set}
+  - {name: opp_priority, kind: priority_set}
+  - {name: replay_attack, kind: binary}
+  - {name: replay_target, kind: target}
+  - {name: opp_block, kind: target}
+fraction: 1.0
+val_rows: 20000
+vocab_k: 3
+data_cache: data/cache/supervised
+init_checkpoint: runs/exp4/mlp_1ep/final.pt.gz     # run 2; the script sets each epoch's
+arch: {dropout: 0.0, pool_dropout: 0.0}            # the shape comes from the checkpoint
+emb_init_std: 0.02
+emb_lr_mult: 30.0
+lr: 2.0e-5                  # the script sets wave K's winner
+weight_decay: 0.0           # the script sets wave K's winner
+ema_decay: 0.9995
+token_dropout: 0.1
+warmup_steps: 1000
+lr_schedule: cosine         # over the one epoch, to 10% of the peak
+value_target: td
+td_lambda: 0.99
+td_start_epochs: 0.0        # TD targets from the network at once
+value_per_game: 4
+value_weight: 0.5
+act_weights: {opp_priority: 3.0, replay_priority: 3.0}
+time_budget_s: 14400        # a cap; max_epochs stops it first
+max_epochs: 1
+eval_every_s: null
+eval_every_steps: 72000     # about a quarter epoch
+ckpt_every_s: 1800
+latest_every_s: 600
+patience_epochs: null
