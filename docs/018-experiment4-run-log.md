@@ -1449,20 +1449,50 @@ silenced, whatever they predict, and the decay is strongest while the rate is hi
 on 4 positions a game: by epoch 1.74 it had seen 7 a game against the transformer's 16 at its epoch 1 (40 against 48
 over the whole run, by design).
 
-### Wave I: lazy AdamW and the decay's target (planned, after the MTG MLP session's use of the GPUs)
+### Wave I: lazy AdamW, the decay's target, a lower rate, weight averaging (Sat 8:02-8:59 PM PT)
 
-**Code** (supervised.py, tested): `emb_optimizer: lazy_adamw` (LazyAdamW: Adam's moments, a per-row step count for
-the bias correction, and the decoupled decay applied only to the rows a step used, those with a nonzero gradient
-row; untouched rows stay exactly as they were; identical to AdamW when every row is used) and `emb_weight_decay` (the
-table's decay apart from the body's). torch.optim.SparseAdam has the same moment semantics but needs sparse gradients,
-which EmbeddingBag's max mode can't give, and no weight decay.
+The MTG MLP compute-scaling session had the second machine from 6:50 to 8:01 PM PT (Dan's priority). Its benchmark
+found the trainer's step 1.36x faster with fused AdamW and 3.5x faster with the feature table frozen (the table update is
+most of the step), and CPU training at ~160-175 samples/s against ~6,000 on the GPU; fused AdamW is now on for CUDA.
 
-**Screen** (10% of the games, 3 epochs, 16 value positions, against `f0` (no decay: overfits after ~1.25 passes) and
-`g2` (dense decay 0.1: stable, slow); configs/exp4_sweep_rare_i0.yml, _i1.yml): lazy AdamW for the table at decay
-0.1, 0 and 0.3 (the body's dense decay 0.1); dense decay 0.1 at half the peak rate; dense decay on the body only.
-Then the best at 30% of the games over 3 epochs, then a new 10-epoch full run, babysat; back to experiments if it
-falters. Further ideas held back: a cap on embedding-row norms instead of decay, weight averaging (EMA), 8 value
-positions a game, larger batches.
+**Code** (supervised.py, tested; 50 trainer tests pass): `emb_optimizer: lazy_adamw` (LazyAdamW: Adam's moments, a
+per-row step count for the bias correction, and the decoupled decay applied only to the rows a step used, those with a
+nonzero gradient row; untouched rows stay exactly as they were; identical to AdamW when every row is used; ~1.5x faster
+steps than dense AdamW with decay), `emb_weight_decay` (the table's decay apart from the body's), and `ema_decay` (an
+exponential average of the weights is what's evaluated, chosen and saved; the live weights train on; resumable).
+
+**Screen** (10% of the games, 3 epochs, 16 value positions; configs/exp4_sweep_rare_i0.yml, _i1.yml). Set NLL:
+
+| Run | Change | Best (epoch) | At 3 epochs | Value log-loss at 3 | Rule |
+|---|---|---|---|---|---|
+| `f0-3ep-drop0` | control: no decay | 0.2674 (1.26) | 0.3228 | 0.95 | fails |
+| **`g2-3ep-wd0.1`** | **control: dense decay 0.1** | **0.2591 (2.77)** | **0.2605** | **0.66** | **passes** |
+| `i1-3ep-lazy-wd0.1` | lazy AdamW for the table, decay 0.1 | 0.2711 (2.01) | 0.2862 | 0.79 | fails |
+| `i2-3ep-lazy-wd0.3` | lazy, decay 0.3 | 0.2809 (1.76) | 0.2907 | 0.74 | fails |
+| `i3-3ep-lazy-wd0` | lazy, no decay | 0.2682 (1.76) | 0.3006 | 0.91 | fails |
+| `i4-3ep-bodywd0.1-tablewd0` | dense decay on the body only | 0.2668 (1.26) | 0.3088 | 0.93 | fails |
+| `i5-3ep-wd0.1-lr5e-5` | dense decay 0.1, half the peak rate | 0.2614 (2.52) | 0.2643 | 0.75 | fails (value) |
+| `i6-3ep-lazy-wd0.1-ema` | lazy decay 0.1 + weight averaging (0.999) | 0.2642 (1.76) | 0.2819 | 0.77 | fails |
+
+(The rule, fixed before the results: lowest set NLL at 3 epochs, no rise of more than 0.005 after the run's best, value
+log-loss <= 0.70 at the end.)
+
+- **The hypothesis was backwards.** Dense decay wearing rare rows away between appearances is the regularization, not
+  the bug: the rare rows are where the memorisation lives. Lazy decay leaves them alone while absent, and the
+  overfitting comes back an epoch later; decay on the body alone overfits like no decay at all, so it's the table's
+  decay that matters.
+- **Weight averaging helps but doesn't prevent it** (the lazy run's best 0.2711 → 0.2642 with it). Half the learning
+  rate keeps the policy stable but lets the value head overfit (its decay, lr x wd, halves too).
+- **Three decayed passes on 10% (0.259) only match one annealed pass without decay** (wave C's `c2`, 0.258): the decay
+  that stops memorisation also cancels the repeats' benefit. Wave J asks the same at 30%.
+
+### Wave J: does multi-epoch training with decay pay at 30%? (running from 8:50 PM PT)
+
+The leading recipe with dense decay 0.1, weight averaging (0.9995) and 4 value positions a game, 3 epochs on 30% of the
+games (configs/exp4_sweep_rare_j1.yml; J2, _j2.yml, keeps only features seen in more than 10 training states), against
+`d1-s30-combined`'s single annealed pass without decay (0.2409). Rule, fixed before the results: if either's best is
+below 0.2389 with value log-loss <= 0.62, the 10-epoch full run uses that recipe; if not, a 1-2 epoch annealed full-data
+run (the `d1` recipe, plus weight averaging), about 1-2 hours instead of ~8, goes to Dan as the recommendation.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
