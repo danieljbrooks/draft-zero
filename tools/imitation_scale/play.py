@@ -190,6 +190,8 @@ def main(argv=None) -> int:
     ap.add_argument("--belief-port", type=int, default=50070, help="the belief service (closed decklists)")
     ap.add_argument("--open-decklists", action="store_true", help="re-deal from the real decklist instead")
     ap.add_argument("--shard", default=None, metavar="I/N", help="play only deck pairs with pair %% N == I (one pod of N)")
+    ap.add_argument("--min-pair", type=int, default=0, metavar="K",
+                    help="play only deck pairs K and up: another machine takes the tail of a run still going elsewhere")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     for spec in (a.bot1, a.bot2):
@@ -203,7 +205,7 @@ def main(argv=None) -> int:
     stems = dzpaths.read_pool(Path(a.pool))
     pairs = deck_pairs(stems, a.pairs, a.seed)
     ports = [int(p) for p in a.ports.split(",")]
-    tasks = shard_tasks(game_tasks(pairs, a.seed, mirror=a.bot1 == a.bot2), a.shard)
+    tasks = [t for t in shard_tasks(game_tasks(pairs, a.seed, mirror=a.bot1 == a.bot2), a.shard) if t["pair"] >= a.min_pair]
     done_keys = set()
     games_file = out / "games.jsonl"
     if games_file.exists():
