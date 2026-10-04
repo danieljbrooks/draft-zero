@@ -1653,6 +1653,64 @@ transformer game but for the network), in two lanes sharing two MageZero servers
   minutes against the transformer's 9.1). Estimates: self-play ~6 h; `@100` ~2 h; `@300` ~5 h; `@1000` ~20 h;
   `@3000` (~4 h a game) ~1.5-3 days, the critical path.
 
+### The MLP's greedy self-play against 17lands (finished Sun 7:03 AM PT)
+
+10,000 games of run 2's policy against itself, greedy (temperature 0), on phase C's deck pairs and settings
+(`mlp-selfplay-t0`, 8 workers on the second machine, 6.4 hours): 9,527 valid (473 lost to engine errors: 4.8%,
+the transformer's 5.7%), 635 at the 50-turn cap (the transformer's 572), **17,784 player-games with a winner**
+(the transformer's 17,718, so its noise ceilings hold). Every card's 17lands-style statistics, the simulation's
+and 17lands' side by side: **[docs/data/018-mlp-selfplay-card-stats.csv](data/018-mlp-selfplay-card-stats.csv)**
+(`tools/imitation_scale/card_stats.py`; games played, in hand and not seen, their win rates and IWD; 17lands' also
+split by opening hand and drawn later, which the simulation's records don't).
+
+| Spearman with 17lands (30+ games in hand) | Cards | GIH WR | GP WR | IWD | Transformer's GIH WR | Noise ceiling |
+|---|---|---|---|---|---|---|
+| Commons | 90 | **0.34** | 0.37 | 0.29 | 0.41 | 0.82 |
+| Uncommons | 99 | 0.44 | 0.35 | 0.44 | 0.45 | – |
+| Rares and mythics | 78 | 0.43 | 0.38 | 0.42 | 0.43 | – |
+| **Every non-basic card** | 267 | **0.40** | 0.37 | 0.38 | 0.43 | 0.79 |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/018-gih-mlp-dark.png">
+  <img alt="Two scatter plots of the MLP's greedy self-play games-in-hand win rates against 17lands': commons on the left (Spearman 0.34) and every non-basic card by rarity on the right (Spearman 0.40); Burst Lightning, Involuntary Employment and Gorehorn Raider sit far below the trend, Gleaming Barrier far above it." src="img/018-gih-mlp-light.png">
+</picture>
+
+**17lands' top 15 commons** (rank among the 88 commons both simulations saw in hand 30+ times):
+
+| 17lands rank | Card | 17lands | MLP (rank) | Transformer (rank) |
+|---|---|---|---|---|
+| 1 | Bake into a Pie | 58.0% | 51.7% (26) | 50.0% (42) |
+| 2 | Burst Lightning | 57.9% | 44.5% (75) | 42.3% (81) |
+| 3 | Stab | 57.9% | 51.1% (36) | 50.1% (41) |
+| 4 | Dazzling Angel | 57.8% | 61.0% (2) | 60.6% (1) |
+| 5 | Luminous Rebuke | 57.7% | 56.0% (9) | 55.6% (10) |
+| 6 | Refute | 57.6% | 52.0% (24) | 52.6% (21) |
+| 7 | Healer's Hawk | 57.5% | 58.9% (4) | 58.4% (5) |
+| 8 | Banishing Light | 57.5% | 58.9% (5) | 59.2% (3) |
+| 9 | Helpful Hunter | 57.5% | 55.2% (13) | 54.4% (15) |
+| 10 | Felidar Savior | 57.4% | 57.8% (7) | 57.3% (6) |
+| 11 | Bigfin Bouncer | 57.1% | 55.7% (10) | 55.1% (11) |
+| 12 | Infestation Sage | 56.7% | 48.8% (55) | 48.5% (53) |
+| 13 | Gorehorn Raider | 56.7% | 45.9% (71) | 45.8% (72) |
+| 14 | Fleeting Flight | 56.4% | 48.0% (59) | 48.6% (51) |
+| 15 | Uncharted Voyage | 56.3% | 50.1% (42) | 50.5% (39) |
+
+- **The better imitator does not rate the cards better.** Run 2 beats the transformer on every held-out measure,
+  but its self-play agrees with 17lands a little less (0.40 against 0.43 overall, 0.34 against 0.41 on commons):
+  both reach about half the noise ceiling, and the two simulations agree with each other far more than either
+  agrees with 17lands (the same cards top and bottom).
+- **The same blind spots:** burn and removal that needs a target or a moment (Burst Lightning 75th, Gorehorn Raider
+  71st, Involuntary Employment and Fake Your Own Death near the bottom) and cheap blockers overrated (Gleaming
+  Barrier 6th, 88th for 17lands). Refute stays mid-table (24th; the transformer's 21st). The MLP moves Bake into a Pie
+  up (42nd to 26th) and Gleaming Barrier further up (34th to 6th); Treetop Snarespinner falls (9th to 39th).
+- **Improvement when drawn** (GIH WR minus not-seen WR) agrees with 17lands about as well as GIH WR (0.38): the card
+  effects the simulation sees are the same ones that matter for humans, at a similar rate, in uncommons and rares;
+  commons are the weakest group on every measure.
+- **Colour pairs** (deck win rate; the transformer and 17lands' top players in brackets): WU 0.60 (0.59, 0.66), WB
+  0.54 (0.53, 0.63), WG 0.51 (0.53, 0.65), WR 0.49 (0.50, 0.65), BG 0.49 (0.48, 0.61), RG 0.49 (0.51, 0.65), UB 0.49
+  (0.49, 0.64), UG 0.47 (0.48, 0.62), UR 0.45 (0.45, 0.64), BR 0.43 (0.40, 0.64): the same order and spread as the
+  transformer's (Spearman 0.37 with the top players over the ten pairs).
+
 ## Stage 4: cheap evaluation (sb-v2)
 
 *The heuristic bot at 300 simulations, run during stages 1–3. The full comparison, the transformer at 0–10,000
