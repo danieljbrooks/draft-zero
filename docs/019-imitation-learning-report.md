@@ -357,6 +357,11 @@ We played **10,000 games of each model's policy against itself**, the transforme
 most likely move every time, no search, about $0.00026 a game). We then compared each card's win rate in each
 model's games with 17lands' (791,000 games), using the Spearman rank correlation.
 
+**A caveat: these are cheap games played with no search.** Every move is the policy's first instinct, with no
+look-ahead. That is exactly where the policy is weakest (§4.2), and removal suffers most: when to use it, and on
+what, are the decisions a look-ahead helps with. We expect a large number of self-play games *with* search to give
+more human-like card ratings.
+
 **How high could it be?** Even a perfect agent wouldn't reach 1.0 from 10,000 games, because of sampling noise. We
 estimate this ceiling by drawing 17lands' own games down to the same size (~17,700 player-games) and correlating them
 with the full file. The range is the 5th to 95th percentile over repeated draws.
@@ -366,42 +371,33 @@ with the full file. The range is the 5th to 95th percentile over repeated draws.
 | **Commons** | 90 | **0.41** | 0.34 | 0.27 | 0.82 [0.74, 0.86] |
 | Every non-basic card | 267 | 0.43 | 0.40 | **0.45** | 0.79 [0.74, 0.82] |
 
-**Card by card.** The tables below rank cards among the 90 commons, or the 266 non-basic cards, that both models drew
-at least 30 times in their self-play. Win rates in self-play sit lower overall than 17lands' because self-play is
-zero-sum (every game has exactly one winner), so compare ranks rather than levels.
+**Card by card.** The tables below rank cards among the 90 commons that both models drew at least 30 times in their
+self-play. Each win rate is shown relative to its source's average over those 90 commons: 54.0% for 17lands, 49.7%
+for the transformer's self-play and 49.8% for the MLP's. Self-play averages about 50% because every game has exactly
+one winner. So "+4.0" means a deck wins 4 points more often than average when it draws the card.
 
-*17lands' six best commons, and where each model ranks them (of 90):*
+*17lands' six best commons, and where each model ranks them (of 90). Win rates in points above or below each source's
+average:*
 
-| 17lands rank | Card | 17lands win rate | Transformer: win rate (rank) | MLP: win rate (rank) |
+| 17lands rank | Card | 17lands | Transformer (rank) | MLP (rank) |
 |---|---|---|---|---|
-| 1 | Bake into a Pie | 58.0% | 50.0% (44) | 51.7% (27) |
-| 2 | Burst Lightning | 57.9% | 42.3% (83) | 44.5% (77) |
-| 3 | Stab | 57.9% | 50.1% (43) | 51.1% (37) |
-| 4 | Dazzling Angel | 57.8% | 60.6% (1) | 61.0% (2) |
-| 5 | Luminous Rebuke | 57.7% | 55.6% (10) | 56.0% (9) |
-| 6 | Refute | 57.6% | 52.6% (21) | 52.0% (24) |
-
-*17lands' six best cards of any rarity, and where each model ranks them (of 266):*
-
-| 17lands rank | Card | Rarity | 17lands win rate | Transformer: win rate (rank) | MLP: win rate (rank) | Games in hand, transformer / MLP |
-|---|---|---|---|---|---|---|
-| 1 | Liliana, Dreadhorde General | mythic | 64.1% | 50.0% (139) | 49.0% (160) | 198 / 196 |
-| 2 | Embercleave | mythic | 63.8% | 57.9% (27) | 50.0% (137) | 38 / 32 |
-| 3 | Bloodthirsty Conqueror | mythic | 62.7% | 60.5% (11) | 63.9% (4) | 296 / 302 |
-| 4 | Zimone, Paradox Sculptor | mythic | 62.6% | 54.8% (49) | 53.1% (77) | 199 / 194 |
-| 5 | Spinner of Souls | rare | 62.1% | 52.5% (87) | 49.9% (143) | 417 / 391 |
-| 6 | Curator of Destinies | rare | 62.1% | 45.3% (216) | 47.8% (185) | 327 / 385 |
+| 1 | Bake into a Pie | +4.0 | +0.4 (44) | +1.9 (27) |
+| 2 | Burst Lightning | +3.9 | −7.3 (83) | −5.4 (77) |
+| 3 | Stab | +3.9 | +0.5 (43) | +1.3 (37) |
+| 4 | Dazzling Angel | +3.8 | +10.9 (1) | +11.1 (2) |
+| 5 | Luminous Rebuke | +3.7 | +5.9 (10) | +6.1 (9) |
+| 6 | Refute | +3.6 | +2.9 (21) | +2.2 (24) |
 
 *The other way round: the transformer's six best commons, and where 17lands and the MLP rank them (of 90):*
 
-| Transformer rank | Card | Transformer win rate | 17lands win rate (rank) | MLP rank |
+| Transformer rank | Card | Transformer | 17lands (rank) | MLP rank |
 |---|---|---|---|---|
-| 1 | Dazzling Angel | 60.6% | 57.8% (4) | 2 |
-| 2 | Vanguard Seraph | 60.4% | 54.5% (41) | 1 |
-| 3 | Banishing Light | 59.2% | 57.5% (8) | 5 |
-| 4 | Tranquil Cove | 58.9% | 55.6% (24) | 8 |
-| 5 | Healer's Hawk | 58.4% | 57.5% (7) | 4 |
-| 6 | Felidar Savior | 57.3% | 57.4% (10) | 7 |
+| 1 | Dazzling Angel | +10.9 | +3.8 (4) | 2 |
+| 2 | Vanguard Seraph | +10.7 | +0.5 (41) | 1 |
+| 3 | Banishing Light | +9.5 | +3.5 (8) | 5 |
+| 4 | Tranquil Cove | +9.2 | +1.6 (24) | 8 |
+| 5 | Healer's Hawk | +8.7 | +3.5 (7) | 4 |
+| 6 | Felidar Savior | +7.7 | +3.4 (10) | 7 |
 
 ![The transformer's self-play: each card's win rate when drawn (vertical) against 17lands' (horizontal), commons on the left (Spearman 0.41) and every non-basic card on the right (0.43). Burst Lightning, Gorehorn Raider and Involuntary Employment sit far below the trend; Hare Apparent and Gleaming Barrier sit above it.](img/019-gih-transformer-light.png)
 
@@ -417,16 +413,19 @@ sit lower overall because self-play is zero-sum.*
   0.20–0.46, but on only 1,000–3,000 games, where even 17lands' own games would reach only about 0.35–0.5. The MLP
   reaches 0.34.
 - **At the top, the transformer agrees with 17lands quite well.** Four of its six best commons are in 17lands' top
-  ten. The MLP's six best commons include three of 17lands' top ten, but also Gleaming Barrier, the lowest-rated of these
-  90 commons on 17lands.
-- **Both models undervalue most of the best removal.** Burst Lightning, 17lands' second-best common, is 83rd for the
-  transformer and 77th for the MLP. Bake into a Pie and Stab fall to the 20s–40s. Banishing Light is the exception,
-  3rd for the transformer and 5th for the MLP. Both models play creatures much like the humans do, but not yet
-  "deal 2 damage to any target".
-- **The best rares fall further, and their ranks are noisier.** Liliana, Dreadhorde General, 17lands' best card, is
-  139th for the transformer and 160th for the MLP, and Curator of Destinies is around 200th for both. A rare is drawn
-  in only 30–500 of a model's games, against about 2,000 for a typical common, so single ranks can move a long way
-  (Embercleave: 27th for the transformer from 38 games, 137th for the MLP from 32).
+  ten. The MLP's six best commons include three of 17lands' top ten, but also Gleaming Barrier, the lowest-rated of
+  these 90 commons on 17lands.
+- **Removal played without search is the weak spot, and Burst Lightning most of all.** Bake into a Pie and Stab, two
+  of 17lands' three best commons, are only about average for both models: 27th to 44th. Burst Lightning, 17lands'
+  second-best common, falls to 83rd for the transformer and 77th for the MLP, 5–7 points below average. It has more
+  ways to be played badly than Stab. Stab gives one creature −2/−2. Burst Lightning can hit any target, a creature or
+  the opponent, and it can be kicked for 4 more mana to deal 4 damage instead of 2. So the bot must decide whether to
+  spend it now for 2 damage or wait to kick it, and whether to aim at a creature or the opponent. Each choice is
+  another chance to waste it. Banishing Light, an enchantment that exiles an opponent's permanent when it enters, is
+  the exception: 3rd for the transformer and 5th for the MLP. Both models play creatures much like the humans do.
+- **Self-play spreads card win rates about twice as wide as humans do.** Across the 90 commons the standard
+  deviation is about 5 points in each model's self-play, against 2.5 for 17lands, and the best commons sit 9–11
+  points above average against about 4. Colour pairs show the same pattern, even more strongly (below).
 - **The transformer's best move beats a random draw from its policy** on commons (0.41 against 0.27). Random draws
   waste its better timing with spells: Refute rises from 51st to 21st, and Luminous Rebuke from 23rd to 10th.
 - **The two models agree with each other far more than with 17lands** (0.91 on commons). Most of the gap comes from
