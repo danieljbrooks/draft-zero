@@ -37,9 +37,10 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
   table at 30x the learning rate, heads 1024) reaches set NLL 0.258 at 10% against the base's 0.266-0.268, and
   +3.5 points on rarely chosen moves; more data helps rare moves far more (+8-15 points). Wave D checks it at 30%
   (The MLP: its bottlenecks).
-- **The full-data MLP is training** (from 4 October ~00:00 UTC, 10 epochs, 6.5-11 hours): the leading recipe plus
-  weight decay 0.1 and 4 value positions a game, after 3-epoch tests showed the recipe overfitting from the second
-  pass (The full-data MLP).
+- **The full-data MLP, run 1, stopped at epoch 1.92** (4 October 01:47; set NLL 0.272 at its best, far from the
+  transformer's 0.234: flat and spiky at its near-peak learning rate). Dense weight decay erases rare embedding rows
+  between appearances; wave I tests lazy AdamW (decay only on the rows a step uses) before a new 10-epoch run (The
+  full-data MLP).
 - **Spend: $59.43 of the $65 cap, no pod running.** The second machine costs nothing.
 
 ### Earlier summary (2 October, during stage 2)
@@ -1417,6 +1418,48 @@ keeps its best and final checkpoints); 88 GB free.
 the live validation curves against stage 3's transformer, refreshed at each check-in) and a check-in every 20 minutes
 (:07, :27 and :47 past the hour) while the laptop session is open; the run itself needs neither. **Launched 23:51 UTC
 on 3 October.**
+
+### Run 1: stopped at epoch 1.92 (4 October, 01:47 UTC)
+
+| Epoch | Set NLL | Non-Pass | Attack | Targets | Value AUC | Value log-loss |
+|---|---|---|---|---|---|---|
+| 0.25 | 0.287 | 0.781 | 0.768 | 0.589 | 0.677 | 0.726 |
+| 0.50 | 0.287 | 0.779 | 0.762 | 0.608 | 0.701 | 0.685 |
+| 0.75 | 0.277 | 0.788 | 0.763 | 0.629 | 0.687 | 0.641 |
+| 0.99 | 0.274 | 0.787 | 0.773 | 0.625 | 0.694 | 0.686 |
+| 1.24 | 0.285 | 0.785 | 0.762 | 0.640 | 0.702 | 0.636 |
+| 1.49 | 0.279 | 0.785 | 0.771 | 0.638 | 0.692 | 0.671 |
+| 1.74 | 0.272 | 0.793 | 0.774 | 0.638 | 0.710 | 0.626 |
+
+Stage 3's transformer at the same ~11M decisions: 0.244 / 0.819 / 0.845 / 0.676 / 0.773 / 0.556; the 30% MLP (`d1`, one
+annealed epoch, 3.3M decisions): 0.241 / 0.820 / 0.855 / 0.673 / 0.775 / 0.571. Speed ~45 minutes an epoch plus a
+~4-minute TD refresh (~8.5 hours for 10 epochs). By position in each run's learning-rate schedule it tracked the 10%
+weight-decay run (`g2`), which only fell as its rate decayed; at 17% of a 10-epoch schedule the rate was still ~93% of
+peak. Dan stopped it at 01:47 (SIGTERM: latest.pt saved): the weights, best checkpoints and resume state are on the
+second machine in runs/exp4/mlp_full_v1_stopped/ (resumable, or a warm start).
+
+**What held it back, as far as we can tell.** AdamW's decoupled decay shrinks every weight by lr x wd each step, every
+embedding row included, and each step's ~38 states use only a small share of the 95,945 rows. At the table's peak
+rate (3e-3 x 0.1) a row loses 0.03% a step, so a feature in 1 state in 100,000 (~110 training states, ~2,600 steps
+between appearances) comes back at ~46% of its size, and one in 1 in 1,000,000 at ~0: the rarest kept features are
+silenced, whatever they predict, and the decay is strongest while the rate is high. The value head also learned slowly
+on 4 positions a game: by epoch 1.74 it had seen 7 a game against the transformer's 16 at its epoch 1 (40 against 48
+over the whole run, by design).
+
+### Wave I: lazy AdamW and the decay's target (planned, after the MTG MLP session's use of the GPUs)
+
+**Code** (supervised.py, tested): `emb_optimizer: lazy_adamw` (LazyAdamW: Adam's moments, a per-row step count for
+the bias correction, and the decoupled decay applied only to the rows a step used, those with a nonzero gradient
+row; untouched rows stay exactly as they were; identical to AdamW when every row is used) and `emb_weight_decay` (the
+table's decay apart from the body's). torch.optim.SparseAdam has the same moment semantics but needs sparse gradients,
+which EmbeddingBag's max mode can't give, and no weight decay.
+
+**Screen** (10% of the games, 3 epochs, 16 value positions, against `f0` (no decay: overfits after ~1.25 passes) and
+`g2` (dense decay 0.1: stable, slow); configs/exp4_sweep_rare_i0.yml, _i1.yml): lazy AdamW for the table at decay
+0.1, 0 and 0.3 (the body's dense decay 0.1); dense decay 0.1 at half the peak rate; dense decay on the body only.
+Then the best at 30% of the games over 3 epochs, then a new 10-epoch full run, babysat; back to experiments if it
+falters. Further ideas held back: a cap on embedding-row norms instead of decay, weight averaging (EMA), 8 value
+positions a game, larger batches.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
