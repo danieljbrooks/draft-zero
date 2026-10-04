@@ -1653,6 +1653,14 @@ transformer game but for the network), in two lanes sharing two MageZero servers
   minutes against the transformer's 9.1). Estimates: self-play ~6 h; `@100` ~2 h; `@300` ~5 h; `@1000` ~20 h;
   `@3000` (~4 h a game) ~1.5-3 days, the critical path.
 
+**Two RunPod pods from 7:08 AM PT** (Dan: rent 3090s to speed the games up, and later "uncap the budget to the $20
+in the account, as needed"; the old cap was $65 with $59.43 spent). Stock was thin on Sunday morning (no Secure 3090,
+no 3090 Ti, A4000 or A5000); two Community RTX 3090s at $0.22/hr came up with `minVcpuCount: 16` (24 failed), each
+with 28-32 vCPU (a 27-core quota) and 62 GB, on the slim image (`runpod/base` + `deploy/slim_bootstrap.sh`, CUDA 12.6
+torch; set up in 8 minutes). Pod 1 plays `il_bc@1000` (100 games) and the 3,000-simulation shard 1 side by side, 14
+workers each; pod 2 took shard 0 from the second machine (its 16 finished games copied over, 24 workers), freeing the
+second machine for `il_bc@100` and `@300`.
+
 ### The MLP's greedy self-play against 17lands (finished Sun 7:03 AM PT)
 
 10,000 games of run 2's policy against itself, greedy (temperature 0), on phase C's deck pairs and settings
