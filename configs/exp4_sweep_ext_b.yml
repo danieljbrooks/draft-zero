@@ -4,6 +4,8 @@
 # 30% of the games, 0.2409) trained one more epoch on the same 30% from its best_policy weights, a fresh optimiser, a
 # 1,000-step warm-up and a cosine to 10% inside the epoch, an average of the weights, 4 value positions a game. Two
 # peaks (2e-5, 5e-5) without decay, two (5e-5, 1e-4) with dense decay 0.1; the winner extends run 2 an epoch at a time.
+# TD targets from the first step (td_start_epochs 0): the first launch kept the default 0.25 epochs of game results as
+# value targets, and on games seen before the value head memorised them (value log-loss 0.571 -> 0.780 in 0.18 epochs).
 #
 #   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_ext_b.yml --out runs/exp4/sweep_ext_b \
 #       --tables-dir data/imitation_scale/h5
@@ -33,6 +35,7 @@ base:
   lr_schedule: cosine
   value_target: td
   td_lambda: 0.99
+  td_start_epochs: 0.0        # a continuation: TD targets from the network at once, not the results it would memorise
   value_per_game: 4
   token_dropout: 0.1
   act_weights: {opp_priority: 3.0, replay_priority: 3.0}

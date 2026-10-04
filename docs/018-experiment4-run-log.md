@@ -13,7 +13,8 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
 
 - **The full-data MLP (run 2) beats the stage-3 transformer** on the test split after one annealed epoch and 39
   minutes of training: set NLL 0.229 against 0.234, non-Pass top-1 0.829 against 0.825, targets 0.730 against 0.709,
-  value AUC 0.784 against 0.781, and +2.7 points on moves seen 1k-10k times in training (HF `exp4/mlp_1ep/`; Run 2).
+  value AUC 0.784 against 0.781; on validation, +2.7 points on moves seen 1k-10k times in training (HF
+  `exp4/mlp_1ep/`; Run 2).
 - **Now (Dan, 10:50 PM PT):** extend it towards 20 epochs, stopping when it stops improving (wave K screens how, at
   30%), then evaluation games with the best MLP on the second machine: 10,000 greedy self-play games and 100 games
   at each of 100, 300, 1,000 and 3,000 simulations against `heuristic@100` (Extending run 2).
@@ -1536,8 +1537,9 @@ stage-3 transformer's `best_policy`:
 | Transformer, 1 layer, 3 epochs (stage 3) | 0.2345 | 0.825 | 0.863 | 0.748 | 0.709 | 0.781 | 0.555 | 4.3 h |
 | **MLP run 2, 1 annealed epoch** | **0.2289** | **0.829** | **0.873** | **0.749** | **0.730** | **0.784** | **0.552** | **0.6 h** |
 
-**Rare decisions** (test split, non-Pass top-1, by how often the human's move appears in training, and by the share
-of the state's features outside the vocabulary; tools/imitation_scale/rare_eval.py):
+**Rare decisions** (the validation tables, the same 20,000 rows a table for every network; non-Pass top-1, by how often
+the human's move appears in training, and by the share of the state's features outside stage 3's vocabulary;
+tools/imitation_scale/rare_eval.py):
 
 | | < 1k | 1k-10k | 10k-100k | 100k+ | State Q1 (< 36% unknown) | Q2 | Q3 | Q4 (> 40%) |
 |---|---|---|---|---|---|---|---|---|
@@ -1584,6 +1586,12 @@ throughout (configs/exp4_sweep_ext_{a,b}.yml):
   best epoch is the final MLP: test split, rare decisions, HF.
 - If no wave-K run beats `d1` by 0.002 (the seed-to-seed gap at 30%: 0.2409 against 0.2432), the extension still runs
   one epoch on all the games with the best of them, and the same stopping rule applies.
+
+**A false start (10:52-11:10 PM PT): value targets in a continuation.** A run's value targets are the game results for
+its first 0.25 epochs, then TD(0.99) from the network. That is harmless on new games, but a continuation re-sees
+games it has trained on, and the hard results were memorised at once: `k1`'s value log-loss went 0.571 → 0.780 in
+0.18 epochs at the lowest rate (`k3`, with decay, 0.640), while its policy barely moved. Relaunched with TD targets from
+the first step (`td_start_epochs: 0`), which every continuation here uses.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
