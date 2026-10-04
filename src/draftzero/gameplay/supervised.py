@@ -2019,6 +2019,17 @@ def load_any_checkpoint(path: Path, device="cpu"):
 # training
 # ================================================================================================
 
+def _adamw(groups, dev, **kw) -> torch.optim.AdamW:
+    """AdamW, fused on CUDA (the same update, one kernel: a trainer step ~1.36x faster on the second machine's RTX PRO
+    6000, measured by the MTG MLP benchmark session), the standard implementation elsewhere or if fused is refused."""
+    if dev.type == "cuda":
+        try:
+            return torch.optim.AdamW(groups, fused=True, **kw)
+        except (RuntimeError, TypeError, ValueError):
+            pass
+    return torch.optim.AdamW(groups, **kw)
+
+
 class LazyAdamW(torch.optim.Optimizer):
     """AdamW for embedding tables, row by row and only on the rows a step used (those with a nonzero gradient row):
     their first and second moments, a per-row step count for the bias correction, and the decoupled weight decay.
@@ -2150,16 +2161,16 @@ class Trainer:
         # param groups carry lr_mult: the step sets lr = schedule x lr_mult
         emb_wd = cfg["weight_decay"] if cfg["emb_weight_decay"] is None else float(cfg["emb_weight_decay"])
         if cfg["emb_optimizer"] == "adagrad":
-            self.opt = torch.optim.AdamW([{"params": rest, "lr_mult": 1.0}], lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+            self.opt = _adamw([{"params": rest, "lr_mult": 1.0}], self.dev, lr=cfg["lr"], weight_decay=cfg["weight_decay"])
             self.opt_emb = torch.optim.Adagrad([{"params": emb, "lr_mult": float(cfg["emb_lr_mult"])}], lr=cfg["lr"])
         elif cfg["emb_optimizer"] == "lazy_adamw":
-            self.opt = torch.optim.AdamW([{"params": rest, "lr_mult": 1.0}], lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+            self.opt = _adamw([{"params": rest, "lr_mult": 1.0}], self.dev, lr=cfg["lr"], weight_decay=cfg["weight_decay"])
             self.opt_emb = LazyAdamW([{"params": emb, "lr_mult": float(cfg["emb_lr_mult"])}], lr=cfg["lr"], weight_decay=emb_wd)
         else:
             groups = [{"params": rest, "lr_mult": 1.0}]
             if emb:
                 groups.append({"params": emb, "lr_mult": float(cfg["emb_lr_mult"]), "weight_decay": emb_wd})
-            self.opt = torch.optim.AdamW(groups, lr=cfg["lr"], weight_decay=cfg["weight_decay"])
+            self.opt = _adamw(groups, self.dev, lr=cfg["lr"], weight_decay=cfg["weight_decay"])
             self.opt_emb = None
         self.opts = [o for o in (self.opt, self.opt_emb) if o is not None]
         self.ema = [q.detach().clone() for q in self.model.parameters()] if cfg["ema_decay"] else None
