@@ -9,8 +9,10 @@
 #   nohup deploy/exp4_mlp_games.sh MODEL RUN:WORKERS:HEAP ... >> runs/exp4/mlp_games.log 2>&1 < /dev/null &
 #   e.g. deploy/exp4_mlp_games.sh runs/exp4/mlp_1ep/best_policy.pt.gz selfplay:20:2000m ilbc100:14:2500m \
 #        ilbc300:12:2500m ilbc1000:9:3g ilbc3000/1/2:6:5g
-# RUN: selfplay (10,000 games, policy_greedy both seats, open decklists) or ilbcN[/I/S] (il_bc@N against
-# heuristic@100, closed decklists, 50 deck pairs; /I/S plays shard I of S, and is not topped up).
+# RUN: selfplay (10,000 games, policy_greedy both seats, open decklists); policy (policy_greedy alone against
+# heuristic@100, "0 simulations": open decklists and the 2-hour game cap, as phase C's c1-pvh-t0; 50 deck pairs, topped
+# up); or ilbcN[/I/S] (il_bc@N against heuristic@100, closed decklists, 50 deck pairs; /I/S plays shard I of S, and is
+# not topped up).
 set -u
 cd "$(dirname "$0")/.."
 export PATH=$HOME/venv/bin:$PATH
@@ -34,15 +36,20 @@ for item in "$@"; do
       --pairs 5000 --workers "$W" --heap "$HEAP" --max-turns 50 --search-timeout 300 --game-timeout 7200
     continue
   fi
-  IFS=/ read -r BUDGETRUN SI SN <<< "$RUN"
-  N=${BUDGETRUN#ilbc}
-  NAME=mlp-ilbc$N${SI:+-s$SI}
-  GT=28800; ST=900
-  [ "$N" -gt 1000 ] && { GT=86400; ST=2700; }
+  if [ "$RUN" = policy ]; then
+    NAME=mlp-pvh-t0 SI="" SN=""
+    BOT=policy_greedy GT=7200 ST=900 OPEN=--open-decklists
+  else
+    IFS=/ read -r BUDGETRUN SI SN <<< "$RUN"
+    N=${BUDGETRUN#ilbc}
+    NAME=mlp-ilbc$N${SI:+-s$SI}
+    BOT=il_bc@$N GT=28800 ST=900 OPEN=""
+    [ "$N" -gt 1000 ] && { GT=86400; ST=2700; }
+  fi
   PAIRS=50 ROUND=0
   while :; do
-    log "$NAME: il_bc@$N against heuristic@100, $PAIRS pairs${SI:+, shard $SI/$SN}, $W workers, heap $HEAP"
-    bash deploy/exp4_games_run.sh "$NAME" "$MODEL" 2 --bot1 "il_bc@$N" --bot2 heuristic@100 --pairs "$PAIRS" \
+    log "$NAME: $BOT against heuristic@100, $PAIRS pairs${SI:+, shard $SI/$SN}, $W workers, heap $HEAP"
+    bash deploy/exp4_games_run.sh "$NAME" "$MODEL" 2 --bot1 "$BOT" --bot2 heuristic@100 --pairs "$PAIRS" $OPEN \
       ${SI:+--shard "$SI/$SN"} --workers "$W" --heap "$HEAP" --max-turns 50 --search-timeout "$ST" --game-timeout "$GT"
     V=$(valid "runs/exp4/games/$NAME")
     log "$NAME: $V valid games"
