@@ -24,8 +24,9 @@ We then let each network guide a tree search and played it against MageZero's ha
   bot searching 100 simulations. With search of its own, the network won 55–56% at 100 simulations, 61–64% at 300,
   and up to 66% at 3,000.
 - **With equal search on both sides, the network bot won 56% of 314 paired games.**
-- **Playing its policy alone against itself, the network ranks cards somewhat like humans do.** Card win rates from
-  10,000 such games correlate with 17lands' at 0.41 on commons, about half of what sampling noise allows.
+- **Playing its policy alone against itself, the transformer ranks cards somewhat like humans do.** Card win rates
+  from 10,000 such games correlate with 17lands' at 0.41 on commons, about half of what sampling noise allows. The
+  MLP's correlate at 0.34.
 
 The next step is to keep improving these networks by self-play, starting from what they learned from people.
 
@@ -97,8 +98,8 @@ So this experiment asks how far top players' games can take us:
 - **Search turns imitation into strength.** The policy alone loses to the heuristic bot, but with search the network
   bot wins 55–66% of games depending on how much it searches (§4.2).
 - **The MLP plays as well as the transformer** at a tenth of the computing cost per move (§4.2).
-- **Self-play with the policy alone ranks cards partly like 17lands does,** but it undervalues burn and removal
-  (§4.4).
+- **Self-play with each model's policy alone ranks cards partly like 17lands does** (0.41 for the transformer, 0.34
+  for the MLP, on commons), but both undervalue burn and removal (§4.4).
 
 The whole experiment has cost about $63 of rented compute so far, three quarters of it for evaluation games (§4.5).
 
@@ -346,55 +347,110 @@ it also makes errors of its own, judged by a value learned from results. The heu
 agreement, however much it searches. Keeping the human sense of the game while adding search is the main problem
 for the next stage.
 
-### 4.4 Do the bots value cards like humans do?
+### 4.4 Do the models value cards like humans do?
 
 17lands' best-known statistic is a card's **games-in-hand win rate:** how often a deck wins the games in which that
-card was drawn. Players use it to rank cards. If an agent plays like people do, the same statistic computed from its
+card was drawn. Players use it to rank cards. If a model plays like people do, the same statistic computed from its
 own games should rank the cards the same way.
 
-We played **10,000 games of each network's policy against itself** (its most likely move every time, no search, about
-$0.00026 a game). We then compared each card's win rate in those games with 17lands' (791,000 games), using the
-Spearman rank correlation.
+We played **10,000 games of each model's policy against itself**, the transformer's and the MLP's separately (its
+most likely move every time, no search, about $0.00026 a game). We then compared each card's win rate in each
+model's games with 17lands' (791,000 games), using the Spearman rank correlation.
 
 **How high could it be?** Even a perfect agent wouldn't reach 1.0 from 10,000 games, because of sampling noise. We
 estimate this ceiling by drawing 17lands' own games down to the same size (~17,700 player-games) and correlating them
 with the full file. The range is the 5th to 95th percentile over repeated draws.
 
-| Rank correlation with 17lands | Cards | Transformer | MLP | Transformer, random moves in proportion to the policy | Noise ceiling [5–95%] |
+| Rank correlation with 17lands | Cards | Transformer | MLP | Transformer, random moves in proportion to its policy | Noise ceiling [5–95%] |
 |---|---|---|---|---|---|
 | **Commons** | 90 | **0.41** | 0.34 | 0.27 | 0.82 [0.74, 0.86] |
 | Every non-basic card | 267 | 0.43 | 0.40 | **0.45** | 0.79 [0.74, 0.82] |
 
-![Left: bar chart of the rank correlation with 17lands. Commons: transformer 0.41, MLP 0.34, transformer with random moves 0.27, against a noise ceiling of 0.82 (5–95%: 0.74–0.86). Every non-basic card: 0.43, 0.40 and 0.45 against a ceiling of 0.79 (0.74–0.82). Right: 17lands' 15 best commons by rank, connected to their rank in the transformer's self-play. Seven of them stay in self-play's top 15, but Burst Lightning falls from 2nd to 83rd, Gorehorn Raider from 14th to 74th, Infestation Sage from 13th to 55th, Bake into a Pie from 1st to 44th, Stab from 3rd to 43rd and Llanowar Elves from 12th to 37th.](img/019-cards-light.png)
+**Card by card.** The tables below rank cards among the 90 commons, or the 266 non-basic cards, that both models drew
+at least 30 times in their self-play. Win rates in self-play sit lower overall than 17lands' because self-play is
+zero-sum (every game has exactly one winner), so compare ranks rather than levels.
 
-*Figure 4. Left: how well each bot's self-play ranks the cards, against the best that sampling noise allows. Right:
-where self-play ranks 17lands' 15 best commons. Orange lines fall 25 places or more.*
+*17lands' six best commons, and where each model ranks them (of 90):*
 
-![Each card's win rate when drawn, in the transformer's self-play (vertical) against 17lands' human games (horizontal): commons on the left (correlation 0.41) and every non-basic card on the right (0.43). Burst Lightning, Gorehorn Raider and Involuntary Employment sit far below the trend; Hare Apparent and Gleaming Barrier sit above it.](img/018-gih-t0-light.png)
+| 17lands rank | Card | 17lands win rate | Transformer: win rate (rank) | MLP: win rate (rank) |
+|---|---|---|---|---|
+| 1 | Bake into a Pie | 58.0% | 50.0% (44) | 51.7% (27) |
+| 2 | Burst Lightning | 57.9% | 42.3% (83) | 44.5% (77) |
+| 3 | Stab | 57.9% | 50.1% (43) | 51.1% (37) |
+| 4 | Dazzling Angel | 57.8% | 60.6% (1) | 61.0% (2) |
+| 5 | Luminous Rebuke | 57.7% | 55.6% (10) | 56.0% (9) |
+| 6 | Refute | 57.6% | 52.6% (21) | 52.0% (24) |
 
-*Figure 5. Each card's win rate when drawn, in the transformer's self-play against 17lands. Simulated win rates sit
-lower overall because self-play is zero-sum.*
+*17lands' six best cards of any rarity, and where each model ranks them (of 266):*
 
-![Deck win rate by colour pair, in points above or below each source's average, for the transformer's self-play and for 17lands' top players. Self-play spreads from +9 points (white-blue) to −10 (black-red); top players stay within about ±3 points.](img/019-colours-light.png)
+| 17lands rank | Card | Rarity | 17lands win rate | Transformer: win rate (rank) | MLP: win rate (rank) | Games in hand, transformer / MLP |
+|---|---|---|---|---|---|---|
+| 1 | Liliana, Dreadhorde General | mythic | 64.1% | 50.0% (139) | 49.0% (160) | 198 / 196 |
+| 2 | Embercleave | mythic | 63.8% | 57.9% (27) | 50.0% (137) | 38 / 32 |
+| 3 | Bloodthirsty Conqueror | mythic | 62.7% | 60.5% (11) | 63.9% (4) | 296 / 302 |
+| 4 | Zimone, Paradox Sculptor | mythic | 62.6% | 54.8% (49) | 53.1% (77) | 199 / 194 |
+| 5 | Spinner of Souls | rare | 62.1% | 52.5% (87) | 49.9% (143) | 417 / 391 |
+| 6 | Curator of Destinies | rare | 62.1% | 45.3% (216) | 47.8% (185) | 327 / 385 |
 
-*Figure 6. Deck win rate by colour pair, relative to each source's average. The bots favour some colour pairs far
-more than top players' results do.*
+*The other way round: the transformer's six best commons, and where 17lands and the MLP rank them (of 90):*
 
-- **A policy that never searches still captures a real part of card quality.** 0.41 on commons is the best agreement
-  we have measured at a sample size where noise doesn't dominate. Earlier agents scored 0.20–0.46, but on only
-  1,000–3,000 games, where even 17lands' own games would reach only about 0.35–0.5.
-- **It is about half the ceiling, so the gap is real, not noise.** The two networks agree with each other far more
-  (0.91 on commons) than either agrees with 17lands. So the gap comes mostly from the shared engine and the way the
-  bots play, not from either network.
-- **The bots undervalue spells that need a target and the right moment** (Figure 4, right). Burst Lightning is
-  17lands' second-best common and 83rd of 90 in self-play. Bake into a Pie, Stab and Gorehorn Raider, which also
-  destroy or damage a creature, drop 40–60 places. Some cheap creatures sit well above their 17lands rank instead
-  (Figure 5). The policy plays creatures like the humans do, but not yet "deal 2 damage to any target".
-- **Its best move beats a random draw from its policy** on commons (0.41 against 0.27). Random draws waste the
-  policy's better timing with spells: Refute rises from 51st to 21st, and Luminous Rebuke from 23rd to 10th.
-- **The bots spread the colour pairs about four times wider than top players do** (Figure 6). Deck win rates in
-  self-play run from 40% to 59%; top players' run from 61% to 66%. Blue-red and black-red come last. Simple bots
-  in this engine seem to favour creature decks.
+| Transformer rank | Card | Transformer win rate | 17lands win rate (rank) | MLP rank |
+|---|---|---|---|---|
+| 1 | Dazzling Angel | 60.6% | 57.8% (4) | 2 |
+| 2 | Vanguard Seraph | 60.4% | 54.5% (41) | 1 |
+| 3 | Banishing Light | 59.2% | 57.5% (8) | 5 |
+| 4 | Tranquil Cove | 58.9% | 55.6% (24) | 8 |
+| 5 | Healer's Hawk | 58.4% | 57.5% (7) | 4 |
+| 6 | Felidar Savior | 57.3% | 57.4% (10) | 7 |
+
+![The transformer's self-play: each card's win rate when drawn (vertical) against 17lands' (horizontal), commons on the left (Spearman 0.41) and every non-basic card on the right (0.43). Burst Lightning, Gorehorn Raider and Involuntary Employment sit far below the trend; Hare Apparent and Gleaming Barrier sit above it.](img/019-gih-transformer-light.png)
+
+*Figure 4. The transformer: each card's win rate when drawn in its self-play, against 17lands. Simulated win rates
+sit lower overall because self-play is zero-sum.*
+
+![The MLP's self-play: each card's win rate when drawn (vertical) against 17lands' (horizontal), commons on the left (Spearman 0.34) and every non-basic card on the right (0.40). Burst Lightning, Involuntary Employment and Gorehorn Raider sit far below the trend; Gleaming Barrier sits far above it.](img/019-gih-mlp-light.png)
+
+*Figure 5. The MLP: the same comparison for its self-play.*
+
+- **The transformer's policy, which never searches, captures a real part of card quality.** Its 0.41 on commons is
+  the best agreement we have measured at a sample size where noise doesn't dominate. Earlier agents scored
+  0.20–0.46, but on only 1,000–3,000 games, where even 17lands' own games would reach only about 0.35–0.5. The MLP
+  reaches 0.34.
+- **At the top, the transformer agrees with 17lands quite well.** Four of its six best commons are in 17lands' top
+  ten. The MLP's six best commons include three of 17lands' top ten, but also Gleaming Barrier, the lowest-rated of these
+  90 commons on 17lands.
+- **Both models undervalue most of the best removal.** Burst Lightning, 17lands' second-best common, is 83rd for the
+  transformer and 77th for the MLP. Bake into a Pie and Stab fall to the 20s–40s. Banishing Light is the exception,
+  3rd for the transformer and 5th for the MLP. Both models play creatures much like the humans do, but not yet
+  "deal 2 damage to any target".
+- **The best rares fall further, and their ranks are noisier.** Liliana, Dreadhorde General, 17lands' best card, is
+  139th for the transformer and 160th for the MLP, and Curator of Destinies is around 200th for both. A rare is drawn
+  in only 30–500 of a model's games, against about 2,000 for a typical common, so single ranks can move a long way
+  (Embercleave: 27th for the transformer from 38 games, 137th for the MLP from 32).
+- **The transformer's best move beats a random draw from its policy** on commons (0.41 against 0.27). Random draws
+  waste its better timing with spells: Refute rises from 51st to 21st, and Luminous Rebuke from 23rd to 10th.
+- **The two models agree with each other far more than with 17lands** (0.91 on commons). Most of the gap comes from
+  what they share, the engine and the way they were trained, rather than from either network.
+
+![Deck win rate by colour pair, in points above or below each source's average, for the transformer's self-play, the MLP's self-play and 17lands' top players. Both models put white-blue on top (about +10 points) and black-red last (−10 for the transformer, −7 for the MLP); blue-black sits near the average for both models and for top players; blue-red is about 4 points below average for both models and even for top players. Top players stay within about ±3 points.](img/019-colours-light.png)
+
+*Figure 6. Deck win rate by colour pair in the transformer's and the MLP's self-play, and for 17lands' top players,
+each relative to its own average.*
+
+**Colour pairs.** Both models spread the colour pairs about four times wider than top players do. Deck win rates run
+from 40% to 59% in the transformer's self-play and from 43% to 60% in the MLP's, against 61% to 66% for top players.
+
+Historically, simple and self-play bots have struggled with slower, controlling decks, which win with removal, card
+draw and well-timed instants. In Forge's AI self-play, cards win least often in blue (47.3% of their games, against
+50.9% in white), and the AI "times instants and card advantage poorly" (Lord of the Pigs' limited simulations:
+[draft-agent behaviour](https://github.com/npiguet/price-predictor/blob/master/experiments/2026-08-29-draft-agent-behaviour.md),
+[scorer preferences](https://github.com/npiguet/price-predictor/blob/master/experiments/2026-08-27-scorer-preferences.md)).
+Our own experiment #1 underrated blue commons more than any other colour ([docs/003](003-fdn-generalist-report.md)).
+
+So it is encouraging to see the blue control pairs hold up here. Blue-black wins at its average rate for both
+models, just as it does for top players. Blue-red, though about 4 points below average for both models, finishes
+ahead of black-red. White-blue is both models' best pair. The clearest weakness is black-red, last for both models (−10
+points for the transformer, −7 for the MLP), in line with their trouble with burn.
 
 ### 4.5 What it cost
 
@@ -534,7 +590,8 @@ width 512.
   belief service `tools/imitation_scale/belief_server.py`. Game records: HF `exp4/games/runs/`.
 - **Card statistics:** `tools/imitation_scale/gih.py` and `gih_ceiling.py`.
 - **This document's figures:** `python tools/imitation_scale/fig_doc019.py --running 1000,3000` (drop `--running`
-  once the MLP's games finish). Figure 5 is docs/018's (`tools/imitation_scale/fig_gih.py`).
+  once the MLP's games finish). Figures 4 and 5 come from `tools/imitation_scale/fig_gih.py` on each model's greedy
+  self-play games, and the card tables from `tools/imitation_scale/card_stats.py`.
 
 ## References
 

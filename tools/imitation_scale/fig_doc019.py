@@ -4,15 +4,16 @@ render everywhere (GitHub, Claude) where <picture> and mermaid don't.
     docs/img/019-pipeline-light.png  from a 17lands replay to training examples (docs/008 §4)
     docs/img/019-curves-light.png    validation curves of the two final networks by training decisions seen
     docs/img/019-ladder-light.png    win rate against heuristic@100 by search budget, the transformer and the MLP
-    docs/img/019-cards-light.png     agreement with 17lands' card win rates, and 17lands' top commons by rank
-    docs/img/019-colours-light.png   deck win rate by colour pair, self-play against 17lands' top players
+    docs/img/019-colours-light.png   deck win rate by colour pair: each model's self-play and 17lands' top players
+
+The card win-rate scatters (019-gih-transformer, 019-gih-mlp) come from tools/imitation_scale/fig_gih.py.
     docs/img/019-games-light.png     the games behind each agent, this work against other game-playing systems
 
     python tools/imitation_scale/fig_doc019.py [--running 1000,3000]
 
 The ladder pools a budget's runs (shards, tails, top-ups), one result per (deck pair, seat swap), and leaves out
 games that ended in an engine error; a game capped at 50 turns counts 0.5. The card and colour-pair numbers are
-docs/018's (C3 and the MLP's self-play), from tools/imitation_scale/gih.py and gih_ceiling.py.
+from the greedy self-play games (c1-selfplay-t0-s*, mlp-selfplay-t0) and 17lands' top players (docs/018, C1).
 """
 from __future__ import annotations
 
@@ -56,20 +57,12 @@ GAMES = [
     ("DeepNash (2022): Stratego self-play", 5_500_000_000, "selfplay", "5.5B"),
 ]
 
-# Spearman with 17lands' GIH WR (docs/018, C3 and the MLP's self-play), and the noise ceiling at ~17,700 player-games
-# (17lands' own games subsampled; median and 5-95%).
-CORR = {"Commons (90 cards)": {"Transformer, greedy": 0.41, "MLP, greedy": 0.34, "Transformer, sampled": 0.27,
-                               "ceiling": (0.82, 0.74, 0.86)},
-        "Every non-basic card (267)": {"Transformer, greedy": 0.43, "MLP, greedy": 0.40, "Transformer, sampled": 0.45,
-                                       "ceiling": (0.79, 0.74, 0.82)}}
-# 17lands' top 15 commons by GIH WR, and their rank among 90 commons in the transformer's greedy self-play (docs/018).
-TOP15 = [("Bake into a Pie", 44), ("Burst Lightning", 83), ("Stab", 43), ("Dazzling Angel", 1),
-         ("Luminous Rebuke", 10), ("Refute", 21), ("Healer's Hawk", 5), ("Helpful Hunter", 15),
-         ("Banishing Light", 3), ("Felidar Savior", 6), ("Bigfin Bouncer", 11), ("Llanowar Elves", 37),
-         ("Infestation Sage", 55), ("Gorehorn Raider", 74), ("Think Twice", 36)]
-# Deck win rate by main colours: the transformer's greedy self-play, and 17lands' top players (docs/018, C1 and C3).
-COLOURS = [("WU", 0.59, 0.656), ("WG", 0.54, 0.646), ("WB", 0.53, 0.634), ("RG", 0.51, 0.653), ("WR", 0.50, 0.650),
-           ("UB", 0.49, 0.640), ("UG", 0.48, 0.622), ("BG", 0.48, 0.612), ("UR", 0.45, 0.638), ("BR", 0.40, 0.639)]
+# Deck win rate by main colours: each model's greedy self-play (recomputed from the game records: deck1 sits in
+# seat A, games with a winner), and 17lands' top players (docs/018, C1).
+COLOURS = [("WU", 0.592, 0.595, 0.656), ("WG", 0.535, 0.505, 0.646), ("WB", 0.529, 0.542, 0.634),
+           ("RG", 0.506, 0.488, 0.653), ("WR", 0.504, 0.495, 0.650), ("UB", 0.491, 0.486, 0.640),
+           ("UG", 0.477, 0.472, 0.622), ("BG", 0.476, 0.489, 0.612), ("UR", 0.454, 0.451, 0.638),
+           ("BR", 0.398, 0.428, 0.639)]
 
 
 def style(ax, grid="y"):
@@ -226,83 +219,26 @@ def curves():
     save(fig, "019-curves")
 
 
-def cards():
-    fig, (ax, bx) = plt.subplots(1, 2, figsize=(12.5, 4.9), facecolor=T["surface"],
-                                 gridspec_kw={"width_ratios": [1.25, 1]})
-    series = ["Transformer, greedy", "MLP, greedy", "Transformer, sampled"]
-    colours = [T["Transformer"], T["MLP"], "#9cc0ec"]
-    bw = 0.22
-    for gi, (group, vals) in enumerate(CORR.items()):
-        c, lo, hi = vals["ceiling"]
-        ax.add_patch(plt.Rectangle((gi - 0.45, lo), 0.9, hi - lo, color=T["grid"], zorder=0, lw=0))
-        ax.plot([gi - 0.45, gi + 0.45], [c, c], color=T["muted"], lw=1.2, ls=(0, (4, 3)), zorder=1)
-        ax.text(gi, hi + 0.015, f"noise ceiling {c:.2f} (5–95%: {lo:.2f}–{hi:.2f})", ha="center", va="bottom",
-                fontsize=7.8, color=T["muted"])
-        for si, (s, col) in enumerate(zip(series, colours)):
-            x = gi + (si - 1) * (bw + 0.03)
-            ax.bar(x, vals[s], width=bw, color=col, edgecolor=T["surface"], lw=1.5, zorder=2)
-            ax.text(x, vals[s] + 0.012, f"{vals[s]:.2f}", ha="center", va="bottom", fontsize=8, color=T["ink2"])
-    ax.set_xticks(range(len(CORR)), list(CORR), fontsize=9, color=T["ink"])
-    ax.set_ylim(0, 1.05)
-    ax.set_xlim(-0.55, len(CORR) - 0.45)
-    ax.set_ylabel("Rank correlation with 17lands (Spearman)", fontsize=9, color=T["ink2"])
-    ax.set_title("How well self-play ranks the cards, against what noise allows", loc="left", fontsize=10,
-                 color=T["ink"])
-    style(ax)
-    ax.legend(handles=[Patch(color=c, label=s.replace("\n", " ")) for s, c in zip(series, colours)],
-              loc="upper left", frameon=False, fontsize=8, labelcolor=T["ink2"], ncol=3, bbox_to_anchor=(0, 1.0))
-    # slope chart: 17lands' rank -> self-play rank
-    # the left column spreads 17lands' ranks 1-15 over the height; the right is the self-play rank, 1-90
-    right = []
-    for i, (name, r) in enumerate(TOP15):
-        y0, y1 = (i + 1) * 6, r
-        drop = r - (i + 1) >= 25
-        col = T["human"] if drop else T["axis"]
-        bx.plot([0, 1], [y0, y1], color=col, lw=2 if drop else 1.2, zorder=2 if drop else 1)
-        bx.plot([0, 1], [y0, y1], "o", ms=4, color=col, zorder=3)
-        bx.text(-0.04, y0, f"{i + 1}. {name}", ha="right", va="center", fontsize=7.8,
-                color=T["ink"] if drop else T["ink2"])
-        if drop:
-            right.append((r, name))
-    last = -10
-    for r, name in sorted(right):   # nudge labels apart where ranks are close
-        y = max(r, last + 4)
-        bx.text(1.04, y, f"{r}. {name}", ha="left", va="center", fontsize=7.8, color=T["ink"])
-        last = y
-    bx.text(1.04, 6, "1–15: the rest\n(Dazzling Angel 1st)", ha="left", va="center", fontsize=7.5, color=T["ink2"])
-    bx.set_ylim(93, 0)
-    bx.set_xlim(-0.05, 1.6)
-    bx.set_xticks([0, 1], ["rank on 17lands", "rank in self-play\n(of 90 commons)"], fontsize=8.5, color=T["ink2"])
-    bx.set_yticks([])
-    for sp in ("top", "right", "left", "bottom"):
-        bx.spines[sp].set_visible(False)
-    bx.tick_params(length=0)
-    bx.set_facecolor(T["surface"])
-    bx.set_title("17lands' 15 best commons: where self-play ranks them", loc="left", fontsize=10, color=T["ink"],
-                 x=-0.45)
-    fig.tight_layout()
-    fig.subplots_adjust(wspace=0.45)
-    save(fig, "019-cards")
-
-
 def colour_pairs():
-    sim_mean = sum(s for _, s, _ in COLOURS) / len(COLOURS)
-    hum_mean = sum(h for _, _, h in COLOURS) / len(COLOURS)
-    fig, ax = plt.subplots(figsize=(7.6, 3.9), facecolor=T["surface"])
-    for i, (pair, s, h) in enumerate(COLOURS):
-        ds, dh = 100 * (s - sim_mean), 100 * (h - hum_mean)
-        ax.plot([i, i], [dh, ds], color=T["grid"], lw=2, zorder=1)
-        ax.plot(i, dh, "o", ms=8, color=T["human"], zorder=3, markeredgecolor=T["surface"], markeredgewidth=1.5)
-        ax.plot(i, ds, "o", ms=8, color=T["Transformer"], zorder=3, markeredgecolor=T["surface"],
-                markeredgewidth=1.5)
+    series = [("Transformer's self-play", 1, T["Transformer"]), ("MLP's self-play", 2, T["MLP"]),
+              ("17lands' top players", 3, T["human"])]
+    means = {k: sum(c[k] for c in COLOURS) / len(COLOURS) for _, k, _ in series}
+    fig, ax = plt.subplots(figsize=(8.4, 4.1), facecolor=T["surface"])
+    for i, c in enumerate(COLOURS):
+        ys = [100 * (c[k] - means[k]) for _, k, _ in series]
+        ax.plot([i, i], [min(ys), max(ys)], color=T["grid"], lw=2, zorder=1)
+        for (label, k, col), off in zip(series, (-0.16, 0.0, 0.16)):
+            ax.plot(i + off, 100 * (c[k] - means[k]), "o", ms=7.5, color=col, zorder=3,
+                    markeredgecolor=T["surface"], markeredgewidth=1.3)
     ax.axhline(0, color=T["muted"], lw=1, ls=(0, (4, 3)), zorder=0)
-    ax.set_xticks(range(len(COLOURS)), [p for p, _, _ in COLOURS], fontsize=9, color=T["ink"])
+    ax.set_xticks(range(len(COLOURS)), [c[0] for c in COLOURS], fontsize=9, color=T["ink"])
     ax.set_yticks(range(-10, 11, 5), [f"{v:+d}" if v else "0" for v in range(-10, 11, 5)])
     ax.set_ylabel("Deck win rate, points above\nor below the average", fontsize=9, color=T["ink2"])
     ax.set_xlabel("Deck colours", fontsize=9, color=T["ink2"])
+    ax.set_title("Deck win rate by colour pair: each model's self-play and 17lands' top players", loc="left",
+                 fontsize=10, color=T["ink"])
     style(ax)
-    ax.legend(handles=[Patch(color=T["Transformer"], label="the transformer's self-play"),
-                       Patch(color=T["human"], label="17lands' top players")], loc="lower left", frameon=False,
+    ax.legend(handles=[Patch(color=col, label=label) for label, _, col in series], loc="lower left", frameon=False,
               fontsize=8.5, labelcolor=T["ink2"])
     fig.tight_layout()
     save(fig, "019-colours")
@@ -342,7 +278,6 @@ def main(argv=None):
     pipeline()
     curves()
     ladder(set(a.running.split(",")) - {""})
-    cards()
     colour_pairs()
     games_figure()
     return 0
