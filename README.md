@@ -40,6 +40,8 @@ Checkpoints from experiment #2 are in the private Hugging Face repo `danbrooks/d
   search looks like.
 - **[Rules engines](docs/015-rules-engine-comparison.md):** faster engines than XMage for a limited
   agent.
+- **[CPU benchmarks](docs/020-cpu-benchmarks.md):** what training the MLP and self-play with search cost on RunPod's
+  CPU and GPU pods, the free RTX PRO 6000 box and a laptop, and what a rented vCPU is.
 - **Running experiments:** the [runbook](docs/002-RUNBOOK.md) and
   [RunPod tips](docs/005-runpod-tips.md).
 
@@ -81,6 +83,7 @@ ran on an older MageZero fork (`mz-engine`, `bcc76de`) and the v0.1 XMage build
 | `java/mzbridge/` | a long-lived XMage worker, no fork change: builds any `StateSpec` and answers build / encode / coach / bench / replay_turn requests. `bench` runs the search benchmark's searches (MageZero-style MCTS, PIMC, IS-MCTS) |
 | `tools/gameplay/` | experiment scripts for the gameplay-data study |
 | `tools/search_bench/` | the search benchmark ([docs/012](docs/012-search-benchmark.md), [docs/016](docs/016-search-benchmark-results.md)): decision set, runner, leak test, analysis, pod plans |
+| `tools/compute_bench/` | the compute benchmark ([docs/020](docs/020-cpu-benchmarks.md)): pod driver, CPU-pod grabber, vCPU census and probe, load monitor, summaries, tables and figures; the battery is `deploy/compute_bench.sh` |
 | `assets/` | small versioned inputs: deck metadata, action vocab, GIH reference |
 | `assets/sample/` | 80 decks and pools, so a fresh clone runs without the full pool |
 | `configs/` | run configs (`fdn_l40s.yml` produced experiment #1) and the curriculum |

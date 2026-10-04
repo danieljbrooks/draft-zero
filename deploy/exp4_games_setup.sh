@@ -10,7 +10,9 @@ cd "$(dirname "$0")/.."
 export CKPT=${1:-exp4/stage3/best_policy.pt.gz}
 export HF_HUB_DISABLE_PROGRESS_BARS=1
 
-bash deploy/bootstrap.sh
+# NO_BOOTSTRAP=1 on a box whose Python and JDK are already set up and shared (the second machine): bootstrap's
+# editable install would repoint that venv's draftzero at this checkout
+[ -n "${NO_BOOTSTRAP:-}" ] || bash deploy/bootstrap.sh
 
 echo "== XMage bundle, card database, decks, network"
 python - <<'PY'
@@ -23,6 +25,8 @@ if not os.path.isdir("xmage/lib"):
 os.makedirs("xmage/db", exist_ok=True)
 if not os.path.exists("xmage/db/cards.h2.mv.db"):
     shutil.copy(get("exp4/games/cards.h2.mv.db"), "xmage/db/cards.h2.mv.db")
+# HF's cache files are read-only and the copy keeps the mode; H2 refuses a read-only database (root never notices)
+os.chmod("xmage/db/cards.h2.mv.db", 0o644)
 if not os.path.exists("data/pools/eval.txt"):          # play.py's default pool; its order fixes the deck pairs
     os.makedirs("data/pools", exist_ok=True)
     shutil.copy(get("exp4/games/eval.txt"), "data/pools/eval.txt")

@@ -1,0 +1,24 @@
+# Compute benchmark (docs/020): imitation-learning throughput on 17lands decisions with the full-data MLP's recipe
+# (configs/exp4_train_mlp.yml) but the result as the value target (TD's refresh is a separate forward pass, timed
+# apart). deploy/compute_bench.sh points tables_dir at two small human tables (the validation files, linked as both
+# splits: only the step rate is read) and sets init_checkpoint (the MLP: its 62,231-feature vocab and shape), device,
+# max_steps and the thread count.
+tables:
+  - {name: turnstart, kind: priority_set}
+  - {name: replay_attack, kind: binary}
+arch: {dropout: 0.0, pool_dropout: 0.0}
+emb_lr_mult: 30.0
+token_dropout: 0.1
+lr: 1.0e-4
+warmup_steps: 20
+value_per_game: 16
+value_weight: 0.5
+val_rows: 200
+time_budget_s: null
+max_steps: 300
+eval_at_start: false
+eval_every_s: null
+eval_every_steps: null
+ckpt_every_s: null
+latest_every_s: 1000000
+patience_epochs: null

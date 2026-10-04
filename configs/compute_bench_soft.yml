@@ -1,0 +1,24 @@
+# Compute benchmark (docs/020): training throughput on self-play tables, stage 6's recipe (docs/017 §6.6) on the
+# MLP. deploy/compute_bench.sh sets tables_dir (the benchmark's own games, tools/imitation_scale/selfplay_tables.py),
+# init_checkpoint (the MLP), device, max_steps and the thread count; only the step rate is read (summary.json).
+#
+#   python -m draftzero.gameplay.supervised train --config configs/compute_bench_soft.yml --out <dir> \
+#       --set tables_dir=<h5 dir> --set init_checkpoint=<ckpt> --set device=cpu --set max_steps=300
+tables:
+  - {name: selfplay, kind: soft, value_column: z_td}   # the bot's searched decisions: visit shares, TD values
+arch: {dropout: 0.0, pool_dropout: 0.0}                # init_checkpoint gives the shape; these are the leading MLP's
+kl_weight: 1.0                                         # x KL(pi_start || pi), annealed to 0.1 (stage 6)
+kl_weight_end: 0.1
+lr: 1.0e-4
+warmup_steps: 20
+token_dropout: 0.1
+emb_lr_mult: 30.0
+val_rows: 200
+time_budget_s: null
+max_steps: 300
+eval_at_start: false
+eval_every_s: null
+eval_every_steps: null
+ckpt_every_s: null
+latest_every_s: 1000000
+patience_epochs: null
