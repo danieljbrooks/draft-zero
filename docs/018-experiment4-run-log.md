@@ -1698,7 +1698,8 @@ split by opening hand and drawn later, which the simulation's records don't).
 - **The better imitator does not rate the cards better.** Run 2 beats the transformer on every held-out measure,
   but its self-play agrees with 17lands a little less (0.40 against 0.43 overall, 0.34 against 0.41 on commons):
   both reach about half the noise ceiling, and the two simulations agree with each other far more than either
-  agrees with 17lands (the same cards top and bottom).
+  agrees with 17lands (Spearman 0.91 between them on commons, 0.82 on every card): what the card ratings measure is
+  the shared engine and imitation setup more than the network.
 - **The same blind spots:** burn and removal that needs a target or a moment (Burst Lightning 75th, Gorehorn Raider
   71st, Involuntary Employment and Fake Your Own Death near the bottom) and cheap blockers overrated (Gleaming
   Barrier 6th, 88th for 17lands). Refute stays mid-table (24th; the transformer's 21st). The MLP moves Bake into a Pie
