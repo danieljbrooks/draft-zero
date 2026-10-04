@@ -1593,6 +1593,33 @@ games it has trained on, and the hard results were memorised at once: `k1`'s val
 0.18 epochs at the lowest rate (`k3`, with decay, 0.640), while its policy barely moved. Relaunched with TD targets from
 the first step (`td_start_epochs: 0`), which every continuation here uses.
 
+**Wave K's results (11:08-11:45 PM PT): a second pass makes the network worse, every way it was tried.** One more epoch
+on the same 30% of the games, from `d1`'s weights, scored at its end on validation:
+
+| Continuing `d1` one epoch | Peak rate | Weight decay | Table | Set NLL | Non-Pass | Value AUC | Value log-loss |
+|---|---|---|---|---|---|---|---|
+| **`d1` itself (the start)** | | | | **0.2409** | **0.820** | **0.775** | **0.571** |
+| `k3` | 5e-5 | 0.1 | trained | 0.2420 | 0.816 | 0.768 | 0.606 |
+| `k4` | 1e-4 | 0.1 | trained | 0.2460 | 0.816 | 0.763 | 0.600 |
+| `k2` | 5e-5 | 0 | trained | 0.2480 | 0.820 | 0.767 | 0.657 |
+| `k5` | 2e-5 | 0 | frozen | 0.2486 | 0.822 | 0.769 | 0.660 |
+| `k1` | 2e-5 | 0 | trained | 0.2504 | 0.822 | 0.766 | 0.664 |
+
+(`k6`, 5e-5 with the table frozen, was stopped unrun: `k5` had settled the question.)
+
+- **None improves on its starting point,** on either head. Without decay the policy worsens from the first evaluation
+  and never recovers (`k1`: 0.2444 at 0.18 epochs, 0.2555 at 0.54, 0.2504 at the end); decay and annealing bring `k3`
+  back to within 0.001, no further.
+- **The table is not where the second pass goes wrong:** freezing it (`k5`) tracks `k1` within 0.002 throughout.
+  The body and heads fit the games they have seen.
+- **The value head is the clearest case.** A continuation's TD targets come from a network that has fit those games:
+  their mean |target| is 0.817 against 0.780 for `d1`'s own (game results are 1.0). Validation log-loss follows the
+  targets' sharpness (0.571 for `d1`; 0.64-0.66 on TD targets; 0.780 on the results), whatever the rate or the table.
+- By the rules no wave-K run qualifies (none gains 0.002, none keeps its value log-loss within 0.01), so the full-data
+  extension runs one epoch with the best of them, `k3`'s recipe (peak 5e-5, decay 0.1), as the test on the real model
+  (`deploy/exp4_mlp_extend.sh 0 5.0e-5 0.1`, from 11:45 PM PT). On all the games each epoch re-shows 3.3x more
+  games, so memorisation should be slower, but nothing above suggests it will pay.
+
 ## Stage 4: cheap evaluation (sb-v2)
 
 *The heuristic bot at 300 simulations, run during stages 1–3. The full comparison, the transformer at 0–10,000

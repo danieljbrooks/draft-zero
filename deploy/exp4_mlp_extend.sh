@@ -4,9 +4,12 @@
 # run from epoch k-1's final weights (configs/exp4_train_mlp_ext.yml with wave K's peak rate and decay).
 # tools/imitation_scale/extend_rule.py decides after each epoch; at the stop the best epoch's best_policy is scored on
 # the test split (once) and on rare decisions. Idempotent and resumable: rerun it and it carries on.
-#   nohup deploy/exp4_mlp_extend.sh GPU LR WD [MAX_EPOCHS] >> runs/exp4/mlp_ext.log 2>&1 < /dev/null &
+#   nohup deploy/exp4_mlp_extend.sh GPU LR WD [MAX_EPOCHS [KEY=VALUE ...]] >> runs/exp4/mlp_ext.log 2>&1 < /dev/null &
+# (KEY=VALUE: more config settings for every extra epoch, e.g. emb_lr_mult=0.0)
 set -u
 GPU=$1 LR=$2 WD=$3 MAX=${4:-20}
+shift $(( $# < 4 ? $# : 4 ))
+SETS=(); for kv in "$@"; do SETS+=(--set "$kv"); done
 cd "$(dirname "$0")/.."
 export MZ_ACTION_VOCAB=$PWD/assets/vocab/FDN_SPG.tsv
 TABLES=data/imitation_scale/h5
@@ -29,9 +32,9 @@ while :; do
     CUDA_VISIBLE_DEVICES=$GPU python -m draftzero.gameplay.supervised train --out "$OUT" --resume --tables-dir "$TABLES" \
         || exit 1
   else
-    log "epoch $k: from $PREV, peak lr $LR, weight decay $WD"
+    log "epoch $k: from $PREV, peak lr $LR, weight decay $WD ${*:-}"
     CUDA_VISIBLE_DEVICES=$GPU python -m draftzero.gameplay.supervised train --config "$CONFIG" --out "$OUT" \
-        --tables-dir "$TABLES" --set "init_checkpoint=$PREV" --set "lr=$LR" --set "weight_decay=$WD" || exit 1
+        --tables-dir "$TABLES" --set "init_checkpoint=$PREV" --set "lr=$LR" --set "weight_decay=$WD" "${SETS[@]}" || exit 1
   fi
   RUNS+=("$OUT")
   k=$((k + 1))
