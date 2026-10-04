@@ -1486,13 +1486,32 @@ log-loss <= 0.70 at the end.)
 - **Three decayed passes on 10% (0.259) only match one annealed pass without decay** (wave C's `c2`, 0.258): the decay
   that stops memorisation also cancels the repeats' benefit. Wave J asks the same at 30%.
 
-### Wave J: does multi-epoch training with decay pay at 30%? (running from 8:50 PM PT)
+### Wave J: does multi-epoch training with decay pay at 30%? (Sat 8:50-9:45 PM PT) No.
 
 The leading recipe with dense decay 0.1, weight averaging (0.9995) and 4 value positions a game, 3 epochs on 30% of the
 games (configs/exp4_sweep_rare_j1.yml; J2, _j2.yml, keeps only features seen in more than 10 training states), against
-`d1-s30-combined`'s single annealed pass without decay (0.2409). Rule, fixed before the results: if either's best is
-below 0.2389 with value log-loss <= 0.62, the 10-epoch full run uses that recipe; if not, a 1-2 epoch annealed full-data
-run (the `d1` recipe, plus weight averaging), about 1-2 hours instead of ~8, goes to Dan as the recommendation.
+`d1-s30-combined`'s single annealed pass without decay:
+
+| 30% of the games | Set NLL | Non-Pass | Attack | Block | Targets | Value AUC | Value log-loss |
+|---|---|---|---|---|---|---|---|
+| **`d1`: 1 annealed epoch, no decay, 16 value positions** | **0.2409** | **0.820** | **0.855** | **0.728** | **0.673** | **0.775** | **0.571** |
+| `j2`: 3 epochs, decay 0.1 + averaging + 4 value positions, > 10 states | 0.2457 | 0.814 | 0.843 | 0.722 | 0.670 | 0.760 | 0.577 |
+| `j1`: the same, > 3 states | 0.2467 | 0.812 | 0.840 | 0.724 | 0.669 | 0.758 | 0.582 |
+
+Both fell steadily all 3 epochs (no overfitting; the value head flat at ~0.58 throughout: decay, averaging and fewer
+value positions together hold it), but both end behind one annealed pass on every head, at three times the compute;
+the rule (beat 0.2389) fails. Keeping only features seen in more than 10 states edges 3 (0.2457 against 0.2467).
+
+**The finding, at 10% and 30% alike:** at this model size, extra passes need weight decay to stop the embedding table
+memorising, and the decay costs about what the repeats add; a single annealed pass is the better use of the data.
+On all the games one pass is 10.95M decisions (3.3x `d1`'s), which should land near or below the transformer's 0.234.
+
+### Run 2: one annealed pass on all the games (from Sat 9:50 PM PT)
+
+The `d1` recipe (max + mean pooling, the table at 30x, features seen in more than 3 states, heads 1024, token dropout
+0.1, the passivity fix, 16 value positions, no weight decay) plus weight averaging (0.9995), one epoch with the cosine
+complete inside it (configs/exp4_train_mlp_1ep.yml, deploy/exp4_mlp_full.sh into runs/exp4/mlp_1ep), test split scored
+once at the end. ~1 hour. The 10-epoch run Dan asked for waits on his call: the evidence says it would trail this.
 
 ## Stage 4: cheap evaluation (sb-v2)
 

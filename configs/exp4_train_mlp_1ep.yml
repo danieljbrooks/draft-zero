@@ -1,0 +1,54 @@
+# Experiment #4: the full-data MLP, run 2 (Sat 3 October 9:50 PM PT; docs/018): ONE annealed epoch of d1-s30-combined's
+# recipe plus weight averaging. Waves I and J showed multi-epoch training needs weight decay against memorisation and
+# the decay costs about what the repeats add: 3 decayed epochs on 30% (0.2457) lose to one annealed pass (0.2409).
+#
+# (Run 1's header, kept for the splits and the rest:) Experiment #4: the full-data MLP (Dan, 2026-10-03 22:40; docs/018): the leading recipe, d1-s30-combined (set NLL
+# 0.241 on 30% of the games, ahead of the 30% transformer's 0.256), on all the training games for 10 epochs, with what
+# waves F and G found against multi-epoch overfitting (3 epochs on 10% of the games; docs/018): no dropout (0.1 was
+# worse), weight decay 0.1 (the only change that stopped it: set NLL still falling at 3 epochs, 0.2591, against the
+# control's 0.267 -> 0.323), and 4 value positions a game (value log-loss 0.62-0.67 through 2.26 epochs against the
+# control's 0.59 -> 0.89; 4 x 10 epochs = 40 sightings of each game's result, near stage 3's value peak at ~38).
+#
+# Splits (tools/imitation_scale/build.py splits): train 145,898 games (10.95M decisions), val 8,248 games (602,555),
+# test 7,052 games (531,406), split by draft component, no game in two splits; sb-v1's drafts held out; sb-v2's 541
+# games all in test. Training reads only *_train.h5; the checkpoints (best_policy, best_value) are chosen on val
+# (20,000 rows a table); deploy/exp4_mlp_full.sh scores test once, after training.
+#
+#   nohup deploy/exp4_mlp_full.sh 0 configs/exp4_train_mlp_1ep.yml runs/exp4/mlp_1ep >> runs/exp4/mlp_1ep.log 2>&1 < /dev/null &
+#
+# Writes runs/exp4/mlp_full/: evals.jsonl, best_policy / best_value / best .pt.gz, ckpt/step*.pt.gz every 30 minutes,
+# latest.pt (resume state), final.pt.gz, summary.json; then test_*.json and the rare-decision scores.
+tables:
+  - {name: turnstart, kind: priority_set}         # the turn's first main-phase priority, set labels
+  - {name: replay_priority, kind: priority_set}   # the player's later stops in its own turn (timing)
+  - {name: opp_priority, kind: priority_set}      # the player's stops in the opponent's turn (timing)
+  - {name: replay_attack, kind: binary}           # "attack with X?"
+  - {name: replay_target, kind: target}           # spell targets the outcome settles
+  - {name: opp_block, kind: target}               # every block question, from the opponent's turn
+fraction: 1.0
+val_rows: 20000
+# Unbounded: every feature in more than vocab_k = 3 training states (62,231 on 30% of the games; more on all of them).
+# vocab_max_features is only a memory ceiling, for an OOM.
+vocab_k: 3
+data_cache: data/cache/supervised        # mapped tables, so a resume skips the vocab mapping
+arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}
+emb_init_std: 0.02
+emb_lr_mult: 30.0           # the feature-embedding table at 30x the body's rate (peak 3e-3): max pooling barely moves it otherwise
+weight_decay: 0.0           # one pass: nothing repeats, so nothing to memorise (decay 0.1 was for the 10-epoch run 1)
+ema_decay: 0.9995           # an average of the weights over ~2,000 steps is evaluated and saved
+token_dropout: 0.1
+warmup_steps: 3000
+lr: 1.0e-4
+lr_schedule: cosine         # over the one epoch, to 10% of the peak
+value_target: td
+td_lambda: 0.99
+value_per_game: 16          # one pass: 16 sightings of each game's result, as d1 and stage 3's first epoch
+value_weight: 0.5
+act_weights: {opp_priority: 3.0, replay_priority: 3.0}   # the passivity fix: x3 on the rows where the human acted
+time_budget_s: 14400        # a 4-hour cap; max_epochs stops it first
+max_epochs: 1
+eval_every_s: null
+eval_every_steps: 72000     # about a quarter epoch (~288k steps of ~38 rows)
+ckpt_every_s: 1800
+latest_every_s: 600
+patience_epochs: null       # the cosine schedule sets the length
