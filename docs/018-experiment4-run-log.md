@@ -1620,6 +1620,39 @@ on the same 30% of the games, from `d1`'s weights, scored at its end on validati
   (`deploy/exp4_mlp_extend.sh 0 5.0e-5 0.1`, from 11:45 PM PT). On all the games each epoch re-shows 3.3x more
   games, so memorisation should be slower, but nothing above suggests it will pay.
 
+**The full-data epoch 2 (11:45 PM-12:28 AM PT): worse, so the extension stops at one epoch.** From run 2's final
+weights, `k3`'s recipe, all the games (runs/exp4/mlp_ext2; its TD targets' mean |target| 0.807 against run 2's 0.796):
+
+| Validation | Set NLL | Non-Pass | Attack | Targets | Value AUC | Value log-loss |
+|---|---|---|---|---|---|---|
+| **Run 2: 1 epoch (the start)** | **0.2271** | **0.832** | **0.870** | **0.735** | **0.787** | **0.553** |
+| Epoch 2 at 0.25 (rate near peak) | 0.2519 | 0.812 | 0.826 | – | 0.745 | 0.587 |
+| Epoch 2 at its end (annealed) | 0.2344 | 0.825 | 0.856 | – | 0.775 | 0.583 |
+
+The rule stopped it (a loss of 0.0074, against the 0.001 gain required): **run 2, one annealed epoch, is the final
+MLP** (HF `exp4/mlp_1ep/`). The second pass cost more on all the games than on 30% (0.0074 against `k3`'s 0.0011):
+3.3x as many steps of decay at a high rate. At this size the MLP gets its accuracy from new games, not from repeats.
+
+### The best MLP's evaluation games (from Sun 12:35 AM PT)
+
+Run 2's `best_policy` on the second machine (`deploy/exp4_mlp_games.sh`, phase C's seed and pool: each game replays a
+transformer game but for the network), in two lanes sharing two MageZero servers on one RTX PRO 6000:
+
+| Lane | Runs, in order | Workers, Java heap |
+|---|---|---|
+| A | greedy self-play, 10,000 games (`mlp-selfplay-t0`); then `il_bc@100`, `@300`, `@1000` against `heuristic@100`, 100+ valid games each | 8, 2.5 GB (3 GB at 1,000) |
+| B | `il_bc@3000` against `heuristic@100`, pairs 0, 2, 4, ... (`mlp-ilbc3000-s0`); the other half when memory allows | 6, 5 GB |
+
+- **Memory, not cores, sets the pace:** the machine's 40 GiB limit holds ~14 Java workers (self-play's grow to
+  their full heap, ~2.9 GB at 2.5 GB). A smaller self-play heap fails: 1.2 GB lost 8 of 18 games to heap errors, 2 GB 4
+  of 118; the transformer's runs at 2.5 GB lost 1.5% to heap errors and 4.2% to MageZero's "Error in unit tests". A
+  memory logger marks the Java workers first in line for an out-of-memory kill, so it costs a game, not the servers.
+- Two `play.py` runs on one machine collided on worker names (`play0`, ...); workers are now named per run
+  (`play_<run>_<i>`).
+- **Throughput:** the MLP plays faster than the transformer (self-play ~18 s a game for one worker; `il_bc@100` ~7
+  minutes against the transformer's 9.1). Estimates: self-play ~6 h; `@100` ~2 h; `@300` ~5 h; `@1000` ~20 h;
+  `@3000` (~4 h a game) ~1.5-3 days, the critical path.
+
 ## Stage 4: cheap evaluation (sb-v2)
 
 *The heuristic bot at 300 simulations, run during stages 1–3. The full comparison, the transformer at 0–10,000

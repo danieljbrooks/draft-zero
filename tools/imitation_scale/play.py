@@ -225,7 +225,7 @@ def main(argv=None) -> int:
             raise SystemExit(f"no belief service on port {belief}: start tools/imitation_scale/belief_server.py "
                              f"--port {belief}, or pass --open-decklists")
     lock = threading.Lock()
-    pool = BridgePool(a.workers, prefix="play", heap=a.heap)
+    pool = BridgePool(a.workers, prefix=f"play_{out.name}_", heap=a.heap)   # per run: two runs on one machine can't share names
     rec_dir = out / "records"
     t0 = time.time()
 
