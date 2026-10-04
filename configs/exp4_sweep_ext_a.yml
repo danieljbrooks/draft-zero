@@ -1,0 +1,43 @@
+# Experiment #4: MLP wave K (Saturday 3 October, 11:05 PM PT; docs/018). Dan asked to extend run 2 (one annealed epoch
+# on all the games, val set NLL 0.2271) towards 20 epochs, stopping when it stops improving. Waves I and J trained
+# several epochs from scratch; this screens how to CONTINUE an annealed network: d1-s30-combined (one annealed epoch on
+# 30% of the games, 0.2409) trained one more epoch on the same 30% from its best_policy weights, a fresh optimiser, a
+# 1,000-step warm-up and a cosine to 10% inside the epoch, an average of the weights, 4 value positions a game. Two
+# peaks (2e-5, 5e-5) without decay, two (5e-5, 1e-4) with dense decay 0.1; the winner extends run 2 an epoch at a time.
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_ext_a.yml --out runs/exp4/sweep_ext_a \
+#       --tables-dir data/imitation_scale/h5
+title: "Experiment #4 sweep: continuing an annealed MLP for one more epoch (wave Ka)"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.3
+  vocab_k: 3
+  val_rows: 20000
+  init_checkpoint: runs/exp4/sweep_rare_d/runs/d1-s30-combined/best_policy.pt.gz   # its weights, shape and vocab
+  arch: {dropout: 0.0, pool_dropout: 0.0}
+  max_epochs: 1.0
+  time_budget_s: 7200         # a cap only
+  eval_every_s: null
+  eval_every_steps: 15506     # quarter epochs (an epoch of 30% is ~62k steps)
+  ckpt_every_s: null
+  latest_every_s: 600
+  patience_epochs: null
+  emb_init_std: 0.02
+  warmup_steps: 1000
+  lr_schedule: cosine
+  value_target: td
+  td_lambda: 0.99
+  value_per_game: 4
+  token_dropout: 0.1
+  act_weights: {opp_priority: 3.0, replay_priority: 3.0}
+  emb_lr_mult: 30.0
+  ema_decay: 0.9995
+runs:
+  - {name: k1-lr2e-5-wd0, lr: 2.0e-5, weight_decay: 0.0}
+  - {name: k2-lr5e-5-wd0, lr: 5.0e-5, weight_decay: 0.0}

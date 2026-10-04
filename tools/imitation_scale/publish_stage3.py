@@ -1,4 +1,4 @@
-"""Publish stage 3's trained network (docs/018) to the project's Hugging Face model repo, with a model card:
+"""Publish one of experiment #4's trained networks (docs/018) to the project's Hugging Face model repo, with a model card:
 the checkpoints (best_policy, best_value, best, final), the run's config, learning curves, summary,
 the 30% checks' choice and the test-split measures. latest.pt (the optimiser's state) and the
 30-minute checkpoints stay behind.
@@ -10,6 +10,7 @@ Copy the run's directory from the training machine first (runs/exp4/main), then,
         [--prefix exp4/stage3] [--dry-run]
 
 Afterwards: ImitationNet.load("hf://danbrooks/draftzero-checkpoints/exp4/stage3/best_policy.pt.gz").
+The full-data MLP (run 2): --run runs/exp4/mlp_1ep --prefix exp4/mlp_1ep --name "the full-data MLP".
 """
 from __future__ import annotations
 
@@ -29,7 +30,21 @@ def _json(p: Path):
     return json.loads(p.read_text()) if p.exists() else None
 
 
-def model_card(run: Path, repo: str, prefix: str) -> str:
+def network_line(arch: dict, vocab_rows: int | None) -> str:
+    if arch.get("type") == "mlp":
+        pool = {"max": "max", "mean": "mean", "maxmean": "max + mean"}.get(arch.get("bag_mode"), arch.get("bag_mode"))
+        table = f"{vocab_rows:,} " if vocab_rows else ""
+        return (f"- MLP: a table of {table}feature embeddings of width {arch.get('width')}, pooled over the state's "
+                f"features ({pool}), then {arch.get('layers')} residual {'SwiGLU' if arch.get('ffn', 'swiglu') == 'swiglu' else arch.get('ffn')} blocks with "
+                f"{'LayerNorm' if arch.get('mlp_norm', 'layer') == 'layer' else arch.get('mlp_norm')}; five heads with a "
+                f"hidden layer of {arch.get('head_hidden')} (the player's priority, the opponent's priority, targets, "
+                "yes/no, value).")
+    return (f"- {arch.get('type', 'transformer')}, {arch.get('layers')} {'layer' if arch.get('layers') == 1 else 'layers'}, width {arch.get('width')}, "
+            f"{'pre-LN' if arch.get('norm_first') else 'post-LN'}, mean pooling over the state's tokens; five heads "
+            "(the player's priority, the opponent's priority, targets, yes/no, value).")
+
+
+def model_card(run: Path, repo: str, prefix: str, name: str = "stage 3") -> str:
     cfg = _json(run / "config.json") or {}
     summ = _json(run / "summary.json") or {}
     choice = _json(run / "choice.json") or {}
@@ -39,7 +54,7 @@ def model_card(run: Path, repo: str, prefix: str) -> str:
     last = evals[-1] if evals else {}
     arch = cfg.get("arch", {})
     lines = [
-        "# draft-zero experiment #4, stage 3: the imitation network",
+        f"# draft-zero experiment #4, {name}: the imitation network",
         "",
         "A network trained by imitation on 17lands' top players' FDN Premier Draft games, replayed in XMage",
         "(github.com/danieljbrooks/draft-zero, docs/017 and docs/018). It predicts, from a game state as",
@@ -73,16 +88,18 @@ def model_card(run: Path, repo: str, prefix: str) -> str:
         "",
         "## The network",
         "",
-        f"- {arch.get('type', 'transformer')}, {arch.get('layers')} {'layer' if arch.get('layers') == 1 else 'layers'}, width {arch.get('width')}, "
-        f"{'pre-LN' if arch.get('norm_first') else 'post-LN'}, mean pooling over the state's tokens; five heads "
-        "(the player's priority, the opponent's priority, targets, yes/no, value).",
+        network_line(arch, (summ.get("data") or {}).get("vocab_rows")),
         f"- Trained on {cfg.get('fraction', 1.0):.0%} of the training games' rows"
-        + (f" for {cfg['max_epochs']:g} epochs" if cfg.get("max_epochs") else "") + ": "
+        + (f" for {cfg['max_epochs']:g} epoch{'' if cfg['max_epochs'] == 1 else 's'}" if cfg.get("max_epochs") else "") + ": "
         f"lr {cfg.get('lr')} with a {cfg.get('warmup_steps')}-step warm-up, "
         + (f"then a cosine down to {cfg.get('lr_min_frac', 0.1):g}x" if cfg.get("lr_schedule") == "cosine" else "then constant")
         + f"; value targets {'TD(lambda = %s)' % cfg.get('td_lambda') if cfg.get('value_target') == 'td' else 'the game result'}"
         f" on {cfg.get('value_per_game') or 'every'} positions a game, value-loss weight {cfg.get('value_weight')}"
         + (f"; the policy loss weighted on the rows where the human acted: {cfg['act_weights']}" if cfg.get("act_weights") else "")
+        + (f"; the embedding table at {cfg['emb_lr_mult']:g}x the learning rate" if cfg.get("emb_lr_mult", 1) != 1 else "")
+        + (f"; weight decay {cfg['weight_decay']:g}" if cfg.get("weight_decay") else "")
+        + (f"; the saved weights are an average (EMA {cfg['ema_decay']:g})" if cfg.get("ema_decay") else "")
+        + (f"; started from `{cfg['init_checkpoint']}`" if cfg.get("init_checkpoint") else "")
         + ".",
     ]
     if choice.get("why"):
@@ -109,16 +126,17 @@ def main(argv=None) -> int:
     ap.add_argument("--run", type=Path, required=True)
     ap.add_argument("--repo", default="danbrooks/draftzero-checkpoints")
     ap.add_argument("--prefix", default="exp4/stage3")
+    ap.add_argument("--name", default="stage 3", help="the model card's heading: experiment #4, <name>")
     ap.add_argument("--dry-run", action="store_true", help="write README.md and list the files, upload nothing")
     a = ap.parse_args(argv)
-    (a.run / "README.md").write_text(model_card(a.run, a.repo, a.prefix))
+    (a.run / "README.md").write_text(model_card(a.run, a.repo, a.prefix, a.name))
     files = [f for f in FILES if (a.run / f).exists()]
     print(f"{len(files)} files for {a.repo}/{a.prefix}: {', '.join(files)}")
     if a.dry_run:
         return 0
     from huggingface_hub import HfApi
     HfApi().upload_folder(repo_id=a.repo, folder_path=str(a.run), path_in_repo=a.prefix, allow_patterns=files,
-                          commit_message=f"exp4 stage 3: {a.prefix}")
+                          commit_message=f"exp4 {a.name}: {a.prefix}")
     print(f"published: hf://{a.repo}/{a.prefix}/")
     return 0
 

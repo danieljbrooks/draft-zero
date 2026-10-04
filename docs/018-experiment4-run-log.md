@@ -9,8 +9,14 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
 *Times: UTC up to 4 October 02:35 UTC; Pacific time (PT, PDT = UTC-7) from then on, which is 7:35 PM PT on Saturday
 3 October (Dan).*
 
-## Where things stand (3 October, 21:00 UTC)
+## Where things stand (Saturday 3 October, 10:55 PM PT)
 
+- **The full-data MLP (run 2) beats the stage-3 transformer** on the test split after one annealed epoch and 39
+  minutes of training: set NLL 0.229 against 0.234, non-Pass top-1 0.829 against 0.825, targets 0.730 against 0.709,
+  value AUC 0.784 against 0.781, and +2.7 points on moves seen 1k-10k times in training (HF `exp4/mlp_1ep/`; Run 2).
+- **Now (Dan, 10:50 PM PT):** extend it towards 20 epochs, stopping when it stops improving (wave K screens how, at
+  30%), then evaluation games with the best MLP on the second machine: 10,000 greedy self-play games and 100 games
+  at each of 100, 300, 1,000 and 3,000 simulations against `heuristic@100` (Extending run 2).
 - **The stage-3 transformer is trained and published** (HF `exp4/stage3/`, `ImitationNet` loads it): 1 layer,
   width 512, 40.6M parameters, 3 epochs of all 10.9M training decisions. Test split: non-Pass top-1 0.825, set NLL
   0.234, attack 0.863, block 0.748, targets 0.709, value AUC 0.781 (Stage 3: results).
@@ -40,10 +46,9 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
   table at 30x the learning rate, heads 1024) reaches set NLL 0.258 at 10% against the base's 0.266-0.268, and
   +3.5 points on rarely chosen moves; more data helps rare moves far more (+8-15 points). Wave D checks it at 30%
   (The MLP: its bottlenecks).
-- **The full-data MLP, run 1, stopped at epoch 1.92** (4 October 01:47; set NLL 0.272 at its best, far from the
-  transformer's 0.234: flat and spiky at its near-peak learning rate). Dense weight decay erases rare embedding rows
-  between appearances; wave I tests lazy AdamW (decay only on the rows a step uses) before a new 10-epoch run (The
-  full-data MLP).
+- **The full-data MLP, run 1 (10-epoch schedule, decay 0.1), stopped at epoch 1.92** (set NLL 0.272 at its best:
+  flat and spiky at its near-peak rate). Waves I and J showed only dense table decay stops multi-epoch overfitting and
+  that it costs what the repeats add, so run 2 made one annealed pass instead (The full-data MLP).
 - **Spend: $59.43 of the $65 cap, no pod running.** The second machine costs nothing.
 
 ### Earlier summary (2 October, during stage 2)
@@ -1506,12 +1511,79 @@ the rule (beat 0.2389) fails. Keeping only features seen in more than 10 states 
 memorising, and the decay costs about what the repeats add; a single annealed pass is the better use of the data.
 On all the games one pass is 10.95M decisions (3.3x `d1`'s), which should land near or below the transformer's 0.234.
 
-### Run 2: one annealed pass on all the games (from Sat 9:50 PM PT)
+### Run 2: one annealed pass on all the games (Sat 9:50-10:45 PM PT): ahead of the transformer
 
 The `d1` recipe (max + mean pooling, the table at 30x, features seen in more than 3 states, heads 1024, token dropout
 0.1, the passivity fix, 16 value positions, no weight decay) plus weight averaging (0.9995), one epoch with the cosine
-complete inside it (configs/exp4_train_mlp_1ep.yml, deploy/exp4_mlp_full.sh into runs/exp4/mlp_1ep), test split scored
-once at the end. ~1 hour. The 10-epoch run Dan asked for waits on his call: the evidence says it would trail this.
+complete inside it (configs/exp4_train_mlp_1ep.yml, deploy/exp4_mlp_full.sh into runs/exp4/mlp_1ep). Loading took 11
+minutes (the mapped tables cached), training **39 minutes** (2,315 s, ~4,700 decisions a second on one RTX PRO 6000),
+then the test split was scored once. On HF as `exp4/mlp_1ep/` with a model card (`ImitationNet.load` reads it).
+
+Validation (20,000 rows a table), every quarter epoch:
+
+| Epoch | Learning rate (share of peak) | Set NLL | Non-Pass | Attack | Targets | Value AUC | Value log-loss |
+|---|---|---|---|---|---|---|---|
+| 0.25 | 87% | 0.2420 | 0.820 | 0.849 | 0.659 | 0.776 | 0.555 |
+| 0.50 | 55% | 0.2333 | 0.827 | 0.862 | 0.704 | 0.783 | 0.556 |
+| 0.75 | 23% | 0.2296 | 0.828 | 0.865 | 0.722 | 0.786 | 0.554 |
+| **1.00** | 10% | **0.2271** | **0.832** | **0.870** | **0.735** | **0.787** | **0.553** |
+
+**The test split** (7,052 held-out games, scored once; `best_policy`, which is also the last evaluation), against the
+stage-3 transformer's `best_policy`:
+
+| Test split | Set NLL | Non-Pass top-1 | Attack | Block | Targets | Value AUC | Value log-loss | Training |
+|---|---|---|---|---|---|---|---|---|
+| Transformer, 1 layer, 3 epochs (stage 3) | 0.2345 | 0.825 | 0.863 | 0.748 | 0.709 | 0.781 | 0.555 | 4.3 h |
+| **MLP run 2, 1 annealed epoch** | **0.2289** | **0.829** | **0.873** | **0.749** | **0.730** | **0.784** | **0.552** | **0.6 h** |
+
+**Rare decisions** (test split, non-Pass top-1, by how often the human's move appears in training, and by the share
+of the state's features outside the vocabulary; tools/imitation_scale/rare_eval.py):
+
+| | < 1k | 1k-10k | 10k-100k | 100k+ | State Q1 (< 36% unknown) | Q2 | Q3 | Q4 (> 40%) |
+|---|---|---|---|---|---|---|---|---|
+| Transformer (stage 3) | 0.702 | 0.699 | 0.765 | **0.865** | 0.790 | 0.778 | 0.774 | 0.752 |
+| MLP `d1`, 30% of the games | 0.649 | 0.668 | 0.761 | 0.858 | 0.777 | 0.762 | 0.749 | 0.733 |
+| **MLP run 2, all the games** | **0.709** | **0.726** | **0.773** | 0.862 | **0.800** | **0.791** | **0.781** | **0.765** |
+
+<p align="center">
+  <img alt="Four panels of validation curves by training decisions seen: set NLL, non-Pass top-1, value AUC and value log-loss. MLP run 2 (green) sits below the transformer's 3-epoch curve (grey) from its first point, passes the transformer's final 0.234 by 5.5 million decisions and ends at 0.227; run 1 (orange) sits far above both; the 30% MLP (dashed green) tracks run 2 early." src="img/018-mlp-run2-rows.png">
+</p>
+
+- **One annealed pass of the MLP beats three epochs of the transformer** on every head of the test split: set NLL
+  0.229 against 0.234, targets +2.1 points, attack +1.0, at a seventh of the training time.
+- **More data is what rare moves needed:** +6 points on moves seen 1k-10k times over the 30% MLP, +2.7 over the
+  transformer; the transformer keeps a small edge only on the commonest moves (100k+).
+- The curves were still falling at the end (0.2296 → 0.2271 over the last quarter), so Dan asked to extend it.
+
+### Extending run 2 towards 20 epochs (Dan, Sat 10:50 PM PT)
+
+Dan: extend the new MLP for several epochs, up to 20 in total, stopping when it is clear performance has stopped
+improving; then evaluation games with the best MLP (10,000 games of greedy self-play for the 17lands statistics;
+100 games each of the MLP searching at 100, 300, 1,000 and 3,000 simulations against `heuristic@100`), all on the
+second machine's two RTX PRO 6000s.
+
+Waves I and J trained several epochs from scratch; continuing an annealed network is a different question (a warm
+restart: a fresh optimiser, a short warm-up, a cosine inside each extra epoch). **Wave K** screens it at 30% of the
+games, from `d1`'s weights (one annealed epoch, 0.2409), one more epoch, weight averaging and 4 value positions a game
+throughout (configs/exp4_sweep_ext_{a,b}.yml):
+
+| Run | Peak learning rate (table x30) | Weight decay |
+|---|---|---|
+| `k1` | 2e-5 | 0 |
+| `k2` | 5e-5 | 0 |
+| `k3` | 5e-5 | 0.1 (dense) |
+| `k4` | 1e-4 | 0.1 (dense) |
+
+**Rules, fixed before the results** (Sat 10:55 PM PT):
+- The wave-K winner is the lowest end-of-epoch validation set NLL whose value log-loss ends within 0.01 of `d1`'s
+  0.571.
+- Run 2 is then extended **one epoch at a time** with the winner's recipe, each epoch a new run from the previous
+  epoch's final (averaged) weights, scored on validation at its end.
+- **Stop** at the first epoch that does not improve the best validation set NLL so far by at least 0.001, or whose value
+  log-loss rises more than 0.01 above run 2's 0.553 without a policy gain of 0.002, or at 20 epochs in total. The
+  best epoch is the final MLP: test split, rare decisions, HF.
+- If no wave-K run beats `d1` by 0.002 (the seed-to-seed gap at 30%: 0.2409 against 0.2432), the extension still runs
+  one epoch on all the games with the best of them, and the same stopping rule applies.
 
 ## Stage 4: cheap evaluation (sb-v2)
 
