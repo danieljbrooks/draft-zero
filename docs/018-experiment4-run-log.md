@@ -6,6 +6,9 @@ newest summary is first). A shorter, polished account of what we learned will fo
 reasoning and the decisions from review are in [docs/017](017-experiment4-scaling-up-imitation-learning.md); its
 §6.1 has the stage estimates this log tracks against.*
 
+*Times: UTC up to 4 October 02:35 UTC; Pacific time (PT, PDT = UTC-7) from then on, which is 7:35 PM PT on Saturday
+3 October (Dan).*
+
 ## Where things stand (3 October, 21:00 UTC)
 
 - **The stage-3 transformer is trained and published** (HF `exp4/stage3/`, `ImitationNet` loads it): 1 layer,
