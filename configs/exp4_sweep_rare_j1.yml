@@ -1,0 +1,37 @@
+# Experiment #4: MLP wave J (Saturday 3 October, 8:50 PM PT; docs/018). Wave I (10% of the games, 3 epochs) showed only
+# dense weight decay on the embedding table stops multi-epoch overfitting (lazy decay and body-only decay don't), and that
+# 3 decayed passes on 10% (0.259) only match 1 annealed pass without decay (0.258). Does it pay at 30%? The leading
+# recipe with dense decay 0.1, an average of the weights (ema_decay 0.9995) and 4 value positions a game, 3 epochs on 30%,
+# against d1-s30-combined's single annealed pass (0.2409); J2 keeps only features seen in more than 10 training states.
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_sweep_rare_j{1,2}.yml --out runs/exp4/sweep_rare_j{1,2} \
+#       --tables-dir data/imitation_scale/h5
+title: "Experiment #4 sweep: decayed multi-epoch training on 30% (wave J)"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.3
+  vocab_k: 3
+  val_rows: 20000
+  max_epochs: 3.0
+  time_budget_s: 21600        # a cap only
+  eval_every_s: null
+  eval_every_steps: 15506     # quarter epochs (an epoch of 30% is ~62k steps)
+  ckpt_every_s: null
+  latest_every_s: 600
+  patience_epochs: null
+  # round 2's leader (19:08), v16-td-cosine-1e-4: TD(0.95) value targets, warm-up + cosine from 1e-4
+  arch: {layers: 1, norm_first: true}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
+  value_per_game: 16
+runs:
+  - {name: j1-s30-3ep-wd0.1-ema-vpg4, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_lr_mult: 30.0, weight_decay: 0.1, ema_decay: 0.9995, value_per_game: 4, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}
