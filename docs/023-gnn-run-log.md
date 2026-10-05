@@ -3,13 +3,13 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Monday 5 October, 12:05 AM PT)
+## Status (Monday 5 October, 1:00 AM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 0. Engineering | done, on main (5d1766a, a72792d, c18a727, c646d46) | laptop | – |
 | 1. Build | **done** 9:14 PM PT (2.7 h, no errors); tables, slim tables uploaded 9:49 PM PT. 0.3-0.7% of games differ from experiment #4's: a pre-existing leak between games in the bridge's workers, not the graph code (below) | pod `gnn-stage1` | ~$1.50 |
-| 2. Sweep | round 2 **done** (r1); round 1 (batch 64, pod) and round 3 (the value head, r1) **running**. **Best so far: small embeddings + dropout 0.1, set NLL 0.305, value AUC 0.671** against the MLP's 0.258 / 0.751 at the same data. High learning rates flatten the attack and value outputs | pod, r1 | |
+| 2. Sweep | rounds 2 and 3 **done** (r1); round 1 (batch 64, pod) and round 4 (the candidate recipe, r1) **running**. **Best so far: small embeddings + dropout 0.1, set NLL 0.305, value AUC 0.671** against the MLP's 0.258 / 0.751 at the same data. The game result beats TD as the GNN's value target (AUC +0.06); high learning rates flatten the attack and value outputs | pod, r1 | |
 | 3. Scale check, large training | | | |
 | 4. Offline evaluation | held-out cards chosen (below); the tooling is on main | | |
 | 5. Games | | | |
@@ -92,6 +92,8 @@ Validation, 20,000 rows a table, one epoch on the same 10% of the training games
 | *round 1, batch 64 (pod)* | | | | | | | | |
 | g-lr3e-4 | 0.375 | 0.717 | 0.628 | 0.687 | 0.535 | 0.507 | 0.993 | 22.6 min |
 | g-lr3e-5 | 0.332 | 0.735 | 0.753 | 0.690 | 0.590 | **0.688** | 0.924 | 22.2 min |
+| g-emb-lr10 (leaf tables' rate ×10) | 0.317 | 0.740 | 0.741 | 0.693 | 0.584 | 0.656 | 0.918 | 22.6 min |
+| g-act5 (passivity fix ×5) | 0.352 | 0.735 | 0.745 | 0.689 | 0.579 | 0.552 | 0.948 | 23.0 min |
 | *round 2, batch 256 (r1)* | | | | | | | | |
 | g256-base-again | 0.328 | 0.735 | 0.742 | 0.690 | 0.598 | 0.667 | 0.932 | 4.8 min |
 | **g256-emb0.02-drop0.1** | **0.305** | **0.744** | 0.753 | 0.690 | **0.619** | 0.671 | 0.924 | 4.7 min |
@@ -100,7 +102,12 @@ Validation, 20,000 rows a table, one epoch on the same 10% of the training games
 | g256-passes1 | 0.340 | 0.734 | 0.719 | 0.687 | 0.560 | 0.582 | 0.941 | 3.2 min |
 | g256-global1 | 0.346 | 0.735 | 0.742 | 0.690 | 0.560 | 0.630 | 0.980 | 4.2 min |
 | g256-d256 (width 256) | 0.319 | 0.735 | **0.759** | 0.696 | 0.581 | 0.636 | 0.922 | 3.3 min |
-| g256-global4 | *died at 0.75 epochs (disk full): 0.326 there, against g256-base-again's 0.332; rerunning* | | | | | | | |
+| g256-global4 | 0.327 | 0.739 | 0.734 | 0.690 | 0.582 | 0.624 | 0.928 | 6.0 min |
+| *round 3, the value head: small embeddings, batch 256 (r1)* | | | | | | | | |
+| g256-v-result (the game result, no TD) | 0.316 | 0.734 | 0.725 | 0.689 | 0.612 | **0.674** | 0.926 | 4.6 min |
+| g256-v-td95 (TD 0.95, MageZero's) | 0.310 | 0.741 | 0.735 | 0.689 | 0.620 | 0.588 | 0.924 | 4.9 min |
+| g256-v-weight2 (value loss ×4) | 0.347 | 0.730 | 0.721 | 0.688 | 0.563 | 0.664 | 0.968 | 5.0 min |
+| g256-v-only (no policy losses) | 0.935 | 0.523 | 0.502 | 0.637 | 0.365 | 0.521 | 0.502 | 4.7 min |
 | *the GNN at 2.4% (docs/022 §2.3)* | *0.343* | *0.721* | *0.711* | *0.722* | *0.540* | *0.536* | *0.982* | |
 | *experiment #4's MLP at 10% (best)* | *0.258* | *0.807* | *0.827* | *0.711* | *0.617* | *0.751* | | |
 | *experiment #4's transformer at 10% (act3-td99)* | *0.285* | *0.791* | | | | *0.749* | *0.937* | |
@@ -123,7 +130,17 @@ Validation, 20,000 rows a table, one epoch on the same 10% of the training games
   0.683, still falling at the end. Experiment #4's MLP gained less from repeats.
 - **Shape:** width 256 is as good as 512 (0.319, the best attacks, 30% faster); one local pass or one global layer is
   worse (0.340, 0.346).
-- **The value head is still the weakest part:** 0.50–0.69 in every run against the MLP's 0.751. Round 3 asks why.
+- **The value head is still the weakest part:** 0.50–0.69 in every run against the MLP's 0.751.
+- **Round 3, the value head** (against small embeddings alone, TD(0.99): set NLL 0.315, value AUC 0.615):
+  - **The game result is the better target for the GNN:** value AUC 0.674 (+0.06), log-loss 0.622 (−0.028), the
+    policy unchanged (0.316). The TD trap: TD(0.99) blends in the network's own still-poor value.
+  - **TD(0.95), MageZero's λ, is the transformer's trade again:** the policy a little better (0.310, within noise),
+    the value worse (0.588). In MageZero the blend is with the search's root score, not the network's value.
+  - **A heavier value loss lifts the value and costs the policy** (0.347): the shared features are contested.
+  - **The value alone learns nothing in an epoch** (AUC 0.52): the value head lives on the features the policy
+    losses build. A separate value tower (experiment #4's `x-value-tower`) wouldn't help the GNN without them.
+- **Round 1 (pod):** the leaf tables' rate ×10 helps a little (0.317, inside twice the batch-64 band); the passivity
+  fix at ×5 moves Pass on top toward the humans (0.948, humans 0.934) at a cost (0.352).
 - **The scaling check (§4.2).** The gap to the MLP in set NLL was 0.076 at 2.4% of the games; at 10% it is 0.047
   with the best recipe (0.066–0.078 with Will's settings). Smaller, as the plan's rule asks to go on: stage 3's 30%
   check decides whether it keeps closing.
@@ -138,6 +155,12 @@ and round 1's shape arms (1 local pass, 1 and 4 global layers, width 256). The p
 
 Round 1's leftover arm (g-passes1) on r1 was stopped at 10:15 PM PT; GPU 0 runs only round 2. Round 2 ended at
 11:45 PM PT (g256-global4 lost to the full disk; rerun after round 3).
+
+### Round 4: the candidate recipe (r1, started 12:52 AM PT)
+
+`configs/gnn_sweep_r4.yml`: small embeddings, dropout 0.1, the game result as the value target, and one change each:
+a second seed, learning rate 1e-4, width 256, the leaf tables' rate ×10. The winner goes to stage 3's 30% check on the
+pod (r1's 58 GB of RAM, shared with another session's games, can't hold 30% of the tables).
 
 ### Round 3: the value head (r1)
 
