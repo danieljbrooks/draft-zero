@@ -6,7 +6,8 @@
 # Before it: a bootstrapped repo (deploy/slim_bootstrap.sh or deploy/bootstrap.sh), and data/17lands/ (the FDN replay
 # file, cards.csv, abilities.csv, xmage_Foundations_SpecialGuests.json) and data/imitation_scale/row_split_exp4.npy
 # copied in: they aren't on HF. ~3 h of build and ~2 h of tables on 24 workers; the shards need ~65 GB of disk.
-# Env: WORKERS (default: the cgroup's cores - 2), HEAP (2500m), OUT (data/imitation_graph), SKIP_BUILD=1 (tables on).
+# Env: WORKERS (default: the cgroup's cores - 2), HEAP (2500m), OUT (data/imitation_graph), SKIP_BUILD=1 (tables on),
+# TABLE_JOBS (8: parts turned into tables at once).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 : "${HF_TOKEN:?set HF_TOKEN to a token that can write danbrooks/draftzero-checkpoints}"
@@ -53,7 +54,7 @@ if [ -z "${SKIP_BUILD:-}" ]; then
   $PY tools/imitation_scale/build.py build --graph --out "$OUT" --workers "$W" --heap "${HEAP:-2500m}" || { log "build failed"; exit 4; }
 fi
 log "tables"
-$PY tools/imitation_scale/build.py tables --graph --out "$OUT" || { log "tables failed"; exit 5; }
+$PY tools/imitation_scale/build.py tables --graph --out "$OUT" --jobs "${TABLE_JOBS:-8}" || { log "tables failed"; exit 5; }
 
 log "compare with experiment #4's tables"
 $PY - <<'PY'

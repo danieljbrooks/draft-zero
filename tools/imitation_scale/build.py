@@ -604,10 +604,22 @@ def _sum_stats(a: dict, b: dict) -> dict:
     return out
 
 
-def tables(log=print, keep_parts: bool = False, graph: bool = False, out_root: Path | None = None) -> dict:
-    """Shard parts -> HDF5 tables (tables_part), one part at a time into h5/parts/<i>/, then each
+def _tables_part_job(job: tuple) -> dict:
+    """One part's tables into its directory, marked done (tables' worker; a module-level function, for spawn)."""
+    paths, d, graph = job
+    d = Path(d)
+    if d.exists():
+        shutil.rmtree(d)
+    d.mkdir(parents=True)
+    st = tables_part(paths, d, log=lambda *a, **k: None, graph=graph)
+    (d / "done.json").write_text(json.dumps(st, default=str))
+    return st
+
+
+def tables(log=print, keep_parts: bool = False, graph: bool = False, out_root: Path | None = None, jobs: int = 1) -> dict:
+    """Shard parts -> HDF5 tables (tables_part), into h5/parts/<i>/, `jobs` parts at a time, then each
     table's parts merged into h5/<table>_<split>.h5 (merge_h5). A finished part is marked, so a
-    re-run resumes. Memory: one part (~1.3 MB a game) rather than the whole build."""
+    re-run resumes. Memory: `jobs` parts (~1.3 MB a game each; ~3x that with graphs) rather than the whole build."""
     root = out_root or OUT
     sh, h5 = root / "shards", root / "h5"
     parts = completed_parts(sh)
@@ -616,19 +628,19 @@ def tables(log=print, keep_parts: bool = False, graph: bool = False, out_root: P
     pdir = h5 / "parts"
     out: dict = {}
     t0 = time.monotonic()
-    for j, p in enumerate(parts):
-        d = pdir / f"{max(p['i'], 0):05d}"
-        done = d / "done.json"
-        if done.exists():
-            st = json.loads(done.read_text())
-        else:
-            if d.exists():
-                shutil.rmtree(d)
-            d.mkdir(parents=True)
-            st = tables_part(p["paths"], d, log=lambda *a, **k: None, graph=graph)
-            done.write_text(json.dumps(st, default=str))
-        out = _sum_stats(out, st)
-        log(f"tables: part {j + 1}/{len(parts)} done ({time.monotonic() - t0:.0f} s)", flush=True)
+    dirs = [pdir / f"{max(p['i'], 0):05d}" for p in parts]
+    todo = [(p["paths"], str(d), graph) for p, d in zip(parts, dirs) if not (d / "done.json").exists()]
+    if todo and jobs > 1:
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(min(jobs, len(todo))) as pool:
+            for k, _ in enumerate(pool.imap_unordered(_tables_part_job, todo)):
+                log(f"tables: {k + 1}/{len(todo)} parts done ({time.monotonic() - t0:.0f} s)", flush=True)
+    else:
+        for k, job in enumerate(todo):
+            _tables_part_job(job)
+            log(f"tables: {k + 1}/{len(todo)} parts done ({time.monotonic() - t0:.0f} s)", flush=True)
+    for d in dirs:
+        out = _sum_stats(out, json.loads((d / "done.json").read_text()))
     names = sorted({f.name for p in parts for f in (pdir / f"{max(p['i'], 0):05d}").glob("*.h5")})
     for name in names:
         srcs = [pdir / f"{max(p['i'], 0):05d}" / name for p in parts]
@@ -855,6 +867,7 @@ def main(argv=None) -> None:
     t.add_argument("--keep-parts", action="store_true", help="keep h5/parts/ (the per-part tables)")
     t.add_argument("--graph", action="store_true", help="also write <table>_<split>.graph.h5 (needs a --graph build)")
     t.add_argument("--out", type=Path, help=f"build root (default {OUT})")
+    t.add_argument("--jobs", type=int, default=1, help="parts built at once (memory: ~4 GB a 5,000-game part with graphs)")
     c = sub.add_parser("compare", help="do two builds' flat tables hold the same rows, game by game?")
     c.add_argument("a", type=Path)
     c.add_argument("b", type=Path)
@@ -885,7 +898,8 @@ def main(argv=None) -> None:
         print(json.dumps(build(a.workers, a.limit, a.heap, part_games=a.part_games, graph=a.graph, out_root=a.out),
                          indent=1))
     else:
-        print(json.dumps(tables(keep_parts=a.keep_parts, graph=a.graph, out_root=a.out), indent=1, default=str))
+        print(json.dumps(tables(keep_parts=a.keep_parts, graph=a.graph, out_root=a.out, jobs=a.jobs), indent=1,
+                         default=str))
 
 
 if __name__ == "__main__":
