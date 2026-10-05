@@ -369,6 +369,9 @@ def test_play_op_with_a_graph_network(worker):
                "evaluator": {"type": "graph", "host": "127.0.0.1", "port": net.port}}
         p = worker.request("play", None, deckA=decks[0], deckB=decks[1], seatA=pol, seatB=heur, seed=3, maxTurns=6,
                            timeout=900)
+        # PIMC (docs/019 §4.6): MageZero's tree search on one world, with the graph network's priors and values
+        pm = worker.request("play", None, deckA=decks[0], deckB=decks[1], seatA={**gnn, "method": "pimc"},
+                            seatB={**heur, "method": "pimc"}, seed=3, maxTurns=6, timeout=900)
     finally:
         net.close()
     a = r["seats"]["A"]
@@ -376,6 +379,9 @@ def test_play_op_with_a_graph_network(worker):
     assert a["netPriors"] > 0 and a["graphPolicyMisses"] >= 0 and r["seats"]["B"]["netEvals"] == 0
     pa = p["seats"]["A"]
     assert pa["policyDecisions"] > 0 and pa["decisions"] == pa["policyDecisions"] + pa["policySearched"]
+    ma = pm["seats"]["A"]
+    assert ma["fallbacks"] == 0 and ma["decisions"] > 0 and ma["sims"] == 8 * ma["decisions"]
+    assert ma["netEvals"] >= ma["sims"] and ma["netPriors"] > 0
 
 
 # ------------------------------------------------------------------------------------------------
