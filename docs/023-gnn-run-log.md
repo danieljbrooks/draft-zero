@@ -3,13 +3,13 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Sunday 4 October, 10:10 PM PT)
+## Status (Sunday 4 October, 10:30 PM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 0. Engineering | done, on main (5d1766a, a72792d, c18a727, c646d46) | laptop | – |
 | 1. Build | **done** 9:14 PM PT (2.7 h, no errors); tables, slim tables uploaded 9:49 PM PT. 0.3-0.7% of games differ from experiment #4's: a pre-existing leak between games in the bridge's workers, not the graph code (below) | pod `gnn-stage1` | ~$1.50 |
-| 2. Sweep | **running**: round 1 (batch 64) on the pod; round 2 (batch 256) on r1 after its second seed. **First result: the GNN trails the MLP clearly at 10% too** (set NLL 0.334 against 0.258) | pod, r1 | |
+| 2. Sweep | **running**: round 1 (batch 64) on the pod, round 2 (batch 256) on r1. **The GNN trails the MLP clearly at 10% too**: set NLL 0.315–0.336 against 0.258, value AUC 0.56–0.62 against 0.75. Batch 256 costs nothing; small embeddings help the policy a little, not the value | pod, r1 | |
 | 3. Scale check, large training | | | |
 | 4. Offline evaluation | held-out cards chosen (below); the tooling is on main | | |
 | 5. Games | | | |
@@ -80,17 +80,32 @@ Validation, 20,000 rows a table, one epoch on the same 10% of the training games
 
 | Run | Set NLL | Top-1 acted | Attacks | Blocks | Targets | Value AUC | Pass on top, opp. turn (humans 0.934) | Train time |
 |---|---|---|---|---|---|---|---|---|
-| **g-batch256** (r1) | 0.334 | 0.731 | 0.737 | 0.689 | 0.585 | 0.623 | 0.947 | 4.5 min |
+| g-base (pod, batch 64) | 0.336 | 0.734 | 0.736 | 0.694 | 0.582 | 0.559 | 0.967 | 22.7 min (3090) |
+| g-base-seed1 (r1, batch 64) | 0.324 | 0.732 | 0.734 | 0.690 | 0.586 | 0.614 | 0.938 | 7.6 min |
+| g-batch256 (r1) | 0.334 | 0.731 | 0.737 | 0.689 | 0.585 | 0.623 | 0.947 | 4.5 min |
+| **g256-emb0.02** (r1) | **0.315** | **0.740** | **0.742** | 0.689 | **0.614** | 0.615 | 0.936 | 4.6 min |
 | *the GNN at 2.4% (docs/022 §2.3)* | *0.343* | *0.721* | *0.711* | *0.722* | *0.540* | *0.536* | *0.982* | |
 | *experiment #4's MLP at 10% (best)* | *0.258* | *0.807* | *0.827* | *0.711* | *0.617* | *0.751* | | |
 | *experiment #4's transformer at 10% (act3-td99)* | *0.285* | *0.791* | | | | *0.749* | *0.937* | |
+| *experiment #4's MLP, all the games, on this build's rows* | *0.227* | *0.832* | *0.870* | *0.744* | *0.734* | *0.787* | *0.930* | |
+| *experiment #4's transformer, all the games, on this build's rows* | *0.234* | *0.828* | *0.856* | *0.741* | *0.707* | *0.781* | *0.927* | |
 
 - **Four times the data barely moved the GNN** (set NLL 0.343 → 0.334), while the flat networks gained a lot between
   similar sizes. If that holds for the batch-64 base, the plan's scaling question already leans against Will's
   data-hunger reading at these sizes.
-- **One untried fix:** experiment #4's transformer trained well only after its embeddings started at std 0.02 instead
-  of 1 (attack +0.026, value AUC +0.05). Will's network still draws its leaf, type and value embeddings and CLS from
-  N(0, 1). `emb_init_std` (graph_supervised.py) and round 2 (`configs/gnn_sweep_r2.yml`) test it.
+- **The seed-to-seed band at batch 64 is wide:** set NLL 0.324 and 0.336, value AUC 0.614 and 0.559. The plan's rule
+  (§4.2: a setting must beat the base by twice the seed difference) asks for 0.024 in set NLL.
+- **Batch 256 is free:** 0.334 sits inside the batch-64 band, at a quarter of the steps. Round 2 and the later stages
+  use it.
+- **Small embeddings help the policy, not the value.** Experiment #4's transformer trained well only after its
+  embeddings started at std 0.02 instead of 1. Will's network draws its leaf, type and value embeddings and CLS from
+  N(0, 1). With `emb_init_std` 0.02: set NLL 0.315 (0.019 better than batch 256's base, short of the rule's 0.024
+  until round 2's second batch-256 seed), targets +0.029, attacks +0.005, value AUC unchanged (0.615).
+- **The value head is the weakest part.** Value AUC 0.56–0.62 in every run against the MLP's 0.75 at the same data,
+  and still climbing at the end of the epoch (0.58 → 0.61 over the last half). The three-epoch arm says whether it
+  is slow or stuck.
+- **The scaling check (§4.2).** The gap to the MLP was 0.076 at 2.4% of the games; at 10% it is 0.066–0.078 for the
+  base and 0.057 with small embeddings. Barely smaller: stage 3's 30% check decides.
 
 ### Round 2: batch 256 on r1
 
@@ -99,6 +114,8 @@ A batch-256 run takes ~5 minutes on r1, four times faster than batch 64. So once
 emb_init_std 0.02 (alone, with dropout 0.1, with lr 5e-4, for 3 epochs), g-batch256 again with quarter-epoch curves,
 and round 1's shape arms (1 local pass, 1 and 4 global layers, width 256). The pod keeps round 1's batch-64 arms
 (learning rates, the leaf table's rate, dropout, the passivity fix).
+
+Round 1's leftover arm (g-passes1) on r1 was stopped at 10:15 PM PT; GPU 0 runs only round 2.
 
 **Why batch 256 runs first.** A profile of a training step on r1 (`torch.profiler`, the planning tables): at 64
 states a step the CPU spends ~39 ms issuing ~3,000 small kernels while the GPU works ~16 ms. The step is launch-bound
