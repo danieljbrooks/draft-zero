@@ -1661,7 +1661,7 @@ torch; set up in 8 minutes). Pod 1 plays `il_bc@1000` (100 games) and the 3,000-
 workers each; pod 2 took shard 0 from the second machine (its 16 finished games copied over, 24 workers), freeing the
 second machine for `il_bc@100` and `@300`.
 
-### The MLP against the baseline, by search budget (running; 12:35 PM PT)
+### The MLP against the baseline, by search budget (1,000 done 5:50 PM PT; 3,000 running)
 
 Run 2's MLP against `heuristic@100` on phase C's deck pairs and seeds, so every game replays one of the transformer's
 but for the network: the policy alone (greedy, open decklists, as C1; Dan, 8:20 AM: "100 games of policy (greedy)
@@ -1674,7 +1674,7 @@ last column compares the two networks on the same games (same deck pair, seats a
 | 0: the policy alone, greedy | 104 | 0.380 [0.29, 0.48] | 1.6 min | 0.403 (2,435) | 3.4 min | -0.024 ± 0.099 (104) |
 | 100 | 103 | 0.563 [0.47, 0.65] | 5.0 min | 0.552 (116) | 9.1 min | +0.000 ± 0.083 (101) |
 | 300 | 103 | 0.641 [0.54, 0.73] | 15.8 min | 0.606 (99) | 26 min | +0.030 ± 0.091 (99) |
-| 1,000 | running (41 so far) | – | ~50 min | 0.622 (98) | 113 min | – |
+| 1,000 | 100 (of 104; 3 machines + a top-up) | 0.640 [0.54, 0.73] | 74 min (mostly slower Community pods) | 0.622 (98) | 113 min | +0.021 ± 0.092 (96) |
 | 3,000 | running (36 so far) | – | ~90-150 min | not run | – | – |
 
 - **The MLP plays as well as the transformer at every budget so far** (the paired differences are within a point or
