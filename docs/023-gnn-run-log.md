@@ -14,6 +14,19 @@ Dan approved the plan ("push to main, use r1 if available, budget is okay"). All
 | 4. Offline evaluation | **held-out cards done:** without the cards' games, the GNN loses about half what the MLP loses on decisions where a held-out card is legal (top-1 −6.4 points against −10.9); the test split runs at the end of the large training | `gnn-stage1` | |
 | 5. Games | | | |
 
+## Results on Hugging Face
+
+Everything below is in the HF repo `danbrooks/draftzero-checkpoints`:
+
+| Path | What |
+|---|---|
+| `gnn/main/` | **the final network** (all the games, three epochs): `best_policy`, `best_value`, `final` (.pt.gz, MageZero's graph checkpoint layout), `evals.jsonl`, `test_best_policy.json` / `test_best_value.json`, `config.json`, `train.log` |
+| `gnn/scale30/` | the 30% check: `s30-d256` (also the held-out test's control), `s30-d512`, `s30-d256-3ep`; curves, configs, best_policy / best_value |
+| `gnn/heldout/train/`, `gnn/heldout/eval/` | the held-out-cards networks (GNN and MLP without the five cards' games) and the four networks' scores |
+| `gnn/sweeps/r1/`, `gnn/sweeps/pod_round1/` | every sweep run's curve, config and summary (rounds 1-6), and r1's sweep logs |
+| `gnn/ref/` | experiment #4's MLP and transformer scored on this build's validation and test rows; `compare.json` (the build against experiment #4's tables) |
+| `exp4/tables_graph/slim/` | the graph tables (graph files + labels) |
+
 ## Where things run
 
 - **r1** (Dama's box): GPU 0 is free; GPU 1 and 8 CPU workers run another session's MLP games. The home disk has
