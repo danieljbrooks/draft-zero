@@ -7,7 +7,8 @@
 #   e.g. bash deploy/gnn_pimc_games.sh models/gnn/main/best_policy.pt.gz policy:20:2g gnn100:24:2500m gnn1000:24:2500m
 # RUN: policy (gnn_policy_greedy against heuristic@100), gnnN (gnn@N against heuristic@100), or h2hN (gnn@N against
 # the MLP's il_bc@N; MLP=<flat checkpoint> in the environment). After deploy/exp4_games_setup.sh.
-# Env: REPLICAS (3 graph servers: one serves ~650 states a second), DECKLISTS (closed | open), MLP.
+# Env: REPLICAS (3 graph servers: one serves ~650 states a second), DECKLISTS (closed | open), MLP, TAG (a name tag:
+# pimc-gnn-<TAG>-gnn100, e.g. the network's), SHARD (I/N: this pod's deck pairs, pair % N == I; not topped up).
 set -u
 cd "$(dirname "$0")/.."
 export PATH=$HOME/venv/bin:/root/venv/bin:$PATH
@@ -18,6 +19,7 @@ valid() { python -c "import json,sys; print(json.load(open(sys.argv[1]))['games'
 DECKLISTS=${DECKLISTS:-closed}
 case $DECKLISTS in closed) PREFIX=pimc-gnn OPEN="" ;; open) PREFIX=pimc-open-gnn OPEN=--open-decklists ;;
   *) echo "DECKLISTS must be closed or open"; exit 2 ;; esac
+PREFIX=$PREFIX${TAG:+-$TAG}
 
 for item in "$@"; do
   IFS=: read -r RUN W HEAP <<< "$item"
@@ -31,11 +33,12 @@ for item in "$@"; do
   PAIRS=50 ROUND=0
   while :; do
     log "$NAME: $B1 against $B2, PIMC ($DECKLISTS decklists), $PAIRS pairs, $W workers, heap $HEAP"
-    bash deploy/gnn_games_run.sh "$NAME" "$MODEL" "${REPLICAS:-3}" --bot1 "$B1" --bot2 "$B2" --method pimc $OPEN \
-      --pairs "$PAIRS" --workers "$W" --heap "$HEAP" --max-turns 50 --search-timeout 900 --game-timeout "$GT"
-    V=$(valid "runs/gnn/games/$NAME")
+    bash deploy/gnn_games_run.sh "$NAME${SHARD:+-s${SHARD%/*}}" "$MODEL" "${REPLICAS:-3}" --bot1 "$B1" --bot2 "$B2" \
+      --method pimc $OPEN ${SHARD:+--shard "$SHARD"} --pairs "$PAIRS" --workers "$W" --heap "$HEAP" --max-turns 50 \
+      --search-timeout 900 --game-timeout "$GT"
+    V=$(valid "runs/gnn/games/$NAME${SHARD:+-s${SHARD%/*}}")
     log "$NAME: $V valid games"
-    [ "$V" -ge 100 ] && break
+    { [ -n "${SHARD:-}" ] || [ "$V" -ge 100 ]; } && break
     ROUND=$((ROUND + 1))
     [ "$ROUND" -gt 3 ] && { log "$NAME: still short after 3 top-ups; moving on"; break; }
     PAIRS=$((PAIRS + (100 - V + 1) / 2 + 1))
