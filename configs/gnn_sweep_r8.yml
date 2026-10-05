@@ -1,0 +1,38 @@
+# docs/024, round 8: the final model's shape, judged the way the final run trains (Dan: train as long as it improves,
+# up to ~48 hours; the goal is the final model). Round 7 (10%, three epochs): local depth 3 and 3 passes x depth 2
+# gained ~0.008 in set NLL over the base (0.254-0.256), depth 2 alone and 4 passes didn't. Short runs favour fast
+# learners, so this round trains the base and the two deeper shapes for 8 epochs of 30% of the games ("at high data
+# scale"), with the extendable schedule (wsd: hold the peak, cosine down over the last 20%): which keeps improving,
+# and where does each start to overfit?
+#
+#   bash ~/r1_sweep.sh <gpu> configs/gnn_sweep_r8.yml runs/gnn/sweep_r8<g|h> r8-base,... <minutes> "data_cache=/var/tmp/dz-gnn-cache"
+title: "docs/024 round 8: long runs at 30%"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.3
+  val_rows: 20000
+  data_cache: /var/tmp/dz-gnn-cache
+  stream_cache: true
+  max_epochs: 8.0
+  time_budget_s: 43200
+  eval_every_steps: 6440       # half epochs at 256 states a step
+  ckpt_every_s: null
+  latest_every_s: 900
+  batch_rows: 256
+  lr: 1.0e-4
+  lr_schedule: wsd
+  wsd_decay_frac: 0.2
+  warmup_steps: 750
+  emb_init_std: 0.02
+  value_target: result
+  arch: {dropout: 0.1, d_model: 256, ff: 512}
+runs:
+  - {name: r8-base}
+  - {name: r8-p3d2, arch: {dropout: 0.1, d_model: 256, ff: 512, passes: 3, local_depth: 2}}
+  - {name: r8-depth3, arch: {dropout: 0.1, d_model: 256, ff: 512, local_depth: 3}}
