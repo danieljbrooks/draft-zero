@@ -484,6 +484,8 @@ def _stream_cache(gpath: Path, sel: np.ndarray, vocab, edge_vocab, d: Path, chun
         mm["opt_is_pass"][o:o + co] = g["is_pass"]
         mm["graph_type"][r:r + k] = g["graph_type"]
         r, nn, e, o, on = r + k, nn + cn, e + ce, o + co, on + con
+        for a in mm.values():      # write back now: dirty pages count against a container's memory limit (docs/024)
+            a.flush()
     if (r, nn, e, o, on) != (n, N, E, O, ON):
         raise RuntimeError(f"{gpath}: streamed {(r, nn, e, o, on)} against {(n, N, E, O, ON)}")
     for a in mm.values():
