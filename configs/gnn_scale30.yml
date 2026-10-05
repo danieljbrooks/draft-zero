@@ -1,0 +1,35 @@
+# docs/022 stage 3, the scale check (docs/023): the GNN's best recipe from the 10% sweep on 30% of the training games
+# (3.3M decisions, experiment #4's 30% subset), against the 30% MLP (set NLL 0.241) and transformer (0.256). Does the
+# gap to the MLP keep closing with data (0.076 at 2.4% with Will's settings, 0.028 at 10% with round 4's)? Width 256
+# (round 4's best at 10%: set NLL 0.286) and Will's 512 (0.292): is the wider network the data-hungry one? Then three
+# epochs of the same 30% at width 256. On the pod (r1's RAM can't hold 30% of the tables beside another session's
+# games); ~25-40 min an epoch on a 3090.
+#
+#   OUT=runs/gnn/scale30 SPEC=configs/gnn_scale30.yml bash deploy/gnn_sweep.sh 0 s30-d256,s30-d512,s30-d256-3ep \
+#     data/imitation_graph/h5
+title: "docs/022 stage 3: 30% of the games"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.3
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 14400
+  eval_every_steps: 3220       # quarter epochs at 256 states a step
+  ckpt_every_s: null
+  latest_every_s: 900
+  batch_rows: 256
+  lr: 1.0e-4
+  warmup_steps: 750
+  emb_init_std: 0.02
+  value_target: result
+  arch: {dropout: 0.1}
+runs:
+  - {name: s30-d256, arch: {dropout: 0.1, d_model: 256, ff: 512}}
+  - {name: s30-d512}
+  - {name: s30-d256-3ep, arch: {dropout: 0.1, d_model: 256, ff: 512}, max_epochs: 3.0}

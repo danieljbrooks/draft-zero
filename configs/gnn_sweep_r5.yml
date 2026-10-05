@@ -1,0 +1,34 @@
+# docs/022, stage 2, round 5 (docs/023): round 4's two winners together, width 256 (set NLL 0.286 against the
+# recipe's 0.303-0.306) and learning rate 1e-4 (0.292, value AUC 0.747), on round 4's recipe (small embeddings,
+# dropout 0.1, the game result as the value target). One change each: a second seed, width 128, learning rate 5e-5,
+# three epochs of the same 10% (the repeats question at the new recipe).
+#
+#   SPEC=configs/gnn_sweep_r5.yml OUT=runs/gnn/sweep_r1e bash deploy/gnn_sweep.sh 0 r5-base,r5-seed1,r5-d128,r5-lr5e-5,r5-3ep data/imitation_graph/slim
+title: "docs/022 stage 2, round 5: width 256 at lr 1e-4"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.1
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 3600
+  eval_every_steps: 1075
+  ckpt_every_s: null
+  latest_every_s: 600
+  batch_rows: 256
+  lr: 1.0e-4
+  warmup_steps: 750
+  emb_init_std: 0.02
+  value_target: result
+  arch: {dropout: 0.1, d_model: 256, ff: 512}
+runs:
+  - {name: r5-base}
+  - {name: r5-seed1, seed: 1}
+  - {name: r5-d128, arch: {dropout: 0.1, d_model: 128, ff: 256}}
+  - {name: r5-lr5e-5, lr: 5.0e-5}
+  - {name: r5-3ep, max_epochs: 3.0}
