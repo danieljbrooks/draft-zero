@@ -3,14 +3,14 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Monday 5 October, 6:20 AM PT)
+## Status (Monday 5 October, 6:45 AM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 0. Engineering | done, on main (5d1766a, a72792d, c18a727, c646d46) | laptop | – |
 | 1. Build | **done** 9:14 PM PT (2.7 h, no errors); tables, slim tables uploaded 9:49 PM PT. 0.3-0.7% of games differ from experiment #4's: a pre-existing leak between games in the bridge's workers, not the graph code (below) | pod `gnn-stage1` | ~$1.50 |
 | 2. Sweep | **done** (6 rounds, 44 runs). **The recipe: width 256, embeddings at std 0.02, dropout 0.1, the game result as the value target, lr 1e-4, batch 256.** Three epochs of 10%: set NLL 0.256, top-1 0.813, value AUC 0.776, past the MLP's best at 10% (0.258 / 0.807 / 0.751); five: 0.247. Will's settings gave 0.324–0.336 | pod, r1 | |
-| 3. Scale check, large training | 30% check **done**: one epoch 0.250 (the MLP 0.241: the gap closes with data, 0.037 at 10%, 0.009 at 30%); **three epochs 0.232, ahead of the 30% MLP on every measure** and level with experiment #4's full-data MLP on most. **Large training running** on `gnn-full` (0.238 at 0.75 epochs), done ~6:45 AM PT | `gnn-stage1`, `gnn-full` | |
+| 3. Scale check, large training | **done.** 30%: one epoch 0.250 (the gap to the MLP closes with data: 0.037 at 10%, 0.009 at 30%), three epochs 0.232. **All the games, three epochs (6:35 AM PT): test set NLL 0.214, top-1 0.847, value AUC 0.797, ahead of experiment #4's MLP (0.229 / 0.829 / 0.784) and transformer on every measure.** HF `gnn/main/` | `gnn-stage1`, `gnn-full` | $7.31 (`gnn-full`) |
 | 4. Offline evaluation | **held-out cards done:** without the cards' games, the GNN loses about half what the MLP loses on decisions where a held-out card is legal (top-1 −6.4 points against −10.9); the test split runs at the end of the large training | `gnn-stage1` | |
 | 5. Games | | | |
 
@@ -211,6 +211,23 @@ free). Results go to HF `gnn/main/` every 15 minutes; the test split is scored a
   (r1 trains the same network at ~5,800: this pod's GPU sits at ~47%), so three epochs take ~2.8 hours.
 - Quarter epochs: set NLL 0.256 → 0.243 → 0.238; top-1 0.817 → 0.831; attacks 0.793 → 0.857; value AUC 0.759 →
   0.784.
+- **Done 6:35 AM PT** (3 epochs, 128,361 steps, 3.4 hours with the load); the test split scored by 6:37; everything
+  on HF `gnn/main/` (best_policy, best_value, final, evals, the test scores); `gnn-full` removed at 6:39 AM PT
+  (3.5 hours, $7.31). Validation: 0.256 at a quarter epoch, 0.232 at one, 0.220 at two, 0.214 at three; still
+  falling slowly (0.2137 → 0.2133 over the last quarter).
+
+**The test split** (stage 4), the same rows for all three networks (experiment #4's scored on this build's rows):
+
+| All the training games | Set NLL | Top-1 acted | Attacks | Blocks | Targets | Value AUC | Value log-loss | Pass on top, opp. turn (humans 0.934) |
+|---|---|---|---|---|---|---|---|---|
+| **GNN, width 256, three epochs** | **0.214** | **0.847** | **0.878** | **0.783** | **0.779** | **0.797** | **0.526** | 0.927 |
+| MLP (experiment #4, `mlp_1ep`) | 0.229 | 0.829 | 0.873 | 0.750 | 0.730 | 0.784 | 0.552 | 0.931 |
+| transformer (experiment #4, stage 3, three epochs) | 0.235 | 0.825 | 0.862 | 0.748 | 0.709 | 0.781 | 0.549 | 0.928 |
+
+- **The GNN leads on every measure:** set NLL −0.015 against the MLP, top-1 +1.8 points, blocks +3.3, targets +4.9,
+  value AUC +0.013. Its gains are largest on the decisions about specific cards and creatures (targets, blocks),
+  which the graph represents directly.
+- best_policy and best_value are the same checkpoint (the last evaluation was best on both).
 
 ### Round 5: width 256 at lr 1e-4 (r1, 1:35–2:03 AM PT), and round 6
 
@@ -325,4 +342,4 @@ The list is `data/imitation_graph/heldout/{cards.json,exclude_games.npy}` (regen
 |---|---|---|---|---|---|---|
 | `gnn-plan` (Community 3090, FR) | docs/022 §2's planning measurements | 4:53 PM PT | 6:07 PM PT | 1.2 | 0.22 | $0.27 |
 | `gnn-stage1` (Secure 3090, CZ) | stage 1, then training | 6:21 PM PT | | | 0.50 | |
-| `gnn-full` (Secure RTX PRO 6000, IS) | stage 3's large training | 3:10 AM PT | | | 2.09 | |
+| `gnn-full` (Secure RTX PRO 6000, IS) | stage 3's large training | 3:10 AM PT | 6:39 AM PT | 3.5 | 2.09 | $7.31 |
