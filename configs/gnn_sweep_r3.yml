@@ -3,9 +3,12 @@
 #   - the game result as the target: TD(0.99) over ~75 positions a game takes about half an early position's target
 #     from the network's own value, which helps a network whose value is good and may trap one whose value is poor;
 #   - the value loss weighted x4 (2.0 instead of 0.5): the policy losses crowding it out?
-#   - the value alone (no policy losses): what the network can learn about the result at all.
+#   - the value alone (no policy losses): what the network can learn about the result at all;
+#   - TD(0.95), MageZero's own (README: 0.9-0.95; curriculum.yml: 0.95 at generation 0, down to 0.70 by generation 3).
+#     There h_i is the search's root score; here it is the network's own value. Experiment #4's transformer:
+#     0.95 against 0.99 was set NLL 0.287 / 0.292, value AUC 0.739 / 0.749 (docs/018).
 #
-#   SPEC=configs/gnn_sweep_r3.yml OUT=runs/gnn/sweep_r1c bash deploy/gnn_sweep.sh 0 g256-v-result,... data/imitation_graph/slim
+#   SPEC=configs/gnn_sweep_r3.yml OUT=runs/gnn/sweep_r1c bash deploy/gnn_sweep.sh 0 g256-v-result,g256-v-weight2,g256-v-only,g256-v-td95 data/imitation_graph/slim
 title: "docs/022 stage 2, round 3: the value head"
 base:
   tables:
@@ -30,3 +33,4 @@ runs:
   - {name: g256-v-result, value_target: result}
   - {name: g256-v-weight2, value_weight: 2.0}
   - {name: g256-v-only, policy_weight: 0.0, binary_weight: 0.0, target_weight: 0.0, value_weight: 1.0}
+  - {name: g256-v-td95, td_lambda: 0.95}
