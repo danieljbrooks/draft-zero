@@ -3,13 +3,13 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Sunday 4 October, 10:30 PM PT)
+## Status (Monday 5 October, 12:05 AM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 0. Engineering | done, on main (5d1766a, a72792d, c18a727, c646d46) | laptop | – |
 | 1. Build | **done** 9:14 PM PT (2.7 h, no errors); tables, slim tables uploaded 9:49 PM PT. 0.3-0.7% of games differ from experiment #4's: a pre-existing leak between games in the bridge's workers, not the graph code (below) | pod `gnn-stage1` | ~$1.50 |
-| 2. Sweep | **running**: round 1 (batch 64) on the pod, round 2 (batch 256) on r1. **The GNN trails the MLP clearly at 10% too**: set NLL 0.315–0.336 against 0.258, value AUC 0.56–0.62 against 0.75. Batch 256 costs nothing; small embeddings help the policy a little, not the value | pod, r1 | |
+| 2. Sweep | round 2 **done** (r1); round 1 (batch 64, pod) and round 3 (the value head, r1) **running**. **Best so far: small embeddings + dropout 0.1, set NLL 0.305, value AUC 0.671** against the MLP's 0.258 / 0.751 at the same data. High learning rates flatten the attack and value outputs | pod, r1 | |
 | 3. Scale check, large training | | | |
 | 4. Offline evaluation | held-out cards chosen (below); the tooling is on main | | |
 | 5. Games | | | |
@@ -21,6 +21,11 @@ Dan approved the plan ("push to main, use r1 if available, budget is okay"). All
   little for 28 build workers. So the build runs on a pod. r1 takes part of the sweep from the **slim** tables
   (graph files + labels, `build.py slim`), in its own checkout (`~/dz-gnn`, `PYTHONPATH=src`), so the other session's
   running games are untouched.
+- **r1's disk filled at ~11:45 PM PT**, from round 2's checkpoints (~1 GB a run with the resume state). Round 2's
+  last run (g256-global4) and round 3's start died, and two of the other session's game workers lost their log
+  threads (`mlp-ilbc3000-top`: "No space left on device"; the games kept running). Cleared to 6.9 GB free; r1's
+  runner (`~/r1_round3.sh`) now keeps only best_policy and best_value of finished runs and stops the sweep under
+  2 GB free.
 - **GNN speed on r1's GPU 0** (the planning tables, Will's network): 1,177 states a second at batch 64, no faster
   than the 3090 (1,233): a step at 64 states is overhead-bound (~54 ms). At batch 256 r1 does 3,950 a second (the
   3090: 1,596). Inference at batch 128: 15,600 a second (the 3090: 5,400). The sweep's batch-256 arm decides whether
@@ -84,6 +89,18 @@ Validation, 20,000 rows a table, one epoch on the same 10% of the training games
 | g-base-seed1 (r1, batch 64) | 0.324 | 0.732 | 0.734 | 0.690 | 0.586 | 0.614 | 0.938 | 7.6 min |
 | g-batch256 (r1) | 0.334 | 0.731 | 0.737 | 0.689 | 0.585 | 0.623 | 0.947 | 4.5 min |
 | **g256-emb0.02** (r1) | **0.315** | **0.740** | **0.742** | 0.689 | **0.614** | 0.615 | 0.936 | 4.6 min |
+| *round 1, batch 64 (pod)* | | | | | | | | |
+| g-lr3e-4 | 0.375 | 0.717 | 0.628 | 0.687 | 0.535 | 0.507 | 0.993 | 22.6 min |
+| g-lr3e-5 | 0.332 | 0.735 | 0.753 | 0.690 | 0.590 | **0.688** | 0.924 | 22.2 min |
+| *round 2, batch 256 (r1)* | | | | | | | | |
+| g256-base-again | 0.328 | 0.735 | 0.742 | 0.690 | 0.598 | 0.667 | 0.932 | 4.8 min |
+| **g256-emb0.02-drop0.1** | **0.305** | **0.744** | 0.753 | 0.690 | **0.619** | 0.671 | 0.924 | 4.7 min |
+| g256-emb0.02-lr5e-4 | 0.368 | 0.724 | 0.631 | 0.688 | 0.544 | 0.503 | 0.986 | 4.8 min |
+| g256-emb0.02-3ep (3 epochs) | 0.300 | 0.747 | 0.753 | 0.691 | 0.656 | 0.683 | 0.925 | 14.5 min |
+| g256-passes1 | 0.340 | 0.734 | 0.719 | 0.687 | 0.560 | 0.582 | 0.941 | 3.2 min |
+| g256-global1 | 0.346 | 0.735 | 0.742 | 0.690 | 0.560 | 0.630 | 0.980 | 4.2 min |
+| g256-d256 (width 256) | 0.319 | 0.735 | **0.759** | 0.696 | 0.581 | 0.636 | 0.922 | 3.3 min |
+| g256-global4 | *died at 0.75 epochs (disk full): 0.326 there, against g256-base-again's 0.332; rerunning* | | | | | | | |
 | *the GNN at 2.4% (docs/022 §2.3)* | *0.343* | *0.721* | *0.711* | *0.722* | *0.540* | *0.536* | *0.982* | |
 | *experiment #4's MLP at 10% (best)* | *0.258* | *0.807* | *0.827* | *0.711* | *0.617* | *0.751* | | |
 | *experiment #4's transformer at 10% (act3-td99)* | *0.285* | *0.791* | | | | *0.749* | *0.937* | |
@@ -93,19 +110,23 @@ Validation, 20,000 rows a table, one epoch on the same 10% of the training games
 - **Four times the data barely moved the GNN** (set NLL 0.343 → 0.334), while the flat networks gained a lot between
   similar sizes. If that holds for the batch-64 base, the plan's scaling question already leans against Will's
   data-hunger reading at these sizes.
-- **The seed-to-seed band at batch 64 is wide:** set NLL 0.324 and 0.336, value AUC 0.614 and 0.559. The plan's rule
-  (§4.2: a setting must beat the base by twice the seed difference) asks for 0.024 in set NLL.
-- **Batch 256 is free:** 0.334 sits inside the batch-64 band, at a quarter of the steps. Round 2 and the later stages
-  use it.
-- **Small embeddings help the policy, not the value.** Experiment #4's transformer trained well only after its
-  embeddings started at std 0.02 instead of 1. Will's network draws its leaf, type and value embeddings and CLS from
-  N(0, 1). With `emb_init_std` 0.02: set NLL 0.315 (0.019 better than batch 256's base, short of the rule's 0.024
-  until round 2's second batch-256 seed), targets +0.029, attacks +0.005, value AUC unchanged (0.615).
-- **The value head is the weakest part.** Value AUC 0.56–0.62 in every run against the MLP's 0.75 at the same data,
-  and still climbing at the end of the epoch (0.58 → 0.61 over the last half). The three-epoch arm says whether it
-  is slow or stuck.
-- **The scaling check (§4.2).** The gap to the MLP was 0.076 at 2.4% of the games; at 10% it is 0.066–0.078 for the
-  base and 0.057 with small embeddings. Barely smaller: stage 3's 30% check decides.
+- **The seed bands:** batch 64, set NLL 0.324 / 0.336 and value AUC 0.614 / 0.559; batch 256, 0.334 / 0.328 and
+  0.623 / 0.667. Value AUC moves by 0.05 between seeds. The plan's rule (§4.2: beat the base by twice the seed
+  difference, no worse on value AUC) asks for ~0.012 in set NLL at batch 256.
+- **Batch 256 is free** (inside the batch-64 band, a quarter of the steps). Every later run uses it.
+- **Small embeddings + dropout 0.1 pass the rule:** set NLL 0.305 against the base's 0.331 (−0.026), targets
+  +0.03, attacks +0.01, value AUC 0.671 (base 0.623–0.667). Small embeddings alone: 0.315, value AUC 0.615.
+- **High learning rates flatten the attack and value outputs:** at 3e-4 (batch 64) and 5e-4 (batch 256) attacks fall
+  to 0.63 and value AUC to 0.50, while the priority heads still learn. A low one helps the value: 3e-5 at batch 64
+  gives the best one-epoch value AUC (0.688) at the base's set NLL.
+- **More epochs help:** three epochs of the same 10% (small embeddings, dropout 0.25) reach 0.300 and value AUC
+  0.683, still falling at the end. Experiment #4's MLP gained less from repeats.
+- **Shape:** width 256 is as good as 512 (0.319, the best attacks, 30% faster); one local pass or one global layer is
+  worse (0.340, 0.346).
+- **The value head is still the weakest part:** 0.50–0.69 in every run against the MLP's 0.751. Round 3 asks why.
+- **The scaling check (§4.2).** The gap to the MLP in set NLL was 0.076 at 2.4% of the games; at 10% it is 0.047
+  with the best recipe (0.066–0.078 with Will's settings). Smaller, as the plan's rule asks to go on: stage 3's 30%
+  check decides whether it keeps closing.
 
 ### Round 2: batch 256 on r1
 
@@ -115,7 +136,17 @@ emb_init_std 0.02 (alone, with dropout 0.1, with lr 5e-4, for 3 epochs), g-batch
 and round 1's shape arms (1 local pass, 1 and 4 global layers, width 256). The pod keeps round 1's batch-64 arms
 (learning rates, the leaf table's rate, dropout, the passivity fix).
 
-Round 1's leftover arm (g-passes1) on r1 was stopped at 10:15 PM PT; GPU 0 runs only round 2.
+Round 1's leftover arm (g-passes1) on r1 was stopped at 10:15 PM PT; GPU 0 runs only round 2. Round 2 ended at
+11:45 PM PT (g256-global4 lost to the full disk; rerun after round 3).
+
+### Round 3: the value head (r1)
+
+`configs/gnn_sweep_r3.yml`, on small embeddings, one change each: the game result as the target (no TD); the value
+loss ×4; the value alone (no policy losses); TD(0.95), MageZero's own λ. TD(0.99) over ~75 positions a game takes
+about half of an early position's target from the network's own value. That helps a network whose value is good and
+may trap one whose value is poor. In MageZero (README; `configs/curriculum.yml`: 0.95 at generation 0, down to 0.70
+by generation 3) the blended value is the search's root score, not the network's. Experiment #4's transformer at
+0.95 against 0.99: set NLL 0.287 / 0.292, value AUC 0.739 / 0.749.
 
 **Why batch 256 runs first.** A profile of a training step on r1 (`torch.profiler`, the planning tables): at 64
 states a step the CPU spends ~39 ms issuing ~3,000 small kernels while the GPU works ~16 ms. The step is launch-bound
