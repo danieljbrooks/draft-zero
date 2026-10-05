@@ -36,8 +36,7 @@ NETS = {
     "Transformer": {"0": [f"{G}/c1-pvh-t0-s*"], "100": [f"{G}/c2-ilbc100"], "300": [f"{G}/c2-ilbc300"],
                     "1000": [f"{G}/c2-ilbc1000"]},
     "MLP": {"0": [f"{G}/mlp-pvh-t0"], "100": [f"{G}/mlp-ilbc100"], "300": [f"{G}/mlp-ilbc300"],
-            "1000": [f"{G}/mlp-ilbc1000-s*", f"{G}/mlp-ilbc1000-top"],
-            "3000": [f"{G}/mlp-ilbc3000-s*", f"{G}/mlp-ilbc3000-top"]},
+            "1000": [f"{G}/mlp-ilbc1000-merged"], "3000": [f"{G}/mlp-ilbc3000-merged"]},   # docs/018: shards merged
 }
 RUNS = {"Transformer": "runs/exp4/main/evals.jsonl", "MLP": "runs/exp4/mlp_1ep/evals.jsonl"}
 

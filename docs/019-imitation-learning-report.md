@@ -3,8 +3,8 @@
 *Experiment #4's report, October 2026. The plan is [docs/017](017-experiment4-scaling-up-imitation-learning.md) and
 the detailed run log is [docs/018](018-experiment4-run-log.md).*
 
-*Status, 4 October: final, except the MLP's games at 1,000 and 3,000 simulations, which are still being played.
-5 October: §4.6 added (PIMC), and §4.2 corrected (the bots knew the opponent's decklist).*
+*Status, 5 October: final. The MLP's games at 1,000 and 3,000 simulations finished early on 5 October (§4.2); §4.6
+added (PIMC), and §4.2 corrected (the bots knew the opponent's decklist).*
 
 ## Abstract
 
@@ -23,7 +23,7 @@ We then let each network guide a tree search and played it against MageZero's ha
 
 - **Search makes the networks strong.** On its own, the network's policy won 40% of games against the heuristic
   bot searching 100 simulations. With search of its own, the network won 55–56% at 100 simulations, 61–64% at 300,
-  and up to 66% at 3,000.
+  62–64% at 1,000 and 69% at 3,000.
 - **With equal search on both sides, the network bot won 56% of 314 paired games.**
 - **A faster search does better still.** With PIMC, which searches one dealt version of the hidden cards instead of
   re-dealing them for every simulation, the network won 74–76% at 1,000 simulations against IS-MCTS's 64%, and its
@@ -100,12 +100,12 @@ So this experiment asks how far top players' games can take us:
 - **Two small networks imitate top players well.** On games they never saw, both networks pick the move the human
   made 83% of the time when the human acted (guessing would get 47%). They predict attacks 86–87% of the time (§4.1).
 - **Search turns imitation into strength.** The policy alone loses to the heuristic bot, but with search the network
-  bot wins 55–66% of games depending on how much it searches (§4.2).
+  bot wins 55–69% of games depending on how much it searches (§4.2).
 - **The MLP plays as well as the transformer** at a tenth of the computing cost per move (§4.2).
 - **Self-play with each model's policy alone ranks cards partly like 17lands does** (0.41 for the transformer, 0.34
   for the MLP, on commons), but both undervalue burn and removal (§4.4).
 
-The whole experiment has cost about $63 of rented compute so far, three quarters of it for evaluation games (§4.5).
+The whole experiment cost about $75 of rented compute, nearly three quarters of it for evaluation games (§4.5).
 
 ## 2. Data: from 17lands replays to engine positions
 
@@ -308,11 +308,10 @@ Every network and every search budget replays the same deck pairs with the same 
 transformer" compares the same games, differing only in the network. A game that reaches 50 turns counts as half a
 win. Games that crash the engine (1–5%) are left out.
 
-![Line chart of games won against the baseline (the heuristic bot at 100 simulations) by the network bot's simulations per decision. The transformer (blue) won 40% of 2,435 paired games with its policy alone, 55% of 116 at 100 simulations, 61% of 99 at 300 and 62% of 98 at 1,000. The MLP (green) won 38% of 104, 56% of 103, 64% of 103, 64% of 92 at 1,000 (still running) and 66% of 68 at 3,000 (still running). A dashed line marks 50%.](img/019-ladder-light.png)
+![Line chart of games won against the baseline (the heuristic bot at 100 simulations) by the network bot's simulations per decision. The transformer (blue) won 40% of 2,435 paired games with its policy alone, 55% of 116 at 100 simulations, 61% of 99 at 300 and 62% of 98 at 1,000. The MLP (green) won 38% of 104, 56% of 103, 64% of 103, 64% of 100 at 1,000 and 69% of 100 at 3,000. A dashed line marks 50%.](img/019-ladder-light.png)
 
 *Figure 3. More search, more wins. Each point is one set of paired games against the heuristic bot at 100
-simulations. Hollow points are still being played. The transformer was not run at 3,000 simulations, and neither
-network at 10,000.*
+simulations. The transformer was not run at 3,000 simulations, and neither network at 10,000.*
 
 **With equal search on both sides:**
 
@@ -328,7 +327,8 @@ network at 10,000.*
   mistakes that a shallow search catches. Picking moves at random in proportion to the policy, as a more human-like
   opponent would, loses another 3 points.
 - **Search is where the strength comes from.** 100 simulations add 15–18 points and 300 add 20–26. Past 300 the gains
-  slow down, which fits experiment #3's finding that search is limited by how well its value judges positions.
+  slow down: the MLP wins 64% at both 300 and 1,000 and 69% at 3,000, all within the ±9 points that about 100 games
+  allow. That fits experiment #3's finding that search is limited by how well its value judges positions.
 - **With equal search, the network bot has a small edge,** 55–56% in each of the three matchups. Moves imitated from
   people plus a value learned from their results are at least as good as the hand-written heuristic searching just
   as hard.
@@ -467,9 +467,9 @@ points for the transformer, −7 for the MLP), in line with their trouble with b
 | Choosing a GPU | 1.5 hours | $1.30 |
 | The final transformer | 4.3 hours on Dama's machine | $0 (~$5 at rented RTX 3090 rates) |
 | The final MLP | 39 minutes on Dama's machine | $0 (~$0.50) |
-| Evaluation games and benchmarks | ~95 rented machine-hours, plus Dama's machine | ~$47 (still running) |
+| Evaluation games and benchmarks | ~130 rented machine-hours, plus Dama's machine | ~$54 |
 | PIMC follow-up (§4.6) | 21 hours on four rented RTX 3090-class machines | $5.31 |
-| **All, so far** | | **~$68** |
+| **All** | | **~$75** |
 
 Many thanks to **Dama**, who lent the project a machine with two RTX PRO 6000 GPUs. It trained both final networks,
 ran most of the hyperparameter search, and played many of the evaluation games, all at no cost to the project.
