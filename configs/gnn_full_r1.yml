@@ -28,7 +28,8 @@ fraction: 1.0
 val_rows: 20000
 data_cache: /home/researcher/gnn-cache   # r1's persistent home (the container's /var/tmp is capped at ~40 GB, docs/024)
 stream_cache: true             # never a whole table in RAM
-arch: {d_model: 256, ff: 512, dropout: 0.1}   # graph_net.ARCH_DEFAULT otherwise: 4 heads, 2 local passes, 2 global layers
+arch: {d_model: 256, ff: 1024, dropout: 0.1}   # round 8's winner (FFN 1,024: set NLL 0.2210 at 30% x 8 epochs, no late value
+                                              # overfit); graph_net.ARCH_DEFAULT otherwise: 4 heads, 2 passes, depth 1, 2 global layers
 emb_init_std: 0.02
 lr: 1.0e-4
 warmup_steps: 750
