@@ -110,6 +110,9 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
     /** creates a card by name (the bridge's StateInjector.newCard) */
     public transient Function<String, Card> cardFactory;
     public int beliefWorlds = 8;
+    /** ismcts (one information-set tree over the belief worlds, re-dealt every simulation) or pimc
+     *  (MageZero's tree search on one sampled world: Play sets beliefWorlds to 1) */
+    public String method = "ismcts";
     public transient int beliefCalls, worldsBuilt, worldsFailed, openFallbacks;
 
     public BenchPlayer(String name, RangeOfInfluence range, int skill) {
@@ -210,7 +213,15 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
             worlds = List.of(new BenchSearch.World(r, this, a, b, action, game));
         }
         BenchSearch.Config c = cfg.copyWithSeed(rng.nextLong());
-        BenchSearch.Result res = BenchSearch.searchIS(worlds, c);
+        BenchSearch.Result res;
+        if ("pimc".equals(method)) {
+            // PIMC with one world (docs/016, docs/021 §2.5): MageZero's tree search on one sampled world
+            BenchSearch.World w = worlds.get(0);
+            if (w.root == r) w = pimcFallbackWorld(game, action, a, b); // r is expanded already, and peeks
+            res = BenchSearch.searchTree(w, c);
+        } else {
+            res = BenchSearch.searchIS(worlds, c);
+        }
         searchNanos += System.nanoTime() - t0;
         stats.add(res.stats);
         decisions++;
@@ -360,6 +371,24 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
         decisions++;
         policyDecisions++;
         return kids.get(pick);
+    }
+
+    /**
+     * PIMC's world without the belief service (open decklists, or every belief world failed): a copy
+     * of the game with the opponent's hand re-dealt from its real hand and library, as IS-MCTS's
+     * open-decklist re-deal does, and both libraries shuffled. Unre-dealt if the replay fails.
+     */
+    private BenchSearch.World pimcFallbackWorld(Game game, ActionEncoder.ActionType action, PlayerScript a, PlayerScript b) {
+        for (int attempt = 0; attempt < 2; attempt++) {
+            Game sim = createMCTSGame(game.getLastPriority());
+            if (attempt == 0) BenchSearch.redeal(sim, getId(), rng);
+            MCTSNode2 rk = new MCTSNode2(this, sim, action, new PlayerScript(a), new PlayerScript(b));
+            rk.validateState();
+            if (rk.isTerminal() || !rk.getPlayer().scriptFailed || attempt == 1) {
+                return new BenchSearch.World(rk, this, a, b, action, game);
+            }
+        }
+        throw new IllegalStateException("unreachable");
     }
 
     // ------------------------------------------------------------------ closed decklists

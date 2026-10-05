@@ -31,8 +31,8 @@ import java.time.Duration;
 import java.util.*;
 
 /**
- * The play op (docs/017 §6.5): one full game between two BenchPlayers, IS-MCTS at every decision
- * for both seats, set up as MageZero's own harness sets up its games (ParallelDataGenerator): a
+ * The play op (docs/017 §6.5): one full game between two BenchPlayers, IS-MCTS (or PIMC with one
+ * world: a seat's `method`) at every decision for both seats, set up as MageZero's own harness sets up its games (ParallelDataGenerator): a
  * TwoPlayerDuel in test mode, decks from .dck files, each player's StateEncoder with the
  * opponent's hand hidden.
  *
@@ -42,7 +42,8 @@ import java.util.*;
  *                           isPolicyPerWorld, discount, discountUnit, cPuct, timeoutSec (default 300
  *                           here), policyOnly and policyTemp (policy-only play, BenchPlayer: the
  *                           search settings then apply only to decisions without a policy head),
- *                           evaluator {type offline | remote, host, port}, and belief
+ *                           evaluator {type offline | remote, host, port}, method (ismcts,
+ *                           the default, or pimc: one belief world, MageZero's tree search), and belief
  *                           {port, exclude, worlds}: closed decklists, the opponent's hidden cards
  *                           sampled by tools/imitation_scale/belief_server.py (`exclude`: the deck
  *                           file stem of the deck played against, whose draft leaves the pool;
@@ -142,11 +143,13 @@ final class Play {
         p.offlineMode = p.nn == null;
         p.allowMulligans = false;
         p.noNoise = true;
+        p.method = Worker.optString(s, "method", "ismcts");
+        if (!List.of("ismcts", "pimc").contains(p.method)) throw new IllegalArgumentException("method must be ismcts or pimc");
         JsonObject bel = seat == null ? null : Worker.optObject(seat, "belief");
         if (bel != null) {
             p.belief = new BeliefClient(Worker.optString(bel, "host", "127.0.0.1"), Worker.optInt(bel, "port", 50070),
                     Worker.optString(bel, "exclude", null));
-            p.beliefWorlds = Worker.optInt(bel, "worlds", 8);
+            p.beliefWorlds = "pimc".equals(p.method) ? 1 : Worker.optInt(bel, "worlds", 8);
             p.cardFactory = n -> StateInjector.newCard(n, null, null);
         }
         DeckCardLists list;

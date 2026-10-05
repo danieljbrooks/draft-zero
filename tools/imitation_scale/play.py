@@ -1,5 +1,6 @@
-"""Experiment #4's games (docs/017 §6.5-6.6): two bots, IS-MCTS at every decision for both, over
-deck pairs from a pool, each pair played twice with the seats swapped.
+"""Experiment #4's games (docs/017 §6.5-6.6): two bots, IS-MCTS at every decision for both (or, with
+--method pimc, PIMC on one belief world: MageZero's tree search on one sample of the hidden cards),
+over deck pairs from a pool, each pair played twice with the seats swapped.
 
     python tools/imitation_scale/play.py --pool data/pools/eval.txt --deck-root $MZ_DECK_DIR \\
         --pairs 100 --budget 1000 --bot1 il_bc --bot2 heuristic --ports 50052,50152 --workers 28 \\
@@ -100,15 +101,16 @@ def parse_bot(spec: str) -> tuple[str, int | None]:
 
 
 def seat_options(bot: str, budget: int, port: int | None, timeout_s: float, belief_port: int | None = None,
-                 opponent_deck: str | None = None, policy_fallback_budget: int = 100, graph_port: int | None = None) -> dict:
+                 opponent_deck: str | None = None, policy_fallback_budget: int = 100, graph_port: int | None = None,
+                 method: str = "ismcts") -> dict:
     bot, own = parse_bot(bot)
     budget = own or budget
     b = BOTS[bot]
-    s = {"budget": budget, "leaf": b["leaf"], "timeoutSec": timeout_s}
+    s = {"budget": budget, "leaf": b["leaf"], "timeoutSec": timeout_s, "method": method}
     if "policy_temp" in b:
         s.update(budget=policy_fallback_budget, policyOnly=True, policyTemp=b["policy_temp"])
     if belief_port is not None:
-        s["belief"] = {"port": belief_port, "exclude": opponent_deck, "worlds": 8}
+        s["belief"] = {"port": belief_port, "exclude": opponent_deck, "worlds": 1 if method == "pimc" else 8}
     if b["evaluator"] in ("remote", "graph"):
         s["evaluator"] = {"type": b["evaluator"], "host": "127.0.0.1", "port": graph_port if b["evaluator"] == "graph" else port}
         if b["priors"]:
@@ -200,6 +202,8 @@ def main(argv=None) -> int:
     ap.add_argument("--record", action="store_true")
     ap.add_argument("--belief-port", type=int, default=50070, help="the belief service (closed decklists)")
     ap.add_argument("--open-decklists", action="store_true", help="re-deal from the real decklist instead")
+    ap.add_argument("--method", choices=("ismcts", "pimc"), default="ismcts",
+                    help="both bots' search: IS-MCTS over 8 belief worlds (default), or PIMC on one belief world")
     ap.add_argument("--shard", default=None, metavar="I/N", help="play only deck pairs with pair %% N == I (one pod of N)")
     ap.add_argument("--min-pair", type=int, default=0, metavar="K",
                     help="play only deck pairs K and up: another machine takes the tail of a run still going elsewhere")
@@ -254,10 +258,13 @@ def main(argv=None) -> int:
         deck_a, deck_b = t["deck1"], t["deck2"]
         opts = dict(deckA=str(dzpaths.deck_path(deck_a, Path(a.deck_root)).resolve()),
                     deckB=str(dzpaths.deck_path(deck_b, Path(a.deck_root)).resolve()),
-                    seatA=seat_options(bot_a, a.budget, port, a.search_timeout, belief, deck_b, a.policy_fallback_budget, gport),
-                    seatB=seat_options(bot_b, a.budget, port, a.search_timeout, belief, deck_a, a.policy_fallback_budget, gport),
+                    seatA=seat_options(bot_a, a.budget, port, a.search_timeout, belief, deck_b, a.policy_fallback_budget, gport,
+                                       a.method),
+                    seatB=seat_options(bot_b, a.budget, port, a.search_timeout, belief, deck_a, a.policy_fallback_budget, gport,
+                                       a.method),
                     seed=t["game_seed"], starting="A", maxTurns=a.max_turns, record=a.record)
-        g = {**t, "botA": bot_a, "botB": bot_b, "budget": a.budget, "closed_decklists": belief is not None}
+        g = {**t, "botA": bot_a, "botB": bot_b, "budget": a.budget, "closed_decklists": belief is not None,
+             "method": a.method}
         ts = time.time()
         try:
             r = pool.request("play", None, timeout=a.game_timeout, **opts)

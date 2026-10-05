@@ -123,6 +123,10 @@ def test_play_pairs_and_scores_by_role():
     assert play.seat_options("heuristic", 1000, None, 300)["evaluator"] == {"type": "offline"}
     assert play.seat_options("heuristic", 1000, None, 300, 50070, "FDN_top_00001_WB")["belief"] == \
         {"port": 50070, "exclude": "FDN_top_00001_WB", "worlds": 8}
+    # PIMC: one belief world a decision, and the seat says which search it runs
+    o = play.seat_options("heuristic", 1000, None, 300, 50070, "FDN_top_00001_WB", method="pimc")
+    assert o["method"] == "pimc" and o["belief"]["worlds"] == 1
+    assert play.seat_options("il_bc", 1000, 50052, 300)["method"] == "ismcts"
 
 
 @needs_worker
@@ -151,6 +155,30 @@ def test_play_op_runs_a_game_with_is_mcts_for_both_seats(tmp_path):
     # a seeded game replays the same way
     assert (again["winner"], again["turns"]) == (r["winner"], r["turns"])
     assert again["seats"]["A"]["decisions"] == r["seats"]["A"]["decisions"]
+
+
+@needs_worker
+def test_play_op_runs_a_game_with_pimc_for_both_seats(tmp_path):
+    """PIMC: MageZero's tree search on one world. A simulation is one engine step (IS-MCTS replays its
+    path from the root, several), the root's options map onto the game's (no fallbacks), and a
+    seeded game replays."""
+    decks = sorted(DECKS.glob("*.dck"))[:2]
+    b = bridge.Bridge("pytest_play_pimc", heap="2g", runtime_root=tmp_path)
+    try:
+        seat = {"budget": 8, "evaluator": {"type": "offline"}, "method": "pimc"}
+        r = b.request("play", None, deckA=str(decks[0]), deckB=str(decks[1]), seatA=seat, seatB=seat,
+                      seed=3, maxTurns=6, record=True, timeout=900)
+        again = b.request("play", None, deckA=str(decks[0]), deckB=str(decks[1]), seatA=seat, seatB=seat,
+                          seed=3, maxTurns=6, timeout=900)
+    finally:
+        b.close()
+    assert r["winner"] in ("A", "B", None) and 1 <= r["turns"] <= 7
+    for s in ("A", "B"):
+        st = r["seats"][s]
+        assert st["decisions"] > 0 and st["fallbacks"] == 0 and st["sims"] == 8 * st["decisions"]
+        assert st["engineSteps"] <= 1.1 * st["sims"]
+        assert all(sum(x["visits"]) == 8 for x in r["records"][s])
+    assert (again["winner"], again["turns"]) == (r["winner"], r["turns"])
 
 
 @needs_worker

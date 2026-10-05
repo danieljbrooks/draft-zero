@@ -372,7 +372,10 @@ public final class BenchSearch {
         List<MCTSNode> ch = node.eng.getChildren();
         node.kids = new ArrayList<>(ch.size());
         for (MCTSNode c : ch) {
-            Node k = new Node(node, null);
+            // the root's options get IS-MCTS's world-independent keys, so a caller can match them to
+            // options of another copy of the game (the game player's PIMC, BenchPlayer); the game is at
+            // the root's state while the root expands
+            Node k = new Node(node, node.parent == null ? key(c, node.type, node.eng.getGame(), world.player.getId()) : null);
             k.eng = (MCTSNode2) c;
             k.prior = 1.0 / ch.size();
             if (node.parent == null) {
