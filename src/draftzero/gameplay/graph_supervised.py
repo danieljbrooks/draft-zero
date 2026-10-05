@@ -1080,13 +1080,15 @@ class Trainer:
         tmp.replace(self.out / "latest.pt")
 
     def _load_latest(self) -> None:
-        st = torch.load(self.out / "latest.pt", map_location=self.dev, weights_only=False)
-        if not np.array_equal(st["vocab"]["ids"].numpy(), np.asarray(self.data.vocab.ids)):
+        # onto the CPU first: the vocab ids and the RNG state must stay there; the model's and the optimizer's
+        # load_state_dict move theirs to the parameters' device, and the EMA shadow is moved below
+        st = torch.load(self.out / "latest.pt", map_location="cpu", weights_only=False)
+        if not np.array_equal(np.asarray(st["vocab"]["ids"]), np.asarray(self.data.vocab.ids)):
             raise ValueError("latest.pt's leaf vocab differs from this data's: load the data with its vocabs")
         self.model.load_state_dict(st["model"])
         self.opt.load_state_dict(st["opt"])
         if self.ema is not None and st["ema"] is not None:
-            self.ema.shadow = st["ema"]
+            self.ema.shadow = {k: v.to(self.dev) for k, v in st["ema"].items()}
         self.sampler.load(st["sampler"])
         for k in ("step", "seen", "train_s", "td_refreshes", "next_td", "targets", "best", "best_eval", "sessions"):
             setattr(self, k, st[k])
