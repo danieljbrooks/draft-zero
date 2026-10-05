@@ -3,13 +3,13 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Sunday 4 October, 7:25 PM PT)
+## Status (Sunday 4 October, 10:10 PM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 0. Engineering | done, on main (5d1766a, a72792d, c18a727, c646d46) | laptop | – |
-| 1. Build | **running**: 16.5 games a second, done ~9:15 PM PT; then the tables (8 parts at a time), the comparison with experiment #4's, the upload | pod `gnn-stage1` | running |
-| 2. Sweep | **queued** to start by itself after stage 1: 7 runs on the pod's 3090, 7 on r1's GPU 0 | pod, r1 | |
+| 1. Build | **done** 9:14 PM PT (2.7 h, no errors); tables, slim tables uploaded 9:49 PM PT. 0.3-0.7% of games differ from experiment #4's: a pre-existing leak between games in the bridge's workers, not the graph code (below) | pod `gnn-stage1` | ~$1.50 |
+| 2. Sweep | **running**: round 1 (batch 64) on the pod; round 2 (batch 256) on r1 after its second seed. **First result: the GNN trails the MLP clearly at 10% too** (set NLL 0.334 against 0.258) | pod, r1 | |
 | 3. Scale check, large training | | | |
 | 4. Offline evaluation | held-out cards chosen (below); the tooling is on main | | |
 | 5. Games | | | |
@@ -43,7 +43,28 @@ Dan approved the plan ("push to main, use r1 if available, budget is okay"). All
   stops `gnn_build.sh` when it reaches its tables step, pulls main and reruns it with `SKIP_BUILD=1 TABLE_JOBS=8`
   (the tables step resumes from finished parts).
 
-## Stage 2: the sweep (queued)
+- **Done 9:14 PM PT:** 161,206 games, no errors, 2.73 hours at 16.4 a second. Turns reproduced: 1,194,754 of the
+  player's (86.9%) and 1,084,551 of the opponent's (83.6%), against experiment #4's 1,194,268 and 1,084,253.
+- **Tables:** 8 parts at a time, ~7 minutes for the parts (experiment #4's serial step: an hour), then the merge.
+  Slim tables (graph files + labels): uploaded to HF `exp4/tables_graph/slim/` at 9:49 PM PT; r1 fetched them
+  (15 GB). The comparison with experiment #4's tables ran in parallel, so the sweep didn't wait for it.
+
+### The 0.3% of games that differ from experiment #4's tables
+
+`build.py compare`: every table has 0.3–0.7% of its games different (block_test: 20 of 5,734; block_train: 423 of
+117,858; opp_block_train: 609 of 92,987), with row counts within 0.1%. In the differing rows the labels are the same
+and the new build's states have **2–12 extra flat features**, the same in every row of the game.
+
+**Not the graph code.** Two such games (83334, 118707) rebuilt on the laptop, each in a fresh bridge worker, give
+experiment #4's rows exactly, with the graph encoding off and on. The extra features appear only in the pod build,
+where a worker runs thousands of requests: something from an earlier game in the same JVM leaks into later games'
+states (as the play op's "seeded games replay exactly only in a fresh JVM", docs/018). Which games it touches depends
+on which worker gets them, so two builds differ in a few hundred games. **Consequence here:** experiment #4's final
+MLP and transformer are scored on this build's validation and test rows (`/root/ref_evals.sh` on the pod), so every
+comparison stays row for row. The leak itself is a bridge bug to fix separately (it touches experiment #4's tables
+the same way).
+
+## Stage 2: the sweep
 
 `configs/gnn_sweep.yml`, the same 10% of the training games for every run, 20,000 validation rows a table (the rows
 experiment #4's sweeps validated on, if `compare` passes):
@@ -52,6 +73,32 @@ experiment #4's sweeps validated on, if `compare` passes):
 |---|---|
 | pod, RTX 3090 (`runs/gnn/sweep_pod`) | g-base, g-lr3e-4, g-lr3e-5, g-emb-lr10, g-drop0.1, g-leafdrop0.1, g-act5 |
 | r1, GPU 0 (`runs/gnn/sweep_r1`, slim tables from HF, in RAM) | g-batch256, g-base-seed1, g-3ep, g-passes1, g-global1, g-d256, g-global4 |
+
+### Results
+
+Validation, 20,000 rows a table, one epoch on the same 10% of the training games (14,590 games, 1.1M decisions):
+
+| Run | Set NLL | Top-1 acted | Attacks | Blocks | Targets | Value AUC | Pass on top, opp. turn (humans 0.934) | Train time |
+|---|---|---|---|---|---|---|---|---|
+| **g-batch256** (r1) | 0.334 | 0.731 | 0.737 | 0.689 | 0.585 | 0.623 | 0.947 | 4.5 min |
+| *the GNN at 2.4% (docs/022 §2.3)* | *0.343* | *0.721* | *0.711* | *0.722* | *0.540* | *0.536* | *0.982* | |
+| *experiment #4's MLP at 10% (best)* | *0.258* | *0.807* | *0.827* | *0.711* | *0.617* | *0.751* | | |
+| *experiment #4's transformer at 10% (act3-td99)* | *0.285* | *0.791* | | | | *0.749* | *0.937* | |
+
+- **Four times the data barely moved the GNN** (set NLL 0.343 → 0.334), while the flat networks gained a lot between
+  similar sizes. If that holds for the batch-64 base, the plan's scaling question already leans against Will's
+  data-hunger reading at these sizes.
+- **One untried fix:** experiment #4's transformer trained well only after its embeddings started at std 0.02 instead
+  of 1 (attack +0.026, value AUC +0.05). Will's network still draws its leaf, type and value embeddings and CLS from
+  N(0, 1). `emb_init_std` (graph_supervised.py) and round 2 (`configs/gnn_sweep_r2.yml`) test it.
+
+### Round 2: batch 256 on r1
+
+A batch-256 run takes ~5 minutes on r1, four times faster than batch 64. So once r1 finishes round 1's second seed
+(the batch-64 noise band), it runs round 2 at batch 256 instead of round 1's remaining batch-64 arms:
+emb_init_std 0.02 (alone, with dropout 0.1, with lr 5e-4, for 3 epochs), g-batch256 again with quarter-epoch curves,
+and round 1's shape arms (1 local pass, 1 and 4 global layers, width 256). The pod keeps round 1's batch-64 arms
+(learning rates, the leaf table's rate, dropout, the passivity fix).
 
 **Why batch 256 runs first.** A profile of a training step on r1 (`torch.profiler`, the planning tables): at 64
 states a step the CPU spends ~39 ms issuing ~3,000 small kernels while the GPU works ~16 ms. The step is launch-bound
