@@ -91,6 +91,8 @@ DEFAULTS: dict[str, Any] = {
     "act_weights": {"opp_priority": 3.0, "replay_priority": 3.0},
     # optimisation
     "lr": 1e-4, "warmup_steps": 3000, "lr_schedule": "cosine", "lr_min_frac": 0.1,
+    "wsd_decay_frac": 0.2,         # lr_schedule wsd: warm up, hold the peak, cosine down over this last share of the
+                                   # steps. Resuming with a larger max_epochs before the decay starts extends the hold
     "emb_lr_mult": 1.0,            # the leaf and edge-label embeddings' learning rate = lr x this
     "emb_init_std": None,          # re-draw the leaf, edge-label, type and value embeddings and CLS from N(0, std);
                                    # null: upstream's N(0, 1) (experiment #4's transformer trained well only at 0.02)
@@ -129,7 +131,7 @@ def resolve_config(*layers: dict | None) -> dict:
         raise ValueError(f"tables {bad}: graph training takes kinds {sorted(KIND_CODE)}")
     if cfg["tables_dir"] is None:
         cfg["tables_dir"] = "data/imitation_graph/h5"
-    for k, ok in {"value_target": ("result", "td"), "lr_schedule": ("constant", "cosine"),
+    for k, ok in {"value_target": ("result", "td"), "lr_schedule": ("constant", "cosine", "wsd"),
                   "amp": ("auto", "bf16", "fp16", "off")}.items():
         if cfg[k] not in ok:
             raise ValueError(f"{k} must be one of {ok}, not {cfg[k]!r}")
@@ -975,8 +977,14 @@ class Trainer:
             return c["lr"] * (step + 1) / c["warmup_steps"]
         if c["lr_schedule"] == "constant" or not self.total_steps:
             return c["lr"]
-        p = min(1.0, (step - c["warmup_steps"]) / max(1, self.total_steps - c["warmup_steps"]))
         lo = c["lr"] * c["lr_min_frac"]
+        if c["lr_schedule"] == "wsd":
+            start = max(c["warmup_steps"], int(self.total_steps * (1 - c["wsd_decay_frac"])))
+            if step < start:
+                return c["lr"]
+            p = min(1.0, (step - start) / max(1, self.total_steps - start))
+        else:
+            p = min(1.0, (step - c["warmup_steps"]) / max(1, self.total_steps - c["warmup_steps"]))
         return lo + (c["lr"] - lo) * 0.5 * (1 + math.cos(math.pi * p))
 
     def value_mask(self, epoch: int) -> np.ndarray:

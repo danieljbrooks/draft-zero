@@ -287,6 +287,19 @@ def test_stream_cache_matches_the_in_memory_path(toy, tmp_path):
     assert s["step"] == 6
 
 
+def test_wsd_schedule_holds_then_decays_and_extends(toy, tmp_path):
+    quiet = lambda *a, **k: None   # noqa: E731
+    cfg = toy_cfg(toy, lr=1e-3, lr_schedule="wsd", wsd_decay_frac=0.25, warmup_steps=2, max_epochs=4)
+    data = gs.load_data(cfg, log=quiet)
+    tr = gs.Trainer(cfg, data, tmp_path / "run", log=quiet)
+    T = tr.total_steps
+    assert tr.lr_at(0) < 1e-3 and tr.lr_at(2) == tr.lr_at(int(T * 0.74)) == 1e-3
+    assert tr.lr_at(int(T * 0.9)) < 1e-3 and abs(tr.lr_at(T) - 1e-4) < 1e-9
+    # a longer max_epochs moves the decay later: a step in the old decay is back at the peak
+    tr2 = gs.Trainer({**cfg, "max_epochs": 8}, data, tmp_path / "run2", log=quiet)
+    assert tr2.lr_at(int(T * 0.9)) == 1e-3
+
+
 def test_graph_trainer_rejects_misaligned_tables(toy, tmp_path):
     import shutil
     d = tmp_path / "bad"
