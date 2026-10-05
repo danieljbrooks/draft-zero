@@ -28,6 +28,10 @@ if ! echo " $* " | grep -q -- " --open-decklists "; then
   curl -s -m 2 localhost:50070/healthz > /dev/null || \
     nohup python tools/imitation_scale/belief_server.py --port 50070 > "$OUT/logs/belief.log" 2>&1 < /dev/null &
   for k in $(seq 1 120); do curl -s -m 2 localhost:50070/healthz > /dev/null && break; sleep 2; done
+  # a service that answers but can't sample would make every decision fall back to the real decklist (openFallbacks)
+  if ! curl -s -m 300 -X POST localhost:50070/sample -d '{"k": 1, "hand": 7, "seed": 1}' | grep -q '"samples"'; then
+    log "the belief service can't sample (data/gameplay/deckpool_FDN_PremierDraft.npz missing?); stopping"; exit 3
+  fi
 fi
 log "servers on $PORTS; playing: $*"
 

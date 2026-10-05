@@ -38,6 +38,11 @@ root = "data/deckgen/FDN_PremierDraft_wr60"
 if not os.path.exists(f"{root}/decks.jsonl"):
     os.makedirs(root, exist_ok=True)
     tarfile.open(get("exp4/games/eval_decks.tgz")).extractall(root)
+# the belief service's deck pool (belief.DeckPool's cache; without it every sample fails and closed decklists fall
+# back to the real decklist, as in experiment #4's games)
+if not os.path.exists("data/gameplay/deckpool_FDN_PremierDraft.npz"):
+    os.makedirs("data/gameplay", exist_ok=True)
+    shutil.copy(get("exp4/games/deckpool_FDN_PremierDraft.npz"), "data/gameplay/deckpool_FDN_PremierDraft.npz")
 dst = os.path.join("models", os.environ["CKPT"])
 if not os.path.exists(dst):
     os.makedirs(os.path.dirname(dst), exist_ok=True)
