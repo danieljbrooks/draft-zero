@@ -6,7 +6,7 @@ set -e
 eval "$(tr '\0' '\n' < /proc/1/environ | grep -E '^RUNPOD_(POD_ID|API_KEY)=' | sed 's/^/export /')"
 cat > /root/selfdestruct_now.sh <<EOS
 #!/bin/bash
-curl -s -X POST "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY" -H "Content-Type: application/json" \
+curl -s -X POST "https://api.runpod.io/graphql" -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
   -d '{"query":"mutation { podTerminate(input:{podId:\"$RUNPOD_POD_ID\"}) }"}'
 EOS
 chmod 700 /root/selfdestruct_now.sh

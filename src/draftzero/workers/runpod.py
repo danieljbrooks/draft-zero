@@ -44,7 +44,8 @@ def catalogue_vcpu() -> dict[str, dict]:
     key = os.environ.get("RUNPOD_API_KEY", "")
     q = ('{"query":"query { gpuTypes { displayName lowestPrice(input:{gpuCount:1}) '
          '{ minVcpu minMemory } } }"}')
-    out = subprocess.run(["curl", "-s", "-X", "POST", f"{GQL}?api_key={key}",
+    auth = ["-H", f"Authorization: Bearer {key}"] if key else []   # a header, never ?api_key= in the URL
+    out = subprocess.run(["curl", "-s", "-X", "POST", GQL, *auth,
                           "-H", "Content-Type: application/json", "-d", q],
                          capture_output=True, text=True).stdout
     try:

@@ -85,8 +85,8 @@ timeout means your network is filtering. Check port 80 too, to be sure portquiz 
 
 ```bash
 # the proxy username is the machine's podHostId, which already reads <podId>-<suffix>
-curl -s -X POST "https://api.runpod.io/graphql?api_key=$RUNPOD_API_KEY" \
-  -H "Content-Type: application/json" \
+curl -s -X POST "https://api.runpod.io/graphql" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" -H "Content-Type: application/json" \
   -d '{"query":"query { pod(input:{podId:\"<podId>\"}) { vcpuCount memoryInGb machine { podHostId } } }"}'
 ssh -tt -i ~/.ssh/id_ed25519 <podHostId>@ssh.runpod.io
 ```
@@ -134,6 +134,8 @@ The proxy gives you a PTY shell only:
 ## Auth
 
 - **`runpodctl` reads its key** from `RUNPOD_API_KEY` or `~/.runpod/config.toml` (`apikey`).
-- **The GraphQL API wants `?api_key=` in the URL.** A `Bearer` header returned 403.
+- **Send the GraphQL key as an `Authorization: Bearer` header, never `?api_key=` in the URL.** A URL ends up in
+  logs and terminal output. With curl, the header authenticated on 2026-10-04. A 403 for a `Bearer` header on
+  2026-09-25 was most likely the API's filter on non-curl User-Agents (see `tools/compute_bench/pods.py`).
 - **Two SSH keys are registered on the account:** the ed25519 key, and `runpodctl`'s own key
   at `~/.runpod/ssh/runpodctl-ssh-key`.
