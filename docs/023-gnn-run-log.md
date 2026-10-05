@@ -3,15 +3,15 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Monday 5 October, 2:20 AM PT)
+## Status (Monday 5 October, 3:30 AM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 0. Engineering | done, on main (5d1766a, a72792d, c18a727, c646d46) | laptop | – |
 | 1. Build | **done** 9:14 PM PT (2.7 h, no errors); tables, slim tables uploaded 9:49 PM PT. 0.3-0.7% of games differ from experiment #4's: a pre-existing leak between games in the bridge's workers, not the graph code (below) | pod `gnn-stage1` | ~$1.50 |
-| 2. Sweep | rounds 1–5 **done**; round 6 (repeats, r1) **running**. **Three epochs of 10% at width 256 and lr 1e-4: set NLL 0.256, top-1 0.813, value AUC 0.776, past the MLP's best at 10%** (0.258 / 0.807 / 0.751). Will's settings gave 0.324–0.336 and value AUC 0.56–0.67 | pod, r1 | |
-| 3. Scale check, large training | 30% check **running** on the pod since 2:05 AM PT (widths 256 and 512, then 3 epochs at 256) | pod | |
-| 4. Offline evaluation | held-out cards chosen (below); the tooling is on main | | |
+| 2. Sweep | **done** (6 rounds, 44 runs). **The recipe: width 256, embeddings at std 0.02, dropout 0.1, the game result as the value target, lr 1e-4, batch 256.** Three epochs of 10%: set NLL 0.256, top-1 0.813, value AUC 0.776, past the MLP's best at 10% (0.258 / 0.807 / 0.751); five: 0.247. Will's settings gave 0.324–0.336 | pod, r1 | |
+| 3. Scale check, large training | **30%, one epoch: set NLL 0.250**, between the MLP (0.241) and the transformer (0.256): the gap to the MLP closes with data (0.037 at 10%, 0.009 at 30%). Width 512 and 3 epochs still running. **Large training** (all games, 3 epochs) on a second pod, `gnn-full`, from ~3:40 AM PT | pod, `gnn-full` | |
+| 4. Offline evaluation | held-out-cards pair queued on `gnn-stage1` after the 30% check (the GNN's and the MLP's 30% recipes without the games that show the five cards); the test split runs at the end of the large training | `gnn-stage1` | |
 | 5. Games | | | |
 
 ## Where things run
@@ -170,6 +170,30 @@ and round 1's shape arms (1 local pass, 1 and 4 global layers, width 256). The p
 Round 1's leftover arm (g-passes1) on r1 was stopped at 10:15 PM PT; GPU 0 runs only round 2. Round 2 ended at
 11:45 PM PT (g256-global4 lost to the full disk; rerun after round 3).
 
+## Stage 3: the scale check and the large training
+
+**30% of the games** (`configs/gnn_scale30.yml`, the pod's 3090, 3.3M decisions), against experiment #4's 30%
+networks (scored on experiment #4's rows, which differ in 0.3% of games):
+
+| 30% of the games, one epoch | Set NLL | Top-1 acted | Attacks | Blocks | Targets | Value AUC | Value log-loss | Train time |
+|---|---|---|---|---|---|---|---|---|
+| **GNN, width 256** (`s30-d256`) | 0.250 | **0.821** | 0.842 | 0.722 | **0.718** | 0.769 | **0.556** | 21 min |
+| *MLP, wave D's combination (`d1`, `d2`)* | ***0.241** / 0.243* | *0.820 / 0.821* | ***0.855** / 0.851* | ***0.728** / 0.727* | *0.673 / 0.665* | ***0.775** / 0.776* | *0.571 / 0.573* | |
+| *transformer (`s30-l1-act3-td99`)* | *0.256* | | | | | | | |
+
+- **The gap to the MLP closes with data.** One epoch of the same recipe: 0.295 against 0.258 at 10% (0.037), 0.250
+  against 0.241 at 30% (0.009). From 10% to 30% the GNN gains 0.045, the MLP 0.017, the transformer 0.029. Will's
+  reading, that the GNN is the data-hungry one, holds once it trains properly.
+- **At 30% the GNN matches the MLP's top-1 and beats its targets by 4.5 points** and its value log-loss; the MLP
+  still leads on attacks, blocks and set NLL.
+- Width 512 at 30% trails 256 at half an epoch (0.287 against 0.267); three epochs at width 256 follow.
+
+**The large training** (`configs/gnn_train.yml`, `deploy/gnn_train.sh`): all 10.9M training decisions, three epochs,
+the sweep's recipe. Its first load holds every row in RAM (~80 GB from the 30% run's 24.5 GB) before the memory-mapped
+cache takes over, too much for `gnn-stage1`'s 125 GB alongside its runs. So it runs on a second pod, `gnn-full`:
+Secure RTX PRO 6000 (r1's GPU), 188 GB, 27 cores of an EPYC 9554, $2.09 an hour (a Community L40S at $0.79 had none
+free). Results go to HF `gnn/main/` every 15 minutes; the test split is scored at the end.
+
 ### Round 5: width 256 at lr 1e-4 (r1, 1:35–2:03 AM PT), and round 6
 
 - **Width 256 and lr 1e-4 don't stack at one epoch:** 0.295 / 0.296 (two seeds), against width 256 at 2e-4's 0.286,
@@ -179,8 +203,18 @@ Round 1's leftover arm (g-passes1) on r1 was stopped at 10:15 PM PT; GPU 0 runs 
   experiment #4's transformer at three epochs of 10% (`ep3`: 0.269 / 0.807, value AUC 0.747). Still falling at the
   end (0.2604 → 0.2570 → 0.2560 over the last half epoch), and the value AUC still rising. The GNN gains far more from
   repeats than the transformer did (−0.039 from one epoch to three, against −0.018).
-- **Round 6** (`configs/gnn_sweep_r6.yml`, r1, from 2:15 AM PT): five epochs; three at lr 2e-4; three at width 512.
-  How far do repeats go, and is Will's wider network the one that gains from more steps?
+- **Round 6, repeats** (`configs/gnn_sweep_r6.yml`, r1, 2:15–3:05 AM PT):
+
+  | 10% of the games | Set NLL | Top-1 acted | Attacks | Blocks | Targets | Value AUC | Train time |
+  |---|---|---|---|---|---|---|---|
+  | three epochs (r5-3ep) | 0.256 | 0.813 | 0.839 | 0.726 | 0.702 | **0.776** | 8.8 min |
+  | **five epochs** | **0.247** | **0.824** | 0.833 | **0.737** | **0.722** | 0.771 | 14.7 min |
+  | three epochs at lr 2e-4 | 0.259 | 0.810 | 0.836 | 0.716 | 0.702 | 0.758 | 9.0 min |
+  | three epochs at width 512 | 0.269 | 0.784 | 0.820 | 0.721 | 0.695 | 0.769 | 13.8 min |
+
+  Repeats keep paying for the policy (five epochs: −0.009 more), while the value peaks around four (0.774) and
+  then drifts. lr 1e-4 beats 2e-4 once there are repeats. **Width 512 doesn't catch up with more steps** (0.269
+  against 0.256): the narrower network is better at this data size.
 - **Round 1's last arms (pod):** dropout 0.1 at batch 64 (0.318) as at 256; leaf dropout adds nothing (0.324).
 - **The pod** finished round 1 at ~1:50 AM PT, then sat idle ~15 minutes (its runner waited for a marker the first
   sweep's launcher never wrote); the 30% check started at 2:05 AM PT.
@@ -239,3 +273,4 @@ The list is `data/imitation_graph/heldout/{cards.json,exclude_games.npy}` (regen
 |---|---|---|---|---|---|---|
 | `gnn-plan` (Community 3090, FR) | docs/022 §2's planning measurements | 4:53 PM PT | 6:07 PM PT | 1.2 | 0.22 | $0.27 |
 | `gnn-stage1` (Secure 3090, CZ) | stage 1, then training | 6:21 PM PT | | | 0.50 | |
+| `gnn-full` (Secure RTX PRO 6000, IS) | stage 3's large training | 3:10 AM PT | | | 2.09 | |
