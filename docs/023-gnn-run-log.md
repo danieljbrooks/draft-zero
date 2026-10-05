@@ -207,7 +207,7 @@ cache takes over, too much for `gnn-stage1`'s 125 GB alongside its runs. So it r
 Secure RTX PRO 6000 (r1's GPU), 188 GB, 27 cores of an EPYC 9554, $2.09 an hour (a Community L40S at $0.79 had none
 free). Results go to HF `gnn/main/` every 15 minutes; the test split is scored at the end.
 
-- 3:14 AM PT: started; all the rows loaded in 29 minutes (vocabs 1,925 leaves); training at ~3,250 states a second
+- 3:14 AM PT: started; all the rows loaded in 29 minutes (vocabs: 1,932 leaves, 22 edge labels); training at ~3,250 states a second
   (r1 trains the same network at ~5,800: this pod's GPU sits at ~47%), so three epochs take ~2.8 hours.
 - Quarter epochs: set NLL 0.256 → 0.243 → 0.238; top-1 0.817 → 0.831; attacks 0.793 → 0.857; value AUC 0.759 →
   0.784.
