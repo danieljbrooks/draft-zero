@@ -3,7 +3,7 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Sunday 4 October, 7:45 PM PT)
+## Status (Sunday 4 October, 7:25 PM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
