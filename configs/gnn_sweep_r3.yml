@@ -1,0 +1,32 @@
+# docs/022, stage 2, round 3 (docs/023): why the GNN's value head lags (AUC 0.56-0.62 against the MLP's 0.75).
+# Round 2's base with small embeddings (g256-emb0.02: set NLL 0.315, value AUC 0.615), one change each:
+#   - the game result as the target: TD(0.99) over ~75 positions a game takes about half an early position's target
+#     from the network's own value, which helps a network whose value is good and may trap one whose value is poor;
+#   - the value loss weighted x4 (2.0 instead of 0.5): the policy losses crowding it out?
+#   - the value alone (no policy losses): what the network can learn about the result at all.
+#
+#   SPEC=configs/gnn_sweep_r3.yml OUT=runs/gnn/sweep_r1c bash deploy/gnn_sweep.sh 0 g256-v-result,... data/imitation_graph/slim
+title: "docs/022 stage 2, round 3: the value head"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.1
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 3600
+  eval_every_steps: 1075
+  ckpt_every_s: null
+  latest_every_s: 600
+  batch_rows: 256
+  lr: 2.0e-4
+  warmup_steps: 750
+  emb_init_std: 0.02
+runs:
+  - {name: g256-v-result, value_target: result}
+  - {name: g256-v-weight2, value_weight: 2.0}
+  - {name: g256-v-only, policy_weight: 0.0, binary_weight: 0.0, target_weight: 0.0, value_weight: 1.0}
