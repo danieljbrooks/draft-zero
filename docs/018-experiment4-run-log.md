@@ -9,15 +9,29 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
 *Times: UTC up to 4 October 02:35 UTC; Pacific time (PT, PDT = UTC-7) from then on, which is 7:35 PM PT on Saturday
 3 October (Dan).*
 
-## Where things stand (Saturday 3 October, 10:55 PM PT)
+## Where things stand (Monday 5 October, 1:30 AM PT)
 
 - **The full-data MLP (run 2) beats the stage-3 transformer** on the test split after one annealed epoch and 39
   minutes of training: set NLL 0.229 against 0.234, non-Pass top-1 0.829 against 0.825, targets 0.730 against 0.709,
   value AUC 0.784 against 0.781; on validation, +2.7 points on moves seen 1k-10k times in training (HF
   `exp4/mlp_1ep/`; Run 2).
-- **Now (Dan, 10:50 PM PT):** extend it towards 20 epochs, stopping when it stops improving (wave K screens how, at
-  30%), then evaluation games with the best MLP on the second machine: 10,000 greedy self-play games and 100 games
-  at each of 100, 300, 1,000 and 3,000 simulations against `heuristic@100` (Extending run 2).
+- **More epochs make it worse:** no way of continuing an annealed network helped (wave K, five recipes at 30%), and a
+  second epoch on all the games lost 0.007 set NLL (0.2344): the extension stopped at one epoch, so run 2 is the final
+  MLP (Extending run 2).
+- **It plays exactly as well as the transformer, twice as fast** (the best MLP against `heuristic@100`, every game a
+  replay of a transformer game but for the network; "The MLP against the baseline"):
+
+  | Simulations a decision | 0 (policy alone) | 100 | 300 | 1,000 | 3,000 |
+  |---|---|---|---|---|---|
+  | MLP (100+ valid games each) | 0.380 | 0.563 | 0.641 | 0.640 | **0.690** |
+  | Transformer (phase C) | 0.403 | 0.552 | 0.606 | 0.622 | – |
+  | MLP minus transformer, same games | -0.024 ± 0.099 | +0.000 ± 0.083 | +0.030 ± 0.091 | +0.021 ± 0.092 | – |
+
+  Search flattens after 300 simulations (1,000 adds nothing, 3,000 about five points within the intervals).
+- **Its greedy self-play rates the cards like the transformer's, a little further from 17lands** (Spearman 0.40 on
+  every card, 0.34 on commons; the transformer 0.43, 0.41; the two simulations agree 0.91 on commons): the blind spots
+  (burn, removal that needs a target or a moment) belong to the imitation setup, not the network. Per-card
+  17lands-style statistics: docs/data/018-mlp-selfplay-card-stats.csv.
 - **The stage-3 transformer is trained and published** (HF `exp4/stage3/`, `ImitationNet` loads it): 1 layer,
   width 512, 40.6M parameters, 3 epochs of all 10.9M training decisions. Test split: non-Pass top-1 0.825, set NLL
   0.234, attack 0.863, block 0.748, targets 0.709, value AUC 0.781 (Stage 3: results).
@@ -50,7 +64,8 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
 - **The full-data MLP, run 1 (10-epoch schedule, decay 0.1), stopped at epoch 1.92** (set NLL 0.272 at its best:
   flat and spiky at its near-peak rate). Waves I and J showed only dense table decay stops multi-epoch overfitting and
   that it costs what the repeats add, so run 2 made one annealed pass instead (The full-data MLP).
-- **Spend: $59.43 of the $65 cap, no pod running.** The second machine costs nothing.
+- **Spend: ~$69.20 on RunPod in all** ($59.43 through phase C, ~$9.80 for the MLP's games on Community pods after Dan
+  raised the budget to the account balance), no pod running. The second machine costs nothing.
 
 ### Earlier summary (2 October, during stage 2)
 
@@ -87,7 +102,7 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
 
 ## Status
 
-*Spend: **$59.43** (RunPod balance $82.58 → $23.15 at 19:00 UTC on 3 October, no pod running): $19.38 through C0 (05:46 UTC), $39.10 for the rest of phase C's 12 pods (Pods). Storage and rounding account for the ~$1 the rows don't. Dan's cap is $65. The second machine costs the project nothing.*
+*Spend: **$59.43** (RunPod balance $82.58 → $23.15 at 19:00 UTC on 3 October, no pod running): $19.38 through C0 (05:46 UTC), $39.10 for the rest of phase C's 12 pods (Pods). Storage and rounding account for the ~$1 the rows don't. Dan's cap was $65; on 4 October he raised the budget to the account balance, and the MLP's games on Community pods added ~$9.80 (~$69.20 in all). The second machine costs the project nothing.*
 
 | Stage | Status | Pod-hours | Cost | Notes |
 |---|---|---|---|---|
@@ -1661,7 +1676,7 @@ torch; set up in 8 minutes). Pod 1 plays `il_bc@1000` (100 games) and the 3,000-
 workers each; pod 2 took shard 0 from the second machine (its 16 finished games copied over, 24 workers), freeing the
 second machine for `il_bc@100` and `@300`.
 
-### The MLP against the baseline, by search budget (1,000 done 5:50 PM PT; 3,000 running)
+### The MLP against the baseline, by search budget (finished Mon 5 October, 1:10 AM PT)
 
 Run 2's MLP against `heuristic@100` on phase C's deck pairs and seeds, so every game replays one of the transformer's
 but for the network: the policy alone (greedy, open decklists, as C1; Dan, 8:20 AM: "100 games of policy (greedy)
@@ -1675,13 +1690,25 @@ last column compares the two networks on the same games (same deck pair, seats a
 | 100 | 103 | 0.563 [0.47, 0.65] | 5.0 min | 0.552 (116) | 9.1 min | +0.000 ± 0.083 (101) |
 | 300 | 103 | 0.641 [0.54, 0.73] | 15.8 min | 0.606 (99) | 26 min | +0.030 ± 0.091 (99) |
 | 1,000 | 100 (of 104; 3 machines + a top-up) | 0.640 [0.54, 0.73] | 74 min (mostly slower Community pods) | 0.622 (98) | 113 min | +0.021 ± 0.092 (96) |
-| 3,000 | running (36 so far) | – | ~90-150 min | not run | – | – |
+| **3,000** | 100 (of 116 played: 6 machines' slices, top-ups, 3 errors) | **0.690** [0.59, 0.77] | 221 min (mostly slower Community pods) | not run | – | – |
 
-- **The MLP plays as well as the transformer at every budget so far** (the paired differences are within a point or
-  three of zero, ±8-10 points), at about half the time a game: its better imitation of human moves (test set NLL
-  0.229 against 0.234) does not show up as strength.
-- **Search does the work:** the policy alone loses six games in ten to the cheap heuristic; 100 simulations make it
-  even, 300 lift it to 0.64.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/018-ladder-dark.png">
+  <img alt="Left: score against heuristic@100 by simulations a decision, transformer (grey) and MLP (green) with 95% intervals: 0.40 and 0.38 for the policy alone, 0.55 and 0.56 at 100, 0.61 and 0.64 at 300, 0.62 and 0.64 at 1,000, and the MLP alone at 0.69 at 3,000. Right: median minutes a game on a log scale, the MLP's line below the transformer's by about half." src="img/018-ladder-light.png">
+</picture>
+
+- **The MLP plays as well as the transformer at every budget** (the paired differences are within three points of
+  zero, ±8-10), at about half the time a game where the hardware compares (the policy alone, 100 and 300): its better
+  imitation of human moves (test set NLL 0.229 against 0.234) does not show up as strength.
+- **Search does the work, and flattens early:** the policy alone loses six games in ten to the cheap heuristic; 100
+  simulations make it even, 300 lift it to 0.64; 1,000 adds nothing (0.640) and 3,000 about five points (0.690), within
+  the intervals. Ten times the search from 300 buys little against this baseline.
+- **How the 1,000 and 3,000 runs were played** (Sun 7 AM-Mon 1 AM PT): the second machine plus RunPod Community pods
+  (two RTX 3090s at $0.22/hr, an RTX 3070 at $0.13/hr), split by deck pair as the pods' slow, fully loaded cores made
+  single runs too long (`play.py --shard`, `--min-pair`, `--max-pair`); merged in `runs/exp4/games/mlp-ilbc{1000,3000}-
+  merged`, on HF under `exp4/games/runs/` with every run's games: one game per deck pair and seat swap, the assigned machine's game first, another machine's duplicate only
+  where it errored or never finished: one at 3,000). The last two pods' self-destructs ended three straggling 3,000
+  games after the run had passed 100 (phase C's 1,000 run stopped its last game the same way).
 
 ### The MLP's greedy self-play against 17lands (finished Sun 7:03 AM PT)
 
@@ -1797,6 +1824,13 @@ Every pod's quote, what it actually had, and what it delivered (docs/005).
 | `gh0lhv99sro0mj` | C1 | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | 2.31 | $1.15 | greedy policy against the baseline, shard 0 (834 games); removed by the reaper |
 | `hp9ft8e6cf6gqt` | C1 | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | ~2.8 | ~$1.38 | greedy self-play, shard 0 (5,000 games); removed |
 | `tp17e5cfnrmpc6` | C1 | RTX 3090, Secure | $0.50/hr, 32 vCPU, 125 GB | – | 2.38 | $1.19 | greedy self-play, shard 1 (5,000 games); removed by the reaper |
+| `4cp6tmq50jj5sh` | MLP games | RTX 3090, Community, CA | $0.22/hr, 32 vCPU, 62 GB | 27.2 cores / 62 GB | 17.95 | $3.95 | 4-5 October, slim image (set up in 8 minutes): `il_bc@1000` (then a third of it) beside `il_bc@3000` shard 1 (pairs up to 31, then duplicates); removed at the end |
+| `dlh44ayrcex0k6` | MLP games | RTX 3090, Community, CA (the same host) | $0.22/hr, 28 vCPU, 62 GB | 27.2 cores / 62 GB | ~17.3 | ~$3.80 | `il_bc@3000` shard 0 (16 games carried over from the second machine) and pairs 41-49 of shard 1; self-destructed at 12:51 AM PT |
+| `7mujqbweucyz2x` | MLP games | RTX 3070, Community, US | $0.13/hr, 16 vCPU, 31 GB | – | ~15.3 | ~$1.99 | a third of `il_bc@1000`, pairs 33-35 of `il_bc@3000` (its slow cores: 3,000-simulation games of 4-12 CPU-hours); self-destructed at 12:51 AM PT |
+| `4ep155hn52okqq`, `2ncfjpf34zyye3` | MLP games (meant) | RTX 3070, Community, US (one host) | $0.13/hr | – | ~0.4 | ~$0.05 | "CUDA unknown error" on the host's GPUs (torch sees none); removed |
+
+The MLP's games (4-5 October; Dan raised the budget to the account balance on Sunday morning): 5 pods, ~51 pod-hours,
+~$9.80; experiment #4's RunPod total ~$69.20.
 
 Phase C after C0 (3 October): 12 pods, 70.7 pod-hours, $39.10 (uptime x price). Community pods stalled pulling the
 image in C0, so every later pod was Secure ($0.50/hr for a 3090, $0.82 for an L40). |

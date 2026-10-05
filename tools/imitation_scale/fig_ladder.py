@@ -1,7 +1,8 @@
 """Strength by search budget, the stage-3 transformer against the full-data MLP (docs/018): each network's score
 against heuristic@100 (win 1, a capped game 0.5, loss 0) with its 95% Wilson interval, the policy alone (greedy) and
-IS-MCTS at 100-3,000 simulations; and the median minutes a game takes one worker. A budget's games may be split over
-several runs (shards, tails, top-ups): they are pooled, one result per (deck pair, seat swap).
+IS-MCTS at 100-3,000 simulations; and the median minutes a game takes one worker. The MLP's 1,000 and 3,000 were split
+over several machines (shards, tails, top-ups) and merged into runs/exp4/games/mlp-ilbc{1000,3000}-merged (one game per
+deck pair and seat swap; each merged directory's README.txt says how).
 
     python tools/imitation_scale/fig_ladder.py --out docs/img/018-ladder [--running 1000,3000]
 """
@@ -26,8 +27,7 @@ RUNS = {
     "Transformer (stage 3)": {"0": [f"{G}/c1-pvh-t0-s*"], "100": [f"{G}/c2-ilbc100"], "300": [f"{G}/c2-ilbc300"],
                               "1000": [f"{G}/c2-ilbc1000"]},
     "MLP (run 2)": {"0": [f"{G}/mlp-pvh-t0"], "100": [f"{G}/mlp-ilbc100"], "300": [f"{G}/mlp-ilbc300"],
-                    "1000": [f"{G}/mlp-ilbc1000-s*", f"{G}/mlp-ilbc1000-top"],
-                    "3000": [f"{G}/mlp-ilbc3000-s*", f"{G}/mlp-ilbc3000-top"]},
+                    "1000": [f"{G}/mlp-ilbc1000-merged"], "3000": [f"{G}/mlp-ilbc3000-merged"]},
 }
 THEMES = {
     "light": {"surface": "#fcfcfb", "ink": "#0b0b0b", "ink2": "#52514e", "muted": "#898781", "grid": "#e1e0d9",
