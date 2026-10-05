@@ -1,0 +1,33 @@
+# docs/022 §4.4, the held-out-cards test (docs/023): the GNN's 30% recipe (configs/gnn_scale30.yml's s30-d256, one
+# epoch) trained without every game that shows one of five cards (heldout_cards.py choose: Savannah Lions, Claws Out,
+# Imprisoned in the Moon, Gleaming Barrier, Goblin Negotiation; 22% of the training games), against s30-d256 itself.
+# The MLP's pair: configs/exp4_heldout_mlp.yml against experiment #4's d1-s30-combined. Then
+#   python tools/imitation_scale/heldout_cards.py eval <the four best_policy checkpoints> \
+#     --cards data/imitation_graph/heldout/cards.json --tables-dir data/imitation_graph/h5 --out runs/gnn/heldout
+#
+#   OUT=runs/gnn/heldout_train SPEC=configs/gnn_heldout.yml bash deploy/gnn_sweep.sh 0 s30-d256-heldout data/imitation_graph/h5
+title: "docs/022 stage 4: the GNN without the held-out cards"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.3
+  exclude_games: data/imitation_graph/heldout/exclude_games.npy
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 14400
+  eval_every_steps: 3220       # quarter epochs at 256 states a step
+  ckpt_every_s: null
+  latest_every_s: 900
+  batch_rows: 256
+  lr: 1.0e-4
+  warmup_steps: 750
+  emb_init_std: 0.02
+  value_target: result
+  arch: {dropout: 0.1}
+runs:
+  - {name: s30-d256-heldout, arch: {dropout: 0.1, d_model: 256, ff: 512}}

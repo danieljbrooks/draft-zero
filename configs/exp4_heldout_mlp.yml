@@ -1,0 +1,37 @@
+# docs/022 §4.4, the held-out-cards test (docs/023): experiment #4's best 30% MLP (configs/exp4_sweep_rare_d.yml's
+# d1-s30-combined: set NLL 0.241) trained without every game that shows one of the five held-out cards (22% of the
+# training games), against d1-s30-combined itself (HF exp4/bench/mlp-d1-s30-combined/). The GNN's pair:
+# configs/gnn_heldout.yml.
+#
+#   python -m draftzero.gameplay.supervised sweep --spec configs/exp4_heldout_mlp.yml --out runs/gnn/heldout_train \
+#     --tables-dir data/imitation_graph/h5
+title: "docs/022 stage 4: the MLP without the held-out cards"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.3
+  exclude_games: data/imitation_graph/heldout/exclude_games.npy
+  vocab_k: 3
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 21600        # a cap only
+  eval_every_s: null
+  eval_every_steps: 15506     # quarter epochs (an epoch of 30% is ~62k steps)
+  ckpt_every_s: null
+  latest_every_s: 600
+  patience_epochs: null
+  # round 2's leader (19:08), v16-td-cosine-1e-4: TD(0.95) value targets, warm-up + cosine from 1e-4
+  arch: {layers: 1, norm_first: true}
+  emb_init_std: 0.02
+  warmup_steps: 3000
+  lr: 1.0e-4
+  lr_schedule: cosine
+  value_target: td
+  value_per_game: 16
+runs:
+  - {name: d1-s30-combined-heldout, token_dropout: 0.1, act_weights: {opp_priority: 3.0, replay_priority: 3.0}, td_lambda: 0.99, emb_lr_mult: 30.0, arch: {type: mlp, layers: 2, width: 1024, bag_mode: maxmean, ffn: swiglu, dropout: 0.0, pool_dropout: 0.0, head_hidden: 1024}}
