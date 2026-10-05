@@ -13,6 +13,15 @@ build somewhere other than data/imitation_scale (the splits file stays there):
     python tools/imitation_scale/build.py build --graph --out data/imitation_graph --workers 28
     python tools/imitation_scale/build.py tables --graph --out data/imitation_graph
 
+Two tools for such a build (docs/022 §4.1):
+
+    python tools/imitation_scale/build.py compare data/imitation_graph/h5 data/imitation_scale/h5   # the same rows?
+    python tools/imitation_scale/build.py slim data/imitation_graph/h5 data/imitation_graph/slim    # labels + graphs
+
+`compare` checks two builds' flat tables hold the same rows game by game (the order of games differs between
+runs: the workers finish them in any order). `slim` copies the graph files and the flat tables without their
+features (`indices`, `row`), which is all the graph trainer reads: about a third of the disk.
+
 Splits. The components of docs/011 (drafts joined by a mirrored game) hashed with #2b's salt, so
 the hash is #2b's. #2b split it 0.82 / 0.05 / 0.13 (train / val / test); experiment #4 takes
 val = [0.82, 0.87), test = [0.87, 0.92) and train = the rest (90 / 5 / 5). The new test split lies
@@ -742,6 +751,94 @@ def tables_part(paths: dict, h5: Path, log=print, graph: bool = False) -> dict:
     return out
 
 
+# ================================================================================================
+# comparing builds, slim tables
+# ================================================================================================
+
+_M1, _M2 = np.uint64(0x9E3779B97F4A7C15), np.uint64(0xBF58476D1CE4E5B9)
+
+
+def row_fingerprints(path: Path, block: int = 1 << 16) -> tuple[np.ndarray, np.ndarray]:
+    """(game, fingerprint) per row of a flat table: a hash of the row's turn, features, legal labels, label set and
+    yes/no label, independent of where the row sits in the file."""
+    import h5py
+    with h5py.File(path, "r") as f:
+        off = f["offsets"][:].astype(np.int64)
+        n = len(off) - 1
+        game = f["meta/row"][:].astype(np.int64)
+        turn = f["meta/turn"][:].astype(np.uint64) if "meta/turn" in f else np.zeros(n, np.uint64)
+        fp = np.zeros(n, np.uint64)
+        with np.errstate(over="ignore"):
+            for a in range(0, n, block):
+                b = min(n, a + block)
+                x = f["indices"][off[a]:off[b]].astype(np.int64).astype(np.uint64)
+                pos = np.repeat(np.arange(b - a), np.diff(off[a:b + 1]))
+                h = (x * _M1) ^ ((x + np.uint64(1)) * _M2)
+                s = np.zeros(b - a, np.uint64)
+                np.add.at(s, pos, h)
+                fp[a:b] = s ^ (np.diff(off[a:b + 1]).astype(np.uint64) * _M2)
+            fp ^= turn * _M1
+            if "legal_labels_json" in f:
+                fp ^= np.asarray([hash(x) & 0xFFFFFFFFFFFF for x in f["legal_labels_json"].asstr()[:]], np.uint64)
+            if "set_indptr" in f:
+                sp, si = f["set_indptr"][:].astype(np.int64), f["set_idx"][:].astype(np.uint64)
+                s = np.zeros(n, np.uint64)
+                np.add.at(s, np.repeat(np.arange(n), np.diff(sp)), (si + np.uint64(7)) * _M2)
+                fp ^= s
+            if "y" in f:
+                fp ^= f["y"][:].astype(np.uint64) * np.uint64(0x94D049BB133111EB)
+    return game, fp
+
+
+def compare(a_dir: Path, b_dir: Path, names: list[str] | None = None, log=print) -> dict:
+    """Per flat table present in both directories: whether every game has the same rows, in the same order within
+    the game. A game's rows are contiguous and in decision order in either build; only the order of games differs."""
+    out = {}
+    names = names or sorted(p.name for p in a_dir.glob("*.h5") if not p.name.endswith(".graph.h5")
+                            and (b_dir / p.name).exists())
+    for name in names:
+        ga, fa = row_fingerprints(a_dir / name)
+        gb, fb = row_fingerprints(b_dir / name)
+
+        def per_game(g, f):
+            o = np.argsort(g, kind="stable")
+            u, st = np.unique(g[o], return_index=True)
+            return {int(k): f[o][s:e].tobytes() for k, s, e in zip(u, st, list(st[1:]) + [len(o)])}
+        pa, pb = per_game(ga, fa), per_game(gb, fb)
+        diff = [k for k in set(pa) | set(pb) if pa.get(k) != pb.get(k)]
+        out[name] = {"rows": [len(ga), len(gb)], "games": [len(pa), len(pb)], "games_differing": len(diff),
+                     "examples": sorted(diff)[:5], "same": not diff}
+        log(f"compare {name}: {len(ga)} / {len(gb)} rows, {len(pa)} / {len(pb)} games, "
+            f"{'identical' if not diff else f'{len(diff)} games differ'}", flush=True)
+    return out
+
+
+SLIM_DROP = ("indices", "row")
+
+
+def slim(src: Path, dst: Path, log=print) -> dict:
+    """The graph files, and the flat tables without their features: what graph_supervised.py reads."""
+    import h5py
+    dst.mkdir(parents=True, exist_ok=True)
+    sizes = {}
+    for p in sorted(src.glob("*.h5")):
+        q = dst / p.name
+        if p.name.endswith(".graph.h5"):
+            shutil.copy(p, q)
+        else:
+            with h5py.File(p, "r") as f, h5py.File(q, "w") as g:
+                for k in _h5_datasets(f):
+                    if k in SLIM_DROP:
+                        continue
+                    f.copy(f[k], g, name=k)
+                for a, v in f.attrs.items():
+                    g.attrs[a] = v
+                g.attrs["slim"] = "features dropped (build.py slim): labels and metadata only"
+        sizes[p.name] = q.stat().st_size
+        log(f"slim {p.name}: {p.stat().st_size / 1e6:.0f} -> {q.stat().st_size / 1e6:.0f} MB", flush=True)
+    return {"files": len(sizes), "bytes": sum(sizes.values())}
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -758,7 +855,24 @@ def main(argv=None) -> None:
     t.add_argument("--keep-parts", action="store_true", help="keep h5/parts/ (the per-part tables)")
     t.add_argument("--graph", action="store_true", help="also write <table>_<split>.graph.h5 (needs a --graph build)")
     t.add_argument("--out", type=Path, help=f"build root (default {OUT})")
+    c = sub.add_parser("compare", help="do two builds' flat tables hold the same rows, game by game?")
+    c.add_argument("a", type=Path)
+    c.add_argument("b", type=Path)
+    c.add_argument("--tables", default=None, help="comma-separated file names (default: every table in both)")
+    c.add_argument("--json", type=Path)
+    sl = sub.add_parser("slim", help="graph files + flat tables without features, for the graph trainer")
+    sl.add_argument("src", type=Path)
+    sl.add_argument("dst", type=Path)
     a = ap.parse_args(argv)
+    if a.cmd == "compare":
+        res = compare(a.a, a.b, a.tables.split(",") if a.tables else None)
+        if a.json:
+            a.json.write_text(json.dumps(res, indent=1))
+        print(json.dumps({k: v["same"] for k, v in res.items()}, indent=1))
+        raise SystemExit(0 if all(v["same"] for v in res.values()) else 1)
+    if a.cmd == "slim":
+        print(json.dumps(slim(a.src, a.dst), indent=1))
+        return
     if a.cmd == "splits":
         codes, stats = make_splits(a.sbv1 if a.sbv1 and a.sbv1.exists() else None)
         if stats["sbv1"] is None:
