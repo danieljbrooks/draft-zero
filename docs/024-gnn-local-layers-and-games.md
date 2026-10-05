@@ -11,8 +11,8 @@ what im most interested in though at high data scale"). All times are Pacific.*
 |---|---|---|---|
 | 1. Code: `local_depth`, the streamed cache, the wsd schedule | done, on main | laptop | – |
 | 2. Round 7: local layers at 10%, three epochs | **done**: local depth 3, 3 passes x depth 2 and FFN 1,024 gain ~0.008 in set NLL | r1 | free |
-| 3. Round 8: long runs (8 epochs of 30%) | base **0.2221**, 3 passes x depth 2 **0.2210** (2x the compute); FFN 1,024 and dropout 0.2 running, done ~4:35 PM PT | r1 | free |
-| 4. The full run | its cache (37 GB) built in r1's home; started 1:54 PM PT, starved of page cache beside round 8 (0.25 epochs in 68 min), stopped at 3:02 PM; restarts alone ~4:40 PM PT | r1 | free |
+| 3. Round 8: long runs (8 epochs of 30%) | **done**: FFN 1,024 (0.2210, the best value head, 1.04x the base's cost) chosen; 3 passes x depth 2 ties it at 2x the cost; base 0.2221; dropout 0.2 0.2286 | r1 | free |
+| 4. The full run | **running** since 4:30 PM PT on r1's GPU 0, alone: all the games, width 256, FFN 1,024, 16 epochs to start (~10-12 h) | r1 | free |
 | 5. Games | a preview ladder of docs/023's network: **policy alone 42.7%, 100 simulations 64.1%** (103 games each; the MLP's PIMC: 40%, 57%); 300 simulations running | Community A4000 | ~$1.20 so far |
 | 6. 17lands analysis (docs/019 §4.4) | | laptop | – |
 
@@ -128,8 +128,8 @@ container (§2) and resumed from their checkpoints.
 |---|---|---|---|---|---|---|---|---|---|
 | base (2 passes, depth 1) | 9.2M | 0.2221 (0.2217) | **0.847** | 0.874 | 0.773 | **0.786** | 0.789 | 0.558 | 1.4 h |
 | 3 passes, local depth 2 | 24.0M | **0.2210 (0.2207)** | 0.846 | **0.876** | **0.783** | 0.784 | **0.794** | 0.557 | 2.8 h |
-| FFN 1,024 | 13.4M | *running* | | | | | | | |
-| dropout 0.2 | 9.2M | *running* | | | | | | | |
+| **FFN 1,024** | 13.4M | **0.2210 (0.2210)** | **0.847** | 0.872 | 0.775 | 0.775 | **0.796** | **0.541** | 1.5 h |
+| dropout 0.2 | 9.2M | 0.2286 | 0.841 | 0.865 | 0.762 | 0.763 | 0.791 | 0.545 | 1.3 h |
 | *docs/023's 3 epochs, cosine (s30-d256-3ep)* | *9.2M* | *0.2317* | *0.838* | *0.860* | *0.752* | *0.744* | *0.799* | *0.525* | *1.1 h* |
 
 - **Will's local layers at high data scale: the gain shrinks with data and training.** At 10% of the games and three
@@ -138,18 +138,28 @@ container (§2) and resumed from their checkpoints.
   point) and the value AUC (+0.005). At this scale the extra capacity isn't what limits the network.
 - **Eight epochs beat three:** set NLL 0.2217 against docs/023's 0.2317 on the same 30%, top-1 +0.9 points, targets
   +4. The policy still improved through the last epoch.
-- **The value head memorises late.** Its log-loss bottomed at ~0.542 around epoch 6 and rose to 0.558 by the end of
-  both runs (docs/023's three-epoch run: 0.525), while its AUC held at ~0.79: the value head starts to learn the
-  training games' results. The trainer keeps `best_value` apart from `best_policy`; dropout 0.2 tests whether more
-  regularisation holds it off.
+- **The value head memorises late, except with the wider FFN.** The base's and the deep network's value log-loss
+  rose from ~0.542 to ~0.557 in the decay, while their policies kept improving; FFN 1,024's stayed at 0.541, with
+  the best value AUC (0.796). Dropout 0.2 held the value off too (0.545) but cost the policy 0.007.
+- **The value head prefers a decaying rate to more epochs.** docs/023's three-epoch run, whose rate decayed
+  throughout, reached a value log-loss of 0.525 and AUC 0.799 at 10M rows, better than any eight-epoch run (0.541-
+  0.558, ~0.79) with 2.6x the rows; its policy, though, ends 0.010 behind. The value head improves while the rate
+  falls and stops once each game has been seen a few times; the policy keeps gaining from repeats. For the full run:
+  `best_value` will likely come early and `best_policy` late, and the trainer keeps both.
+- **The choice: FFN 1,024 at width 256** (13.4M parameters): the deep network's set NLL at 1.04x the base's training
+  time (the deep network: 2x), the best value head, and no late value overfit. Width stays 256, as Dan asked.
+
+![Six panels of validation curves over eight epochs of 30% of the games: set NLL, non-Pass top-1, attack accuracy, target top-1, value AUC and value log-loss. The base, FFN 1,024 and 3 passes x depth 2 overlap on the policy and end near 0.221 set NLL; dropout 0.2 trails throughout. docs/023's three-epoch cosine run (grey) leads at equal rows on every panel and reaches the lowest value log-loss, 0.525.](img/024-r8-curves-light.png)
+
+*Figure 2. Round 8's validation curves against docs/023's three-epoch run on the same 30% (grey).*
 
 ### The full run's first try: starved of page cache
 
 The full run (all 10.9M decisions; `configs/gnn_full_r1.yml`) started at 1:54 PM PT on GPU 0 beside round 8 on GPU 1.
 Its memory-mapped data (37 GB) and round 8's (12 GB) don't fit together in r1's 40 GiB, so the full run's random
 reads mostly went to disk: GPU 0 at 0%, 13M major page faults, 0.25 epochs in 68 minutes (~670 states a second, a
-tenth of its speed). Stopped at 3:02 PM PT; it restarts alone once round 8 ends, with the whole page cache (~34 GB
-for its 37 GB).
+tenth of its speed). Stopped at 3:02 PM PT; restarted alone at 4:30 PM PT with round 8's winner (FFN 1,024; the base's 0.25 epochs
+don't carry over to another shape), round 8's 30% cache deleted to leave it the whole page cache.
 
 ## 5b. The preview ladder: docs/023's network in games
 
@@ -161,7 +171,7 @@ Community A4000, 12 workers, 3 GB heaps.
 |---|---|---|
 | 0: the policy alone | **42.7%** of 103 | 40% of 100 |
 | 100 | **64.1%** of 103 | 57% of 100 |
-| 300 | *running* | 60% of 103 |
+| 300 | **67.7%** of 99 (one top-up round running) | 60% of 103 |
 
 At ~100 games a point the differences are within the noise (a 95% interval of about ±10 points on each), but both
 point the GNN's way.
