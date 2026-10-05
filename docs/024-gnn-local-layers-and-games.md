@@ -171,7 +171,30 @@ Community A4000, 12 workers, 3 GB heaps.
 |---|---|---|
 | 0: the policy alone | **42.7%** of 103 | 40% of 100 |
 | 100 | **64.1%** of 103 | 57% of 100 |
-| 300 | **67.7%** of 99 (one top-up round running) | 60% of 103 |
+| 300 | **68.0%** of 103 | 60% of 103 |
 
-At ~100 games a point the differences are within the noise (a 95% interval of about ±10 points on each), but both
-point the GNN's way.
+At ~100 games a point each difference is within the noise (a 95% interval of about ±9 points on each), but all
+three point the GNN's way, by 3-8 points. Records: HF `gnn/games/runs/pimc-gnn-stage3-*`.
+
+**Games an hour** (Community A4000 at $0.17/h, 12 workers, 13.6 cores; the first 100 games of each rung):
+
+| GNN's simulations | Wall time, 100 games | Games an hour | Median game | GNN decisions searched a game | $ a game |
+|---|---|---|---|---|---|
+| 0 (policy alone; the heuristic searches) | 16 min | ~380 | 1.6 min | – | $0.0004 |
+| 100 | 76 min | ~79 | 7.8 min | 84 | $0.0022 |
+| 300 | 3.8 h | ~27 | 20.4 min | 84 | $0.0064 |
+| 1,000 (projected, x3.3 the 300 rung's time) | ~12.5 h | ~8 | ~65 min | | ~$0.021 |
+| 3,000 (projected, x10) | ~37 h | ~2.7 | ~3.4 h | | ~$0.063 |
+| greedy self-play (docs/023's network, 40-game test) | – | ~530 | 49 s | – | $0.0003 |
+
+For the final model's ladder: ~55 pod-hours (~$9) for 0-3,000 simulations, ~19 for 10,000 self-play games (~$3),
+spread over several pods so it finishes in under a day.
+
+## Pods and spend
+
+| Pod | What | Rented | Removed | Cost |
+|---|---|---|---|---|
+| `gnn-eval-a`, `-b` (Community RTX 3070, $0.13/h) | the pipeline test; CUDA failed on that host | 8:44 AM PT | 9:25 AM PT | ~$0.10 |
+| `gnn-eval-c` (Community RTX 3090, $0.22/h) | a 6.8-core quota and 1.4 MB/s: replaced | 9:30 AM PT | 10:00 AM PT | ~$0.11 |
+| `gnn-eval-c` (Community RTX A4000, $0.17/h) | throughput tests and the preview ladder | 9:58 AM PT | 4:43 PM PT | ~$1.15 |
+| r1 (Dama's RTX PRO 6000s) | rounds 7-8, the full run | | | free |
