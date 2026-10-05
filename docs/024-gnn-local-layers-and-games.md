@@ -11,8 +11,8 @@ what im most interested in though at high data scale"). All times are Pacific.*
 |---|---|---|---|
 | 1. Code: `local_depth`, the streamed cache, the wsd schedule | done, on main | laptop | – |
 | 2. Round 7: local layers at 10%, three epochs | **done** (4 of 10 arms lost to r1's restart): local depth 3, 3 passes x depth 2 and FFN 1,024 gain ~0.007 in set NLL; depth 2 and 4 passes don't | r1, both GPUs | free |
-| 3. Round 8: long runs at 30% (the final model's shape) | rebuilding its cache after r1's restart, then 8 epochs of four shapes | r1 | free |
-| 4. The full run | its cache (37 GB) lost in the restart; rebuilt after round 8 | r1 | free |
+| 3. Round 8: long runs at 30% (the final model's shape) | resuming after r1's second restart (12:00 PM PT); the base was at set NLL 0.232 after 3.5 of 8 epochs | r1 | free |
+| 4. The full run | **blocked on disk:** its 37 GB cache overflows the container's storage cap, and r1's home has 5.8 GB free | r1 | free |
 | 5. Games | pipeline tested; a preview ladder of docs/023's network (0, 100, 300 simulations) running | Community A4000 | ~$0.30 so far |
 | 6. 17lands analysis (docs/019 §4.4) | | laptop | – |
 
@@ -79,14 +79,21 @@ six tables), ~58 GB in the trainer's arrays: docs/023's full run went to a rente
 - Depth costs inference: depth 3 and 3 passes x depth 2 have 2.6x the parameters and roughly twice the local-layer
   work of the base (measured in the games, below, once the shape is chosen).
 
-### r1's restart (10:00 AM PT)
+### r1's restarts (10:00 and 11:24 AM PT): the container's storage cap
 
-At 10:00 AM PT r1's container restarted, killing round 7's last four arms, round 8's cache build and the 37 GB cache
-of all the rows in `/var/tmp`. The likely cause is ours: round 8's cache build started beside the two round-7
-sweeps, which held their 10% tables in RAM, and the container's cgroup kills every process at once when it runs out
-of memory (`memory.oom.group = 1`, 40 GiB), sshd included. Since then: `~/r1_memguard.sh` kills our newest training
-job if anonymous + dirty memory passes 32 GiB; the cache builder flushes its memory maps after every chunk; every run
-reads the shared memory-mapped caches instead of its own copy in RAM; and heavy jobs run one at a time.
+r1's container restarted twice, each time killing every process (round 7's last four arms; round 8's first 3.5
+epochs and a cache rebuild) and wiping `/var/tmp`. **The cause was our caches in `/var/tmp`**, which sits in the
+container's own writable layer on the host's disk. Kubernetes caps that ephemeral storage per container (here, it
+seems, ~40 GB) and evicts a container over it; Dan got a low-disk alert for r1. Both times we had written ~39-42 GB
+there: the full cache (37 GB) plus the start of round 8's 30% cache, then the 30% cache (11 GB) plus 31 GB of the
+full cache's rebuild. A first guess, running out of memory, was wrong: a memory guard (`~/r1_memguard.sh`, killing
+our newest job past 32 GiB of anonymous + dirty memory) was running the second time and never fired.
+
+- **Only round 8's 30% cache (11 GB) goes in `/var/tmp`**; round 8 resumed from its checkpoints (the base's run
+  saves `latest.pt` every 15 minutes in the persistent home).
+- **The full cache (37 GB) needs a persistent disk.** r1's home (197 GB) has 5.8 GB free: experiment #4's runs
+  (98 GB), its MLP data caches (39 GB) and a Hugging Face cache (18 GB) fill it. Freeing space there, or more disk
+  from Dama, is Dan's call (docs/024 §4).
 
 ## 5. Games: the pipeline and its cost
 
