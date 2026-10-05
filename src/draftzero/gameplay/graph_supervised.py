@@ -99,6 +99,8 @@ DEFAULTS: dict[str, Any] = {
     "weight_decay": 0.0, "grad_clip": 1.0,
     "ema_decay": None,
     "batch_rows": 64,              # states per batch (MageZero's graph trainer: 64)
+    "sample_block_rows": 1,        # >1: sample blocks of this many consecutive rows, shuffled within
+    "sample_window_blocks": 64,    # windows of this many blocks (for data larger than the page cache)
     "eval_batch_rows": 128,
     "amp": "auto", "device": "auto", "seed": 0,
     "prefetch": 3,
@@ -710,10 +712,16 @@ def row_losses(out: gn.Out, b: dict) -> tuple[torch.Tensor, torch.Tensor]:
 
 class Sampler:
     """Every training row once an epoch, in a fresh random order (mixed tables), batch_rows at a
-    time; resumable from (epoch, position)."""
+    time; resumable from (epoch, position).
 
-    def __init__(self, tables: list[GraphTable], batch_rows: int, seed: int):
+    block_rows > 1 (memory-mapped data larger than the page cache, docs/024): the order visits random
+    blocks of block_rows consecutive rows, and shuffles the rows of window_blocks blocks at a time, so a
+    batch still draws from ~window_blocks places but the disk reads contiguous runs."""
+
+    def __init__(self, tables: list[GraphTable], batch_rows: int, seed: int, block_rows: int = 1,
+                 window_blocks: int = 64):
         self.tables, self.B, self.seed = tables, batch_rows, seed
+        self.block_rows, self.window_blocks = max(1, int(block_rows)), max(1, int(window_blocks))
         self.off = np.r_[0, np.cumsum([t.n for t in tables])].astype(np.int64)
         self.epoch, self.pos = 0, 0
         self._perm = None
@@ -724,7 +732,18 @@ class Sampler:
 
     def _order(self) -> np.ndarray:
         if self._perm is None or self._perm[0] != self.epoch:
-            self._perm = (self.epoch, np.random.default_rng([self.seed, 0x47, self.epoch]).permutation(self.rows))
+            rng = np.random.default_rng([self.seed, 0x47, self.epoch])
+            if self.block_rows == 1:
+                order = rng.permutation(self.rows)
+            else:
+                k = self.block_rows
+                blocks = rng.permutation((self.rows + k - 1) // k)
+                order = (blocks[:, None] * k + np.arange(k)).ravel()
+                order = order[order < self.rows]
+                w = self.window_blocks * k
+                for a in range(0, len(order), w):
+                    rng.shuffle(order[a:a + w])
+            self._perm = (self.epoch, order)
         return self._perm[1]
 
     def next(self) -> tuple[np.ndarray, int]:
@@ -947,7 +966,8 @@ class Trainer:
                                       {"params": emb, "lr_mult": float(cfg["emb_lr_mult"])}],
                                      lr=cfg["lr"], weight_decay=cfg["weight_decay"], **kw)
         self.ema = EMA(self.model, float(cfg["ema_decay"])) if cfg["ema_decay"] else None
-        self.sampler = Sampler(self.train_tables, cfg["batch_rows"], cfg["seed"])
+        self.sampler = Sampler(self.train_tables, cfg["batch_rows"], cfg["seed"], cfg["sample_block_rows"],
+                               cfg["sample_window_blocks"])
         self.epoch_rows = self.sampler.rows
         steps_per_epoch = max(1, math.ceil(self.epoch_rows / cfg["batch_rows"]))
         self.total_steps = cfg["max_steps"] or (int(cfg["max_epochs"] * steps_per_epoch) if cfg["max_epochs"] else None)

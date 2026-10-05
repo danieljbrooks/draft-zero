@@ -300,6 +300,27 @@ def test_wsd_schedule_holds_then_decays_and_extends(toy, tmp_path):
     assert tr2.lr_at(int(T * 0.9)) == 1e-3
 
 
+def test_block_sampler_covers_every_row_once_an_epoch(toy):
+    data = gs.load_data(toy_cfg(toy), log=lambda *a, **k: None)
+    sm = gs.Sampler(data.train, 8, 0, block_rows=4, window_blocks=3)
+    seen = []
+    while True:
+        g, ep = sm.next()
+        if ep > 0:
+            break
+        seen.append(g)
+    allg = np.concatenate(seen)
+    assert sorted(allg.tolist()) == list(range(sm.rows))
+    # deterministic in (seed, epoch), and different from the plain shuffle
+    o1 = gs.Sampler(data.train, 8, 0, block_rows=4, window_blocks=3)._order()
+    assert np.array_equal(o1, gs.Sampler(data.train, 8, 0, block_rows=4, window_blocks=3)._order())
+    assert not np.array_equal(o1, gs.Sampler(data.train, 8, 0)._order())
+    # each window of 3 blocks holds 12 rows from 3 runs of 4 consecutive rows
+    w = np.sort(o1[:12])
+    assert len(np.unique(w // 4)) == 3 and all(np.array_equal(np.unique(w[w // 4 == b]), b * 4 + np.arange(4))
+                                               for b in np.unique(w // 4))
+
+
 def test_graph_trainer_rejects_misaligned_tables(toy, tmp_path):
     import shutil
     d = tmp_path / "bad"
