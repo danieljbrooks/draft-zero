@@ -3,14 +3,14 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Monday 5 October, 3:30 AM PT)
+## Status (Monday 5 October, 4:50 AM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 0. Engineering | done, on main (5d1766a, a72792d, c18a727, c646d46) | laptop | – |
 | 1. Build | **done** 9:14 PM PT (2.7 h, no errors); tables, slim tables uploaded 9:49 PM PT. 0.3-0.7% of games differ from experiment #4's: a pre-existing leak between games in the bridge's workers, not the graph code (below) | pod `gnn-stage1` | ~$1.50 |
 | 2. Sweep | **done** (6 rounds, 44 runs). **The recipe: width 256, embeddings at std 0.02, dropout 0.1, the game result as the value target, lr 1e-4, batch 256.** Three epochs of 10%: set NLL 0.256, top-1 0.813, value AUC 0.776, past the MLP's best at 10% (0.258 / 0.807 / 0.751); five: 0.247. Will's settings gave 0.324–0.336 | pod, r1 | |
-| 3. Scale check, large training | **30%, one epoch: set NLL 0.250**, between the MLP (0.241) and the transformer (0.256): the gap to the MLP closes with data (0.037 at 10%, 0.009 at 30%). Width 512 and 3 epochs still running. **Large training** (all games, 3 epochs) on a second pod, `gnn-full`, from ~3:40 AM PT | pod, `gnn-full` | |
+| 3. Scale check, large training | 30% check **done**: one epoch 0.250 (the MLP 0.241: the gap closes with data, 0.037 at 10%, 0.009 at 30%); **three epochs 0.232, ahead of the 30% MLP on every measure** and level with experiment #4's full-data MLP on most. **Large training running** on `gnn-full` (0.238 at 0.75 epochs), done ~6:45 AM PT | `gnn-stage1`, `gnn-full` | |
 | 4. Offline evaluation | held-out-cards pair queued on `gnn-stage1` after the 30% check (the GNN's and the MLP's 30% recipes without the games that show the five cards); the test split runs at the end of the large training | `gnn-stage1` | |
 | 5. Games | | | |
 
@@ -177,7 +177,9 @@ networks (scored on experiment #4's rows, which differ in 0.3% of games):
 
 | 30% of the games, one epoch | Set NLL | Top-1 acted | Attacks | Blocks | Targets | Value AUC | Value log-loss | Train time |
 |---|---|---|---|---|---|---|---|---|
-| **GNN, width 256** (`s30-d256`) | 0.250 | **0.821** | 0.842 | 0.722 | **0.718** | 0.769 | **0.556** | 21 min |
+| GNN, width 256 (`s30-d256`) | 0.250 | 0.821 | 0.842 | 0.722 | 0.718 | 0.769 | 0.556 | 21 min |
+| GNN, width 512 (`s30-d512`, Will's width) | 0.269 | 0.779 | 0.814 | 0.721 | 0.704 | 0.773 | 0.553 | 36 min |
+| **GNN, width 256, three epochs** (`s30-d256-3ep`) | **0.232** | **0.838** | **0.860** | **0.752** | **0.744** | **0.799** | **0.525** | 65 min |
 | *MLP, wave D's combination (`d1`, `d2`)* | ***0.241** / 0.243* | *0.820 / 0.821* | ***0.855** / 0.851* | ***0.728** / 0.727* | *0.673 / 0.665* | ***0.775** / 0.776* | *0.571 / 0.573* | |
 | *transformer (docs/022 §4.3's reference)* | *0.256* | | | | | | | |
 
@@ -186,13 +188,29 @@ networks (scored on experiment #4's rows, which differ in 0.3% of games):
   reading, that the GNN is the data-hungry one, holds once it trains properly.
 - **At 30% the GNN matches the MLP's top-1 and beats its targets by 4.5 points** and its value log-loss; the MLP
   still leads on attacks, blocks and set NLL.
-- Width 512 at 30% trails 256 at half an epoch (0.287 against 0.267); three epochs at width 256 follow.
+- **Width 512 trails 256 at 30% too** (0.269 against 0.250 at one epoch), as at 10%: at these data sizes Will's
+  width is the slower learner, not the better one.
+- **Three epochs of 30%: set NLL 0.232, ahead of the 30% MLP on every measure** (top-1 +1.8 points, attacks +0.5,
+  blocks +2.4, targets +7.1, value AUC +0.024, log-loss −0.046). Against experiment #4's MLP trained on *all* the
+  games, scored on these rows (0.227 / 0.832 / 0.870 / 0.744 / 0.734 / 0.787): better top-1, blocks, targets and
+  value, a little behind on set NLL (+0.005) and attacks (−1.0 point), from a third of the data. The MLP gains
+  nothing from repeats (experiment #4), so one epoch is its best at 30%.
+- **The curve:** 0.253 at one epoch, 0.236 at two, 0.232 at three; the value AUC still rising (0.775 → 0.788 →
+  0.799).
+- **Inference** (`graph_supervised bench`, r1's GPU 0; batch 1 / 8 / 32 / 128): width 256 (9.2M parameters) 120 /
+  1,058 / 3,559 / 10,844 states a second, width 512 (35.1M) 140 / 1,095 / 3,958 / 14,167. The GPU is launch-bound
+  either way. On one CPU thread at batch 1 the narrower network is 6.6× faster (99 against 15 states a second).
 
 **The large training** (`configs/gnn_train.yml`, `deploy/gnn_train.sh`): all 10.9M training decisions, three epochs,
 the sweep's recipe. Its first load holds every row in RAM (~80 GB from the 30% run's 24.5 GB) before the memory-mapped
 cache takes over, too much for `gnn-stage1`'s 125 GB alongside its runs. So it runs on a second pod, `gnn-full`:
 Secure RTX PRO 6000 (r1's GPU), 188 GB, 27 cores of an EPYC 9554, $2.09 an hour (a Community L40S at $0.79 had none
 free). Results go to HF `gnn/main/` every 15 minutes; the test split is scored at the end.
+
+- 3:14 AM PT: started; all the rows loaded in 29 minutes (vocabs 1,925 leaves); training at ~3,250 states a second
+  (r1 trains the same network at ~5,800: this pod's GPU sits at ~47%), so three epochs take ~2.8 hours.
+- Quarter epochs: set NLL 0.256 → 0.243 → 0.238; top-1 0.817 → 0.831; attacks 0.793 → 0.857; value AUC 0.759 →
+  0.784.
 
 ### Round 5: width 256 at lr 1e-4 (r1, 1:35–2:03 AM PT), and round 6
 
