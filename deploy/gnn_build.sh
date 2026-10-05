@@ -17,10 +17,15 @@ log() { echo "[$(date -u +%H:%M:%S)] gnn_build: $*"; }
 CORES=$($PY -c "
 import os
 try:
-    q, p = open('/sys/fs/cgroup/cpu.max').read().split()
+    q, p = open('/sys/fs/cgroup/cpu.max').read().split()                    # cgroup v2
     print(int(int(q) / int(p)) if q != 'max' else os.cpu_count())
 except Exception:
-    print(os.cpu_count())")
+    try:                                                                     # cgroup v1 (nproc shows the host's)
+        q = int(open('/sys/fs/cgroup/cpu/cpu.cfs_quota_us').read())
+        p = int(open('/sys/fs/cgroup/cpu/cpu.cfs_period_us').read())
+        print(q // p if q > 0 else os.cpu_count())
+    except Exception:
+        print(os.cpu_count())")
 W=${WORKERS:-$(( CORES - 2 ))}
 for f in data/17lands/replay_data_public.FDN.PremierDraft.csv.gz data/17lands/cards.csv data/17lands/abilities.csv \
          data/17lands/xmage_Foundations_SpecialGuests.json data/imitation_scale/row_split_exp4.npy; do
