@@ -27,3 +27,8 @@ runs:
   - {name: g256-emb0.02-lr5e-4, emb_init_std: 0.02, lr: 5.0e-4}
   - {name: g256-emb0.02-3ep, emb_init_std: 0.02, max_epochs: 3.0}
   - {name: g256-base-again}                                  # g-batch256 with quarter-epoch curves (a seed check)
+  # round 1's shape arms, at batch 256 (against g256-base-again)
+  - {name: g256-passes1, arch: {passes: 1}}
+  - {name: g256-global1, arch: {global_layers: 1}}
+  - {name: g256-d256, arch: {d_model: 256, ff: 512}}
+  - {name: g256-global4, arch: {global_layers: 4}}
