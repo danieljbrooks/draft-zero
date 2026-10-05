@@ -9,6 +9,18 @@ reasoning and the decisions from review are in [docs/017](017-experiment4-scalin
 *Times: UTC up to 4 October 02:35 UTC; Pacific time (PT, PDT = UTC-7) from then on, which is 7:35 PM PT on Saturday
 3 October (Dan).*
 
+## Update (Monday 5 October, 4 AM PT): PIMC, and the belief service
+
+- **PIMC plays at least as well as IS-MCTS, at about half the cost a game.** The MLP against `heuristic@100`, both
+  bots on PIMC (one world), ~100 paired games each: 35%, 63%, 67% and **76%** at 0, 100, 300 and 1,000 simulations,
+  against IS-MCTS's 38%, 56%, 64% and 64% on the same games. On one pod its games are 2.2 times faster at 100
+  simulations and 1.9 times at 300 (PIMC instead of IS-MCTS in the MLP's games).
+- **No closed-decklist game of this experiment used the belief service:** a missing cache file made every sample
+  fail, so C2, its anchor and the MLP's ladder all searched with the opponent's real decklist (not its hand or
+  library order). Fixed for new runs. With a working belief, PIMC scores 40%, 57%, 60% and 74%: about 3 points below
+  the real decklist.
+- **Spend: $5.31** on four Community pods (20.7 pod-hours), all terminated.
+
 ## Where things stand (Monday 5 October, 1:30 AM PT)
 
 - **The full-data MLP (run 2) beats the stage-3 transformer** on the test split after one annealed epoch and 39
@@ -363,7 +375,9 @@ stalls more often), 17,718 player-games with a winner, 2.6 hours on two Secure 3
 
 The transformer searching with IS-MCTS (`il_bc@N`: its policy as the prior, its value at the leaves, closed
 decklists with the belief service) against the baseline `heuristic@100`, on the eval pool's deck pairs, both seats
-a pair. A searching bot plays its most-visited option (greedy; no temperature). Dan asked for at least 100 valid
+a pair. *Correction (5 October): the belief service failed on every call, so these games re-dealt from the
+opponent's real decklist (open decklists in effect); see "No closed-decklist game of this experiment used the belief
+service".* A searching bot plays its most-visited option (greedy; no temperature). Dan asked for at least 100 valid
 games a budget (engine errors don't count), so `il_bc@100` was topped up from 50 to 60 deck pairs:
 
 | Transformer | Opponent | Games played | Valid | Score [95% CI] | Median game, one worker |
@@ -1681,7 +1695,8 @@ second machine for `il_bc@100` and `@300`.
 Run 2's MLP against `heuristic@100` on phase C's deck pairs and seeds, so every game replays one of the transformer's
 but for the network: the policy alone (greedy, open decklists, as C1; Dan, 8:20 AM: "100 games of policy (greedy)
 alone versus heuristic. This is '0 simulations'") and IS-MCTS with the MLP's priors and value at N simulations
-(closed decklists, as C2). At least 100 valid games each (engine errors replayed or topped up with deck pairs). The
+(closed decklists, as C2; *in effect open, as C2's: see "No closed-decklist game of this experiment used the belief
+service"*). At least 100 valid games each (engine errors replayed or topped up with deck pairs). The
 last column compares the two networks on the same games (same deck pair, seats and shuffles):
 
 | MLP's simulations | Valid games | MLP's score [95% CI] | Median game (one worker) | Transformer's score (games) | Transformer's median game | MLP minus transformer, same games |
@@ -1769,6 +1784,137 @@ split by opening hand and drawn later, which the simulation's records don't).
   (0.49, 0.64), UG 0.47 (0.48, 0.62), UR 0.45 (0.45, 0.64), BR 0.43 (0.40, 0.64): the same order and spread as the
   transformer's (Spearman 0.37 with the top players over the ten pairs).
 
+## PIMC instead of IS-MCTS in the MLP's games (Sun 4 October, from 10:30 PM PT)
+
+Dan: benchmark PIMC with the MLP, both bots on PIMC with one world, at 0, 100, 300 and 1,000 simulations against
+`heuristic@100`, 100 games each, with approximate runtimes, on a 3070 or 3090 under $0.35/hr (Secure if one is
+available); write it up here and in docs/019 §4.6.
+
+**The code** (`play.py --method pimc`, `BenchPlayer.method`): every searched decision runs `BenchSearch.searchTree`
+(MageZero's tree search; docs/016's `pimc1`) on one world: a belief sample with closed decklists, or with open
+decklists (and when no belief world replays to the decision) the live game re-dealt once from the opponent's real
+decklist (`BenchSearch.redeal`). It never searches the live game itself. The search's root children now carry
+world-independent keys, so its choice maps back to MageZero's options. Tested in
+`test_play_op_runs_a_game_with_pimc_for_both_seats` (one engine step a simulation, no fallbacks, a seeded replay).
+`deploy/pimc_games.sh` plays a ladder (`DECKLISTS=closed|open`); `tools/imitation_scale/pimc_games.py` makes the
+tables below and docs/019's Figure 7.
+
+### No closed-decklist game of this experiment used the belief service
+
+The PIMC smoke test built no belief world: every `/sample` call failed with `FileNotFoundError` on the 17lands
+replay file. `belief.DeckPool` loads a cache, `data/gameplay/deckpool_FDN_PremierDraft.npz`, and builds it from the
+replay file when it is missing. Neither was ever on a game machine. `belief_server.py` still started and answered
+`/healthz`, and `BenchPlayer` fell back to the live game on every decision (`openFallbacks`), which is the open
+setting: the opponent's real decklist re-dealt, never its hand or library order. The records show it everywhere:
+**0 belief worlds built in about 122,000 searched decisions** (C2's three runs and its anchor, the MLP at 100, 300,
+1,000 and 3,000; `worldsBuilt` 0, `openFallbacks` equal to `beliefCalls`). So C2, its anchor and the MLP's ladder
+all had open decklists in effect, and docs/019 §4.2 is corrected. C4 and docs/016 are unaffected: their decisions'
+worlds were built offline (`tools/search_bench/items.py`).
+
+Fixed: the cache is on HF (`exp4/games/deckpool_FDN_PremierDraft.npz`), `deploy/exp4_games_setup.sh` fetches it, and
+`deploy/exp4_games_run.sh` stops a closed-decklist run whose belief service can't sample. Lesson: a health check has
+to exercise the real call, not just answer.
+
+So PIMC ran as two ladders, each on phase C's seed and deck pairs (each game replays an IS-MCTS game but for the
+search method), at least 100 valid games a budget:
+
+- **PIMC, real decklist** (`pimc-open-mlp-*`): the same information the IS-MCTS games had, so the method is the only
+  change.
+- **PIMC, belief** (`pimc-mlp-*`): the world is a belief sample, the fair setting (and what Dan chose).
+
+### Pods
+
+No Secure 3070 or 3090 was under $0.35 (a Secure 3090 was $0.50), so four Community pods on the slim image
+(`runpod/base` and `deploy/slim_bootstrap.sh`, CUDA 12.8 torch), each with a 10-hour self-destruct and a watcher that
+terminates it when its queue is done:
+
+| Pod | GPU, price | Quota | Runs | Workers |
+|---|---|---|---|---|
+| A | RTX 3090, $0.22/hr | 27.2 cores, 62 GB | belief: 1,000 (shard 0), 300; then the timing runs | 18, 17 |
+| B | RTX 3090 Ti, $0.27/hr | 23.8 cores, 62 GB | belief: policy, 100, 1,000 (shard 1), 1,000 top-up | 18, 16, 16, 6 |
+| C | RTX 3090 Ti, $0.27/hr | 23.8 cores, 62 GB | real decklist: 1,000 (shard 0), 300 | 16, 14 |
+| D | RTX 3090 Ti, $0.27/hr | 23.8 cores, 62 GB | real decklist: policy, 100, 1,000 (shard 1), 1,000 top-up | 18, 16, 16, 6 |
+
+- **B, C and D shared one host with slow downloads:** setup took 20-30 minutes there against 7 on A, mostly
+  `pip`. Uploads from the laptop crawled (a 16 MB code archive took ~5 minutes); a 1.1 MB archive without `docs/`
+  went quickly.
+- **Memory:** an `il_bc@1000` worker at a 2.5 GB heap reaches ~2.75 GB, so 18 workers and four servers filled ~51 GiB
+  of A's 62; no out-of-memory kills.
+- **Long games hold a pod:** a 1,000-simulation game can take 2+ hours (the median is under half an hour), so each
+  pod started its next run beside the last games of a 1,000 shard instead of waiting.
+
+### Results
+
+The network bot's score against `heuristic@100` (engine errors left out: all MageZero's "Error in unit tests", as
+in the IS-MCTS games). "Same games" is the mean difference over the (deck pair, seat swap) games both have, ± 1.96
+standard errors over deck pairs:
+
+| Simulations | Method | Valid games (engine errors) | Score | Same games, minus IS-MCTS |
+|---|---|---|---|---|
+| 0 | IS-MCTS | 104 (2) | 38.0% | |
+| 0 | PIMC, real decklist | 100 (0) | 35.0% | -3.5 ± 8.2 (100 games) |
+| 0 | PIMC, belief | 100 (0) | 40.0% | +1.5 ± 8.9 (100 games) |
+| 100 | IS-MCTS | 103 (3) | 56.3% | |
+| 100 | PIMC, real decklist | 103 (7) | 63.1% | +6.0 ± 8.8 (100 games) |
+| 100 | PIMC, belief | 100 (0) | 57.0% | +1.0 ± 8.2 (99 games) |
+| 300 | IS-MCTS | 103 (3) | 64.1% | |
+| 300 | PIMC, real decklist | 104 (5) | 67.3% | +3.9 ± 7.0 (102 games) |
+| 300 | PIMC, belief | 103 (2) | 60.2% | -3.9 ± 8.0 (103 games) |
+| 1,000 | IS-MCTS | 100 (4) | 64.0% | |
+| 1,000 | PIMC, real decklist | 102 (4) | 76.5% | **+12.2 ± 6.4** (98 games) |
+| 1,000 | PIMC, belief | 103 (3) | 73.8% | +9.2 ± 7.1 (98 games) |
+
+- **PIMC is at least as strong as IS-MCTS** with the same information: +4 to +6 points at 100 and 300 (within the
+  noise) and +12 at 1,000, the one clear gap. IS-MCTS flattened from 300 to 1,000 (64.1%, 64.0%); PIMC rose (67%,
+  76%).
+- **The belief costs ~3 points** against the real decklist on the same games: +5.0 ± 5.8 with the policy alone (only
+  the heuristic searches), -3.1 ± 7.1 at 100, -6.9 ± 6.6 at 300, -3.0 ± 4.9 at 1,000. 112 of 43,590 belief searches
+  (0.26%) fell back to the real decklist (no sampled world replayed to the decision).
+- **The 1,000 runs** are two shards of 50 deck pairs on two pods plus a top-up of pairs 50-52 (the IS-MCTS ladder's
+  top-up took pairs 50-51), so "same games" covers 98 of them.
+
+### What the games cost
+
+Each bot's search seconds a decision (its searched decisions; the policy-alone bot's are network calls) and engine
+steps a simulation, from the game records. The ladders ran on different machines: the IS-MCTS games at 0, 100 and
+300 on the second machine, at 1,000 on Community 3090s that also played the 3,000 shard (more workers than cores),
+and PIMC on these four pods. So the clean runtime comparison is the **same pod** rows: after its ladder, pod A
+played 16 deck pairs of IS-MCTS at 100 and 300 and of PIMC at 100 (real decklist, 17 workers, as its PIMC run at 300):
+
+| Simulations | Method | Games | Median game, one worker | Network bot, s a decision | Heuristic, s a decision | Engine steps a simulation (network, heuristic) |
+|---|---|---|---|---|---|---|
+| 0 | IS-MCTS | 104 | 1.6 min | 0.05 | 1.87 | 7.7, 6.4 |
+| 0 | PIMC, real decklist | 100 | 0.7 min | 0.05 | 0.86 | 1.0, 1.0 |
+| 0 | PIMC, belief | 100 | 0.9 min | 0.06 | 1.17 | 1.1, 1.0 |
+| 100 | IS-MCTS | 103 | 5.0 min | 3.44 | 1.05 | 7.6, 6.5 |
+| 100 | PIMC, real decklist | 103 | 3.5 min | 2.90 | 0.33 | 1.0, 1.0 |
+| 100 | PIMC, belief | 100 | 3.8 min | 2.96 | 0.43 | 1.0, 1.0 |
+| 100 | IS-MCTS, same pod | 32 | 6.1 min | 3.33 | 1.51 | 7.5, 6.5 |
+| 100 | PIMC, same pod | 30 | **2.8 min** | 2.44 | 0.29 | 1.0, 1.0 |
+| 300 | IS-MCTS | 103 | 15.8 min | 11.49 | 1.23 | 9.2, 6.4 |
+| 300 | PIMC, real decklist | 104 | 9.4 min | 8.38 | 0.32 | 1.0, 1.0 |
+| 300 | PIMC, belief (pod A) | 103 | **8.8 min** | 7.94 | 0.31 | 1.0, 1.0 |
+| 300 | IS-MCTS, same pod | 32 | 16.5 min | 9.89 | 1.46 | 9.0, 6.6 |
+| 1,000 | IS-MCTS | 100 | 74.3 min | 62.09 | 2.35 | 10.9, 6.5 |
+| 1,000 | PIMC, real decklist | 102 | 29.8 min | 28.44 | 0.32 | 1.0, 1.0 |
+| 1,000 | PIMC, belief | 103 | 29.9 min | 26.94 | 0.36 | 1.0, 1.0 |
+
+- **On one pod, PIMC games are 2.2 times faster at 100 simulations and 1.9 times at 300.** The heuristic's moves
+  are ~5 times faster (one engine step a simulation against 6.5); the network bot's only 1.2-1.4 times. At ~25 ms a
+  simulation, its time is mostly the network's evaluation over HTTP (four MageZero servers on the GPU), so cheaper
+  serving is the next speed-up (as the decision benchmark on one Secure 3090 found: PIMC 1.65 times faster at 100
+  and 1.92 at 1,000, with the servers the limit).
+- **At 1,000 simulations** the median game fell from 74 to 30 minutes across the two ladders, but the IS-MCTS games
+  ran on oversubscribed pods, so 2.5 times overstates it; ~2 times is the better estimate.
+- **The belief costs little time:** 0.1 s a heuristic decision at 100 simulations (its sampling call), nothing
+  visible at 300 and 1,000.
+
+### Spend
+
+Four pods from 10:12 PM to 3:57 AM PT, 20.7 pod-hours, **$5.31** (uptime times price): A 5.7 h ($1.26), B 5.2 h
+($1.42), C and D 4.9 h each ($1.32, $1.31). Each terminated itself after its queue; the same-pod timing was ~$0.33
+of A's. RunPod balance $96.35 at 3:58 AM PT (other sessions' pods run on it too).
+
 ## Stage 4: cheap evaluation (sb-v2)
 
 *The heuristic bot at 300 simulations, run during stages 1–3. The full comparison, the transformer at 0–10,000
@@ -1828,9 +1974,13 @@ Every pod's quote, what it actually had, and what it delivered (docs/005).
 | `dlh44ayrcex0k6` | MLP games | RTX 3090, Community, CA (the same host) | $0.22/hr, 28 vCPU, 62 GB | 27.2 cores / 62 GB | ~17.3 | ~$3.80 | `il_bc@3000` shard 0 (16 games carried over from the second machine) and pairs 41-49 of shard 1; self-destructed at 12:51 AM PT |
 | `7mujqbweucyz2x` | MLP games | RTX 3070, Community, US | $0.13/hr, 16 vCPU, 31 GB | – | ~15.3 | ~$1.99 | a third of `il_bc@1000`, pairs 33-35 of `il_bc@3000` (its slow cores: 3,000-simulation games of 4-12 CPU-hours); self-destructed at 12:51 AM PT |
 | `4ep155hn52okqq`, `2ncfjpf34zyye3` | MLP games (meant) | RTX 3070, Community, US (one host) | $0.13/hr | – | ~0.4 | ~$0.05 | "CUDA unknown error" on the host's GPUs (torch sees none); removed |
+| `nad5euw1bvf5i7` | PIMC games (A) | RTX 3090, Community | $0.22/hr, 32 vCPU, 62 GB | 27.2 cores / 62 GB | 5.7 | $1.26 | belief: 1,000 shard 0 and 300; then the same-pod timing; set up in 7 minutes; terminated itself |
+| `wzyoado4xipkqw` | PIMC games (B) | RTX 3090 Ti, Community | $0.27/hr, 28 vCPU, 62 GB | 23.8 cores / 62 GB | 5.2 | $1.42 | belief: policy, 100, 1,000 shard 1, 1,000 top-up; a slow host (setup ~25 minutes); terminated itself |
+| `fciy5o2wr8x0eh` | PIMC games (C) | RTX 3090 Ti, Community | $0.27/hr, 28 vCPU, 62 GB | 23.8 cores / 62 GB | 4.9 | $1.32 | real decklist: 1,000 shard 0 and 300; the same host as B; terminated itself |
+| `pi7oks5dxown4l` | PIMC games (D) | RTX 3090 Ti, Community | $0.27/hr, 28 vCPU, 62 GB | 23.8 cores / 62 GB | 4.9 | $1.31 | real decklist: policy, 100, 1,000 shard 1, 1,000 top-up; the same host as B; terminated itself |
 
 The MLP's games (4-5 October; Dan raised the budget to the account balance on Sunday morning): 5 pods, ~51 pod-hours,
-~$9.80; experiment #4's RunPod total ~$69.20.
+~$9.80. The PIMC games (5 October): 4 pods, 20.7 pod-hours, $5.31. Experiment #4's RunPod total ~$74.50.
 
 Phase C after C0 (3 October): 12 pods, 70.7 pod-hours, $39.10 (uptime x price). Community pods stalled pulling the
 image in C0, so every later pod was Secure ($0.50/hr for a 3090, $0.82 for an L40). |

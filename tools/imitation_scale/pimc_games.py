@@ -65,7 +65,7 @@ def seat_totals(games, bot1: bool) -> dict:
         bot1_in_a = not g["swap"]   # bot1 sits in A unless the pair's game is swapped
         seat = "A" if bot1_in_a == bot1 else "B"
         v = (g.get("seats") or {}).get(seat) or {}
-        for k in ("decisions", "sims", "engineSteps", "searchSeconds", "worldsBuilt", "openFallbacks", "fallbacks"):
+        for k in ("decisions", "sims", "engineSteps", "searchSeconds", "beliefCalls", "openFallbacks"):
             t[k] = t.get(k, 0) + (v.get(k) or 0)
     return t
 
@@ -85,15 +85,20 @@ def same_games(a, b):
     return mean, half, len(keys)
 
 
+# runtime on one pod (the 3090 that played PIMC, belief at 1,000 and 300): 16 deck pairs each, real decklist
+TIMING = {("100", "PIMC, same pod"): [f"{G}/pimc-open-mlp-ilbc100-timing"],
+          ("100", "IS-MCTS, same pod"): [f"{G}/ismcts-open-mlp-ilbc100-timing"],
+          ("300", "IS-MCTS, same pod"): [f"{G}/ismcts-open-mlp-ilbc300-timing"]}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--figure", action="store_true", help="also draw docs/img/019-pimc-light.png")
     a = ap.parse_args(argv)
     data = {(m, b): load(p) for m, spec in METHODS.items() for b, p in spec.items()}
-    print("| Simulations | Method | Valid games (errors) | Score | Same games as IS-MCTS | Median game | "
-          "Network bot s/decision | Heuristic s/decision | Engine steps/simulation (network, heuristic) | "
-          "Belief worlds built / decisions |")
-    print("|---|---|---|---|---|---|---|---|---|---|")
+    print("Strength: the network bot's score against heuristic@100\n")
+    print("| Simulations | Method | Valid games (engine errors) | Score | Same games, minus IS-MCTS |")
+    print("|---|---|---|---|---|")
     table = {}
     for b in BUDGETS:
         for m in METHODS:
@@ -103,15 +108,30 @@ def main(argv=None) -> int:
             sc = sum(points(g) for g in games.values()) / len(games)
             table[(m, b)] = (sc, len(games))
             same = "" if m == "IS-MCTS" else same_games(data[("IS-MCTS", b)][0], games)
-            same = "" if not same else f"{100 * same[0]:+.1f} ± {100 * same[1]:.1f} ({same[2]})"
-            med = st.median(g["seconds"] for g in games.values()) / 60
-            n1, h = seat_totals(games, True), seat_totals(games, False)
-            spd = lambda t: f"{t['searchSeconds'] / t['decisions']:.2f}" if t.get("decisions") else "–"   # noqa: E731
-            sps = lambda t: f"{t['engineSteps'] / t['sims']:.1f}" if t.get("sims") else "–"   # noqa: E731
-            built = n1.get("worldsBuilt", 0) + h.get("worldsBuilt", 0)
-            dec = n1.get("decisions", 0) + h.get("decisions", 0)
-            print(f"| {b} | {m} | {len(games)} ({err}) | {100 * sc:.1f}% | {same} | {med:.1f} min | {spd(n1)} | "
-                  f"{spd(h)} | {sps(n1)}, {sps(h)} | {built:,} / {dec:,} |")
+            same = "" if not same else f"{100 * same[0]:+.1f} ± {100 * same[1]:.1f} ({same[2]} games)"
+            print(f"| {b} | {m} | {len(games)} ({err}) | {100 * sc:.1f}% | {same} |")
+    print("\nGuessing the deck: PIMC, belief minus PIMC, real decklist, on the same games\n")
+    for b in BUDGETS:
+        d = same_games(data[("PIMC, real decklist", b)][0], data[("PIMC, belief", b)][0])
+        if d:
+            print(f"- {b}: {100 * d[0]:+.1f} ± {100 * d[1]:.1f} ({d[2]} games)")
+    print("\nCost (\"same pod\": short runs on the pod that played PIMC, belief at 300 and 1,000, for the runtime only)\n")
+    print("| Simulations | Method | Games | Median game, one worker | Network bot s/decision | "
+          "Heuristic s/decision | Engine steps/simulation (network, heuristic) | Belief searches that fell back |")
+    print("|---|---|---|---|---|---|---|---|")
+    rows = [(b, m, data[(m, b)][0]) for b in BUDGETS for m in METHODS]
+    rows += [(b, m, load(p)[0]) for (b, m), p in TIMING.items()]
+    for b, m, games in sorted(rows, key=lambda r: BUDGETS.index(r[0])):
+        if not games:
+            continue
+        med = st.median(g["seconds"] for g in games.values()) / 60
+        n1, h = seat_totals(games, True), seat_totals(games, False)
+        spd = lambda t: f"{t['searchSeconds'] / t['decisions']:.2f}" if t.get("decisions") else "–"   # noqa: E731
+        sps = lambda t: f"{t['engineSteps'] / t['sims']:.1f}" if t.get("sims") else "–"   # noqa: E731
+        calls = n1.get("beliefCalls", 0) + h.get("beliefCalls", 0)
+        fell = n1.get("openFallbacks", 0) + h.get("openFallbacks", 0)
+        fb = f"{fell:,} of {calls:,}" if calls else "– (real decklist)"
+        print(f"| {b} | {m} | {len(games)} | {med:.1f} min | {spd(n1)} | {spd(h)} | {sps(n1)}, {sps(h)} | {fb} |")
     if a.figure:
         figure(table)
     return 0

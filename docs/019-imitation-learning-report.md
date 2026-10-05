@@ -3,7 +3,8 @@
 *Experiment #4's report, October 2026. The plan is [docs/017](017-experiment4-scaling-up-imitation-learning.md) and
 the detailed run log is [docs/018](018-experiment4-run-log.md).*
 
-*Status, 4 October: final, except the MLP's games at 1,000 and 3,000 simulations, which are still being played.*
+*Status, 4 October: final, except the MLP's games at 1,000 and 3,000 simulations, which are still being played.
+5 October: §4.6 added (PIMC), and §4.2 corrected (the bots knew the opponent's decklist).*
 
 ## Abstract
 
@@ -24,6 +25,9 @@ We then let each network guide a tree search and played it against MageZero's ha
   bot searching 100 simulations. With search of its own, the network won 55–56% at 100 simulations, 61–64% at 300,
   and up to 66% at 3,000.
 - **With equal search on both sides, the network bot won 56% of 314 paired games.**
+- **A faster search does better still.** With PIMC, which searches one dealt version of the hidden cards instead of
+  re-dealing them for every simulation, the network won 74–76% at 1,000 simulations against IS-MCTS's 64%, and its
+  games were about twice as fast (§4.6).
 - **Playing its policy alone against itself, the transformer ranks cards somewhat like humans do.** Card win rates
   from 10,000 such games correlate with 17lands' at 0.41 on commons, about half of what sampling noise allows. The
   MLP's correlate at 0.34.
@@ -59,7 +63,7 @@ The usual recipe for a game-playing agent comes from AlphaZero (Silver et al., 2
 - The games the agent plays against itself become its next training data.
 
 The recipe is general, but it needs a lot of games. AlphaGo Zero's first strong run played 4.9 million games,
-AlphaZero played 44 million games of chess, and DeepNash played 5.5 billion games of Stratego (Figure 7).
+AlphaZero played 44 million games of chess, and DeepNash played 5.5 billion games of Stratego (Figure 8).
 
 Magic engines are slow to search. Ours is XMage, a full implementation of Magic's rules. On the most
 cost-effective rented machine we measured, one game in which both players search costs
@@ -286,9 +290,12 @@ only indicative.
 - **Policy alone:** the network's most likely move at every decision, with no search.
 - **`network@N`:** search with N simulations per decision, guided by the network's policy and judged by its value.
 
-**Fair search.** Neither bot sees the other's hand or deck list. Every simulation re-deals the hidden cards
-consistently with what has been seen: information-set search (Cowling et al., 2012). The opponent's deck is guessed
-from real 17lands decks that fit the cards revealed so far.
+**Search with hidden cards.** Neither bot sees the other's hand or the order of either library. Every simulation
+re-deals the hidden cards consistently with what has been seen: information-set search (IS-MCTS; Cowling et al.,
+2012). Both bots do know the 40 cards in the opponent's deck. We meant them to guess it from real 17lands decks that
+fit the cards revealed so far, but the service that makes the guess failed on every call (a data file was missing
+from the game machines), and each search fell back to the opponent's real decklist. We found this afterwards, in
+§4.6, which also plays the guessed version.
 
 **Paired games.** The decks are 3,150 top players' decks held out of experiment #1's training. (Most of their drafts
 are among this experiment's training games, so the networks have seen these players' games with these decks, but
@@ -461,7 +468,8 @@ points for the transformer, −7 for the MLP), in line with their trouble with b
 | The final transformer | 4.3 hours on Dama's machine | $0 (~$5 at rented RTX 3090 rates) |
 | The final MLP | 39 minutes on Dama's machine | $0 (~$0.50) |
 | Evaluation games and benchmarks | ~95 rented machine-hours, plus Dama's machine | ~$47 (still running) |
-| **All, so far** | | **~$63** |
+| PIMC follow-up (§4.6) | 21 hours on four rented RTX 3090-class machines | $5.31 |
+| **All, so far** | | **~$68** |
 
 Many thanks to **Dama**, who lent the project a machine with two RTX PRO 6000 GPUs. It trained both final networks,
 ran most of the hyperparameter search, and played many of the evaluation games, all at no cost to the project.
@@ -469,6 +477,72 @@ ran most of the hyperparameter search, and played many of the evaluation games, 
 Learning from 146,000 human games cost less than evaluating the result. Playing 146,000 games of self-play at 1,000
 simulations would cost about $8,000 on our engine, and those games would be played by a far weaker player than
 17lands' top players.
+
+### 4.6 Follow-up: PIMC, a faster and simpler search for hidden cards
+
+**Motivation.** PIMC (perfect-information Monte Carlo) is a faster and simpler way to handle hidden information than
+the information-set search of §4.2. It deals the hidden cards once, into one "world" that fits everything the bot
+has seen, and runs MageZero's ordinary tree search on that world. IS-MCTS re-deals the hidden cards for every
+simulation and shares one tree across all the deals, so the engine does 6 to 11 times as much work per simulation.
+In experiment #3's benchmark ([docs/016](016-search-benchmark-results.md)), PIMC with one world agreed with top
+players as often as IS-MCTS did, at less cost. Here are results where both bots use PIMC instead of IS-MCTS: the
+MLP against the heuristic bot at 100 simulations, on the same deck pairs and shuffles as §4.2.
+
+**Two versions.** Setting this up, we found that §4.2's games never guessed the opponent's deck (§4.2, "Search with
+hidden cards"): every search knew the opponent's real decklist, though never its hand or library order. So PIMC ran
+two ways:
+
+- **Real decklist:** the world is dealt from the opponent's real decklist. This is the information §4.2's IS-MCTS
+  games had, so the search method is the only change.
+- **Guessed deck:** the world's opponent deck is drawn from real 17lands decks that fit the cards seen so far, and
+  includes those cards. Neither bot knows anything it couldn't know in a real game.
+
+**Results.**
+
+| MLP's simulations | IS-MCTS, real decklist (§4.2) | PIMC, real decklist | PIMC, guessed deck |
+|---|---|---|---|
+| 0: the policy alone | 38% of 104 | 35% of 100 | 40% of 100 |
+| 100 | 56% of 103 | 63% of 103 | 57% of 100 |
+| 300 | 64% of 103 | 67% of 104 | 60% of 103 |
+| 1,000 | 64% of 100 | **76%** of 102 | 74% of 103 |
+
+*In the "policy alone" row, only the heuristic bot searches, so only its method changes.*
+
+![Line chart of games won against the baseline by the MLP's simulations per decision, with both bots using the same search method. IS-MCTS with the real decklist (green): 38%, 56%, 64%, 64%. PIMC with the real decklist (blue): 35%, 63%, 67%, 76%. PIMC with a guessed deck (orange, dashed): 40%, 57%, 60%, 74%. A dashed line marks 50%.](img/019-pimc-light.png)
+
+*Figure 7. PIMC against IS-MCTS. Each point is about 100 paired games against the heuristic bot at 100
+simulations, with both bots using the method named.*
+
+- **PIMC plays at least as well as IS-MCTS.** With the same information, PIMC scores 4–6 points more at 100 and 300
+  simulations on the same games, and 12 points more at 1,000. Only the gap at 1,000 is clearly bigger than chance
+  at 100 games.
+- **PIMC keeps improving at 1,000 simulations,** where IS-MCTS had stalled at 300. One possible reason: PIMC's
+  simulations all build one tree on one deal, so they can look further ahead than IS-MCTS's, which are spread over
+  many deals.
+- **Guessing the deck costs a few points:** about 3 on the same games, and 7 at 300 simulations. The guess almost
+  never fails: 0.3% of searches had to fall back to the real decklist.
+
+**Benchmark: what a game costs.** We timed both methods on one rented RTX 3090 with the same settings. At 100
+simulations each played 16 deck pairs with the real decklist. At 300, IS-MCTS played 16 deck pairs, and PIMC's
+figures come from its guessed-deck games on the same machine:
+
+| Simulations | Median game: IS-MCTS | PIMC | Network bot's move: IS-MCTS | PIMC | Heuristic's move: IS-MCTS | PIMC |
+|---|---|---|---|---|---|---|
+| 100 | 6.1 min | **2.8 min** | 3.3 s | 2.4 s | 1.5 s | 0.3 s |
+| 300 | 16.5 min | **8.8 min** | 9.9 s | 7.9 s | 1.5 s | 0.3 s |
+
+- **PIMC games are about twice as fast** (2.2 times at 100 simulations, 1.9 at 300). The engine does one step per
+  simulation against IS-MCTS's 6–11.
+- **The heuristic bot's moves are 5 times faster, the network bot's only 1.2–1.4 times,** because evaluating the
+  network, not running the engine, takes most of its time. Cheaper network serving is the next speed-up.
+- **At 1,000 simulations** the ladders' games took a median 30 minutes with PIMC and 74 with IS-MCTS, but on busier
+  machines for IS-MCTS. A separate benchmark of single decisions on one RTX 3090 found PIMC 1.9 times faster at
+  1,000 simulations.
+
+**PIMC is the better way for us to handle hidden information.** It plays as well as IS-MCTS or better, 12 points
+better at 1,000 simulations. Its games are about twice as fast. It is also simpler: MageZero's own tree search on one
+dealt world. With a guessed deck, it gives up only a few points. Self-play from the imitation start (§5.3) will use
+it.
 
 ## 5. Discussion
 
@@ -489,7 +563,7 @@ a policy that copies moves without looking ahead, and of a value learned from on
 
 ![Horizontal bars on a log scale of games each agent learned from: DraftZero #2a's training run from scratch, 2.7 thousand games; this work's top players' training games, 146 thousand; all 17lands FDN Premier Draft games, 791 thousand; then, for scale, AlphaGo's human games, 160 thousand; AlphaGo Zero's 3-day run, 4.9 million self-play games; AlphaZero's chess, 44 million; and DeepNash's Stratego, 5.5 billion.](img/019-games-light.png)
 
-*Figure 7. The games behind each agent. Self-play systems that reached expert or superhuman play used millions to
+*Figure 8. The games behind each agent. Self-play systems that reached expert or superhuman play used millions to
 billions of games. Human data gives us about AlphaGo's amount for free.*
 
 | System | Games | Search in self-play | The same number of games on our engine |
@@ -503,7 +577,7 @@ billions of games. Human data gives us about AlphaGo's amount for free.*
 The comparison is rough: a chess game is shorter than a Magic game, and chess engines are far faster. But the
 conclusion holds. Self-play at the scale that made those systems strong would cost us six to seven figures.
 
-Four things can change that:
+Five things can change that:
 
 - **More efficient self-play.** KataGo (Wu, 2019) showed how much the AlphaZero recipe itself can be tightened. With
   changes to its training process and network, it cut the compute needed about 50-fold, passing ELF OpenGo, a strong
@@ -513,6 +587,8 @@ Four things can change that:
   faster (gorge, ManaBrew), and mtg-kernel is about 470× faster on a simple test deck, with FDN support in progress
   ([docs/015](015-rules-engine-comparison.md)). A 30–70× cheaper search step would bring a 1,000-simulation game
   from about $0.055 to a fraction of a cent, if the network can keep up.
+- **Cheaper search.** PIMC searches one dealt world instead of re-dealing the hidden cards for every simulation.
+  Its games are about twice as fast as IS-MCTS's, and no weaker (§4.6).
 - **Cheaper networks.** With a fast engine, the network becomes the bottleneck. The MLP costs a tenth of the
   transformer per evaluation and plays as well, so it suits search on ordinary CPUs.
 - **More compute.** Self-play is almost entirely CPU work. A rented RTX 3090 machine plays 183 games a dollar at 100
@@ -585,8 +661,11 @@ width 512.
 - **Data:** `tools/imitation_scale/build.py splits | build | tables` on the 17lands file (docs/017 §6.8).
 - **Training:** `python -m draftzero.gameplay.supervised train --config configs/exp4_train.yml` (or
   `exp4_train_mlp_1ep.yml`) `--tables-dir data/imitation_scale/h5`.
-- **Games:** `tools/imitation_scale/play.py` (bots `policy_greedy`, `il_bc` with `--budget N`, `heuristic`), with the
-  belief service `tools/imitation_scale/belief_server.py`. Game records: HF `exp4/games/runs/`.
+- **Games:** `tools/imitation_scale/play.py` (bots `policy_greedy`, `il_bc` with `--budget N`, `heuristic`;
+  `--method ismcts` or `pimc`), with the belief service `tools/imitation_scale/belief_server.py`, which needs the
+  deck pool's cache (HF `exp4/games/deckpool_FDN_PremierDraft.npz`, fetched by `deploy/exp4_games_setup.sh`). Game
+  records: HF `exp4/games/runs/`. §4.6's ladders: `deploy/pimc_games.sh`, tables and Figure 7 from
+  `tools/imitation_scale/pimc_games.py --figure`.
 - **Card statistics:** `tools/imitation_scale/gih.py` and `gih_ceiling.py`.
 - **This document's figures:** `python tools/imitation_scale/fig_doc019.py --running 1000,3000` (drop `--running`
   once the MLP's games finish). Figures 4 and 5 come from `tools/imitation_scale/fig_gih.py` on each model's greedy
