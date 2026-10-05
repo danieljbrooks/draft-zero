@@ -11,6 +11,7 @@ GPU=$1 ONLY=$2 T=${3:-data/imitation_graph/h5}
 OUT=${OUT:-runs/gnn/sweep}
 SPEC=${SPEC:-configs/gnn_sweep.yml}
 PY=$(command -v python || command -v python3)
+export PYTHONPATH=$PWD/src${PYTHONPATH:+:$PYTHONPATH}   # this checkout's code, even in a venv another checkout installed
 if [ ! -f "$T/turnstart_train.graph.h5" ]; then
   : "${HF_TOKEN:?no tables at $T: set HF_TOKEN to fetch the slim ones from the HF repo}"
   T=data/imitation_graph/slim
