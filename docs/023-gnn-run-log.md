@@ -3,7 +3,7 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Monday 5 October, 4:50 AM PT)
+## Status (Monday 5 October, 6:20 AM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
@@ -11,7 +11,7 @@ Dan approved the plan ("push to main, use r1 if available, budget is okay"). All
 | 1. Build | **done** 9:14 PM PT (2.7 h, no errors); tables, slim tables uploaded 9:49 PM PT. 0.3-0.7% of games differ from experiment #4's: a pre-existing leak between games in the bridge's workers, not the graph code (below) | pod `gnn-stage1` | ~$1.50 |
 | 2. Sweep | **done** (6 rounds, 44 runs). **The recipe: width 256, embeddings at std 0.02, dropout 0.1, the game result as the value target, lr 1e-4, batch 256.** Three epochs of 10%: set NLL 0.256, top-1 0.813, value AUC 0.776, past the MLP's best at 10% (0.258 / 0.807 / 0.751); five: 0.247. Will's settings gave 0.324–0.336 | pod, r1 | |
 | 3. Scale check, large training | 30% check **done**: one epoch 0.250 (the MLP 0.241: the gap closes with data, 0.037 at 10%, 0.009 at 30%); **three epochs 0.232, ahead of the 30% MLP on every measure** and level with experiment #4's full-data MLP on most. **Large training running** on `gnn-full` (0.238 at 0.75 epochs), done ~6:45 AM PT | `gnn-stage1`, `gnn-full` | |
-| 4. Offline evaluation | held-out-cards pair queued on `gnn-stage1` after the 30% check (the GNN's and the MLP's 30% recipes without the games that show the five cards); the test split runs at the end of the large training | `gnn-stage1` | |
+| 4. Offline evaluation | **held-out cards done:** without the cards' games, the GNN loses about half what the MLP loses on decisions where a held-out card is legal (top-1 −6.4 points against −10.9); the test split runs at the end of the large training | `gnn-stage1` | |
 | 5. Games | | | |
 
 ## Where things run
@@ -267,7 +267,41 @@ states a step the CPU spends ~39 ms issuing ~3,000 small kernels while the GPU w
 whatever the GPU, so a bigger batch is nearly free: 3.4x the throughput on r1, 1.3x on the 3090. If it costs no
 accuracy, stages 3 and later use it.
 
-## Stage 4, ahead of time: the held-out cards
+## Stage 4: the held-out cards
+
+**Results (done 6:06 AM PT).** Each network's 30% recipe (one epoch) trained twice: on the 30% subset, and on it
+without every game that shows one of the five cards (9,799 of 43,769 games, 22.4%; `configs/gnn_heldout.yml`,
+`configs/exp4_heldout_mlp.yml`; the MLP's full-subset network is experiment #4's `d1-s30-combined`). Scored on the
+test split by `heldout_cards.py eval`: "involved" are the decisions where a held-out card is a legal option (3,761;
+2,173 where the human acted), "chosen" those where the human's move is a held-out card (766; 636 acted), "control"
+5,000 other decisions a table (24,981; 11,295 acted).
+
+| Top-1 when the human acted (set NLL) | Involved | Chosen | Involved, not chosen | Control |
+|---|---|---|---|---|
+| GNN, all games | 0.794 (0.437) | 0.777 (0.570) | 0.802 | 0.761 (0.410) |
+| GNN, cards held out | 0.730 (0.568) | 0.756 (0.640) | 0.719 | 0.749 (0.428) |
+| **GNN, change** | **−6.4 (+0.130)** | −2.1 (+0.071) | **−8.2** | −1.2 (+0.019) |
+| MLP, all games | 0.794 (0.433) | 0.774 (0.572) | 0.802 | 0.740 (0.414) |
+| MLP, cards held out | 0.685 (0.680) | 0.841 (0.373) | 0.621 | 0.730 (0.423) |
+| **MLP, change** | **−10.9 (+0.248)** | +6.7 (−0.199) | **−18.1** | −1.0 (+0.009) |
+
+*"Involved, not chosen" is derived from the other columns (chosen decisions are a subset of involved).*
+
+- **The GNN keeps more of what it knew.** On every decision where a held-out card is legal, it loses 6.4 points of
+  top-1 and 0.13 of set NLL; the MLP loses 10.9 and 0.25. Both lose about the same on the control decisions (1.0-1.2
+  points: 22% fewer games), so the excess loss from the unseen cards is about half the MLP's (5.2 points against
+  9.9). With ~2,200 acted decisions, the difference is several times its sampling noise.
+- **Both over-pick a card they have never seen, the MLP far more.** When the human played something else, the MLP
+  without the cards drops from 0.802 to 0.621, while it *gains* on the decisions where the human did play the card
+  (0.774 → 0.841). It puts the unknown card on top whatever the situation, which is right when the human cast it and
+  wrong otherwise. The cause: its policy heads score slots of a fixed action vocabulary, and training's softmax runs
+  over the legal options only, so an unseen card's slot keeps its initial score while every rival it would have
+  faced was pushed down. The GNN builds the card from its parts (types, cost, power, abilities), and its
+  drop when the human played something else is less than half the MLP's (−8.2 against −18.1).
+- **The GNN's reading is supported, with a limit.** It generalizes better to unseen cards than the flat network, but
+  it still loses 5 points beyond the control on them: the known parts don't fully stand in for having seen the card.
+
+### The choice
 
 `heldout_cards.py choose` over the top players' training games (145,903). Five cards, each a different kind, each
 sharing its mechanics with other cards: a vanilla creature, a defender, burn, a removal aura and a combat trick.
