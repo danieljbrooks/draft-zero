@@ -32,14 +32,15 @@ arch: {d_model: 256, ff: 512, dropout: 0.1}   # graph_net.ARCH_DEFAULT otherwise
 emb_init_std: 0.02
 lr: 1.0e-4
 warmup_steps: 750
-lr_schedule: cosine
+lr_schedule: wsd                # hold the peak; cosine down over the last 20% (wsd_decay_frac). Extend a run that is
+wsd_decay_frac: 0.2             # still improving by resuming with a larger max_epochs before the decay starts
 value_target: result
 value_per_game: 16
 value_weight: 0.5
 act_weights: {opp_priority: 3.0, replay_priority: 3.0}
 batch_rows: 256
-max_epochs: 3
-time_budget_s: 28800
+max_epochs: 16                 # ~10 h on r1 at ~5,100 states/s; extended while validation improves (Dan: up to ~48 h)
+time_budget_s: 180000           # 50 h
 eval_every_steps: 10650        # about a quarter epoch (~42.6k steps of 256 states)
-ckpt_every_s: 1800
+ckpt_every_s: 10800             # every 3 h (r1's home has ~11 GB free)
 latest_every_s: 600
