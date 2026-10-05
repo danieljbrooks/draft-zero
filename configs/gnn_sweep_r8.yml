@@ -3,7 +3,7 @@
 # gained ~0.008 in set NLL over the base (0.254-0.256), depth 2 alone and 4 passes didn't. Short runs favour fast
 # learners, so this round trains the base and the two deeper shapes for 8 epochs of 30% of the games ("at high data
 # scale"), with the extendable schedule (wsd: hold the peak, cosine down over the last 20%): which keeps improving,
-# and where does each start to overfit?
+# and where does each start to overfit? Also the FFN at 1,024 (round 7: 0.248, at 1.2x the base's time).
 #
 #   bash ~/r1_sweep.sh <gpu> configs/gnn_sweep_r8.yml runs/gnn/sweep_r8<g|h> r8-base,... <minutes> "data_cache=/var/tmp/dz-gnn-cache"
 title: "docs/024 round 8: long runs at 30%"
@@ -36,3 +36,4 @@ runs:
   - {name: r8-base}
   - {name: r8-p3d2, arch: {dropout: 0.1, d_model: 256, ff: 512, passes: 3, local_depth: 2}}
   - {name: r8-depth3, arch: {dropout: 0.1, d_model: 256, ff: 512, local_depth: 3}}
+  - {name: r8-ff1024, arch: {dropout: 0.1, d_model: 256, ff: 1024}}
