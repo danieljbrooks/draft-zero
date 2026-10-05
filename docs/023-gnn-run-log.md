@@ -3,14 +3,14 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Monday 5 October, 1:40 AM PT)
+## Status (Monday 5 October, 2:20 AM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 0. Engineering | done, on main (5d1766a, a72792d, c18a727, c646d46) | laptop | – |
 | 1. Build | **done** 9:14 PM PT (2.7 h, no errors); tables, slim tables uploaded 9:49 PM PT. 0.3-0.7% of games differ from experiment #4's: a pre-existing leak between games in the bridge's workers, not the graph code (below) | pod `gnn-stage1` | ~$1.50 |
-| 2. Sweep | rounds 2–4 **done** (r1); round 5 (r1) and round 1's last arm (pod) **running**. **Best at 10%: width 256, set NLL 0.286, top-1 0.778** (the transformer's 0.285 / 0.791; the MLP's 0.258 / 0.807); **lr 1e-4: value AUC 0.747** (the MLP's 0.751). Will's settings gave 0.324–0.336 and 0.56–0.67 | pod, r1 | |
-| 3. Scale check, large training | 30% check queued on the pod (widths 256 and 512, then 3 epochs at 256), from ~1:45 AM PT | pod | |
+| 2. Sweep | rounds 1–5 **done**; round 6 (repeats, r1) **running**. **Three epochs of 10% at width 256 and lr 1e-4: set NLL 0.256, top-1 0.813, value AUC 0.776, past the MLP's best at 10%** (0.258 / 0.807 / 0.751). Will's settings gave 0.324–0.336 and value AUC 0.56–0.67 | pod, r1 | |
+| 3. Scale check, large training | 30% check **running** on the pod since 2:05 AM PT (widths 256 and 512, then 3 epochs at 256) | pod | |
 | 4. Offline evaluation | held-out cards chosen (below); the tooling is on main | | |
 | 5. Games | | | |
 
@@ -94,6 +94,8 @@ Validation, 20,000 rows a table, one epoch on the same 10% of the training games
 | g-lr3e-5 | 0.332 | 0.735 | 0.753 | 0.690 | 0.590 | **0.688** | 0.924 | 22.2 min |
 | g-emb-lr10 (leaf tables' rate ×10) | 0.317 | 0.740 | 0.741 | 0.693 | 0.584 | 0.656 | 0.918 | 22.6 min |
 | g-act5 (passivity fix ×5) | 0.352 | 0.735 | 0.745 | 0.689 | 0.579 | 0.552 | 0.948 | 23.0 min |
+| g-drop0.1 | 0.318 | 0.741 | 0.746 | 0.689 | 0.587 | 0.653 | 0.931 | 22.8 min |
+| g-leafdrop0.1 (and leaf dropout 0.1) | 0.324 | 0.739 | 0.788 | 0.700 | 0.597 | 0.666 | 0.938 | 22.6 min |
 | *round 2, batch 256 (r1)* | | | | | | | | |
 | g256-base-again | 0.328 | 0.735 | 0.742 | 0.690 | 0.598 | 0.667 | 0.932 | 4.8 min |
 | **g256-emb0.02-drop0.1** | **0.305** | **0.744** | 0.753 | 0.690 | **0.619** | 0.671 | 0.924 | 4.7 min |
@@ -114,6 +116,12 @@ Validation, 20,000 rows a table, one epoch on the same 10% of the training games
 | c-lr1e-4 | 0.292 | 0.753 | 0.769 | **0.709** | 0.639 | **0.747** | 0.926 | 5.0 min |
 | **c-d256 (width 256)** | **0.286** | **0.778** | 0.768 | 0.690 | 0.641 | 0.723 | 0.928 | **3.0 min** |
 | c-emb-lr10 | 0.303 | 0.750 | 0.758 | 0.697 | **0.649** | 0.723 | 0.923 | 4.6 min |
+| *round 5: round 4's recipe at width 256 and lr 1e-4 (r1)* | | | | | | | | |
+| r5-base | 0.295 | 0.754 | 0.770 | 0.701 | 0.624 | 0.749 | 0.926 | 3.4 min |
+| r5-seed1 | 0.296 | 0.752 | 0.792 | 0.689 | 0.636 | 0.751 | 0.922 | 3.3 min |
+| r5-d128 (width 128) | 0.323 | 0.743 | 0.770 | 0.698 | 0.607 | 0.738 | 0.936 | 2.5 min |
+| r5-lr5e-5 | 0.304 | 0.748 | 0.767 | 0.692 | 0.610 | 0.717 | 0.930 | 3.0 min |
+| **r5-3ep (three epochs)** | **0.256** | **0.813** | **0.839** | **0.726** | **0.702** | **0.776** | 0.928 | 8.8 min |
 | *the GNN at 2.4% (docs/022 §2.3)* | *0.343* | *0.721* | *0.711* | *0.722* | *0.540* | *0.536* | *0.982* | |
 | *experiment #4's MLP at 10% (best)* | *0.258* | *0.807* | *0.827* | *0.711* | *0.617* | *0.751* | | |
 | *experiment #4's transformer at 10% (act3-td99)* | *0.285* | *0.791* | | | | *0.749* | *0.937* | |
@@ -161,6 +169,21 @@ and round 1's shape arms (1 local pass, 1 and 4 global layers, width 256). The p
 
 Round 1's leftover arm (g-passes1) on r1 was stopped at 10:15 PM PT; GPU 0 runs only round 2. Round 2 ended at
 11:45 PM PT (g256-global4 lost to the full disk; rerun after round 3).
+
+### Round 5: width 256 at lr 1e-4 (r1, 1:35–2:03 AM PT), and round 6
+
+- **Width 256 and lr 1e-4 don't stack at one epoch:** 0.295 / 0.296 (two seeds), against width 256 at 2e-4's 0.286,
+  but the value AUC is lr 1e-4's (0.749 / 0.751). Width 128 (0.323) and lr 5e-5 (0.304) are worse.
+- **Three epochs of the same 10%: set NLL 0.256**, top-1 0.813, attacks 0.839, blocks 0.726, targets 0.702, value
+  AUC 0.776. **Past the MLP's best at 10% on every measure** (0.258 / 0.807 / 0.827 / 0.711 / 0.617 / 0.751), and
+  experiment #4's transformer at three epochs of 10% (`ep3`: 0.269 / 0.807, value AUC 0.747). Still falling at the
+  end (0.2604 → 0.2570 → 0.2560 over the last half epoch), and the value AUC still rising. The GNN gains far more from
+  repeats than the transformer did (−0.039 from one epoch to three, against −0.018).
+- **Round 6** (`configs/gnn_sweep_r6.yml`, r1, from 2:15 AM PT): five epochs; three at lr 2e-4; three at width 512.
+  How far do repeats go, and is Will's wider network the one that gains from more steps?
+- **Round 1's last arms (pod):** dropout 0.1 at batch 64 (0.318) as at 256; leaf dropout adds nothing (0.324).
+- **The pod** finished round 1 at ~1:50 AM PT, then sat idle ~15 minutes (its runner waited for a marker the first
+  sweep's launcher never wrote); the 30% check started at 2:05 AM PT.
 
 ### Round 4: the candidate recipe (r1, 12:52–1:26 AM PT)
 
