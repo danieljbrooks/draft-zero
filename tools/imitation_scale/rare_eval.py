@@ -44,16 +44,16 @@ def slot_counts(tables_dir: Path, names) -> np.ndarray:
     return c
 
 
-def sample(tables_dir: Path, t: str, n: int, seed: int = 0) -> np.ndarray:
-    with h5py.File(tables_dir / f"{t}_val.h5", "r") as f:
+def sample(tables_dir: Path, t: str, n: int, seed: int = 0, split: str = "val") -> np.ndarray:
+    with h5py.File(tables_dir / f"{t}_{split}.h5", "r") as f:
         k = len(f["offsets"]) - 1
     return np.sort(np.random.default_rng(seed).choice(k, min(n, k), replace=False))
 
 
-def load_rows(tables_dir: Path, t: str, n: int, seed: int = 0):
-    f = h5py.File(tables_dir / f"{t}_val.h5", "r")
+def load_rows(tables_dir: Path, t: str, n: int, seed: int = 0, split: str = "val", sel: np.ndarray | None = None):
+    f = h5py.File(tables_dir / f"{t}_{split}.h5", "r")
     off = f["offsets"][:]
-    sel = sample(tables_dir, t, n, seed)
+    sel = sample(tables_dir, t, n, seed, split) if sel is None else sel
     li, lp = f["legal_idx"][:], f["legal_indptr"][:]
     si, sp = f["set_idx"][:], f["set_indptr"][:]
     rows = []
@@ -62,16 +62,16 @@ def load_rows(tables_dir: Path, t: str, n: int, seed: int = 0):
     return rows
 
 
-def graph_logits(model, vocab, edge_vocab, tables_dir: Path, t: str, sel: np.ndarray, dev) -> np.ndarray:
+def graph_logits(model, vocab, edge_vocab, tables_dir: Path, t: str, sel: np.ndarray, dev, split: str = "val") -> np.ndarray:
     """[rows, 1024] slot logits of a graph network on rows `sel` of table t's validation split: each option's
     logit (graph_supervised.table_outputs) at its label's action slot, log-sum-exp where labels share a slot."""
     from draftzero.gameplay import graph_supervised as gs
     kind = "priority_set" if t in PRIORITY else "target"
     cfg = gs.resolve_config({"tables_dir": str(tables_dir), "tables": [{"name": t, "kind": kind}]})
-    gtab = gs.load_table(cfg, cfg["tables"][0], "val", sel, log=lambda *a, **k: None)
+    gtab = gs.load_table(cfg, cfg["tables"][0], split, sel, log=lambda *a, **k: None)
     gs.map_table(gtab, vocab, edge_vocab)
     o = gs.table_outputs(model, gtab, dev, None)
-    with h5py.File(tables_dir / f"{t}_val.h5", "r") as f:
+    with h5py.File(tables_dir / f"{t}_{split}.h5", "r") as f:
         lab_idx = [json.loads(x) for x in f["legal_label_idx_json"].asstr()[:][sel]]
     out = np.full((len(sel), 1024), -np.inf)
     for j, (sc, li) in enumerate(zip(o["scores"], lab_idx)):

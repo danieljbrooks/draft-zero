@@ -167,6 +167,7 @@ DEFAULTS: dict[str, Any] = {
     "tables": DEFAULT_TABLES,
     "fraction": 1.0,               # share of the training GAMES used (meta/row), drawn with subset_seed
     "subset_seed": 0,
+    "exclude_games": None,         # a .npy of games (meta/row) dropped from training after `fraction` (docs/022 §4.4)
     "val_rows": 5000,              # per validation table, whole games, drawn with val_seed (None = all)
     "val_seed": 12345,
     "vocab_k": 10,                 # MageZero's ignore rule: drop features in <= k training states
@@ -233,7 +234,7 @@ DEFAULTS: dict[str, Any] = {
     "min_delta": 1e-4,
 }
 DATA_KEYS = ("tables_dir", "tables", "fraction", "subset_seed", "val_rows", "val_seed", "vocab_k",
-             "vocab_max_rows", "vocab_max_features", "init_checkpoint")
+             "vocab_max_rows", "vocab_max_features", "init_checkpoint", "exclude_games")
 
 
 # ================================================================================================
@@ -1335,6 +1336,16 @@ def ensure_aux(tables: list, names: list, log=print) -> None:
                 f"its head gets no loss")
 
 
+def drop_excluded(keep_g: np.ndarray, path, log=print) -> np.ndarray:
+    """Training games minus those listed in the .npy at `path` (the held-out-cards test, docs/022 §4.4)."""
+    if not path:
+        return keep_g
+    ex = np.load(path).astype(np.int64)
+    out = keep_g[~np.isin(keep_g, ex)]
+    log(f"supervised: exclude_games {path}: {len(keep_g) - len(out)} of {len(keep_g)} training games dropped")
+    return out
+
+
 def load_data(cfg: dict, *, vocab=None, splits: tuple = ("train", "val"), log=print) -> Data:
     """The training rows (a `fraction` of the training games), the feature vocab built on them
     (unless given), and the validation rows (whole games, `val_rows` per table), for every table."""
@@ -1356,6 +1367,7 @@ def load_data(cfg: dict, *, vocab=None, splits: tuple = ("train", "val"), log=pr
         if cfg["fraction"] < 1:
             rng = np.random.default_rng(cfg["subset_seed"])
             keep_g = np.sort(rng.choice(allg, max(1, int(round(cfg["fraction"] * len(allg)))), replace=False))
+        keep_g = drop_excluded(keep_g, cfg["exclude_games"], log)
         sel = {s["name"]: np.flatnonzero(np.isin(games[s["name"]], keep_g)) for s in specs}
         info.update(train_games=int(len(keep_g)), train_games_all=int(len(allg)))
         if vocab is None:

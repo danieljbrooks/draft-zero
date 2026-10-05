@@ -70,6 +70,7 @@ DEFAULTS: dict[str, Any] = {
     "tables_dir": None,
     "tables": DEFAULT_TABLES,
     "fraction": 1.0, "subset_seed": 0,
+    "exclude_games": None,         # a .npy of games (meta/row) dropped from training after `fraction` (docs/022 §4.4)
     "val_rows": 20000, "val_seed": 12345,
     "vocab_k": 10,                 # leaves seen in <= k training states get no row (MageZero's graph rule)
     "edge_vocab_k": 10,            # the same for edge labels
@@ -100,7 +101,8 @@ DEFAULTS: dict[str, Any] = {
     "eval_every_s": None, "eval_every_steps": None, "eval_at_start": True,
     "ckpt_every_s": 1800, "latest_every_s": 600,
 }
-DATA_KEYS = ("tables_dir", "tables", "fraction", "subset_seed", "val_rows", "val_seed", "vocab_k", "edge_vocab_k")
+DATA_KEYS = ("tables_dir", "tables", "fraction", "subset_seed", "val_rows", "val_seed", "vocab_k", "edge_vocab_k",
+             "exclude_games")
 KIND_CODE = {"priority_set": 0, "priority_onehot": 0, "target": 1, "binary": 2}
 
 
@@ -400,6 +402,7 @@ def load_data(cfg: dict, *, vocabs=None, splits: tuple = ("train", "val"), log=p
         if cfg["fraction"] < 1:
             rng = np.random.default_rng(cfg["subset_seed"])
             keep_g = np.sort(rng.choice(allg, max(1, int(round(cfg["fraction"] * len(allg)))), replace=False))
+        keep_g = sv.drop_excluded(keep_g, cfg["exclude_games"], log)
         sel = {s["name"]: np.flatnonzero(np.isin(games[s["name"]], keep_g)) for s in specs}
         info.update(train_games=int(len(keep_g)), train_games_all=int(len(allg)))
         train = [load_table(cfg, s, "train", sel[s["name"]], log=log) for s in specs]

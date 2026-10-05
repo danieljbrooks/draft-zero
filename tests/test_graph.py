@@ -376,3 +376,62 @@ def test_play_op_with_a_graph_network(worker):
     assert a["netPriors"] > 0 and a["graphPolicyMisses"] >= 0 and r["seats"]["B"]["netEvals"] == 0
     pa = p["seats"]["A"]
     assert pa["policyDecisions"] > 0 and pa["decisions"] == pa["policyDecisions"] + pa["policySearched"]
+
+
+# ------------------------------------------------------------------------------------------------
+# stage 1 and 4 tools: comparing builds, slim tables, held-out games
+# ------------------------------------------------------------------------------------------------
+
+def _reorder_games(src: Path, dst: Path) -> None:
+    """dst: the flat tables of src with their games in reverse order (as another build would write them)."""
+    import h5py
+    build = tool("build")
+    dst.mkdir(parents=True, exist_ok=True)
+    for p in sorted(src.glob("*_val.h5")):
+        if p.name.endswith(".graph.h5"):
+            continue
+        with h5py.File(p, "r") as f:
+            g = f["meta/row"][:]
+            games = list(dict.fromkeys(g.tolist()))[::-1]
+            order = np.concatenate([np.flatnonzero(g == x) for x in games])
+            with h5py.File(dst / p.name, "w") as h:
+                for k in build._h5_datasets(f):
+                    d = f[k][()]
+                    if k in ("offsets", "legal_indptr", "set_indptr"):
+                        lens = np.diff(d)[order]
+                        h.create_dataset(k, data=np.r_[0, np.cumsum(lens)].astype(d.dtype))
+                    elif k in ("indices", "legal_idx", "set_idx"):
+                        ptr = f[{"indices": "offsets", "legal_idx": "legal_indptr", "set_idx": "set_indptr"}[k]][()]
+                        h.create_dataset(k, data=np.concatenate([d[ptr[r]:ptr[r + 1]] for r in order]).astype(d.dtype))
+                    elif d.ndim and d.shape[0] == len(g):
+                        h.create_dataset(k, data=d[order])
+                    else:
+                        h.create_dataset(k, data=d)
+
+
+def test_compare_builds_game_by_game_and_slim_tables(toy, tmp_path):
+    import h5py
+    build = tool("build")
+    _reorder_games(toy, tmp_path / "b")
+    res = build.compare(toy, tmp_path / "b", log=lambda *a, **k: None)
+    assert res and all(v["same"] for v in res.values())                 # another game order, the same rows
+    with h5py.File(tmp_path / "b" / "turnstart_val.h5", "a") as f:
+        f["indices"][0] = f["indices"][0] + 1                            # one feature of one row changed
+    assert build.compare(toy, tmp_path / "b", ["turnstart_val.h5"], log=lambda *a, **k: None)["turnstart_val.h5"][
+        "games_differing"] == 1
+    out = build.slim(toy, tmp_path / "slim", log=lambda *a, **k: None)
+    assert out["files"] == len(list(toy.glob("*.h5")))
+    with h5py.File(tmp_path / "slim" / "turnstart_val.h5", "r") as f:
+        assert "indices" not in f and "set_idx" in f and "offsets" in f
+    a = gs.load_data(toy_cfg(toy), splits=("val",), vocabs=gs.build_vocabs([], 0, 0), log=lambda *a, **k: None)
+    b = gs.load_data(toy_cfg(tmp_path / "slim"), splits=("val",), vocabs=gs.build_vocabs([], 0, 0),
+                     log=lambda *a, **k: None)
+    assert all(np.array_equal(x.file_rows, y.file_rows) and np.array_equal(x.w, y.w) for x, y in zip(a.val, b.val))
+
+
+def test_exclude_games_drops_them_from_training_only(toy, tmp_path):
+    ex = np.asarray([0, 1, 2, 1000], np.int64)                           # three training games, one validation game
+    np.save(tmp_path / "ex.npy", ex)
+    d = gs.load_data(toy_cfg(toy, exclude_games=str(tmp_path / "ex.npy")), log=lambda *a, **k: None)
+    assert all(not np.isin(t.game, ex).any() for t in d.train) and [t.n for t in d.train] == [81, 81, 81]
+    assert any(np.isin(t.game, ex).any() for t in d.val)                 # validation is untouched
