@@ -1,0 +1,37 @@
+# docs/022, stage 2, round 4 (docs/023): the winners together, the candidate recipe for stage 3.
+# Base: small embeddings (std 0.02), dropout 0.1 (round 2: set NLL 0.305, value AUC 0.671) and the game result as
+# the value target (round 3: value AUC 0.674 against TD(0.99)'s 0.615, the policy unchanged). One change each:
+#   - a second seed (the noise band of the combined recipe);
+#   - learning rate 1e-4 (round 1: the lower rate gave the best value AUC, 0.688 at batch 64 and 3e-5);
+#   - width 256 (round 2: as good as 512, the best attacks, 30% faster to train and to run in a search);
+#   - the leaf and edge-label tables' learning rate x10 (round 1, batch 64: set NLL 0.317, value AUC 0.656).
+#
+#   SPEC=configs/gnn_sweep_r4.yml OUT=runs/gnn/sweep_r1d bash deploy/gnn_sweep.sh 0 c-base,c-seed1,c-lr1e-4,c-d256,c-emb-lr10 data/imitation_graph/slim
+title: "docs/022 stage 2, round 4: the candidate recipe"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.1
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 3600
+  eval_every_steps: 1075
+  ckpt_every_s: null
+  latest_every_s: 600
+  batch_rows: 256
+  lr: 2.0e-4
+  warmup_steps: 750
+  emb_init_std: 0.02
+  value_target: result
+  arch: {dropout: 0.1}
+runs:
+  - {name: c-base}
+  - {name: c-seed1, seed: 1}
+  - {name: c-lr1e-4, lr: 1.0e-4}
+  - {name: c-d256, arch: {dropout: 0.1, d_model: 256, ff: 512}}
+  - {name: c-emb-lr10, emb_lr_mult: 10.0}
