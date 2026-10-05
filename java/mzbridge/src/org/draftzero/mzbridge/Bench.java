@@ -116,7 +116,7 @@ final class Bench {
         double rootW = 0.0;
         long rootN = 0;
         if (method.equals("policy")) {
-            if (base.nn == null) throw new IllegalArgumentException("method policy needs evaluator.type remote");
+            if (!base.hasNet()) throw new IllegalArgumentException("method policy needs evaluator.type remote or graph");
             BenchSearch.Result r = BenchSearch.rootPolicy(worlds.get(0), base);
             stats.add(r.stats);
             rootValue = r.rootValue;
@@ -255,10 +255,12 @@ final class Bench {
         String evalType = Worker.optString(evalOpt, "type", "offline");
         if ("remote".equals(evalType)) {
             base.nn = Coach.evaluator(Worker.optString(evalOpt, "host", "127.0.0.1"), Worker.optInt(evalOpt, "port", 50052));
+        } else if ("graph".equals(evalType)) {   // a graph network (docs/022): tools/imitation_scale/graph_server.py
+            base.gnn = mage.player.ai.GraphNet.of(Worker.optString(evalOpt, "host", "127.0.0.1"), Worker.optInt(evalOpt, "port", 50062));
         } else if (!"offline".equals(evalType)) {
-            throw new IllegalArgumentException("evaluator.type must be offline or remote, got '" + evalType + "'");
+            throw new IllegalArgumentException("evaluator.type must be offline, remote or graph, got '" + evalType + "'");
         }
-        if (base.priors && base.nn == null) throw new IllegalArgumentException("priors need evaluator.type remote");
+        if (base.priors && !base.hasNet()) throw new IllegalArgumentException("priors need evaluator.type remote or graph");
         base.leaf = Worker.optString(opt, "leaf", null);
         base.leafMix = Worker.optDouble(opt, "leafMix", 0.5);
         base.opponentPriors = Worker.optString(opt, "opponentPriors", "net");
@@ -274,6 +276,7 @@ final class Bench {
         c.unit = b.unit;
         c.cPuct = b.cPuct;
         c.nn = b.nn;
+        c.gnn = b.gnn;
         c.seed = b.seed;
         c.redeal = b.redeal;
         c.timeoutSec = b.timeoutSec;

@@ -180,7 +180,7 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
                 String label = a.toString();
                 MageObject src = a.getSourceId() == null ? null : game.getObject(a.getSourceId());
                 String srcName = src == null || label.contains(src.getName()) ? null : src.getName();
-                d.add(label, actionEncoder.getActionIndex(a, true), srcName);
+                d.add(label, actionEncoder.getActionIndex(a, true), srcName, GraphRecord.actionId(a));
             }
             reached(game, d, ActionEncoder.ActionType.PRIORITY);
         } catch (RuntimeException e) {
@@ -222,6 +222,7 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
         }
         try {
             Decision d = newDecision(game, "CHOOSE_USE", message);
+            d.source = source == null ? null : source.getSourceId();
             d.add("no", 0, null);
             d.add("yes", 1, null);
             MCTSNode best = reached(game, d, ActionEncoder.ActionType.CHOOSE_USE);
@@ -274,12 +275,14 @@ public class BridgePlayer extends ComputerPlayerMCTS2 {
         try {
             String text = (source == null ? "null" : source.getRule()) + ":Choose a target:" + target.getTargetName();
             Decision d = newDecision(game, "CHOOSE_TARGET", text);
+            d.source = source == null ? null : source.getSourceId();
+            d.fromCards = fromCards;
             List<UUID> opts = new ArrayList<>(possible);
             if (canStop) opts.add(STOP_CHOOSING);
             List<String[]> labelled = new ArrayList<>();
             for (UUID id : opts) labelled.add(new String[]{targetLabel(game, id), id.toString()});
             labelled.sort(Comparator.comparing((String[] x) -> x[0]).thenComparing(x -> x[1]));
-            for (String[] l : labelled) d.add(l[0], actionEncoder.getTargetIndex(l[0]), null);
+            for (String[] l : labelled) d.add(l[0], actionEncoder.getTargetIndex(l[0]), null, UUID.fromString(l[1]));
             MCTSNode best = reached(game, d, ActionEncoder.ActionType.CHOOSE_TARGET);
             if (best != null && best.getTargetAction() != null && !best.getTargetAction().equals(STOP_CHOOSING)) {
                 target.addTarget(best.getTargetAction(), source, game);

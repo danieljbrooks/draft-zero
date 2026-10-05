@@ -208,6 +208,8 @@ final class Play {
         s.addProperty("netEvals", p.stats.netEvals);
         s.addProperty("engineSteps", p.stats.engineSteps);
         s.addProperty("policyRefreshes", p.stats.policyRefreshes);
+        s.addProperty("netPriors", p.stats.netPriors);
+        if (p.cfg != null && p.cfg.gnn != null) s.addProperty("graphPolicyMisses", p.stats.graphPolicyMisses);
         s.addProperty("timedOut", p.stats.timedOut);
         s.addProperty("searchSeconds", Math.round(p.searchNanos / 1e6) / 1000.0);
         s.addProperty("redeals", p.stats.redeals);

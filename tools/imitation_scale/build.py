@@ -6,6 +6,13 @@ on every row.
     python tools/imitation_scale/build.py build --workers 28 [--limit N]     # shard parts; re-run resumes
     python tools/imitation_scale/build.py tables                             # shard parts -> HDF5; re-run resumes
 
+With --graph, build also records every decision as MageZero's graph encoder sees it, and tables writes
+a graph file beside each table, row for row (draftzero.gameplay.graph_tables; docs/022). --out puts a
+build somewhere other than data/imitation_scale (the splits file stays there):
+
+    python tools/imitation_scale/build.py build --graph --out data/imitation_graph --workers 28
+    python tools/imitation_scale/build.py tables --graph --out data/imitation_graph
+
 Splits. The components of docs/011 (drafts joined by a mirrored game) hashed with #2b's salt, so
 the hash is #2b's. #2b split it 0.82 / 0.05 / 0.13 (train / val / test); experiment #4 takes
 val = [0.82, 0.87), test = [0.87, 0.92) and train = the rest (90 / 5 / 5). The new test split lies
@@ -126,7 +133,7 @@ def make_splits(sbv1: Path | None, path=None) -> tuple[np.ndarray, dict]:
 # records
 # ================================================================================================
 
-def block_record(g, n: int, b, ids, split: int = -1) -> dict:
+def block_record(g, n: int, b, ids, split: int = -1, graph: bool = False) -> dict:
     """The player's first block question in the opponent's turn after user turn n, or a status."""
     from draftzero.gameplay import coach as co
     from draftzero.gameplay import reconstruct as rc
@@ -145,7 +152,7 @@ def block_record(g, n: int, b, ids, split: int = -1) -> dict:
                global_turn=spec.labels.get("global_turn"))
     opts = dict(spec.labels.get("bridge") or {})
     try:
-        r = b.encode(spec, perfectInfo=False, heuristic=True, dump=True, **opts)
+        r = b.encode(spec, perfectInfo=False, heuristic=True, dump=True, **({"graph": True} if graph else {}), **opts)
     except BridgeError as e:
         rec.update(status="bridge_error", error=str(e).splitlines()[0][:300])
         return rec
@@ -170,17 +177,20 @@ def block_record(g, n: int, b, ids, split: int = -1) -> dict:
         rec.update(status="unmatched", error=f"{ha.labels} not in {rec['legal'][:6]}"[:200])
         return rec
     rec.update(status="ok", text=decision["text"], S=S, heuristic=r.get("heuristic"), features=im._feat(r))
+    if graph:
+        rec["graph"] = im._graph(r)
     return rec
 
 
-def opp_replay_records(g, n: int, b, ids, split: int = -1) -> dict:
+def opp_replay_records(g, n: int, b, ids, split: int = -1, graph: bool = False) -> dict:
     """The opponent's turn right after user turn n replayed (turnreplay.replay_opp_turn): the user's
     decisions in it, at every stop with a real choice (its instants, flash, abilities, answers to
     the stack) and every block question, in imitation.replay_records' shape."""
     from draftzero.gameplay import turnreplay as tr
     out = {"turn": n, "split": split, "side": "opp", **im._decision_meta(g)}
     try:
-        r = tr.replay_opp_turn(b, g, n, ids, encode=True, allStops=True, heuristic=True)
+        r = tr.replay_opp_turn(b, g, n, ids, encode=True, allStops=True, heuristic=True,
+                               **({"graph": True} if graph else {}))
     except Exception as e:           # noqa: BLE001 - a failed replay is data, not a crash
         out.update(reproduced=False, error=f"{type(e).__name__}: {e}"[:300], decisions=[])
         return out
@@ -192,7 +202,8 @@ def opp_replay_records(g, n: int, b, ids, split: int = -1) -> dict:
                          "chosen": d.get("chosen"), "label_kind": d.get("label_kind"), "evidence": d.get("evidence"),
                          "set": d.get("set"), "step": (d.get("where") or {}).get("step"),
                          "stack": (d.get("where") or {}).get("stack"), "heuristic": d.get("heuristic"),
-                         "features": im._feat(d) if out["reproduced"] else None}
+                         "features": im._feat(d) if out["reproduced"] else None,
+                         **({"graph": im._graph(d) if out["reproduced"] else None} if graph else {})}
                         for d in r.get("decisions") or []]
     return out
 
@@ -203,7 +214,9 @@ _W: dict = {}
 def _work(task: tuple) -> dict:
     """One game: its turn starts, every decision turn replayed, and its block questions."""
     from draftzero.gameplay.replay import parse_game
-    row, line, split = task
+    row, line, split = task[:3]
+    graph = len(task) > 3 and bool(task[3])
+    gopt = {"graph": True} if graph else {}
     t0 = time.monotonic()
     try:
         g = parse_game(next(csv.reader([line])), im._W["H"], row)
@@ -211,22 +224,22 @@ def _work(task: tuple) -> dict:
         return {"row": row, "error": f"parse: {e}", "ts": [], "rp": [], "bl": [], "op": []}
     ids, b = im._W["ids"], im._bridge()
     turns = g.decision_turns()
-    ts = [im.turn_start_record(g, n, b, ids, split=split, heuristic=True) for n in turns]
+    ts = [im.turn_start_record(g, n, b, ids, split=split, heuristic=True, **gopt) for n in turns]
     t1 = time.monotonic()
-    rp = [im.replay_records(g, n, b, ids, split=split, allStops=True, heuristic=True) for n in turns]
+    rp = [im.replay_records(g, n, b, ids, split=split, allStops=True, heuristic=True, **gopt) for n in turns]
     t2 = time.monotonic()
     bl = []
     for t in g.turns:
         if t.side == "user" and t.played:
             q = g.next_slot(t.n)
             if q is not None and q.side == "oppo" and q.played and q.L("creatures_attacked"):
-                bl.append(block_record(g, t.n, b, ids, split=split))
+                bl.append(block_record(g, t.n, b, ids, split=split, graph=graph))
     t3 = time.monotonic()
     op = []
     for n in turns:
         q = g.next_slot(n)
         if q is not None and q.side == "oppo" and q.played and not q.terminal:
-            op.append(opp_replay_records(g, n, b, ids, split=split))
+            op.append(opp_replay_records(g, n, b, ids, split=split, graph=graph))
     return {"row": row, "ts": ts, "rp": rp, "bl": bl, "op": op,
             "sec": {"ts": t1 - t0, "rp": t2 - t1, "bl": t3 - t2, "op": time.monotonic() - t3}}
 
@@ -323,13 +336,13 @@ class PartWriter:
 
 
 def build(workers: int, limit: int | None = None, heap: str = "2500m", top: float = TOP, log=print,
-          part_games: int = PART_GAMES) -> dict:
+          part_games: int = PART_GAMES, graph: bool = False, out_root: Path | None = None) -> dict:
     """Every top player's game in a split (not held out), `workers` processes with one bridge JVM
     each. Shard parts under data/imitation_scale/shards (PartWriter); re-running resumes, skipping
     the games of finished parts."""
     from draftzero.gameplay.replay import open_lines, replay_path
     splits = np.load(SPLIT_FILE)
-    out_dir = OUT / "shards"
+    out_dir = (out_root or OUT) / "shards"
     writer = PartWriter(out_dir, part_games)
     if writer.done_rows:
         log(f"resuming: {len(writer.done_rows)} games in {writer.next_i} finished parts", flush=True)
@@ -355,7 +368,7 @@ def build(workers: int, limit: int | None = None, heap: str = "2500m", top: floa
             if i in writer.done_rows:
                 seen["resumed"] += 1
                 continue
-            yield (i, line, int(splits[i]))
+            yield (i, line, int(splits[i]), graph)
 
     stats = Counter()
     t0 = time.monotonic()
@@ -382,7 +395,7 @@ def build(workers: int, limit: int | None = None, heap: str = "2500m", top: floa
         sec.update(p["sec"])
     out = {**total, "parts": len(parts), "seconds_this_run": round(el, 1),
            "games_this_run": stats["games"], "games_per_s": round(stats["games"] / max(el, 1e-9), 2),
-           "worker_seconds": {k: round(v, 1) for k, v in sec.items()}, "workers": workers, "top": top,
+           "worker_seconds": {k: round(v, 1) for k, v in sec.items()}, "workers": workers, "top": top, "graph": graph,
            "rows_scanned": seen["rows"], "rows_held_out": seen["held_out"], "rows_resumed": seen["resumed"]}
     (out_dir / "build_stats.json").write_text(json.dumps(out, indent=1))
     return out
@@ -422,7 +435,15 @@ def _heur(xs) -> np.ndarray:
     return np.asarray([x if x is not None else np.nan for x in xs], np.float32)
 
 
-def _target_table(recs: list[dict], keep, prefix: str, h5: Path, log) -> None:
+def _graph_file(path: Path, graphs: list, labels: list[list[str]], sets: list, rows, turns) -> None:
+    """The graph file beside table `path`, row for row: each row's graph and, per legal label, whether
+    it is in the row's label set (graph_tables)."""
+    from draftzero.gameplay import graph_tables as gt
+    flags = [gt.option_labels(lab, st) for lab, st in zip(labels, sets)]
+    gt.write(gt.graph_path(path), graphs, [f[0] for f in flags], [f[1] for f in flags], rows, turns)
+
+
+def _target_table(recs: list[dict], keep, prefix: str, h5: Path, log, graph: bool = False) -> None:
     """CHOOSE_TARGET decisions of reproduced replayed turns that `keep` accepts -> <prefix>_<split>.h5
     (one-hot labels in the set CSR, as block_* and turnstart_*)."""
     tg = defaultdict(list)
@@ -436,7 +457,8 @@ def _target_table(recs: list[dict], keep, prefix: str, h5: Path, log) -> None:
                                                                  "n_games_bucket", "on_play", "tier")},
                                        "legal": d["legal"], "legal_idx": d["legal_idx"], "S": [d.get("chosen")],
                                        "features": d["features"], "heuristic": d.get("heuristic"),
-                                       "label_status": "set", "acts": [], "attacked": False, "status": "ok"})
+                                       "label_status": "set", "acts": [], "attacked": False, "status": "ok",
+                                       "graph": d.get("graph")})
     for i, s in enumerate(SPLITS):
         rs = [r for r in tg.get(i, []) if r["S"][0] in r["legal"] and len(set(r["legal"])) >= 2]
         if not rs:
@@ -447,10 +469,13 @@ def _target_table(recs: list[dict], keep, prefix: str, h5: Path, log) -> None:
         path = h5 / f"{prefix}_{s}.h5"
         im._save_table(t, path, action_type=im.ACTION_TYPE["CHOOSE_TARGET"])
         _append(path, **{"meta/heuristic": _heur(r.get("heuristic") for r in rs)})
+        if graph:
+            _graph_file(path, [r["graph"] for r in rs], [r["legal"] for r in rs], [r["S"] for r in rs],
+                        [r["row"] for r in rs], [r["turn"] for r in rs])
         log(f"{prefix}_{s}: {len(rs)} rows")
 
 
-def _priority_tables(pri: dict, prefix: str, h5: Path, log) -> None:
+def _priority_tables(pri: dict, prefix: str, h5: Path, log, graph: bool = False) -> None:
     """imitation.replay_tables' priority part -> <prefix>_<split>.h5, with meta/step, meta/stack,
     meta/heuristic and a per-row weight (exact 1, imputed IMPUTED_WEIGHT)."""
     if not pri:
@@ -478,10 +503,16 @@ def _priority_tables(pri: dict, prefix: str, h5: Path, log) -> None:
                 **{"meta/step": np.asarray([STEPS.index(pri["step"][j]) if pri["step"][j] in STEPS else -1 for j in sel], np.int32),
                    "meta/stack": np.asarray([pri["stack"][j] for j in sel], np.int32),
                    "meta/heuristic": _heur(pri["heuristic"][j] for j in sel)})
+        if graph:
+            _graph_file(path, [pri["graph"][j] for j in sel], [pri["labels"][j] for j in sel],
+                        [pri["S_labels"][j] for j in sel], [pri["meta/row"][j] for j in sel],
+                        [pri["meta/turn"][j] for j in sel])
         log(f"{prefix}_{s}: {len(sel)} rows")
 
 
-CSR_PTRS = {"offsets": "indices", "legal_indptr": "legal_idx", "set_indptr": "set_idx"}
+CSR_PTRS = {"offsets": "indices", "legal_indptr": "legal_idx", "set_indptr": "set_idx",
+            # graph files (graph_tables.GRAPH_PTRS)
+            "node_ptr": "node_ids", "edge_ptr": "edge_child", "row_opt_ptr": "opt_in_set", "opt_ptr": "opt_node"}
 
 
 def _h5_datasets(f) -> list[str]:
@@ -540,7 +571,8 @@ def merge_h5(paths: list[Path], out: Path, block_elems: int = 1 << 24) -> int:
                 dst = g[name] if name else g
                 for a, v in src.attrs.items():
                     dst.attrs[a] = v
-            n_rows = int(g["offsets"].shape[0] - 1) if "offsets" in g else None
+            ptr = "offsets" if "offsets" in g else "node_ptr" if "node_ptr" in g else None
+            n_rows = int(g[ptr].shape[0] - 1) if ptr else None
         os.replace(tmp, out)
         return n_rows
     finally:
@@ -563,11 +595,12 @@ def _sum_stats(a: dict, b: dict) -> dict:
     return out
 
 
-def tables(log=print, keep_parts: bool = False) -> dict:
+def tables(log=print, keep_parts: bool = False, graph: bool = False, out_root: Path | None = None) -> dict:
     """Shard parts -> HDF5 tables (tables_part), one part at a time into h5/parts/<i>/, then each
     table's parts merged into h5/<table>_<split>.h5 (merge_h5). A finished part is marked, so a
     re-run resumes. Memory: one part (~1.3 MB a game) rather than the whole build."""
-    sh, h5 = OUT / "shards", OUT / "h5"
+    root = out_root or OUT
+    sh, h5 = root / "shards", root / "h5"
     parts = completed_parts(sh)
     if not parts:
         raise SystemExit(f"no finished shard parts in {sh}")
@@ -583,7 +616,7 @@ def tables(log=print, keep_parts: bool = False) -> dict:
             if d.exists():
                 shutil.rmtree(d)
             d.mkdir(parents=True)
-            st = tables_part(p["paths"], d, log=lambda *a, **k: None)
+            st = tables_part(p["paths"], d, log=lambda *a, **k: None, graph=graph)
             done.write_text(json.dumps(st, default=str))
         out = _sum_stats(out, st)
         log(f"tables: part {j + 1}/{len(parts)} done ({time.monotonic() - t0:.0f} s)", flush=True)
@@ -594,13 +627,13 @@ def tables(log=print, keep_parts: bool = False) -> dict:
         n = merge_h5(srcs, h5 / name)
         log(f"{name[:-3]}: {n} rows from {len(srcs)} parts", flush=True)
     out["parts"] = len(parts)
-    (OUT / "tables_stats.json").write_text(json.dumps(out, indent=1, default=str))
+    (root / "tables_stats.json").write_text(json.dumps(out, indent=1, default=str))
     if not keep_parts:
         shutil.rmtree(pdir)
     return out
 
 
-def tables_part(paths: dict, h5: Path, log=print) -> dict:
+def tables_part(paths: dict, h5: Path, log=print, graph: bool = False) -> dict:
     """One shard part ({kind: path}) -> HDF5 tables in imitation.write_h5's layout under `h5`, per
     split: turnstart_*, replay_priority_* and opp_priority_* (with meta/step, meta/stack and a
     per-row weight: exact 1, imputed IMPUTED_WEIGHT), replay_attack_*, replay_target_* (spell
@@ -622,6 +655,10 @@ def tables_part(paths: dict, h5: Path, log=print) -> dict:
         t["lab_idx"] = [r["legal_idx"] for r in rs]
         im._save_table(t, h5 / f"turnstart_{s}.h5")
         _append(h5 / f"turnstart_{s}.h5", **{"meta/heuristic": _heur(r.get("heuristic") for r in rs)})
+        if graph:
+            _graph_file(h5 / f"turnstart_{s}.h5", [r["graph"] for r in rs], [r["legal"] for r in rs],
+                        [r["S"] if r.get("label_status") != "unreachable" else [] for r in rs],
+                        [r["row"] for r in rs], [r["turn"] for r in rs])
         log(f"turnstart_{s}: {len(rs)} rows")
     del ts
     # replayed turns: the user's own (rp) and the opponent's after them (op)
@@ -641,8 +678,8 @@ def tables_part(paths: dict, h5: Path, log=print) -> dict:
         return d["type"] == "CHOOSE_TARGET" and (d.get("text") or "").startswith("choose which creature to block for")
     # spell targets the outcome settles, in either turn; the user's blocks in the opponent's turns
     _target_table([t for t in rp + op], lambda d: d.get("label_kind") == "exact" and not is_block(d)
-                  and d.get("step") != "DECLARE_BLOCKERS", "replay_target", h5, log)
-    _target_table(op, lambda d: d.get("label_kind") == "exact" and is_block(d), "opp_block", h5, log)
+                  and d.get("step") != "DECLARE_BLOCKERS", "replay_target", h5, log, graph)
+    _target_table(op, lambda d: d.get("label_kind") == "exact" and is_block(d), "opp_block", h5, log, graph)
     rt = im.replay_tables(rp, ids)
     del rp
     att = rt["attack"]
@@ -674,11 +711,15 @@ def tables_part(paths: dict, h5: Path, log=print) -> dict:
                 [att["meta/wr_bucket"][j] if att["meta/wr_bucket"][j] is not None else np.nan for j in sel], np.float32))
             f.create_dataset("meta/heuristic", data=_heur(att["heuristic"][j] for j in sel))
             f.attrs["layout"] = "LabeledStateWriter (CHOOSE_USE rows) + y/heur (draftzero.gameplay.imitation)"
+        if graph:   # the graph asks "attack with X?" as a target choice: options [no = Stop Choosing, yes = the defender]
+            yl = ["yes" if v else "no" for v in y]
+            _graph_file(path, [att["graph"][j] for j in sel], [["no", "yes"]] * len(sel), [[v] for v in yl],
+                        [att["meta/row"][j] for j in sel], [att["meta/turn"][j] for j in sel])
         log(f"replay_attack_{s}: {len(sel)} rows")
-    _priority_tables(rt["priority"], "replay_priority", h5, log)
+    _priority_tables(rt["priority"], "replay_priority", h5, log, graph)
     del rt, att
     if op:
-        _priority_tables(im.replay_tables(op, ids)["priority"], "opp_priority", h5, log)
+        _priority_tables(im.replay_tables(op, ids)["priority"], "opp_priority", h5, log, graph)
     del op
     # blocks
     bl = load_shard(paths["bl"])
@@ -694,6 +735,9 @@ def tables_part(paths: dict, h5: Path, log=print) -> dict:
         path = h5 / f"block_{s}.h5"
         im._save_table(t, path, action_type=im.ACTION_TYPE["CHOOSE_TARGET"])
         _append(path, **{"meta/heuristic": _heur(r.get("heuristic") for r in rs)})
+        if graph:
+            _graph_file(path, [r["graph"] for r in rs], [r["legal"] for r in rs], [r["S"] for r in rs],
+                        [r["row"] for r in rs], [r["turn"] for r in rs])
         log(f"block_{s}: {len(rs)} rows")
     return out
 
@@ -708,8 +752,12 @@ def main(argv=None) -> None:
     b.add_argument("--limit", type=int)
     b.add_argument("--heap", default="2500m")
     b.add_argument("--part-games", type=int, default=PART_GAMES, help="games per shard part")
+    b.add_argument("--graph", action="store_true", help="also record MageZero's graph encoding of every decision (docs/022)")
+    b.add_argument("--out", type=Path, help=f"build root (default {OUT})")
     t = sub.add_parser("tables")
     t.add_argument("--keep-parts", action="store_true", help="keep h5/parts/ (the per-part tables)")
+    t.add_argument("--graph", action="store_true", help="also write <table>_<split>.graph.h5 (needs a --graph build)")
+    t.add_argument("--out", type=Path, help=f"build root (default {OUT})")
     a = ap.parse_args(argv)
     if a.cmd == "splits":
         codes, stats = make_splits(a.sbv1 if a.sbv1 and a.sbv1.exists() else None)
@@ -720,9 +768,10 @@ def main(argv=None) -> None:
         (OUT / "row_split_exp4.stats.json").write_text(json.dumps(stats, indent=1))
         print(json.dumps(stats, indent=1))
     elif a.cmd == "build":
-        print(json.dumps(build(a.workers, a.limit, a.heap, part_games=a.part_games), indent=1))
+        print(json.dumps(build(a.workers, a.limit, a.heap, part_games=a.part_games, graph=a.graph, out_root=a.out),
+                         indent=1))
     else:
-        print(json.dumps(tables(keep_parts=a.keep_parts), indent=1, default=str))
+        print(json.dumps(tables(keep_parts=a.keep_parts, graph=a.graph, out_root=a.out), indent=1, default=str))
 
 
 if __name__ == "__main__":

@@ -10,6 +10,10 @@
       of that share over the evaluated rows (the same edges for every network).
 
     python tools/imitation_scale/rare_eval.py CKPT [CKPT ...] --out runs/exp4/rare_eval [--rows 20000]
+
+A graph network's checkpoint (graph_supervised.py, docs/022) is scored on the same rows from the tables' graph
+files: its per-option logits go to the options' action slots (log-sum-exp where labels share a slot, as the flat
+networks see them), so the buckets and scores are the flat networks'.
 """
 from __future__ import annotations
 
@@ -40,17 +44,41 @@ def slot_counts(tables_dir: Path, names) -> np.ndarray:
     return c
 
 
+def sample(tables_dir: Path, t: str, n: int, seed: int = 0) -> np.ndarray:
+    with h5py.File(tables_dir / f"{t}_val.h5", "r") as f:
+        k = len(f["offsets"]) - 1
+    return np.sort(np.random.default_rng(seed).choice(k, min(n, k), replace=False))
+
+
 def load_rows(tables_dir: Path, t: str, n: int, seed: int = 0):
     f = h5py.File(tables_dir / f"{t}_val.h5", "r")
     off = f["offsets"][:]
-    k = len(off) - 1
-    sel = np.sort(np.random.default_rng(seed).choice(k, min(n, k), replace=False))
+    sel = sample(tables_dir, t, n, seed)
     li, lp = f["legal_idx"][:], f["legal_indptr"][:]
     si, sp = f["set_idx"][:], f["set_indptr"][:]
     rows = []
     for i in sel:
         rows.append((f["indices"][off[i]:off[i + 1]], li[lp[i]:lp[i + 1]], si[sp[i]:sp[i + 1]]))
     return rows
+
+
+def graph_logits(model, vocab, edge_vocab, tables_dir: Path, t: str, sel: np.ndarray, dev) -> np.ndarray:
+    """[rows, 1024] slot logits of a graph network on rows `sel` of table t's validation split: each option's
+    logit (graph_supervised.table_outputs) at its label's action slot, log-sum-exp where labels share a slot."""
+    from draftzero.gameplay import graph_supervised as gs
+    kind = "priority_set" if t in PRIORITY else "target"
+    cfg = gs.resolve_config({"tables_dir": str(tables_dir), "tables": [{"name": t, "kind": kind}]})
+    gtab = gs.load_table(cfg, cfg["tables"][0], "val", sel, log=lambda *a, **k: None)
+    gs.map_table(gtab, vocab, edge_vocab)
+    o = gs.table_outputs(model, gtab, dev, None)
+    with h5py.File(tables_dir / f"{t}_val.h5", "r") as f:
+        lab_idx = [json.loads(x) for x in f["legal_label_idx_json"].asstr()[:][sel]]
+    out = np.full((len(sel), 1024), -np.inf)
+    for j, (sc, li) in enumerate(zip(o["scores"], lab_idx)):
+        for x, a in zip(sc, li):
+            a %= 1024
+            out[j, a] = np.logaddexp(out[j, a], x)
+    return out
 
 
 @torch.no_grad()
@@ -106,14 +134,21 @@ def main(argv=None) -> int:
     q = np.quantile(np.concatenate(list(unk.values())), [0.25, 0.5, 0.75])
     STATE_BUCKETS = ((0.0, q[0], f"Q1 <{q[0]:.0%}"), (q[0], q[1], f"Q2 {q[0]:.0%}-{q[1]:.0%}"),
                      (q[1], q[2], f"Q3 {q[1]:.0%}-{q[2]:.0%}"), (q[2], 1.01, f"Q4 >{q[2]:.0%}"))
+    from draftzero.gameplay import graph_supervised as gs
     for ck in a.checkpoints:
-        model, vocab, meta = sv.load_any_checkpoint(ck, device=dev)
-        rec = {"checkpoint": ck, "by_move": {}, "by_state": {}, "tables": {}}
+        try:
+            model, vocab, edge_vocab, meta = gs.load_checkpoint(ck, dev)
+            graph = True
+        except ValueError:
+            model, vocab, meta = sv.load_any_checkpoint(ck, device=dev)
+            graph = False
+        rec = {"checkpoint": ck, "graph": graph, "by_move": {}, "by_state": {}, "tables": {}}
         allm = {b[2]: [[], []] for b in MOVE_BUCKETS}
         alls = {b[2]: [[], []] for b in STATE_BUCKETS}
         for t, rows in data.items():
             head = "priority" if t in PRIORITY else "target"
-            lg = logits_for(model, vocab, [r[0] for r in rows], head, dev)
+            lg = graph_logits(model, vocab, edge_vocab, a.tables_dir, t, sample(a.tables_dir, t, a.rows), dev) if graph \
+                else logits_for(model, vocab, [r[0] for r in rows], head, dev)
             tt = [[], []]
             for j, (_, legal, hum) in enumerate(rows):
                 top1, nll = score(lg[j], legal, hum)

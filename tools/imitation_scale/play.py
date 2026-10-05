@@ -25,6 +25,10 @@ with no simulations and no belief worlds. Decisions without a head are searched 
 Every run records each bot's policy temperature (`policy_temp` in config.json and summary.json; null for
 the searching bots).
 
+The same with MageZero's graph network (docs/022), served by tools/imitation_scale/graph_server.py on
+--graph-ports: gnn (as il_bc), gnn_heur (as il_heur), gnn_bc (as bc), gnn_policy_greedy and
+gnn_policy_sampled. A graph bot can play a flat one: each reads its own server.
+
 A bot can carry its own budget, `name@simulations` (heuristic@100, il_bc@1000); without one it searches at
 --budget. Experiment #4's games (docs/018): policy_greedy against heuristic@100, il_bc@100/300/1000 against
 heuristic@100, and il_bc@1000 against heuristic@1000.
@@ -71,6 +75,12 @@ BOTS = {
     "policy_greedy": {"evaluator": "remote", "priors": True, "leaf": "net", "policy_temp": 0.0},
     "policy_sampled": {"evaluator": "remote", "priors": True, "leaf": "net", "policy_temp": 1.0},
     "policy": {"evaluator": "remote", "priors": True, "leaf": "net", "policy_temp": 1.0},   # = policy_sampled
+    # MageZero's graph network (docs/022): the same bots, the graph server on --graph-ports
+    "gnn": {"evaluator": "graph", "priors": True, "leaf": "net"},
+    "gnn_heur": {"evaluator": "graph", "priors": True, "leaf": "heuristic"},
+    "gnn_bc": {"evaluator": "graph", "priors": False, "leaf": "net"},
+    "gnn_policy_greedy": {"evaluator": "graph", "priors": True, "leaf": "net", "policy_temp": 0.0},
+    "gnn_policy_sampled": {"evaluator": "graph", "priors": True, "leaf": "net", "policy_temp": 1.0},
 }
 
 
@@ -90,7 +100,7 @@ def parse_bot(spec: str) -> tuple[str, int | None]:
 
 
 def seat_options(bot: str, budget: int, port: int | None, timeout_s: float, belief_port: int | None = None,
-                 opponent_deck: str | None = None, policy_fallback_budget: int = 100) -> dict:
+                 opponent_deck: str | None = None, policy_fallback_budget: int = 100, graph_port: int | None = None) -> dict:
     bot, own = parse_bot(bot)
     budget = own or budget
     b = BOTS[bot]
@@ -99,8 +109,8 @@ def seat_options(bot: str, budget: int, port: int | None, timeout_s: float, beli
         s.update(budget=policy_fallback_budget, policyOnly=True, policyTemp=b["policy_temp"])
     if belief_port is not None:
         s["belief"] = {"port": belief_port, "exclude": opponent_deck, "worlds": 8}
-    if b["evaluator"] == "remote":
-        s["evaluator"] = {"type": "remote", "host": "127.0.0.1", "port": port}
+    if b["evaluator"] in ("remote", "graph"):
+        s["evaluator"] = {"type": b["evaluator"], "host": "127.0.0.1", "port": graph_port if b["evaluator"] == "graph" else port}
         if b["priors"]:
             s.update(priors=True, opponentPriors="uniform", isPolicyPerWorld=True)
     else:
@@ -181,6 +191,7 @@ def main(argv=None) -> int:
     ap.add_argument("--bot1", required=True, help=f"one of {sorted(BOTS)}, optionally @<simulations>")
     ap.add_argument("--bot2", required=True, help="as --bot1")
     ap.add_argument("--ports", default="50052", help="inference servers, comma-separated (network bots)")
+    ap.add_argument("--graph-ports", default="50062", help="graph inference servers (gnn bots), comma-separated")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--heap", default="3g")
     ap.add_argument("--max-turns", type=int, default=50)
@@ -206,6 +217,7 @@ def main(argv=None) -> int:
     stems = dzpaths.read_pool(Path(a.pool))
     pairs = deck_pairs(stems, a.pairs, a.seed)
     ports = [int(p) for p in a.ports.split(",")]
+    gports = [int(p) for p in a.graph_ports.split(",")]
     tasks = [t for t in shard_tasks(game_tasks(pairs, a.seed, mirror=a.bot1 == a.bot2), a.shard) if a.min_pair <= t["pair"] <= (a.max_pair if a.max_pair is not None else t["pair"])]
     done_keys = set()
     games_file = out / "games.jsonl"
@@ -234,7 +246,7 @@ def main(argv=None) -> int:
 
     def play(i_t):
         i, t = i_t
-        port = ports[i % len(ports)]
+        port, gport = ports[i % len(ports)], gports[i % len(gports)]
         # the decks keep their seats (deck1 in A, which plays first), the bots swap seats: over a
         # pair each bot plays each deck once and goes first once, so deck strength and the play
         # order cancel in the pair
@@ -242,8 +254,8 @@ def main(argv=None) -> int:
         deck_a, deck_b = t["deck1"], t["deck2"]
         opts = dict(deckA=str(dzpaths.deck_path(deck_a, Path(a.deck_root)).resolve()),
                     deckB=str(dzpaths.deck_path(deck_b, Path(a.deck_root)).resolve()),
-                    seatA=seat_options(bot_a, a.budget, port, a.search_timeout, belief, deck_b, a.policy_fallback_budget),
-                    seatB=seat_options(bot_b, a.budget, port, a.search_timeout, belief, deck_a, a.policy_fallback_budget),
+                    seatA=seat_options(bot_a, a.budget, port, a.search_timeout, belief, deck_b, a.policy_fallback_budget, gport),
+                    seatB=seat_options(bot_b, a.budget, port, a.search_timeout, belief, deck_a, a.policy_fallback_budget, gport),
                     seed=t["game_seed"], starting="A", maxTurns=a.max_turns, record=a.record)
         g = {**t, "botA": bot_a, "botB": bot_b, "budget": a.budget, "closed_decklists": belief is not None}
         ts = time.time()

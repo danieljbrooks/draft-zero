@@ -61,6 +61,9 @@ public final class BenchSearch {
         public double cPuct = 1.0;
         /** null: offline search (the heuristic) */
         public RemoteModelEvaluator nn;
+        /** a graph network instead of nn (docs/022): MageZero's graph encoder at every node, priors from
+         *  the scores of the options' graph nodes (GraphNet) */
+        public GraphNet gnn;
         public long seed = 0;
         /** IS-MCTS: re-deal the hidden cards of the chosen world every iteration */
         public boolean redeal = true;
@@ -111,6 +114,7 @@ public final class BenchSearch {
             c.unit = unit;
             c.cPuct = cPuct;
             c.nn = nn;
+            c.gnn = gnn;
             c.seed = newSeed;
             c.redeal = redeal;
             c.timeoutSec = timeoutSec;
@@ -128,18 +132,24 @@ public final class BenchSearch {
         }
 
         public String leafMode() {
-            return leaf != null ? leaf : nn != null ? "net" : "heuristic";
+            return leaf != null ? leaf : hasNet() ? "net" : "heuristic";
+        }
+
+        /** a network of either kind (flat or graph) */
+        public boolean hasNet() {
+            return nn != null || gnn != null;
         }
 
         /** Throws on an option combination the search can't run. */
         public void check() {
             String l = leafMode();
             if (!List.of("net", "heuristic", "mix").contains(l)) throw new IllegalArgumentException("leaf must be net, heuristic or mix, got '" + l + "'");
-            if (nn == null && !l.equals("heuristic")) throw new IllegalArgumentException("leaf " + l + " needs a network (evaluator.type remote)");
+            if (!hasNet() && !l.equals("heuristic")) throw new IllegalArgumentException("leaf " + l + " needs a network (evaluator.type remote or graph)");
+            if (nn != null && gnn != null) throw new IllegalArgumentException("a flat network and a graph network: give one");
             if (!(leafMix >= 0.0 && leafMix <= 1.0)) throw new IllegalArgumentException("leafMix must be in [0, 1], got " + leafMix);
             if (!List.of("net", "uniform").contains(opponentPriors)) throw new IllegalArgumentException("opponentPriors must be net or uniform, got '" + opponentPriors + "'");
-            if (priors && nn == null) throw new IllegalArgumentException("priors need a network (evaluator.type remote)");
-            if (policyOnly && nn == null) throw new IllegalArgumentException("policyOnly needs a network (evaluator.type remote)");
+            if (priors && !hasNet()) throw new IllegalArgumentException("priors need a network (evaluator.type remote or graph)");
+            if (policyOnly && !hasNet()) throw new IllegalArgumentException("policyOnly needs a network (evaluator.type remote or graph)");
             if (!(policyTemp >= 0.0)) throw new IllegalArgumentException("policyTemp must be >= 0, got " + policyTemp);
         }
     }
@@ -177,6 +187,9 @@ public final class BenchSearch {
         public long policyRefreshes;
         /** IS-MCTS without isPolicyPerWorld: priors applied from a policy read for another actor or decision type */
         public long policyMismatches;
+        /** graph network: options with no node in the node's policy (another world's objects), and the
+         *  network calls that read the policy again in the iteration's world */
+        public long graphPolicyMisses;
         public int maxDepth;
         public long engineNanos, evalNanos, searchNanos;
         /** per edge traversed in backprop: all, out of a priority decision, and turns crossed */
@@ -197,6 +210,7 @@ public final class BenchSearch {
             oppNetPriors += o.oppNetPriors;
             policyRefreshes += o.policyRefreshes;
             policyMismatches += o.policyMismatches;
+            graphPolicyMisses += o.graphPolicyMisses;
             maxDepth = Math.max(maxDepth, o.maxDepth);
             engineNanos += o.engineNanos;
             evalNanos += o.evalNanos;
@@ -260,6 +274,8 @@ public final class BenchSearch {
         float[] policy;           // the network's policy head for this node's decision (priors on)
         String policyKey;         // the (actor, decision type) the policy was read for
         Map<String, float[]> policyByKey;  // IS-MCTS with isPolicyPerWorld: one policy per (actor, type)
+        GraphNet.Policy gpolicy;           // the same two for a graph network
+        Map<String, GraphNet.Policy> gpolicyByKey;
         boolean hasValue, hasHeur, hasNet, validated, terminal, win;
         ActionEncoder.ActionType type;
         UUID actor;
@@ -367,14 +383,47 @@ public final class BenchSearch {
         }
         st.nodes += ch.size();
         st.maxDepth = Math.max(st.maxDepth, node.depth + 1);
-        if (node.policy != null) { // set by evaluate() only where priors apply (opponentPriors)
-            double[] pr = priors(node.policy, ch, world.live, cfg);
+        if (node.policy != null || node.gpolicy != null) { // set by evaluate() only where priors apply (opponentPriors)
+            double[] pr = node.gpolicy != null ? graphPriors(node.gpolicy, singletons(ch), ch, cfg)
+                    : priors(node.policy, ch, world.live, cfg);
             if (pr != null) {
                 for (int i = 0; i < ch.size(); i++) node.kids.get(i).prior = pr[i];
                 st.netPriors++;
                 if (!world.player.getId().equals(node.actor)) st.oppNetPriors++;
             }
         }
+    }
+
+    /** A graph network's priors: its option logits (copies of an option pooled, groups[i] holding opts[i]'s
+     *  copies) through MageZero's setPriors; null when an option has no node in the policy. */
+    static double[] graphPriors(GraphNet.Policy pol, List<List<MCTSNode>> groups, List<MCTSNode> opts, Config cfg) {
+        double[] lg = pol.logits(groups);
+        return lg == null ? null : priorsFromLogits(lg, opts, cfg);
+    }
+
+    static List<List<MCTSNode>> singletons(List<MCTSNode> opts) {
+        List<List<MCTSNode>> out = new ArrayList<>(opts.size());
+        for (MCTSNode c : opts) out.add(List.of(c));
+        return out;
+    }
+
+    /** MageZero's setPriors from option logits: softmax(logit / T) plus a bonus for anything but Pass and mana abilities. */
+    static double[] priorsFromLogits(double[] logits, List<MCTSNode> opts, Config cfg) {
+        int n = opts.size();
+        double[] out = new double[n];
+        double mx = Double.NEGATIVE_INFINITY;
+        for (double x : logits) mx = Math.max(mx, x);
+        double sum = 0;
+        for (int i = 0; i < n; i++) {
+            out[i] = Math.exp((logits[i] - mx) / cfg.priorTemp);
+            sum += out[i];
+        }
+        for (int i = 0; i < n; i++) {
+            out[i] /= sum;
+            Ability pa = opts.get(i).getPriorityAction();
+            if (pa == null || (!pa.isManaAbility() && !(pa instanceof mage.abilities.common.PassAbility))) out[i] += cfg.priorBonus;
+        }
+        return out;
     }
 
     /** MageZero's setPriors on a list of options: softmax(logit / T) plus a bonus for anything but Pass. */
@@ -404,6 +453,41 @@ public final class BenchSearch {
             if (pa == null || (!pa.isManaAbility() && !(pa instanceof mage.abilities.common.PassAbility))) out[i] += cfg.priorBonus;
         }
         return out;
+    }
+
+    /** rootPolicy for a graph network: a softmax over the options' logits (no prior temperature or bonus). */
+    private static Result rootPolicyGraph(World world, Config cfg, Result res, long t0) {
+        MCTSNode2 r = world.root;
+        UUID me = world.player.getId();
+        GraphNet.Ask q = GraphNet.ask(r);
+        GraphNet.Out out = cfg.gnn.infer(r, q);
+        res.stats.netEvals = 1;
+        GraphNet.Policy pol = policyAllowed(r.actionType, me.equals(r.playerId), cfg) ? out.policy(q) : null;
+        List<MCTSNode> ch = r.getChildren();
+        double[] lg = pol == null ? null : pol.logits(singletons(ch));
+        double[] logit = new double[ch.size()];
+        double mx = Double.NEGATIVE_INFINITY;
+        for (int k = 0; k < ch.size(); k++) {
+            logit[k] = lg == null ? 0.0 : lg[k];
+            mx = Math.max(mx, logit[k]);
+        }
+        double sum = 0;
+        for (int k = 0; k < ch.size(); k++) {
+            logit[k] = Math.exp(logit[k] - mx);
+            sum += logit[k];
+        }
+        for (int k = 0; k < ch.size(); k++) {
+            RootChild c = new RootChild();
+            c.label = label(ch.get(k), r.actionType, world.live, me);
+            c.prior = logit[k] / sum;
+            if (r.actionType == ActionEncoder.ActionType.CHOOSE_NUM) c.amount = ch.get(k).getAmountAction();
+            res.children.add(c);
+        }
+        res.rootValue = (double) out.value;
+        res.rootNet = (double) out.value;
+        res.stats.evals = 1;
+        res.stats.searchNanos = System.nanoTime() - t0;
+        return res;
     }
 
     private static Node selectTree(Node node, UUID me, Config cfg) {
@@ -439,6 +523,7 @@ public final class BenchSearch {
         MCTSNode2 r = world.root;
         UUID me = world.player.getId();
         r.expand();
+        if (cfg.gnn != null) return rootPolicyGraph(world, cfg, res, t0);
         Set<Integer> sv = r.stateVector;
         long[] idx = new long[sv == null ? 0 : sv.size()];
         int i = 0;
@@ -549,11 +634,36 @@ public final class BenchSearch {
                 // opponent-prior rule is applied to this iteration's actor
                 boolean mine = me.equals(cur.actor);
                 // isPolicyPerWorld: the policy for this world's actor and decision type at this node
-                float[] curPolicy = cfg.isPolicyPerWorld ? policyFor(cur, sh, mine, cfg, st)
+                float[] curPolicy = cfg.gnn != null ? null : cfg.isPolicyPerWorld ? policyFor(cur, sh, mine, cfg, st)
                         : (mine || cfg.opponentPriors.equals("net")) ? cur.policy : null;
+                GraphNet.Policy curG = cfg.gnn == null ? null : cfg.isPolicyPerWorld ? graphPolicyFor(cur, sh, mine, cfg, st, false)
+                        : (mine || cfg.opponentPriors.equals("net")) ? cur.gpolicy : null;
+                // a graph policy's option groups: every copy of an option (MageZero lists each card's)
+                Map<String, List<MCTSNode>> copies = null;
+                if (curG != null) {
+                    copies = new HashMap<>();
+                    for (MCTSNode c : sh.getChildren()) copies.computeIfAbsent(key(c, sh.actionType, sh.getGame(), me), x -> new ArrayList<>()).add(c);
+                }
                 while (!opts.isEmpty()) {
                     Map<String, Double> pri = null;
-                    if (curPolicy != null) {
+                    if (curG != null) {
+                        List<MCTSNode> ol = new ArrayList<>(opts.values());
+                        List<List<MCTSNode>> groups = new ArrayList<>();
+                        for (String kk : opts.keySet()) groups.add(copies.get(kk));
+                        double[] pr = graphPriors(curG, groups, ol, cfg);
+                        if (pr == null && cfg.isPolicyPerWorld) { // this world's objects: read it here once
+                            st.graphPolicyMisses++;
+                            curG = graphPolicyFor(cur, sh, mine, cfg, st, true);
+                            pr = curG == null ? null : graphPriors(curG, groups, ol, cfg);
+                        }
+                        if (pr != null) {
+                            pri = new HashMap<>();
+                            int i = 0;
+                            for (String kk : opts.keySet()) pri.put(kk, pr[i++]);
+                            st.netPriors++;
+                            if (!mine) st.oppNetPriors++;
+                        }
+                    } else if (curPolicy != null) {
                         List<MCTSNode> ol = new ArrayList<>(opts.values());
                         double[] pr = priors(curPolicy, ol, sh.getGame(), cfg);
                         if (pr != null) {
@@ -774,7 +884,16 @@ public final class BenchSearch {
         }
         boolean mine = eng.targetPlayer.equals(eng.playerId);
         boolean wantPolicy = cfg.priors && policyAllowed(eng.actionType, mine, cfg);
-        if (!leaf.equals("heuristic") || wantPolicy) {
+        if (cfg.gnn != null && (!leaf.equals("heuristic") || wantPolicy)) {
+            GraphNet.Ask q = GraphNet.ask(eng);
+            GraphNet.Out out = inferGraph(eng, q, cfg, st);
+            node.net = out.value;
+            node.hasNet = true;
+            if (wantPolicy) {
+                node.gpolicy = out.policy(q);
+                node.policyKey = policyKey(eng.actionType, mine);
+            }
+        } else if (!leaf.equals("heuristic") || wantPolicy) {
             RemoteModelEvaluator.InferenceResult out = infer(eng, cfg, st);
             node.net = out.value;
             node.hasNet = true;
@@ -803,9 +922,9 @@ public final class BenchSearch {
 
     /** The network's value at the root, for the output only (the search never reads it): one extra call when evaluate() made none. */
     private static void rootNet(Node root, MCTSNode eng, Config cfg, Stats st) {
-        if (cfg.nn == null || root.hasNet || root.terminal) return;
+        if (!cfg.hasNet() || root.hasNet || root.terminal) return;
         long te = System.nanoTime();
-        root.net = infer(eng, cfg, st).value;
+        root.net = cfg.gnn != null ? inferGraph(eng, GraphNet.ask(eng), cfg, st).value : infer(eng, cfg, st).value;
         root.hasNet = true;
         st.evalNanos += System.nanoTime() - te;
     }
@@ -817,6 +936,42 @@ public final class BenchSearch {
         if (sv != null) for (int f : sv) idx[i++] = f;
         st.netEvals++;
         return cfg.nn.infer(idx);
+    }
+
+    static GraphNet.Out inferGraph(MCTSNode eng, GraphNet.Ask q, Config cfg, Stats st) {
+        st.netEvals++;
+        return cfg.gnn.infer(eng, q);
+    }
+
+    /**
+     * policyFor for a graph network: the policy for this iteration's actor and decision type at a shared
+     * node, read in this world (sh) the first time the pair is met there, or again when `refresh` (an
+     * option of this world had no node in it); a refresh adds this world's nodes to the policy.
+     */
+    private static GraphNet.Policy graphPolicyFor(Node cur, MCTSNode2 sh, boolean mine, Config cfg, Stats st, boolean refresh) {
+        if (!cfg.priors || !policyAllowed(cur.type, mine, cfg)) return null;
+        String k = policyKey(cur.type, mine);
+        if (cur.gpolicyByKey == null) cur.gpolicyByKey = new HashMap<>();
+        GraphNet.Policy pol = cur.gpolicyByKey.get(k);
+        if (pol == null && !refresh && k.equals(cur.policyKey) && cur.gpolicy != null) {
+            pol = cur.gpolicy;
+            cur.gpolicyByKey.put(k, pol);
+        }
+        if (pol == null || refresh) {
+            long te = System.nanoTime();
+            GraphNet.Ask q = GraphNet.ask(sh);
+            GraphNet.Policy fresh = inferGraph(sh, q, cfg, st).policy(q);
+            st.evalNanos += System.nanoTime() - te;
+            st.policyRefreshes++;
+            if (pol != null && fresh != null && pol.byId != null && fresh.byId != null) {
+                Map<UUID, Float> merged = new HashMap<>(pol.byId);
+                merged.putAll(fresh.byId);
+                fresh = new GraphNet.Policy(fresh.q, merged, fresh.use);
+            }
+            pol = fresh;
+            cur.gpolicyByKey.put(k, pol);
+        }
+        return pol;
     }
 
     static String policyKey(ActionEncoder.ActionType type, boolean mine) {

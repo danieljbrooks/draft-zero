@@ -194,6 +194,8 @@ public final class Worker {
         JsonObject dump = optBool(opt, "dump", false) ? Dumper.dump(b, false) : null;
         String seat = decisionSeat(spec, opt);
         boolean heuristic = optBool(opt, "heuristic", false);
+        boolean graph = optBool(opt, "graph", false);
+        JsonObject[] graphRec = new JsonObject[1];
         int[][] features = new int[1][];
         double[] encMs = new double[1];
         Double[] heur = new Double[1];
@@ -207,6 +209,8 @@ public final class Worker {
             Set<Integer> fv = enc.processState(game, me, ActionEncoder.ActionType.valueOf(d.type), d.text);
             features[0] = fv.stream().mapToInt(Integer::intValue).sorted().toArray();
             encMs[0] = (System.nanoTime() - te) / 1e6;
+            // the same state for MageZero's graph encoder (docs/022 §3.1)
+            if (graph) graphRec[0] = GraphRecord.encode(game, me, GraphRecord.Ask.of(d), perfectInfo);
             // offline MageZero's leaf score (docs/017's value pilot), from the decision player's seat
             if (heuristic) heur[0] = GameStateEvaluator3.evaluateNormalized(me, game);
         };
@@ -223,6 +227,7 @@ public final class Worker {
         r.add("features", fa);
         r.addProperty("nFeatures", fa.size());
         if (heur[0] != null) r.addProperty("heuristic", heur[0]);
+        if (graphRec[0] != null) r.add("graph", graphRec[0]);
         if (dump != null) r.add("dump", dump);
         r.add("warnings", Dumper.strings(b.warnings));
         if (!subs.applied.isEmpty()) r.add("substitutions", subs.toJson());

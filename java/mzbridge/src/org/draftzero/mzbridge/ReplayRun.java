@@ -56,6 +56,9 @@ final class ReplayRun {
     boolean allStops;
     /** each recorded decision also carries GameStateEvaluator3's score from the deciding seat */
     boolean heuristic;
+    /** each recorded decision also carries its state as MageZero's graph encoder sees it, with the
+     *  legal options as graph nodes (GraphRecord; docs/022 §3.1) */
+    boolean graph;
     /** whose decisions are recorded: the scripted seat (default), or the other one (the 17lands
      *  user during the opponent's turn: its instants, flash and blocks; docs/017 §2.2) */
     String recordSeat;
@@ -297,7 +300,11 @@ final class ReplayRun {
             // sorted by label: the engine's playable order can follow hash order (a card that
             // returned to hand), which would make identical replays list options differently
             TreeMap<String, ActivatedAbility> byLabel = new TreeMap<>();
-            for (ActivatedAbility a : playable) byLabel.putIfAbsent(a.toString(), a);
+            TreeMap<String, List<UUID>> idsByLabel = new TreeMap<>();
+            for (ActivatedAbility a : playable) {
+                byLabel.putIfAbsent(a.toString(), a);
+                idsByLabel.computeIfAbsent(a.toString(), k -> new ArrayList<>()).add(GraphRecord.actionId(a));
+            }
             JsonArray legal = new JsonArray();
             JsonArray set = new JsonArray();
             for (Map.Entry<String, ActivatedAbility> e : byLabel.entrySet()) {
@@ -324,7 +331,8 @@ final class ReplayRun {
                 d.addProperty("label_kind", left ? "imputed_order" : "exact");
                 d.addProperty("evidence", left ? "policy" : "recorded_none_left");
             }
-            finishDecision(d, game, p, "PRIORITY", "priority");
+            finishDecision(d, game, p, "PRIORITY", "priority",
+                    new GraphRecord.Ask("PRIORITY", "priority", null, null, new ArrayList<>(idsByLabel.values())));
         }
         if (pick == null) {
             p.pass(game);
@@ -635,7 +643,7 @@ final class ReplayRun {
             d.addProperty("label_kind", imputed ? "imputed_order" : "exact");
             d.addProperty("evidence", guess ? "copy_guess" : evidence);
             if (alias != null) d.addProperty("alias", alias);
-            finishDecision(d, game, p, "CHOOSE_USE", text);
+            finishDecision(d, game, p, "CHOOSE_USE", text, GraphRecord.Ask.attack(game, pm.getId(), playerDef));
             p.getPlayerHistory().useSequence.add(yes);
             if (yes) {
                 UUID defender = playerDef;
@@ -742,12 +750,21 @@ final class ReplayRun {
         Set<String> seen = new HashSet<>();
         for (String[] l : labelled) if (seen.add(l[0])) legal.add(option(l[0], p.actionEncoder.getTargetIndex(l[0])));
         if (legal.size() < 2) return;
+        GraphRecord.Ask ask = GraphRecord.Ask.block(blk.getId(), optionIds(labelled));
         d.add("legal", legal);
         d.addProperty("chosen", target == null ? "Stop Choosing" : BridgePlayer.targetLabel(game, target, p.getId()));
         boolean exact = script.blockPairing == null || script.blockPairing.equals("unique") || script.blockPairing.equals("none");
         d.addProperty("label_kind", exact ? "exact" : "guessed_target");
         d.addProperty("evidence", "block_" + (script.blockPairing == null ? "none" : script.blockPairing));
-        finishDecision(d, game, p, "CHOOSE_TARGET", text);
+        finishDecision(d, game, p, "CHOOSE_TARGET", text, ask);
+    }
+
+    /** The engine ids behind each distinct label of `labelled` ({label, uuid} rows sorted by label),
+     *  in the order the labels were first added to the decision's legal list. */
+    static List<List<UUID>> optionIds(List<String[]> labelled) {
+        LinkedHashMap<String, List<UUID>> out = new LinkedHashMap<>();
+        for (String[] l : labelled) out.computeIfAbsent(l[0], k -> new ArrayList<>()).add(UUID.fromString(l[1]));
+        return new ArrayList<>(out.values());
     }
 
     private UUID attackerId(String ref, Game game, Set<UUID> usedNew) {
@@ -913,7 +930,8 @@ final class ReplayRun {
                 d.addProperty("chosen", pk.label);
                 d.addProperty("label_kind", pk.evidence.equals("fate") ? "exact" : "guessed_target");
                 d.addProperty("evidence", pk.evidence);
-                finishDecision(d, game, p, "CHOOSE_TARGET", text);
+                finishDecision(d, game, p, "CHOOSE_TARGET", text, new GraphRecord.Ask("CHOOSE_TARGET", text,
+                        source == null ? null : source.getSourceId(), fromCards, optionIds(labelled)));
             }
             if (inTurn && pk.options >= 2) {
                 JsonObject t = new JsonObject();
@@ -1012,7 +1030,7 @@ final class ReplayRun {
             d.addProperty("chosen", String.valueOf(idx));
             d.addProperty("label_kind", evidence.equals("policy") ? "guessed_target" : "exact");
             d.addProperty("evidence", evidence);
-            finishDecision(d, game, p, "CHOOSE_NUM", text);
+            finishDecision(d, game, p, "CHOOSE_NUM", text, null);
         }
         // what ComputerPlayerMCTS.chooseMode records: nothing when there is no choice (makeChoiceAmount min >= max)
         if (options.size() > 1) p.getPlayerHistory().numSequence.add(idx);
@@ -1086,9 +1104,10 @@ final class ReplayRun {
         return d;
     }
 
-    void finishDecision(JsonObject d, Game game, ReplayPlayer p, String type, String text) {
+    void finishDecision(JsonObject d, Game game, ReplayPlayer p, String type, String text, GraphRecord.Ask ask) {
         if (!p.seat.equals(recordSeat)) return;   // only the recorded seat's decisions are labels
         if (encode) d.add("features", features(game, p, type, text));
+        if (graph && ask != null) d.add("graph", GraphRecord.encode(game, p.getId(), ask, perfectInfo));
         if (heuristic) d.addProperty("heuristic", GameStateEvaluator3.evaluateNormalized(p.getId(), game));
         decisions.add(d);
     }

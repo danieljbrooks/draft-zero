@@ -85,6 +85,7 @@ final class TurnReplay {
         boolean allStops = Worker.optBool(opt, "allStops", false);
         String recordSeat = Worker.optString(opt, "recordSeat", null);
         boolean heuristic = Worker.optBool(opt, "heuristic", false);
+        boolean graph = Worker.optBool(opt, "graph", false);
         Substitutions.Result subs = Substitutions.apply(spec, Worker.optObject(opt, "substitute"));
         int defaultTurn = spec.turn + (spec.activePlayer.equals(Worker.optString(Worker.optObject(opt, "script"), "seat", "A")) ? 0 : 1);
         TurnScript script = TurnScript.parse(Worker.optObject(opt, "script"), Worker.optObject(opt, "expected"), defaultTurn);
@@ -109,7 +110,8 @@ final class TurnReplay {
         int bestIdx = 0;
         long buildMs = 0, replayMs = 0;
         for (int i = 0; i < policies.size(); i++) {
-            Attempt a = attempt(spec, script, policies.get(i), seed, idSeed, lenient, encode, perfectInfo, allStops, heuristic, recordSeat);
+            Attempt a = attempt(spec, script, policies.get(i), seed, idSeed, lenient, encode, perfectInfo, allStops, heuristic, recordSeat,
+                    graph);
             buildMs += a.buildMs;
             replayMs += a.replayMs;
             log.add(a.summary());
@@ -248,7 +250,8 @@ final class TurnReplay {
     }
 
     static Attempt attempt(Spec spec, TurnScript script, TurnScript.Policy pol, long seed, long idSeed, boolean lenient,
-                           boolean encode, boolean perfectInfo, boolean allStops, boolean heuristic, String recordSeat) {
+                           boolean encode, boolean perfectInfo, boolean allStops, boolean heuristic, String recordSeat,
+                           boolean graph) {
         Attempt a = new Attempt();
         a.policy = pol;
         long t0 = System.nanoTime();
@@ -258,6 +261,7 @@ final class TurnReplay {
         ReplayRun run = new ReplayRun(b, script, pol, encode, perfectInfo);
         run.allStops = allStops;
         run.heuristic = heuristic;
+        run.graph = graph;
         if (recordSeat != null) run.recordSeat = recordSeat;
         a.run = run;
         // both seats become script-following puppets: replace the player objects in the game state

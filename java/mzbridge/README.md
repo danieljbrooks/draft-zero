@@ -35,7 +35,16 @@ src/org/draftzero/mzbridge/
   ReplayPlayer.java     BridgePlayer that follows a ReplayRun (both seats)
   TargetResolver.java   targets from the snapshot ("fate": what died, left, was needed), else a heuristic, flagged
   ReplayWatcher.java    deaths during the replayed turn, the hand as its cleanup began
-build.sh, run.sh, log4j.properties
+  GraphRecord.java      a decision as MageZero's graph encoder sees it: the state graph and each legal option's
+                        nodes (the `graph` option of encode and replay_turn; docs/022)
+  graph/                MageZero's graph encoder (FeatureGraph, StateEncoder), copied from WillWroble/mage
+                        graph-encoder at a pinned commit by graph_sync.sh: do not edit by hand
+src/mage/player/ai/
+  BenchSearch.java      the search benchmark's and the games' search (IS-MCTS); `evaluator.type graph` for a graph network
+  BenchPlayer.java      the game player (the play op)
+  GraphMCTSPlayer.java  MageZero's simulation player, also recording a decision's source, attacker or blocker (graph search)
+  GraphNet.java         the graph network's client (tools/imitation_scale/graph_server.py) and node -> option priors
+build.sh, run.sh, graph_sync.sh, log4j.properties
 specs/*.json            golden scenarios (the 7 research scenarios in StateSpec v1)
 ```
 

@@ -40,6 +40,9 @@ Checkpoints from experiment #2 are in the private Hugging Face repo `danbrooks/d
   search looks like.
 - **[Rules engines](docs/015-rules-engine-comparison.md):** faster engines than XMage for a limited
   agent.
+- **[Testing MageZero's graph network](docs/022-gnn-imitation-test-plan.md)** (a proposal): Will Wroble's GNN
+  through experiment #4's gauntlet on the same decisions, with the graph encodings, trainer and graph search it
+  needs.
 - **[CPU benchmarks](docs/020-cpu-benchmarks.md):** what training the MLP and self-play with search cost on RunPod's
   CPU and GPU pods, the free RTX PRO 6000 box and a laptop, and what a rented vCPU is.
 - **Running experiments:** the [runbook](docs/002-RUNBOOK.md) and

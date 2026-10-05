@@ -1,0 +1,53 @@
+# docs/022, stage 2: the GNN's hyperparameter sweep, experiment #4's protocol (docs/017 §6.3, docs/018 stage 2) on
+# the graph tables: one epoch of the same 10% of the training games for every run, the same validation rows (20,000
+# a table, whole games: the rows experiment #4's sweeps validated on), learning curves at quarter epochs, two seeds
+# of the base for the noise band. One setting at a time around the base: MageZero's graph network as Will wrote it
+# (graph_net.ARCH_DEFAULT) with experiment #4's final recipe (warm-up + cosine from 1e-4, TD(0.99) values on 16
+# positions a game, the passivity fix).
+#
+#   python -m draftzero.gameplay.graph_supervised sweep --spec configs/gnn_sweep.yml --out runs/gnn/sweep \
+#       --tables-dir data/imitation_graph/h5
+#
+# Writes runs/gnn/sweep/sweep.json and runs/gnn/sweep/runs/<name>/ (evals.jsonl, best_*.pt.gz, summary.json);
+# re-running skips finished runs and resumes a stopped one. The rule (docs/022 §4.2): keep the base unless a setting
+# beats it by more than twice the seed-to-seed difference on set NLL, is no worse on the value head, and costs less
+# than 25% more inference time.
+title: "docs/022 stage 2: one setting at a time around MageZero's graph network"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.1
+  val_rows: 20000
+  data_cache: data/cache/graph
+  max_epochs: 1.0
+  time_budget_s: 14400        # a cap only
+  eval_every_steps: 4300      # quarter epochs (an epoch of 10% is ~17k steps of 64 states)
+  ckpt_every_s: null
+  latest_every_s: 600
+runs:
+  - {name: g-base}
+  - {name: g-base-seed1, seed: 1}
+  # optimisation
+  - {name: g-lr3e-4, lr: 3.0e-4}
+  - {name: g-lr3e-5, lr: 3.0e-5}
+  - {name: g-batch256, batch_rows: 256, lr: 2.0e-4, warmup_steps: 750}
+  - {name: g-emb-lr10, emb_lr_mult: 10.0}
+  # three passes over the same 10% (experiment #4's `ep3` test): on the planning pod's 4,000 games three epochs
+  # helped the GNN's policy (set NLL 0.343 -> 0.320) without the value memorisation the MLP shows on repeats
+  - {name: g-3ep, max_epochs: 3.0}
+  # the passivity fix: on the planning pod's 4,000 games the GNN put Pass on top in 98% of the opponent's-turn
+  # decisions even at x3 (the MLP: 93%, the humans: 93%)
+  - {name: g-act5, act_weights: {opp_priority: 5.0, replay_priority: 5.0}}
+  # regularisation (Will's dropout is 0.25 inside every layer; experiment #4's networks did best with less)
+  - {name: g-drop0.1, arch: {dropout: 0.1}}
+  - {name: g-leafdrop0.1, arch: {dropout: 0.1, leaf_dropout: 0.1}}
+  # shape: cheaper networks first (the search pays for every evaluation)
+  - {name: g-passes1, arch: {passes: 1}}
+  - {name: g-global1, arch: {global_layers: 1}}
+  - {name: g-d256, arch: {d_model: 256, ff: 512}}
+  - {name: g-global4, arch: {global_layers: 4}}

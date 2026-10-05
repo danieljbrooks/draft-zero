@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * One decision of the decision player: what MageZero is asked (type + text, exactly the strings
@@ -32,6 +33,11 @@ public class Decision {
     public int passedBefore;
     /** For CHOOSE_NUM: labels are min..max, the MCTS amount action is an offset from min. */
     public int numMin;
+    /** The object the decision is about (a target's or a "may" question's source), as the graph
+     *  encoder's DecisionSource edge; null when the engine gives none. */
+    public UUID source;
+    /** A target's candidate cards outside the zones the encoder walks (a library search): its OptionPile. */
+    public transient mage.cards.Cards fromCards;
     public final List<Option> legal = new ArrayList<>();
 
     // filled by a search
@@ -49,6 +55,10 @@ public class Decision {
         public int idx;
         public int n = 1;          // multiplicity (two copies of a card in hand give two "Cast X" options)
         public String source;      // source object name for abilities, when it is not already in the label
+        /** The engine objects behind the option: one ability id per copy for PRIORITY, the target
+         *  ids for CHOOSE_TARGET (STOP_CHOOSING for "Stop Choosing"); empty for yes/no and numbers.
+         *  The graph encoder has a node for each (docs/022 §3.1). */
+        public final List<UUID> ids = new ArrayList<>();
 
         Option(String label, int idx) {
             this.label = label;
@@ -74,15 +84,29 @@ public class Decision {
 
     /** Add an option, merging duplicates of the same label. */
     void add(String label, int idx, String source) {
+        add(label, idx, source, null);
+    }
+
+    /** Add an option for engine object `id` (may be null), merging duplicates of the same label. */
+    void add(String label, int idx, String source, UUID id) {
         for (Option o : legal) {
             if (o.label.equals(label)) {
                 o.n++;
+                if (id != null && !o.ids.contains(id)) o.ids.add(id);
                 return;
             }
         }
         Option o = new Option(label, idx);
         o.source = source;
+        if (id != null) o.ids.add(id);
         legal.add(o);
+    }
+
+    /** The options' engine ids, in legal order (GraphRecord's option groups). */
+    List<List<UUID>> optionIds() {
+        List<List<UUID>> out = new ArrayList<>();
+        for (Option o : legal) out.add(o.ids);
+        return out;
     }
 
     JsonObject toJson(boolean withChildren) {

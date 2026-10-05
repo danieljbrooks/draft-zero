@@ -19,7 +19,7 @@ OUT=$HERE/build
 rm -rf "$OUT/classes"
 mkdir -p "$OUT/classes"
 # --release 17: the XMage jars are Java 8 bytecode; 17 is the oldest JDK MageZero's launchers use
-"$JAVAC" -nowarn -encoding UTF-8 --release 17 -cp "$LIB/*" -d "$OUT/classes" "$HERE"/src/org/draftzero/mzbridge/*.java "$HERE"/src/mage/player/ai/*.java
+"$JAVAC" -nowarn -encoding UTF-8 --release 17 -cp "$LIB/*" -d "$OUT/classes" "$HERE"/src/org/draftzero/mzbridge/*.java "$HERE"/src/org/draftzero/mzbridge/graph/*.java "$HERE"/src/mage/player/ai/*.java
 "$JARTOOL" --create --file "$OUT/mzbridge.jar.tmp" -C "$OUT/classes" .
 mv "$OUT/mzbridge.jar.tmp" "$OUT/mzbridge.jar"
 echo "mzbridge build: $OUT/mzbridge.jar" >&2

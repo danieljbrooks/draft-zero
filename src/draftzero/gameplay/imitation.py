@@ -305,11 +305,18 @@ def _feat(r: dict) -> np.ndarray:
     return np.asarray(r.get("features") or [], dtype=np.int32)
 
 
+def _graph(r: dict):
+    """The bridge's `graph` field (the graph encoder's view, docs/022), decoded; None without it."""
+    from draftzero.gameplay import graph_tables
+    return graph_tables.decode(r.get("graph"))
+
+
 def turn_start_record(g, n: int, b, ids, *, perfect_info: bool = False, spec=None, split: int = -1,
-                      heuristic: bool = False) -> dict:
+                      heuristic: bool = False, graph: bool = False) -> dict:
     """One turn-start decision: spec -> encode (labels['bridge'] options) -> labels. Never raises
     for a bridge or reconstruction problem: status says what happened. heuristic=True also records
-    offline MageZero's GameStateEvaluator3 score of the decision state (docs/017)."""
+    offline MageZero's GameStateEvaluator3 score of the decision state (docs/017); graph=True the
+    state as MageZero's graph encoder sees it (docs/022)."""
     from draftzero.gameplay import reconstruct as rc
     from draftzero.gameplay.bridge import BridgeError
     rec = {"turn": n, "split": split, **_decision_meta(g)}
@@ -327,7 +334,8 @@ def turn_start_record(g, n: int, b, ids, *, perfect_info: bool = False, spec=Non
     rec["n_unkeyed_activations"] = sum(1 for x in lab.get("activations", []) if not x.get("key"))
     opts = dict(lab.get("bridge") or {})
     try:
-        r = b.encode(spec, perfectInfo=perfect_info, **({"heuristic": True} if heuristic else {}), **opts)
+        r = b.encode(spec, perfectInfo=perfect_info, **({"heuristic": True} if heuristic else {}),
+                     **({"graph": True} if graph else {}), **opts)
     except BridgeError as e:
         rec.update(status="bridge_error", error=str(e).splitlines()[0][:300])
         return rec
@@ -355,6 +363,8 @@ def turn_start_record(g, n: int, b, ids, *, perfect_info: bool = False, spec=Non
     rec["S"] = S
     rec["status"] = "ok"
     rec["features"] = _feat(r)
+    if graph:
+        rec["graph"] = _graph(r)
     return rec
 
 
@@ -398,7 +408,8 @@ def replay_records(g, n: int, b, ids, split: int = -1, **replay_opts) -> dict:
                      "chosen": d.get("chosen"), "label_kind": d.get("label_kind"), "evidence": d.get("evidence"),
                      "set": d.get("set"), "step": (d.get("where") or {}).get("step"),
                      "stack": (d.get("where") or {}).get("stack"), "heuristic": d.get("heuristic"),
-                     "features": _feat(d) if out["reproduced"] else None})
+                     "features": _feat(d) if out["reproduced"] else None,
+                     **({"graph": _graph(d) if out["reproduced"] else None} if "graph" in d else {})})
     out["decisions"] = decs
     return out
 
@@ -1170,6 +1181,7 @@ def replay_tables(rp: list[dict], ids) -> dict:
                     and d.get("label_kind") == "exact" and d.get("chosen") in ("yes", "no"):
                 ab = attack_baseline(d["text"], t.get("attack_ctx") or {}, ids)
                 att["features"].append(f)
+                att["graph"].append(d.get("graph"))
                 att["y"].append(1 if d["chosen"] == "yes" else 0)
                 att["heur"].append(int(ab["attack"]))
                 att["power"].append(ab["power"])
@@ -1186,6 +1198,8 @@ def replay_tables(rp: list[dict], ids) -> dict:
                 if len(li) < 2 or not si:
                     continue
                 pri["features"].append(f)
+                pri["graph"].append(d.get("graph"))
+                pri["S_labels"].append(S)
                 pri["legal"].append(li)
                 pri["labels"].append(legal)
                 pri["lab_idx"].append(lidx)

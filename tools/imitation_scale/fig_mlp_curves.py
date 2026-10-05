@@ -55,6 +55,7 @@ def main(argv=None) -> int:
     ap.add_argument("--series", action="append", required=True)
     ap.add_argument("--title", required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--suptitle", help="the figure's title (default: MLP learning curves, <title>: ...)")
     a = ap.parse_args(argv)
     series = [(k, label, curve(p)) for k, label, p in map(parse, a.series)]
     for mode, t in THEMES.items():
@@ -89,8 +90,8 @@ def main(argv=None) -> int:
         h, lab = axs.flat[0].get_legend_handles_labels()
         fig.legend(h, lab, loc="lower center", ncol=min(len(lab), 4), frameon=False, fontsize=9,
                    labelcolor=t["ink2"], bbox_to_anchor=(0.5, 0.0))
-        fig.suptitle(f"MLP learning curves, {a.title}: validation over one epoch", x=0.01, ha="left", fontsize=12,
-                     color=t["ink"])
+        fig.suptitle(a.suptitle or f"MLP learning curves, {a.title}: validation over one epoch", x=0.01, ha="left",
+                     fontsize=12, color=t["ink"])
         fig.tight_layout(rect=(0, 0.07, 1, 0.95))
         p = Path(f"{a.out}-{mode}.png")
         p.parent.mkdir(parents=True, exist_ok=True)

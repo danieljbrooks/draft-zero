@@ -1829,11 +1829,13 @@ def value_metrics(vx: np.ndarray, z: np.ndarray, turn: np.ndarray) -> dict:
 
 
 def evaluate(model, tables: list, cfg: dict, dev, dtype=None, *, aux: AuxHeads | None = None,
-             shares: dict | None = None) -> dict:
+             shares: dict | None = None, outputs=None) -> dict:
     """Every validation measure, flat: '<table>/<metric>' per table (by label kind where tables
     have more than one), 'policy/*' pooled over the priority tables, 'binary/*', 'value/*' pooled
     over the value tables, and the selection measures 'select/policy_loss' (the training mix of
-    set NLL / cross-entropy), 'select/value_logloss' and 'select/combined'."""
+    set NLL / cross-entropy), 'select/value_logloss' and 'select/combined'. `outputs(model, t)`
+    replaces table_outputs for a network that is not a flat one (graph_supervised, docs/022): it
+    returns the same per-row fields, scores aligned with the table's legal_idx."""
     was = model.training
     model.eval()
     if aux is not None:
@@ -1846,7 +1848,8 @@ def evaluate(model, tables: list, cfg: dict, dev, dtype=None, *, aux: AuxHeads |
     for t in tables:
         if t.n == 0:
             continue
-        o = table_outputs(model, t, dev, dtype, batch_rows=cfg["eval_batch_rows"], aux=aux)
+        o = outputs(model, t) if outputs is not None else \
+            table_outputs(model, t, dev, dtype, batch_rows=cfg["eval_batch_rows"], aux=aux)
         if t.kind in PRIORITY_KINDS:
             m = priority_metrics(t, o)
             pri_rows.append(m.pop("_rows"))

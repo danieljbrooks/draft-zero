@@ -150,6 +150,26 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
         }
     }
 
+    /**
+     * ComputerPlayerMCTS.createMCTSGame, with GraphMCTSPlayer as the simulation players when the seat
+     * searches with a graph network: they keep the decision context the graph encoder needs (docs/022).
+     */
+    @Override
+    protected Game createMCTSGame(Game game) {
+        if (cfg == null || cfg.gnn == null) return super.createMCTSGame(game);
+        Game mcts = game.createSimulationForAI();
+        for (Player copyPlayer : mcts.getState().getPlayers().values()) {
+            Player origPlayer = game.getState().getPlayers().get(copyPlayer.getId());
+            GraphMCTSPlayer newPlayer = new GraphMCTSPlayer(copyPlayer.getId(), getId(), stateEncoder);
+            newPlayer.restore(origPlayer);
+            newPlayer.setMatchPlayer(origPlayer.getMatchPlayer());
+            mcts.getState().getPlayers().put(copyPlayer.getId(), newPlayer);
+        }
+        mcts.pause();
+        mcts.setMCTSSimulation(true);
+        return mcts;
+    }
+
     @Override
     protected MCTSNode2 getNextAction(Game game, ActionEncoder.ActionType actionType) {
         root = null;       // a fresh tree every decision: `budget` means new simulations
@@ -213,9 +233,10 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
         } else {
             best = byKey.get(bestKey);
         }
-        // the training record, as MageZero's calculateActions writes it
+        // the training record, as MageZero's calculateActions writes it (flat networks only: a graph
+        // network's self-play records would need the graph and its option nodes, docs/022 §7)
         int[] vec = new int[ActionEncoder.ACTION_DIM];
-        boolean ok = true;
+        boolean ok = cfg.gnn == null;
         for (Map.Entry<String, MCTSNode> e : byKey.entrySet()) {
             int idx = e.getValue().getActionIndex(game);
             if (idx < 0) {
@@ -251,6 +272,7 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
     /** The policy's option (cfg.policyOnly), or null when the decision has no head or an option no index. */
     private MCTSNode policyChoice(Game game, ActionEncoder.ActionType action, MCTSNode2 r, List<MCTSNode> kids) {
         boolean mine = getId().equals(r.playerId);
+        if (cfg.gnn != null) return graphPolicyChoice(action, r, kids, mine);
         if (!BenchSearch.policyAllowed(action, mine, cfg) || r.stateVector == null) return null;
         int n = kids.size();
         int[] idx = new int[n];
@@ -287,6 +309,45 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
         }
         int pick = best;
         if (cfg.policyTemp > 0 && sum > 0) {
+            double u = rng.nextDouble() * sum;
+            for (int k = 0; k < n; k++) {
+                u -= p[k];
+                if (u <= 0) {
+                    pick = k;
+                    break;
+                }
+            }
+        }
+        decisions++;
+        policyDecisions++;
+        return kids.get(pick);
+    }
+
+    /** policyChoice for a graph network: a softmax over each option's own node score (each copy of a card is
+     *  its own option here, so copies share the option's probability as the trainer's log-sum-exp does). */
+    private MCTSNode graphPolicyChoice(ActionEncoder.ActionType action, MCTSNode2 r, List<MCTSNode> kids, boolean mine) {
+        if (!BenchSearch.policyAllowed(action, mine, cfg)) return null;
+        long t0 = System.nanoTime();
+        GraphNet.Ask q = GraphNet.ask(r);
+        GraphNet.Policy pol = BenchSearch.inferGraph(r, q, cfg, stats).policy(q);
+        searchNanos += System.nanoTime() - t0;
+        double[] lg = pol == null ? null : pol.logits(BenchSearch.singletons(kids));
+        if (lg == null) return null;
+        int n = kids.size();
+        int best = 0;
+        double mx = Double.NEGATIVE_INFINITY;
+        for (int k = 0; k < n; k++) {
+            if (lg[k] > lg[best]) best = k;
+            mx = Math.max(mx, lg[k]);
+        }
+        int pick = best;
+        if (cfg.policyTemp > 0) {
+            double[] p = new double[n];
+            double sum = 0.0;
+            for (int k = 0; k < n; k++) {
+                p[k] = Math.exp((lg[k] - mx) / cfg.policyTemp);
+                sum += p[k];
+            }
             double u = rng.nextDouble() * sum;
             for (int k = 0; k < n; k++) {
                 u -= p[k];
