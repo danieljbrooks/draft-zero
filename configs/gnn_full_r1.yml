@@ -26,7 +26,7 @@ tables:
   - {name: opp_block, kind: target}
 fraction: 1.0
 val_rows: 20000
-XX
+data_cache: /home/researcher/gnn-cache   # r1's persistent home (the container's /var/tmp is capped at ~40 GB, docs/024)
 stream_cache: true             # never a whole table in RAM
 arch: {d_model: 256, ff: 512, dropout: 0.1}   # graph_net.ARCH_DEFAULT otherwise: 4 heads, 2 local passes, 2 global layers
 emb_init_std: 0.02
