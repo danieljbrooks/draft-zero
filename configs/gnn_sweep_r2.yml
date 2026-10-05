@@ -1,0 +1,29 @@
+# docs/022, stage 2, round 2 (docs/023): batch 256 (4x faster than batch 64 on r1) with the settings round 1 left open.
+# Same base, data and validation rows as configs/gnn_sweep.yml; compare with its g-batch256 (set NLL 0.334).
+#
+#   bash deploy/gnn_sweep.sh 0 g256-emb0.02,... data/imitation_graph/slim     (SPEC=configs/gnn_sweep_r2.yml)
+title: "docs/022 stage 2, round 2: batch 256"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.1
+  val_rows: 20000
+  max_epochs: 1.0
+  time_budget_s: 14400
+  eval_every_steps: 1075       # quarter epochs at 256 states a step
+  ckpt_every_s: null
+  latest_every_s: 600
+  batch_rows: 256
+  lr: 2.0e-4
+  warmup_steps: 750
+runs:
+  - {name: g256-emb0.02, emb_init_std: 0.02}                 # experiment #4's transformer fix
+  - {name: g256-emb0.02-drop0.1, emb_init_std: 0.02, arch: {dropout: 0.1}}
+  - {name: g256-emb0.02-lr5e-4, emb_init_std: 0.02, lr: 5.0e-4}
+  - {name: g256-emb0.02-3ep, emb_init_std: 0.02, max_epochs: 3.0}
+  - {name: g256-base-again}                                  # g-batch256 with quarter-epoch curves (a seed check)

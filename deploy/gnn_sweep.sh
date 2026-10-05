@@ -12,6 +12,7 @@ OUT=${OUT:-runs/gnn/sweep}
 SPEC=${SPEC:-configs/gnn_sweep.yml}
 PY=$(command -v python || command -v python3)
 export PYTHONPATH=$PWD/src${PYTHONPATH:+:$PYTHONPATH}   # this checkout's code, even in a venv another checkout installed
+export PYTHONUNBUFFERED=1                                # the log shows each evaluation as it happens
 if [ ! -f "$T/turnstart_train.graph.h5" ]; then
   : "${HF_TOKEN:?no tables at $T: set HF_TOKEN to fetch the slim ones from the HF repo}"
   T=data/imitation_graph/slim

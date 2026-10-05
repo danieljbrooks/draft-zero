@@ -89,6 +89,8 @@ DEFAULTS: dict[str, Any] = {
     # optimisation
     "lr": 1e-4, "warmup_steps": 3000, "lr_schedule": "cosine", "lr_min_frac": 0.1,
     "emb_lr_mult": 1.0,            # the leaf and edge-label embeddings' learning rate = lr x this
+    "emb_init_std": None,          # re-draw the leaf, edge-label, type and value embeddings and CLS from N(0, std);
+                                   # null: upstream's N(0, 1) (experiment #4's transformer trained well only at 0.02)
     "weight_decay": 0.0, "grad_clip": 1.0,
     "ema_decay": None,
     "batch_rows": 64,              # states per batch (MageZero's graph trainer: 64)
@@ -758,6 +760,13 @@ class Trainer:
         torch.manual_seed(cfg["seed"])
         self.train_tables = with_act_weights(data.train, cfg["act_weights"], log=log)
         self.model = gn.NetGraph(len(data.vocab), len(data.edge_vocab), cfg["arch"]).to(self.dev)
+        if cfg["emb_init_std"] is not None:
+            with torch.no_grad():
+                for e in (self.model.embedding, self.model.edge_embedding, self.model.type_embedding,
+                          self.model.value_embedding):
+                    e.weight.normal_(0.0, float(cfg["emb_init_std"]))
+                self.model.edge_embedding.weight[0].zero_()          # the unknown label stays the padding row
+                self.model.cls.normal_(0.0, float(cfg["emb_init_std"]))
         emb = [p for n, p in self.model.named_parameters() if n in ("embedding.weight", "edge_embedding.weight")]
         rest = [p for n, p in self.model.named_parameters() if n not in ("embedding.weight", "edge_embedding.weight")]
         kw = {"fused": True} if self.dev.type == "cuda" else {}
