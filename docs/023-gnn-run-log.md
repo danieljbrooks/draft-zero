@@ -179,7 +179,7 @@ networks (scored on experiment #4's rows, which differ in 0.3% of games):
 |---|---|---|---|---|---|---|---|---|
 | **GNN, width 256** (`s30-d256`) | 0.250 | **0.821** | 0.842 | 0.722 | **0.718** | 0.769 | **0.556** | 21 min |
 | *MLP, wave D's combination (`d1`, `d2`)* | ***0.241** / 0.243* | *0.820 / 0.821* | ***0.855** / 0.851* | ***0.728** / 0.727* | *0.673 / 0.665* | ***0.775** / 0.776* | *0.571 / 0.573* | |
-| *transformer (`s30-l1-act3-td99`)* | *0.256* | | | | | | | |
+| *transformer (docs/022 §4.3's reference)* | *0.256* | | | | | | | |
 
 - **The gap to the MLP closes with data.** One epoch of the same recipe: 0.295 against 0.258 at 10% (0.037), 0.250
   against 0.241 at 30% (0.009). From 10% to 30% the GNN gains 0.045, the MLP 0.017, the transformer 0.029. Will's
