@@ -31,11 +31,13 @@ base:
   latest_every_s: 600
 runs:
   - {name: g-base}
+  # batch 256 first: a step at 64 states is launch-bound (~39 ms of CPU for ~16 of GPU, docs/023), and 256 states a
+  # step train 3.4x faster on r1 (1.3x on a 3090); if it costs nothing, the later stages use it
+  - {name: g-batch256, batch_rows: 256, lr: 2.0e-4, warmup_steps: 750}
   - {name: g-base-seed1, seed: 1}
   # optimisation
   - {name: g-lr3e-4, lr: 3.0e-4}
   - {name: g-lr3e-5, lr: 3.0e-5}
-  - {name: g-batch256, batch_rows: 256, lr: 2.0e-4, warmup_steps: 750}
   - {name: g-emb-lr10, emb_lr_mult: 10.0}
   # three passes over the same 10% (experiment #4's `ep3` test): on the planning pod's 4,000 games three epochs
   # helped the GNN's policy (set NLL 0.343 -> 0.320) without the value memorisation the MLP shows on repeats
