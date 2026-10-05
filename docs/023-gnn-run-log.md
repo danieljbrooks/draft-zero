@@ -3,14 +3,14 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Monday 5 October, 1:00 AM PT)
+## Status (Monday 5 October, 1:40 AM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 0. Engineering | done, on main (5d1766a, a72792d, c18a727, c646d46) | laptop | – |
 | 1. Build | **done** 9:14 PM PT (2.7 h, no errors); tables, slim tables uploaded 9:49 PM PT. 0.3-0.7% of games differ from experiment #4's: a pre-existing leak between games in the bridge's workers, not the graph code (below) | pod `gnn-stage1` | ~$1.50 |
-| 2. Sweep | rounds 2 and 3 **done** (r1); round 1 (batch 64, pod) and round 4 (the candidate recipe, r1) **running**. **Best so far: small embeddings + dropout 0.1, set NLL 0.305, value AUC 0.671** against the MLP's 0.258 / 0.751 at the same data. The game result beats TD as the GNN's value target (AUC +0.06); high learning rates flatten the attack and value outputs | pod, r1 | |
-| 3. Scale check, large training | | | |
+| 2. Sweep | rounds 2–4 **done** (r1); round 5 (r1) and round 1's last arm (pod) **running**. **Best at 10%: width 256, set NLL 0.286, top-1 0.778** (the transformer's 0.285 / 0.791; the MLP's 0.258 / 0.807); **lr 1e-4: value AUC 0.747** (the MLP's 0.751). Will's settings gave 0.324–0.336 and 0.56–0.67 | pod, r1 | |
+| 3. Scale check, large training | 30% check queued on the pod (widths 256 and 512, then 3 epochs at 256), from ~1:45 AM PT | pod | |
 | 4. Offline evaluation | held-out cards chosen (below); the tooling is on main | | |
 | 5. Games | | | |
 
@@ -108,6 +108,12 @@ Validation, 20,000 rows a table, one epoch on the same 10% of the training games
 | g256-v-td95 (TD 0.95, MageZero's) | 0.310 | 0.741 | 0.735 | 0.689 | 0.620 | 0.588 | 0.924 | 4.9 min |
 | g256-v-weight2 (value loss ×4) | 0.347 | 0.730 | 0.721 | 0.688 | 0.563 | 0.664 | 0.968 | 5.0 min |
 | g256-v-only (no policy losses) | 0.935 | 0.523 | 0.502 | 0.637 | 0.365 | 0.521 | 0.502 | 4.7 min |
+| *round 4, the candidate: small embeddings, dropout 0.1, result targets, batch 256 (r1)* | | | | | | | | |
+| c-base | 0.303 | 0.749 | 0.762 | 0.689 | 0.639 | 0.702 | 0.931 | 4.8 min |
+| c-seed1 | 0.306 | 0.742 | 0.778 | 0.698 | 0.625 | 0.729 | 0.923 | 5.0 min |
+| c-lr1e-4 | 0.292 | 0.753 | 0.769 | **0.709** | 0.639 | **0.747** | 0.926 | 5.0 min |
+| **c-d256 (width 256)** | **0.286** | **0.778** | 0.768 | 0.690 | 0.641 | 0.723 | 0.928 | **3.0 min** |
+| c-emb-lr10 | 0.303 | 0.750 | 0.758 | 0.697 | **0.649** | 0.723 | 0.923 | 4.6 min |
 | *the GNN at 2.4% (docs/022 §2.3)* | *0.343* | *0.721* | *0.711* | *0.722* | *0.540* | *0.536* | *0.982* | |
 | *experiment #4's MLP at 10% (best)* | *0.258* | *0.807* | *0.827* | *0.711* | *0.617* | *0.751* | | |
 | *experiment #4's transformer at 10% (act3-td99)* | *0.285* | *0.791* | | | | *0.749* | *0.937* | |
@@ -141,9 +147,9 @@ Validation, 20,000 rows a table, one epoch on the same 10% of the training games
     losses build. A separate value tower (experiment #4's `x-value-tower`) wouldn't help the GNN without them.
 - **Round 1 (pod):** the leaf tables' rate ×10 helps a little (0.317, inside twice the batch-64 band); the passivity
   fix at ×5 moves Pass on top toward the humans (0.948, humans 0.934) at a cost (0.352).
-- **The scaling check (§4.2).** The gap to the MLP in set NLL was 0.076 at 2.4% of the games; at 10% it is 0.047
-  with the best recipe (0.066–0.078 with Will's settings). Smaller, as the plan's rule asks to go on: stage 3's 30%
-  check decides whether it keeps closing.
+- **The scaling check (§4.2).** The gap to the MLP in set NLL was 0.076 at 2.4% of the games (Will's settings); at
+  10% it is 0.066–0.078 with Will's settings and 0.028 with round 4's best. Smaller, as the plan's rule asks to go
+  on: stage 3's 30% check decides whether it keeps closing.
 
 ### Round 2: batch 256 on r1
 
@@ -156,11 +162,21 @@ and round 1's shape arms (1 local pass, 1 and 4 global layers, width 256). The p
 Round 1's leftover arm (g-passes1) on r1 was stopped at 10:15 PM PT; GPU 0 runs only round 2. Round 2 ended at
 11:45 PM PT (g256-global4 lost to the full disk; rerun after round 3).
 
-### Round 4: the candidate recipe (r1, started 12:52 AM PT)
+### Round 4: the candidate recipe (r1, 12:52–1:26 AM PT)
 
 `configs/gnn_sweep_r4.yml`: small embeddings, dropout 0.1, the game result as the value target, and one change each:
-a second seed, learning rate 1e-4, width 256, the leaf tables' rate ×10. The winner goes to stage 3's 30% check on the
-pod (r1's 58 GB of RAM, shared with another session's games, can't hold 30% of the tables).
+a second seed, learning rate 1e-4, width 256, the leaf tables' rate ×10.
+
+- **The fixes stack:** the recipe reaches set NLL 0.303–0.306 and value AUC 0.70–0.73, against 0.315 / 0.615 for small
+  embeddings alone. Its two seeds differ by 0.003, so the rule's bar is ~0.006.
+- **Width 256 is the best network yet:** set NLL 0.286 (−0.019), top-1 0.778 (+0.03), at 60% of the training time.
+  At 10% of the games the GNN now matches experiment #4's transformer (0.285 / 0.791) and trails the MLP by 0.028.
+- **Learning rate 1e-4:** set NLL 0.292 (−0.013), value AUC 0.747, the MLP's level (0.751), and the best blocks.
+- **The leaf tables' rate ×10** adds nothing on top of small embeddings (0.303).
+- **Next:** round 5 (`configs/gnn_sweep_r5.yml`, r1) puts width 256 and lr 1e-4 together, with a second seed, width
+  128, lr 5e-5 and three epochs. Stage 3's 30% check (`configs/gnn_scale30.yml`, the pod) runs the same recipe at
+  widths 256 and 512: is Will's wider network the one that needs more data? Then three epochs at width 256. r1's 58
+  GB of RAM, shared with another session's games, can't hold 30% of the tables.
 
 ### Round 3: the value head (r1)
 
