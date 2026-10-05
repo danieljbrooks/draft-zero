@@ -1,6 +1,6 @@
 # docs/024: the full-scale run on r1 (Dama's RTX PRO 6000s, 40 GiB of RAM): configs/gnn_train.yml's recipe with the
-# training rows streamed into a memory-mapped cache on the container's scratch disk (stream_cache; ~40 GB, rebuilt if
-# the container restarts). The architecture and epochs are set from rounds 7-8 (docs/024).
+# training rows streamed into a memory-mapped cache in r1's persistent home (stream_cache; 37 GB; not /var/tmp, whose
+# ~40 GB storage cap evicted the container twice, docs/024). The architecture and epochs are set from rounds 7-8 (docs/024).
 #
 # docs/022, stage 3: the GNN's large training, with the 10% sweep's recipe (docs/023): MageZero's graph network at
 # width 256, embeddings drawn at std 0.02, dropout 0.1, the game result as the value target, lr 1e-4, 256 states a
@@ -26,7 +26,7 @@ tables:
   - {name: opp_block, kind: target}
 fraction: 1.0
 val_rows: 20000
-data_cache: /var/tmp/dz-gnn-cache   # r1's overlay (153 GB free; ~ has 7.6 GB): lost on a container restart
+XX
 stream_cache: true             # never a whole table in RAM
 arch: {d_model: 256, ff: 512, dropout: 0.1}   # graph_net.ARCH_DEFAULT otherwise: 4 heads, 2 local passes, 2 global layers
 emb_init_std: 0.02
