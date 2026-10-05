@@ -1,0 +1,45 @@
+# docs/024, round 7: Will's question, the number of local layers, at width 256 (Dan: keep 256 for speed). The base is
+# round 5's three-epoch recipe at 10% (r5-3ep: set NLL 0.256): width 256, embeddings at std 0.02, dropout 0.1, the
+# game result as the value target, lr 1e-4, batch 256, three epochs. One change each:
+#   - local_depth 2 and 3: LocalLayers per node type within each bottom-up pass (Will's network: 1);
+#   - passes 3 and 4 (round 2 tested 1 against 2), and 3 passes at depth 2;
+#   - cheaper knobs at the same width: FFN 1024, 8 heads, 3 global layers, an EMA of the weights;
+#   - a second seed of the base.
+# Three epochs, not one: the final recipe trains several, and one-epoch runs favour the fastest learner (docs/023).
+#
+#   SPEC=configs/gnn_sweep_r7.yml OUT=runs/gnn/sweep_r1g bash deploy/gnn_sweep.sh 0 r7-base-seed1,... data/imitation_graph/slim
+title: "docs/024 round 7: local layers (Will), at width 256"
+base:
+  tables:
+    - {name: turnstart, kind: priority_set}
+    - {name: replay_priority, kind: priority_set}
+    - {name: opp_priority, kind: priority_set}
+    - {name: replay_attack, kind: binary}
+    - {name: replay_target, kind: target}
+    - {name: opp_block, kind: target}
+  fraction: 0.1
+  val_rows: 20000
+  max_epochs: 3.0
+  time_budget_s: 5400
+  eval_every_steps: 1075
+  ckpt_every_s: null
+  latest_every_s: 600
+  batch_rows: 256
+  lr: 1.0e-4
+  warmup_steps: 750
+  emb_init_std: 0.02
+  value_target: result
+  arch: {dropout: 0.1, d_model: 256, ff: 512}
+runs:
+  # GPU 0
+  - {name: r7-base-seed1, seed: 1}                                   # the base's noise (r5-3ep, seed 0: 0.256)
+  - {name: r7-depth2, arch: {dropout: 0.1, d_model: 256, ff: 512, local_depth: 2}}
+  - {name: r7-depth3, arch: {dropout: 0.1, d_model: 256, ff: 512, local_depth: 3}}
+  - {name: r7-passes3, arch: {dropout: 0.1, d_model: 256, ff: 512, passes: 3}}
+  - {name: r7-ema, ema_decay: 0.9995}
+  # GPU 1
+  - {name: r7-passes3-depth2, arch: {dropout: 0.1, d_model: 256, ff: 512, passes: 3, local_depth: 2}}
+  - {name: r7-passes4, arch: {dropout: 0.1, d_model: 256, ff: 512, passes: 4}}
+  - {name: r7-ff1024, arch: {dropout: 0.1, d_model: 256, ff: 1024}}
+  - {name: r7-heads8, arch: {dropout: 0.1, d_model: 256, ff: 512, heads: 8}}
+  - {name: r7-global3, arch: {dropout: 0.1, d_model: 256, ff: 512, global_layers: 3}}
