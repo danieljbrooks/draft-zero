@@ -5,15 +5,15 @@ every offline measure (test set NLL 0.214 against 0.229 and 0.234). Started Mond
 Dan's request after Will's review ("this looks great! also try to ablate GNN local layers ... the num local layers is
 what im most interested in though at high data scale"). All times are Pacific.*
 
-## Status (Monday 5 October, 10:50 AM PT)
+## Status (Monday 5 October, 3:20 PM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 1. Code: `local_depth`, the streamed cache, the wsd schedule | done, on main | laptop | – |
-| 2. Round 7: local layers at 10%, three epochs | **done** (4 of 10 arms lost to r1's restart): local depth 3, 3 passes x depth 2 and FFN 1,024 gain ~0.007 in set NLL; depth 2 and 4 passes don't | r1, both GPUs | free |
-| 3. Round 8: long runs at 30% (the final model's shape) | resuming after r1's second restart (12:00 PM PT); the base was at set NLL 0.232 after 3.5 of 8 epochs | r1 | free |
-| 4. The full run | **blocked on disk:** its 37 GB cache overflows the container's storage cap, and r1's home has 5.8 GB free | r1 | free |
-| 5. Games | pipeline tested; a preview ladder of docs/023's network (0, 100, 300 simulations) running | Community A4000 | ~$0.30 so far |
+| 2. Round 7: local layers at 10%, three epochs | **done**: local depth 3, 3 passes x depth 2 and FFN 1,024 gain ~0.008 in set NLL | r1 | free |
+| 3. Round 8: long runs (8 epochs of 30%) | base **0.2221**, 3 passes x depth 2 **0.2210** (2x the compute); FFN 1,024 and dropout 0.2 running, done ~4:35 PM PT | r1 | free |
+| 4. The full run | its cache (37 GB) built in r1's home; started 1:54 PM PT, starved of page cache beside round 8 (0.25 epochs in 68 min), stopped at 3:02 PM; restarts alone ~4:40 PM PT | r1 | free |
+| 5. Games | a preview ladder of docs/023's network: **policy alone 42.7%, 100 simulations 64.1%** (103 games each; the MLP's PIMC: 40%, 57%); 300 simulations running | Community A4000 | ~$1.20 so far |
 | 6. 17lands analysis (docs/019 §4.4) | | laptop | – |
 
 **Dan's added goals (9:10 AM PT):** save and plot every run's curves, to audit whether the network is still learning
@@ -117,3 +117,51 @@ Secure 3090's $0.016. The games are CPU-bound, so cores per dollar is the measur
 - **A preview ladder** of docs/023's network (0, 100 and 300 simulations, 100 games each) is running on the A4000
   while the final model trains: early playing-strength numbers against the MLP's PIMC ladder (docs/019 §4.6: 40%,
   57%, 60% with guessed decks), and measured games an hour.
+
+## 3. Round 8: long runs at 30% of the games
+
+`configs/gnn_sweep_r8.yml`: 8 epochs of 30% of the games (3.3M decisions), lr 1e-4 held to epoch 6.4 and cosine down
+over the last 20% (wsd); r1's two GPUs, reading one memory-mapped 30% cache. The runs restarted twice with r1's
+container (§2) and resumed from their checkpoints.
+
+| Run | Parameters | Set NLL (best) | Top-1 acted | Attacks | Blocks | Targets | Value AUC | Value log-loss | Train time |
+|---|---|---|---|---|---|---|---|---|---|
+| base (2 passes, depth 1) | 9.2M | 0.2221 (0.2217) | **0.847** | 0.874 | 0.773 | **0.786** | 0.789 | 0.558 | 1.4 h |
+| 3 passes, local depth 2 | 24.0M | **0.2210 (0.2207)** | 0.846 | **0.876** | **0.783** | 0.784 | **0.794** | 0.557 | 2.8 h |
+| FFN 1,024 | 13.4M | *running* | | | | | | | |
+| dropout 0.2 | 9.2M | *running* | | | | | | | |
+| *docs/023's 3 epochs, cosine (s30-d256-3ep)* | *9.2M* | *0.2317* | *0.838* | *0.860* | *0.752* | *0.744* | *0.799* | *0.525* | *1.1 h* |
+
+- **Will's local layers at high data scale: the gain shrinks with data and training.** At 10% of the games and three
+  epochs, 3 passes x depth 2 led the base by 0.008 in set NLL; on 30% for eight epochs, by 0.001 (0.2207 against
+  0.2217), for 2.6x the parameters and twice the training and inference cost. It keeps a small edge on blocks (+1
+  point) and the value AUC (+0.005). At this scale the extra capacity isn't what limits the network.
+- **Eight epochs beat three:** set NLL 0.2217 against docs/023's 0.2317 on the same 30%, top-1 +0.9 points, targets
+  +4. The policy still improved through the last epoch.
+- **The value head memorises late.** Its log-loss bottomed at ~0.542 around epoch 6 and rose to 0.558 by the end of
+  both runs (docs/023's three-epoch run: 0.525), while its AUC held at ~0.79: the value head starts to learn the
+  training games' results. The trainer keeps `best_value` apart from `best_policy`; dropout 0.2 tests whether more
+  regularisation holds it off.
+
+### The full run's first try: starved of page cache
+
+The full run (all 10.9M decisions; `configs/gnn_full_r1.yml`) started at 1:54 PM PT on GPU 0 beside round 8 on GPU 1.
+Its memory-mapped data (37 GB) and round 8's (12 GB) don't fit together in r1's 40 GiB, so the full run's random
+reads mostly went to disk: GPU 0 at 0%, 13M major page faults, 0.25 epochs in 68 minutes (~670 states a second, a
+tenth of its speed). Stopped at 3:02 PM PT; it restarts alone once round 8 ends, with the whole page cache (~34 GB
+for its 37 GB).
+
+## 5b. The preview ladder: docs/023's network in games
+
+docs/023's full GNN (`gnn/main`, three epochs at width 256) against MageZero's heuristic bot at 100 simulations, PIMC
+on one world for both bots with guessed decks, the same deck pairs and seed as the MLP's PIMC ladder (docs/019 §4.6);
+Community A4000, 12 workers, 3 GB heaps.
+
+| GNN's simulations | GNN | MLP (docs/019 §4.6, guessed decks) |
+|---|---|---|
+| 0: the policy alone | **42.7%** of 103 | 40% of 100 |
+| 100 | **64.1%** of 103 | 57% of 100 |
+| 300 | *running* | 60% of 103 |
+
+At ~100 games a point the differences are within the noise (a 95% interval of about ±10 points on each), but both
+point the GNN's way.
