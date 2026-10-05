@@ -186,6 +186,24 @@ def test_segment_logsumexp_and_option_logits_pool_copies():
     assert torch.allclose(use, torch.tensor([0.1, 0.7]))
 
 
+def test_local_depth_keeps_upstream_layout_at_depth_one(toy):
+    one = gn.NetGraph(50, 4, TINY)
+    assert not hasattr(one, "local_extra") and gn.upstream_loadable({}) and not gn.upstream_loadable({"local_depth": 2})
+    two = gn.NetGraph(50, 4, {**TINY, "local_depth": 3})
+    k1, k2 = set(one.state_dict()), set(two.state_dict())
+    assert k1 <= k2 and all(k.startswith("local_extra.") for k in k2 - k1)
+    # every pass and type gets local_depth - 1 extra layers
+    assert len(two.local_extra) == 2 and all(len(m) == 2 for m in two.local_extra[0].values())
+    data = gs.load_data(toy_cfg(toy), log=lambda *a, **k: None)
+    b = gs.make_batch(data.val, [(0, np.arange(4))])
+    with torch.no_grad():
+        two.eval()
+        o = two(b["graphs"])
+    assert torch.isfinite(o.value).all() and torch.isfinite(o.priority[o.priority > -1e30]).all()
+    with pytest.raises(ValueError):
+        gn.NetGraph(50, 4, {**TINY, "local_depth": 0})
+
+
 # ------------------------------------------------------------------------------------------------
 # tables and the trainer
 # ------------------------------------------------------------------------------------------------
@@ -245,6 +263,28 @@ def test_graph_trainer_learns_on_toy_tables_and_checkpoints_round_trip(toy, tmp_
     # resuming a finished run picks up its step count
     tr2 = gs.Trainer(cfg, data, tmp_path / "run", log=lambda *a, **k: None, resume=True)
     assert tr2.step == s["step"]
+
+
+def test_stream_cache_matches_the_in_memory_path(toy, tmp_path):
+    quiet = lambda *a, **k: None   # noqa: E731
+    a = gs.load_data(toy_cfg(toy), log=quiet)
+    scfg = toy_cfg(toy, data_cache=str(tmp_path / "cache"), stream_cache=True, cache_chunk_rows=7)
+    b = gs.load_data(scfg, log=quiet)
+    assert list(a.vocab.ids) == list(b.vocab.ids) and list(a.edge_vocab.ids) == list(b.edge_vocab.ids)
+    assert list((tmp_path / "cache").glob("vocab_*.npz"))
+    for x, y in zip(a.train + a.val, b.train + b.val):
+        assert isinstance(y.node_id, np.memmap)
+        for k in gs._ARRAYS:
+            u, v = np.asarray(getattr(x, k)), np.asarray(getattr(y, k))
+            assert u.dtype == v.dtype and np.array_equal(u, v), (x.name, x.split, k)
+        for k in ("legal_idx", "legal_indptr", "set_idx", "set_indptr", "w", "z", "game", "turn"):
+            assert np.array_equal(getattr(x, k), getattr(y, k)), (x.name, k)
+    assert a.train[0].node_id.dtype == np.int16 and a.train[0].edge_label.dtype == np.int8
+    # a second load reads the cached vocab and arrays, and a trainer runs on them
+    c = gs.load_data(scfg, log=quiet)
+    assert np.array_equal(np.asarray(c.train[1].edge_child), np.asarray(b.train[1].edge_child))
+    s = gs.Trainer({**scfg, "max_steps": 6, "max_epochs": None}, c, tmp_path / "run", log=quiet).run()
+    assert s["step"] == 6
 
 
 def test_graph_trainer_rejects_misaligned_tables(toy, tmp_path):

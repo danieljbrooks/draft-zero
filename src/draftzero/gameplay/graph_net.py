@@ -4,13 +4,16 @@ imitation training and search (docs/022).
 The network is MageZero's `NetGraph` (src/magezero/model.py at de225045, 2026-10-04), copied here
 rather than imported: that branch's modules import each other as top-level names (`from vocab import
 ...`), and DraftZero pins MageZero v0.2 for the flat networks. The code below is the upstream model with
-three changes, none of which changes what a default network computes:
+four changes, none of which changes what a default network computes:
 
   * its sizes are constructor arguments (`arch`), so a sweep can vary them; the defaults are
     upstream's constants, and a default network's state dict is upstream's, so it loads in
     MageZero's own graph server (`load_checkpoint` there);
   * `leaf_dropout`: drop a share of leaf edges while training, the graph analogue of the flat
     networks' token dropout (0 = upstream);
+  * `local_depth`: LocalLayers per type within each pass (1 = upstream). Each extra layer re-attends
+    from the node's updated embedding to the same children; extra layers live in `local_extra`, so a
+    depth-1 network's state dict is upstream's;
   * `forward` also returns the value head's input to its Tanh (`value_x`), which the imitation
     trainer's cross-entropy needs, as supervised.value_logit does for the flat networks.
 
@@ -18,7 +21,7 @@ Input: the graph encoder's state graph (graph_tables), nodes typed ROOT, PLAYER,
 PERMANENT, CARD, ABILITY or LEAF, edges child -> parent with a label:
 
   embeddings: typed node = type embedding; leaf = leaf vocab row + numeric value bucket
-  local layers: `passes` bottom-up passes, each one LocalLayer per type, run in order
+  local layers: `passes` bottom-up passes, each `local_depth` LocalLayers per type, run in order
       ABILITY -> CARD -> PERMANENT -> STACK_OBJECT -> ZONE -> PLAYER -> ROOT
       every node attends over [itself, children + edge label embedding]
   global layers: TransformerEncoder over [CLS, the state's internal nodes]
@@ -43,7 +46,7 @@ GLOBAL_MAX = 2 ** 31 - 1
 
 # upstream's constants (model.py): the default architecture
 ARCH_DEFAULT = {"type": "graph", "d_model": 512, "heads": 4, "ff": 1024, "dropout": 0.25, "passes": 2,
-                "global_layers": 2, "head_hidden": 256, "leaf_dropout": 0.0}
+                "global_layers": 2, "head_hidden": 256, "leaf_dropout": 0.0, "local_depth": 1}
 
 # numeric value buckets: exact -5..20 (P/T, counters, mana, costs, small counts), then 21-25, 26-30,
 # 31-40, 41-60, 61+ (life totals, library and zone sizes); everything below -5 is one bucket
@@ -128,7 +131,8 @@ def full_arch(arch: dict | None) -> dict:
 def upstream_loadable(arch: dict) -> bool:
     """A network MageZero's own graph server loads as it is (upstream's constants)."""
     a = full_arch(arch)
-    return all(a[k] == ARCH_DEFAULT[k] for k in ("d_model", "heads", "ff", "passes", "global_layers", "head_hidden"))
+    return all(a[k] == ARCH_DEFAULT[k] for k in ("d_model", "heads", "ff", "passes", "global_layers", "head_hidden",
+                                                 "local_depth"))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -216,6 +220,13 @@ class NetGraph(nn.Module):
         self.local_layers = nn.ModuleList(
             nn.ModuleDict({t.name: LocalLayer(d, a["heads"], a["ff"], a["dropout"]) for t in STAGES})
             for _ in range(a["passes"]))
+        if a["local_depth"] < 1:
+            raise ValueError(f"local_depth {a['local_depth']}: at least 1")
+        if a["local_depth"] > 1:  # the layers after each type's first, per pass (absent at depth 1: upstream's layout)
+            self.local_extra = nn.ModuleList(
+                nn.ModuleDict({t.name: nn.ModuleList(LocalLayer(d, a["heads"], a["ff"], a["dropout"])
+                                                     for _ in range(a["local_depth"] - 1)) for t in STAGES})
+                for _ in range(a["passes"]))
         self.cls = nn.Parameter(torch.randn(d))
         global_layer = nn.TransformerEncoderLayer(d, a["heads"], a["ff"], a["dropout"], activation="gelu",
                                                   batch_first=True, norm_first=True)
@@ -255,9 +266,14 @@ class NetGraph(nn.Module):
 
         # local layers, bottom-up passes: children earlier in the order arrive updated in this pass,
         # children of the same type or later in the order (attachments, targets, linked exile) from the last one
-        for layers in self.local_layers:
+        extra = getattr(self, "local_extra", None)
+        for p, layers in enumerate(self.local_layers):
             for name, nodes, c, lbl, seg in stages:
-                h = h.index_copy(0, nodes, layers[name](h[nodes], h[c] + self.edge_embedding(lbl), seg).to(h.dtype))
+                kids = h[c] + self.edge_embedding(lbl)
+                x = layers[name](h[nodes], kids, seg).to(h.dtype)
+                for layer in (extra[p][name] if extra is not None else ()):
+                    x = layer(x, kids, seg).to(h.dtype)
+                h = h.index_copy(0, nodes, x)
 
         # global layers: self-attention over [CLS, internal nodes], one padded sequence per state
         internal = (g.node_type != NodeType.LEAF).nonzero().squeeze(1)

@@ -75,6 +75,9 @@ DEFAULTS: dict[str, Any] = {
     "vocab_k": 10,                 # leaves seen in <= k training states get no row (MageZero's graph rule)
     "edge_vocab_k": 10,            # the same for edge labels
     "data_cache": None,            # a directory: the mapped graph arrays as .npy, memory-mapped on load
+    "stream_cache": False,         # build data_cache a chunk of rows at a time (vocab pass, then mapping), never
+                                   # holding a whole table: all the rows in ~40 GB of RAM (docs/024)
+    "cache_chunk_rows": 300_000,   # rows a chunk when streaming
     # model
     "arch": dict(gn.ARCH_DEFAULT),
     # losses (supervised.py's, experiment #4's final recipes)
@@ -104,7 +107,7 @@ DEFAULTS: dict[str, Any] = {
     "ckpt_every_s": 1800, "latest_every_s": 600,
 }
 DATA_KEYS = ("tables_dir", "tables", "fraction", "subset_seed", "val_rows", "val_seed", "vocab_k", "edge_vocab_k",
-             "exclude_games")
+             "exclude_games", "data_cache", "stream_cache", "cache_chunk_rows")
 KIND_CODE = {"priority_set": 0, "priority_onehot": 0, "target": 1, "binary": 2}
 
 
@@ -323,17 +326,29 @@ def build_vocabs(tables: list[GraphTable], k: int, k_edge: int):
         lab_ids.append(u)
         lab_cnt.append(c)
 
-    def kept(ids, cnt, kk):
-        if not ids:
-            return np.zeros(0, np.int64)
-        u, c = np.concatenate(ids), np.concatenate(cnt)
-        order = np.argsort(u, kind="stable")
-        u, c = u[order], c[order]
-        starts = np.flatnonzero(np.r_[True, u[1:] != u[:-1]]) if len(u) else np.zeros(0, np.int64)
-        tot = np.add.reduceat(c, starts) if len(u) else c
-        return u[starts][tot > kk] if len(u) else u
     mk = lambda ids: FeatureVocab(ids, feature_hash_bins=gn.GLOBAL_MAX, hash_version=2)   # noqa: E731
-    return mk(kept(leaf_ids, leaf_cnt, k)), mk(kept(lab_ids, lab_cnt, k_edge))
+    return mk(_kept(leaf_ids, leaf_cnt, k)), mk(_kept(lab_ids, lab_cnt, k_edge))
+
+
+def _kept(ids: list, cnt: list, k: int) -> np.ndarray:
+    """The ids whose summed state counts exceed k, ascending (the vocab rule)."""
+    if not ids:
+        return np.zeros(0, np.int64)
+    u, c = np.concatenate(ids), np.concatenate(cnt)
+    order = np.argsort(u, kind="stable")
+    u, c = u[order], c[order]
+    starts = np.flatnonzero(np.r_[True, u[1:] != u[:-1]]) if len(u) else np.zeros(0, np.int64)
+    tot = np.add.reduceat(c, starts) if len(u) else c
+    return u[starts][tot > k] if len(u) else u
+
+
+def _compact(vocab, edge_vocab) -> tuple:
+    """The dtypes of a mapped table's node rows and edge labels: the smallest that hold the vocabs
+    (int16 and int8 for MageZero's 2-3k leaves and ~20 labels: 2.5 of the 7 bytes a node and 3 of the 8
+    an edge, ~20 GB on all the training rows)."""
+    nd = np.int16 if len(vocab) < np.iinfo(np.int16).max else np.int32
+    ed = np.int8 if len(edge_vocab) + 1 < np.iinfo(np.int8).max else np.int32
+    return nd, ed
 
 
 def map_table(t: GraphTable, vocab, edge_vocab) -> None:
@@ -341,8 +356,9 @@ def map_table(t: GraphTable, vocab, edge_vocab) -> None:
     leaves outside the vocab), edge_label the label row + 1 (0 outside the vocab)."""
     if t.mapped:
         return
-    t.node_id = np.where(t.node_type == gn.NodeType.LEAF, vocab.lookup(t.node_id), -1).astype(np.int32)
-    t.edge_label = (edge_vocab.lookup(t.edge_label) + 1).astype(np.int32)
+    nd, ed = _compact(vocab, edge_vocab)
+    t.node_id = np.where(t.node_type == gn.NodeType.LEAF, vocab.lookup(t.node_id), -1).astype(nd)
+    t.edge_label = (edge_vocab.lookup(t.edge_label) + 1).astype(ed)
     t.mapped = True
 
 
@@ -355,7 +371,7 @@ def _cache_dir(cfg: dict, spec: dict, split: str, sel: np.ndarray, vocab, edge_v
         return None
     p = gt.graph_path(sv.table_path(cfg, spec, split))
     st = p.stat()
-    h = hashlib.sha1(f"{p.resolve()}|{st.st_size}|{st.st_mtime_ns}|g1".encode())
+    h = hashlib.sha1(f"{p.resolve()}|{st.st_size}|{st.st_mtime_ns}|g2".encode())
     for a in (np.asarray(sel, np.int64), np.asarray(vocab.ids, np.int64), np.asarray(edge_vocab.ids, np.int64)):
         h.update(a.tobytes())
     return Path(cfg["data_cache"]) / f"graph_{spec['name']}_{split}_{h.hexdigest()[:16]}"
@@ -377,6 +393,146 @@ def _load_cache(d: Path, t: GraphTable) -> None:
     for k in _ARRAYS:
         setattr(t, k, np.load(d / f"{k}.npy", mmap_mode="r"))
     t.mapped = True
+
+
+def _chunks(sel: np.ndarray, rows: int):
+    for a in range(0, len(sel), rows):
+        yield sel[a:a + rows]
+
+
+def stream_vocabs(cfg: dict, sels: dict, log=print):
+    """build_vocabs over the training rows `sels` ({table: rows}), read a chunk at a time; the same
+    vocabs (ids are counted once a state either way). Cached in data_cache as vocab_<key>.npz."""
+    from magezero.vocab import FeatureVocab
+    h = hashlib.sha1(f"{cfg['vocab_k']}|{cfg['edge_vocab_k']}|v1".encode())
+    for s in cfg["tables"]:
+        p = gt.graph_path(sv.table_path(cfg, s, "train"))
+        st = p.stat()
+        h.update(f"{p.resolve()}|{st.st_size}|{st.st_mtime_ns}".encode())
+        h.update(np.asarray(sels[s["name"]], np.int64).tobytes())
+    path = Path(cfg["data_cache"]) / f"vocab_{h.hexdigest()[:16]}.npz"
+    mk = lambda ids: FeatureVocab(ids, feature_hash_bins=gn.GLOBAL_MAX, hash_version=2)   # noqa: E731
+    if path.exists():
+        z = np.load(path)
+        return mk(z["leaf"]), mk(z["edge"])
+    t0 = time.monotonic()
+    leaf_ids, leaf_cnt, lab_ids, lab_cnt = [], [], [], []
+    for s in cfg["tables"]:
+        gpath = gt.graph_path(sv.table_path(cfg, s, "train"))
+        for ch in _chunks(np.asarray(sels[s["name"]], np.int64), cfg["cache_chunk_rows"]):
+            g = _read_graph(gpath, ch)
+            u, c = _id_state_counts(g["ids"], g["node_ptr"], keep=gn.node_types(g["ids"]) == gn.NodeType.LEAF)
+            leaf_ids.append(u)
+            leaf_cnt.append(c)
+            u, c = _id_state_counts(g["label"], g["edge_ptr"])
+            lab_ids.append(u)
+            lab_cnt.append(c)
+        log(f"graph_supervised: vocab pass: {s['name']} ({time.monotonic() - t0:.0f} s)")
+    leaf, edge = _kept(leaf_ids, leaf_cnt, cfg["vocab_k"]), _kept(lab_ids, lab_cnt, cfg["edge_vocab_k"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp.npz")
+    np.savez(tmp, leaf=leaf, edge=edge)
+    tmp.replace(path)
+    return mk(leaf), mk(edge)
+
+
+def _stream_cache(gpath: Path, sel: np.ndarray, vocab, edge_vocab, d: Path, chunk_rows: int, log=print) -> None:
+    """A table's mapped graph arrays (rows `sel`) written into cache dir `d` a chunk at a time, as
+    preallocated .npy files: the same arrays map_table + _save_cache write, never all in memory."""
+    import h5py
+    with h5py.File(gpath, "r") as f:
+        npt, ept, rop, opp = (f[k][:] for k in ("node_ptr", "edge_ptr", "row_opt_ptr", "opt_ptr"))
+    sel = np.asarray(sel, np.int64)
+    n = len(sel)
+    N, E = int((npt[sel + 1] - npt[sel]).sum()), int((ept[sel + 1] - ept[sel]).sum())
+    O, ON = int((rop[sel + 1] - rop[sel]).sum()), int((opp[rop[sel + 1]] - opp[rop[sel]]).sum())
+    nd, ed = _compact(vocab, edge_vocab)
+    shapes = {"node_type": (np.int8, N), "node_id": (nd, N), "node_value": (np.int16, N), "node_ptr": (np.int64, n + 1),
+              "edge_child": (np.uint16, E), "edge_parent": (np.uint16, E), "edge_label": (ed, E),
+              "edge_ptr": (np.int64, n + 1), "opt_node": (np.int32, ON), "opt_ptr": (np.int64, O + 1),
+              "row_opt_ptr": (np.int64, n + 1), "opt_in_set": (bool, O), "opt_is_pass": (bool, O),
+              "graph_type": (np.int8, n)}
+    assert set(shapes) == set(_ARRAYS)
+    tmp = d.with_name(d.name + ".tmp")
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    tmp.mkdir(parents=True)
+    mm = {k: np.lib.format.open_memmap(tmp / f"{k}.npy", mode="w+", dtype=dt, shape=(size,))
+          for k, (dt, size) in shapes.items()}
+    for k in ("node_ptr", "edge_ptr", "opt_ptr", "row_opt_ptr"):
+        mm[k][0] = 0
+    r = nn = e = o = on = 0
+    t0 = time.monotonic()
+    for ch in _chunks(sel, chunk_rows):
+        g = _read_graph(gpath, ch)
+        k, cn, ce, co, con = len(ch), len(g["ids"]), len(g["child"]), len(g["in_set"]), len(g["opt_node"])
+        types = gn.node_types(g["ids"])
+        mm["node_type"][nn:nn + cn] = types
+        mm["node_id"][nn:nn + cn] = np.where(types == gn.NodeType.LEAF, vocab.lookup(g["ids"]), -1).astype(nd)
+        mm["node_value"][nn:nn + cn] = g["values"]
+        mm["node_ptr"][r + 1:r + k + 1] = g["node_ptr"][1:] + nn
+        mm["edge_child"][e:e + ce] = g["child"]
+        mm["edge_parent"][e:e + ce] = g["parent"]
+        mm["edge_label"][e:e + ce] = (edge_vocab.lookup(g["label"]) + 1).astype(ed)
+        mm["edge_ptr"][r + 1:r + k + 1] = g["edge_ptr"][1:] + e
+        mm["opt_node"][on:on + con] = g["opt_node"]
+        mm["opt_ptr"][o + 1:o + co + 1] = g["opt_ptr"][1:] + on
+        mm["row_opt_ptr"][r + 1:r + k + 1] = g["row_opt_ptr"][1:] + o
+        mm["opt_in_set"][o:o + co] = g["in_set"]
+        mm["opt_is_pass"][o:o + co] = g["is_pass"]
+        mm["graph_type"][r:r + k] = g["graph_type"]
+        r, nn, e, o, on = r + k, nn + cn, e + ce, o + co, on + con
+    if (r, nn, e, o, on) != (n, N, E, O, ON):
+        raise RuntimeError(f"{gpath}: streamed {(r, nn, e, o, on)} against {(n, N, E, O, ON)}")
+    for a in mm.values():
+        a.flush()
+    del mm
+    if d.exists():
+        shutil.rmtree(d)
+    tmp.rename(d)
+    log(f"graph_supervised: cached {gpath.name}: {n} rows, {N} nodes, {E} edges ({time.monotonic() - t0:.0f} s)")
+
+
+def load_table_cached(cfg: dict, spec: dict, split: str, sel: np.ndarray, vocab, edge_vocab, log=print) -> GraphTable:
+    """load_table + map_table for stream_cache: the labels from the flat table, the graph arrays
+    memory-mapped from data_cache (streamed into it first if they aren't there)."""
+    import h5py
+    flat = sv.table_path(cfg, spec, split)
+    gpath = gt.graph_path(flat)
+    if not gpath.exists():
+        raise FileNotFoundError(f"{gpath}: no graph file beside {flat.name} (build.py build/tables --graph)")
+    sel = np.asarray(sel, np.int64)
+    with h5py.File(flat, "r") as f:
+        lab = sv._read_labels(f, spec, sel)
+    with h5py.File(gpath, "r") as f:
+        missing, meta_row = f["missing"][:][sel], f["meta/row"][:][sel]
+    if not np.array_equal(meta_row, lab["game"]):
+        raise ValueError(f"{gpath}: rows don't line up with {flat.name} (meta/row differs)")
+    cd = _cache_dir(cfg, spec, split, sel, vocab, edge_vocab)
+    if not (cd / "graph_type.npy").exists():
+        _stream_cache(gpath, sel, vocab, edge_vocab, cd, cfg["cache_chunk_rows"], log)
+    a = {k: np.load(cd / f"{k}.npy", mmap_mode="r") for k in _ARRAYS}
+    legal_indptr, legal_idx, set_indptr, set_idx = _labels_view(np.asarray(a["row_opt_ptr"]), np.asarray(a["opt_in_set"]),
+                                                                np.asarray(a["opt_is_pass"]))
+    w = lab["w"].copy()
+    if (missing > 0).any():
+        w[missing > 0] = 0.0
+    t = GraphTable(name=spec["name"], kind=spec["kind"], split=split, spec=spec, file_rows=sel,
+                   game=lab["game"], turn=lab["turn"], z=lab["z"], w=w,
+                   node_type=a["node_type"], node_id=a["node_id"], node_value=a["node_value"], node_ptr=a["node_ptr"],
+                   edge_child=a["edge_child"], edge_parent=a["edge_parent"], edge_label=a["edge_label"],
+                   edge_ptr=a["edge_ptr"], opt_node=a["opt_node"], opt_ptr=a["opt_ptr"], row_opt_ptr=a["row_opt_ptr"],
+                   opt_in_set=a["opt_in_set"], opt_is_pass=a["opt_is_pass"], graph_type=a["graph_type"],
+                   legal_indptr=legal_indptr, legal_idx=legal_idx, set_indptr=set_indptr, set_idx=set_idx,
+                   y=lab.get("y"), lk=lab.get("lk"), lk_names=lab.get("lk_names") or [], zv=lab.get("zv"),
+                   notes=lab["notes"], mapped=True)
+    if (missing > 0).any():
+        t.notes.append(f"{int((missing > 0).sum())} rows have an option with no graph node: weight 0")
+    if spec["kind"] == "binary" and len(t.y):
+        yes = np.asarray(t.opt_in_set)[t.row_opt_ptr[:-1] + 1]
+        if not np.array_equal(yes.astype(np.int64), t.y):
+            raise ValueError(f"{gpath}: the yes/no labels don't match {flat.name}'s y")
+    return t
 
 
 @dataclass
@@ -407,11 +563,23 @@ def load_data(cfg: dict, *, vocabs=None, splits: tuple = ("train", "val"), log=p
         keep_g = sv.drop_excluded(keep_g, cfg["exclude_games"], log)
         sel = {s["name"]: np.flatnonzero(np.isin(games[s["name"]], keep_g)) for s in specs}
         info.update(train_games=int(len(keep_g)), train_games_all=int(len(allg)))
-        train = [load_table(cfg, s, "train", sel[s["name"]], log=log) for s in specs]
+        if cfg["stream_cache"]:
+            if not cfg["data_cache"]:
+                raise ValueError("stream_cache needs data_cache (a directory for the memory-mapped arrays)")
+            if vocabs is None:
+                vocabs = stream_vocabs(cfg, sel, log)
+                log(f"graph_supervised: vocabs {len(vocabs[0])} leaves (k={cfg['vocab_k']}), {len(vocabs[1])} edge "
+                    f"labels ({time.monotonic() - t0:.0f} s)")
+            train = [load_table_cached(cfg, s, "train", sel[s["name"]], *vocabs, log=log) for s in specs]
+        else:
+            train = [load_table(cfg, s, "train", sel[s["name"]], log=log) for s in specs]
     for split in [x for x in splits if x != "train"]:
         games = {s["name"]: sv._games_of(sv.table_path(cfg, s, split)) for s in specs}
         vs = sv._val_selection(games, cfg["val_rows"], cfg["val_seed"])
-        val += [load_table(cfg, s, split, vs[s["name"]], log=log) for s in specs]
+        if cfg["stream_cache"] and vocabs is not None:
+            val += [load_table_cached(cfg, s, split, vs[s["name"]], *vocabs, log=log) for s in specs]
+        else:
+            val += [load_table(cfg, s, split, vs[s["name"]], log=log) for s in specs]
     if vocabs is None:
         if not train:
             raise ValueError("no training rows to build the vocabs on: pass vocabs (a checkpoint's)")
@@ -429,12 +597,13 @@ def load_data(cfg: dict, *, vocabs=None, splits: tuple = ("train", "val"), log=p
             _save_cache(cd, t)
             _load_cache(cd, t)
     for t in train + val:
-        leaves = t.node_type == gn.NodeType.LEAF
+        m = min(len(t.node_type), 50_000_000)       # a memory-mapped table: its first nodes are enough
+        leaves = np.asarray(t.node_type[:m]) == gn.NodeType.LEAF
         info["tables"][f"{t.name}_{t.split}"] = {
             "rows": t.n, "games": int(len(np.unique(t.game))),
             "nodes_per_row": round(float(t.node_ptr[-1]) / max(t.n, 1), 1),
             "edges_per_row": round(float(t.edge_ptr[-1]) / max(t.n, 1), 1),
-            "leaves_in_vocab": round(float((np.asarray(t.node_id)[leaves] >= 0).mean()) if leaves.any() else 1.0, 4)}
+            "leaves_in_vocab": round(float((np.asarray(t.node_id[:m])[leaves] >= 0).mean()) if leaves.any() else 1.0, 4)}
     info.update(vocab_rows=len(vocab), edge_vocab_rows=len(edge_vocab), load_s=round(time.monotonic() - t0, 1))
     log(f"graph_supervised: data loaded in {info['load_s']} s: " + ", ".join(
         f"{k} {v['rows']} rows" for k, v in info["tables"].items()))
