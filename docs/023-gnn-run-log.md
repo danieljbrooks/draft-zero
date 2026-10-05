@@ -3,13 +3,13 @@
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 
-## Status (Sunday 4 October, 7:05 PM PT)
+## Status (Sunday 4 October, 7:45 PM PT)
 
 | Stage | Status | Where | Spend |
 |---|---|---|---|
 | 0. Engineering | done, on main (5d1766a, a72792d, c18a727, c646d46) | laptop | – |
-| 1. Build | **running**: 13.4 games a second, ~3.3 h; then the tables, the comparison with experiment #4's, the upload | pod `gnn-stage1` | running |
-| 2. Sweep | waiting for the tables; split between the pod's 3090 and r1's free GPU | | |
+| 1. Build | **running**: 16.5 games a second, done ~9:15 PM PT; then the tables (8 parts at a time), the comparison with experiment #4's, the upload | pod `gnn-stage1` | running |
+| 2. Sweep | **queued** to start by itself after stage 1: 7 runs on the pod's 3090, 7 on r1's GPU 0 | pod, r1 | |
 | 3. Scale check, large training | | | |
 | 4. Offline evaluation | held-out cards chosen (below); the tooling is on main | | |
 | 5. Games | | | |
@@ -36,6 +36,27 @@ Dan approved the plan ("push to main, use r1 if available, budget is okay"). All
 - **Speed:** 13.4 games a second at 8,000 games (experiment #4's flat build: 17.6 on a different pod), so ~3.3 hours
   for the 161,206 games.
 - **Shards:** 1.1 GB per 5,000-game part, ~36 GB in all (the plan guessed 65 GB from the laptop's smaller parts).
+- 7:22 PM PT: 52,000 games at 16.5 a second.
+- **Tables in parallel.** `build.py tables` turned the 33 parts into tables one at a time (exp4: 1 hour; with graphs
+  longer), with the pod's cores idle. `tables --jobs N` now builds N parts at once; on the planning build, 4 jobs gave
+  the same flat tables (`compare`) and the same graph datasets as one. A hand-off on the pod (`/root/handoff.sh`)
+  stops `gnn_build.sh` when it reaches its tables step, pulls main and reruns it with `SKIP_BUILD=1 TABLE_JOBS=8`
+  (the tables step resumes from finished parts).
+
+## Stage 2: the sweep (queued)
+
+`configs/gnn_sweep.yml`, the same 10% of the training games for every run, 20,000 validation rows a table (the rows
+experiment #4's sweeps validated on, if `compare` passes):
+
+| Machine | Runs |
+|---|---|
+| pod, RTX 3090 (`runs/gnn/sweep_pod`) | g-base, g-lr3e-4, g-lr3e-5, g-emb-lr10, g-drop0.1, g-leafdrop0.1, g-act5 |
+| r1, GPU 0 (`runs/gnn/sweep_r1`, slim tables from HF, in RAM) | g-batch256, g-base-seed1, g-3ep, g-passes1, g-global1, g-d256, g-global4 |
+
+**Why batch 256 runs first.** A profile of a training step on r1 (`torch.profiler`, the planning tables): at 64
+states a step the CPU spends ~39 ms issuing ~3,000 small kernels while the GPU works ~16 ms. The step is launch-bound
+whatever the GPU, so a bigger batch is nearly free: 3.4x the throughput on r1, 1.3x on the 3090. If it costs no
+accuracy, stages 3 and later use it.
 
 ## Stage 4, ahead of time: the held-out cards
 
