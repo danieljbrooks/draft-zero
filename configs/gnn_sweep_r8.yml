@@ -37,3 +37,6 @@ runs:
   - {name: r8-p3d2, arch: {dropout: 0.1, d_model: 256, ff: 512, passes: 3, local_depth: 2}}
   - {name: r8-depth3, arch: {dropout: 0.1, d_model: 256, ff: 512, local_depth: 3}}
   - {name: r8-ff1024, arch: {dropout: 0.1, d_model: 256, ff: 1024}}
+  # the value head memorises results late in a long run (r8-base, r8-p3d2: value log-loss 0.542 -> 0.558 over the last
+  # epochs while the policy kept improving): does more dropout hold it off?
+  - {name: r8-drop0.2, arch: {dropout: 0.2, d_model: 256, ff: 512}}
