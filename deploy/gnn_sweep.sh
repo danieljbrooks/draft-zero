@@ -23,6 +23,7 @@ PY
   mkdir -p "$T"
   for f in data/imitation_graph/hf/exp4/tables_graph/slim/*; do ln -sf "$PWD/$f" "$T/$(basename "$f")"; done
 fi
+unset HF_TOKEN       # only the download needs it: not in the long-running sweep's environment
 ARGS=()
 for s in ${SETS:-}; do ARGS+=(--set "$s"); done
 mkdir -p "$OUT"
