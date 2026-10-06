@@ -5,7 +5,7 @@ session, and update it before ending one** — mark items done, record decisions
 the bottom, and move anything you learned into the right phase. It's the single source of
 truth for status. Chat history isn't.
 
-*Last updated: 2026-10-01*
+*Last updated: 2026-10-06*
 
 ## Where things stand
 
@@ -526,6 +526,19 @@ speed, FDN cards and MCTS support: XMage, Forge, gorge, mtg-kernel and ManaBrew.
 - [x] Explore mtg-kernel: its coverage, the 40× and 1,000× figures, one-seat search, and what
       MageZero-style search would take (docs/015 §2, §4, §5).
 - [x] Compare gorge, Forge and ManaBrew on the same test (docs/015).
+- [x] **Self-play on gorge** ([docs/025](docs/025-gorge-fdn-self-play.md), code in `gorge/`). All 31,516 FDN decks
+      play at gorge `c9a422b70`, with no card added.
+  - Speed on 4 vCPUs: 611,000 `bot` games an hour; 4,400 an hour with search for both seats at 25 simulations.
+  - gorge's search beats its heuristic bot 62–78% from 10 to 100 simulations.
+  - One AlphaZero generation, trained with gorge's own trainer, adds about 5 points at equal simulations: 54.8% of
+    800 games. At equal time it ties twice the simulations.
+  - 17lands rank correlation: the bot 0.21 on commons, the search at 10 simulations 0.30.
+  - Porting experiment #4's MLP was blocked: weights on HF, which the cloud session couldn't reach, and no shared
+    encoding.
+- [ ] **Next on gorge** (docs/025 §8):
+  - give the cloud environment RunPod and HF access;
+  - distil experiment #4's MLP into a gorge network;
+  - continue the AlphaZero loop from the 2-epoch network.
 - [ ] **Follow mtg-kernel's FDN Limited support**
       ([mtg-kernel#110](https://github.com/jackmaiorino/mtg-kernel/issues/110)). Dan wants to follow
       it. Status on 2026-10-01:
@@ -576,6 +589,12 @@ These apply to people and to Claude sessions, and each rule comes from an actual
 ## Decision log
 
 Add dated entries, newest first.
+
+- **2026-10-06** — gorge self-play ([docs/025](docs/025-gorge-fdn-self-play.md)).
+  - gorge plays every FDN deck about 100× faster than XMage's bot, and its search scales with simulations.
+  - One AlphaZero generation helps the search a little: +5 points at equal simulations, a tie at equal time.
+  - Distilled policies alone stay below the bot, as on XMage.
+  - RunPod and HF were unreachable from the cloud session, so nothing was spent.
 
 - **2026-10-01** — Engines ([docs/015](docs/015-rules-engine-comparison.md)): five compared.
   - gorge and ManaBrew have FDN today.

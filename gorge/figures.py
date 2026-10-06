@@ -62,26 +62,67 @@ def style(t):
     })
 
 
+# Each network inside gorge's search, against the same search without it: (label, games files pooled, colour role).
+NETWORKS = [
+    ("gen 1, 2 epochs: prior + value", ["eval/gen1e2/full_v_az.jsonl", "eval/confirm/gen1e2_full_v_az_s78.jsonl"], "net"),
+    ("gen 1, 2 epochs: value", ["eval/gen1e2/leaf_v_az.jsonl"], "net"),
+    ("gen 1: prior + value", ["eval/gen1/full_v_az.jsonl"], "net"),
+    ("gen 1: value", ["eval/gen1/leaf_v_az.jsonl"], "net"),
+    ("gen 1: prior", ["eval/gen1/prioronly_v_az.jsonl"], "net"),
+    ("cheap-game value", ["eval/v1/leaf_v_az.jsonl"], "net"),
+    ("gen 1 + bot bonus: prior + value", ["eval/gen1r/full_v_az.jsonl"], "net"),
+    ("@100: cheap-game value", ["eval/confirm/v1_leaf_v_az_s100.jsonl"], "net"),
+    ("@100: gen 1, 2 epochs: prior + value", ["eval/confirm/gen1e2_full_v_az_s100.jsonl"], "net"),
+]
+
+
+def pooled(paths: list[str]):
+    games = []
+    for i, path in enumerate(paths):
+        if not done(RUNS / path):
+            return None
+        for g in analyze.load([RUNS / path]):
+            g["pair"] = (i, g["pair"])  # pairs from different runs stay distinct
+            games.append(g)
+    return analyze.score(games)
+
+
 def ladder(mode: str) -> Path | None:
-    t = THEMES[mode]
-    style(t)
     rows = []
     for label, path, side, role in LADDER:
-        p = RUNS / path
-        if not done(p):
+        r = pooled([path])
+        if r is None:
             continue
-        r = analyze.score(analyze.load([p]))
         s, lo, hi = r["score"], r["lo"], r["hi"]
         if side == "B":
             s, lo, hi = 1 - s, 1 - hi, 1 - lo
         rows.append((label, s, lo, hi, r["games"], role))
+    return dots(mode, rows, "025-ladder", "Score against gorge's bot",
+                "Score against gorge's bot (paired games on the eval decks, 95% intervals over deck pairs)",
+                (("search", "gorge's search, heuristic leaf"), ("net", "with the trained network"), ("other", "random")))
+
+
+def networks(mode: str) -> Path | None:
+    rows = []
+    for label, paths, role in NETWORKS:
+        r = pooled(paths)
+        if r is not None:
+            rows.append((label, r["score"], r["lo"], r["hi"], r["games"], role))
+    return dots(mode, rows, "025-networks", "Each network inside the search, against the same search without it",
+                "Score against the search without the network (az@25; @100 rows: az@100)",
+                (), xlim=(25, 75), left=0.33)
+
+
+def dots(mode, rows, name, title, xlabel, legend, xlim=(0, 100), left=0.25) -> Path | None:
+    t = THEMES[mode]
+    style(t)
     if not rows:
         return None
     h = 0.62 * len(rows) + 2.1  # figure height, inches
     fig, ax = plt.subplots(figsize=(9, h), dpi=160)
     fig.patch.set_facecolor(t["surface"])
     ax.set_facecolor(t["surface"])
-    fig.subplots_adjust(left=0.25, right=0.97, top=1 - 1.25 / h, bottom=0.62 / h)
+    fig.subplots_adjust(left=left, right=0.97, top=1 - (1.25 if legend else 0.8) / h, bottom=0.62 / h)
     for i, (label, s, lo, hi, n, role) in enumerate(rows):
         y = len(rows) - 1 - i
         ax.plot([100 * lo, 100 * hi], [y, y], color=t[role], linewidth=2, solid_capstyle="round", zorder=2)
@@ -92,29 +133,27 @@ def ladder(mode: str) -> Path | None:
         ax.text(-0.02, y - 0.2, f"{n:,} games", transform=ax.get_yaxis_transform(), color=t["muted"], fontsize=8.5,
                 ha="right", va="center")
     ax.axvline(50, color=t["ink2"], linewidth=1, linestyle=(0, (4, 3)), zorder=1)
-    ax.set_xlim(0, 100)
+    ax.set_xlim(*xlim)
     ax.set_ylim(-0.6, len(rows) - 0.4)
-    ax.set_xticks(range(0, 101, 10))
-    ax.set_xticklabels([f"{x}%" for x in range(0, 101, 10)])
+    step = 10 if xlim[1] - xlim[0] > 60 else 5
+    ax.set_xticks(range(xlim[0], xlim[1] + 1, step))
+    ax.set_xticklabels([f"{x}%" for x in range(xlim[0], xlim[1] + 1, step)])
     ax.tick_params(axis="y", length=0, labelleft=False)
     ax.grid(True, axis="x", color=t["grid"], linewidth=0.8)
     ax.set_axisbelow(True)
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
-    ax.set_xlabel("Score against gorge's bot (paired games on the eval decks, 95% intervals over deck pairs)",
-                  color=t["ink2"])
-    fig.text(0.02, 1 - 0.22 / h, "Score against gorge's bot", color=t["ink"], fontsize=13, fontweight="bold",
-             ha="left", va="top")
+    ax.set_xlabel(xlabel, color=t["ink2"])
+    fig.text(0.02, 1 - 0.22 / h, title, color=t["ink"], fontsize=13, fontweight="bold", ha="left", va="top")
     handles = [Line2D([], [], color=t[r], marker="o", linewidth=2, markersize=7, label=l)
-               for r, l in (("search", "gorge's search, heuristic leaf"), ("net", "with the trained network"),
-                            ("other", "random"))
-               if any(row[5] == r for row in rows)]
-    leg = fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.015, 1 - 0.5 / h), ncol=len(handles),
-                     frameon=False, fontsize=9.5, handlelength=2.2, columnspacing=2.0)
-    for text in leg.get_texts():
-        text.set_color(t["ink2"])
+               for r, l in legend if any(row[5] == r for row in rows)]
+    if handles:
+        leg = fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.015, 1 - 0.5 / h), ncol=len(handles),
+                         frameon=False, fontsize=9.5, handlelength=2.2, columnspacing=2.0)
+        for text in leg.get_texts():
+            text.set_color(t["ink2"])
     OUT.mkdir(parents=True, exist_ok=True)
-    path = OUT / f"025-ladder-{mode}.png"
+    path = OUT / f"{name}-{mode}.png"
     fig.savefig(path, facecolor=t["surface"])
     plt.close(fig)
     return path
@@ -195,7 +234,7 @@ def gih(mode: str) -> Path | None:
 
 if __name__ == "__main__":
     for mode in THEMES:
-        for fn in (ladder, gih):
+        for fn in (ladder, networks, gih):
             p = fn(mode)
             if p:
                 print(p)

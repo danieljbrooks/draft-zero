@@ -58,7 +58,8 @@ def score(games: list[dict]) -> dict:
         return {"games": 0}
     s = float(np.mean(pair_means))
     se = float(np.std(pair_means, ddof=1) / math.sqrt(len(pair_means))) if len(pair_means) > 1 else float("nan")
-    return {"games": n_games, "pairs": len(pair_means), "score": s, "lo": s - 1.96 * se, "hi": s + 1.96 * se,
+    return {"games": n_games, "pairs": len(pair_means), "score": s,
+            "lo": max(0.0, s - 1.96 * se), "hi": min(1.0, s + 1.96 * se),
             "errors": sum(g["result"] == "error" for g in games),
             "stalls": sum(g["result"] == "stall" for g in games),
             "turns": float(np.mean([g["turns"] for g in games]))}

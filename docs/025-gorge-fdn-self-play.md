@@ -9,7 +9,37 @@ RunPod spend: $0 (§7).*
 
 ## Summary
 
-DRAFT: filled in as results land.
+**gorge is fast enough to make self-play cheap, and one AlphaZero generation on it already helps the search a little.
+The engine is not the limit any more: what the network learns from is.**
+
+- **Every FDN deck plays.** All 286 cards and all 31,516 of DraftZero's decks are supported at the pinned commit.
+  192,350 games ran with no engine error or stall. No card was added.
+- **Games an hour on 4 vCPUs:**
+  - gorge's heuristic `bot` against itself: **611,000** (~150,000 per core, roughly 100× XMage's bot);
+  - AlphaZero-style search for both seats: **4,400** at 25 simulations and 2,200 at 50;
+  - the same search with the trained network for both seats: **2,500** at 25 simulations (630 per worker);
+  - experiment #4's MLP searching on XMage at 100 simulations: 3.4 games an hour per worker (docs/020).
+- **Search without a network beats `bot`**, more with more search: 62% at 10 simulations, 67% at 25, 78% at 100.
+- **One AlphaZero generation, trained from scratch** with gorge's tools (1,800 self-play games at 50 simulations,
+  48 minutes; 99k decisions; minutes of training):
+  - The value judges positions as well as a 50-simulation search does (AUC 0.81).
+  - The policy learned almost nothing: the visit counts it copies are nearly uniform at this budget.
+  - The best network, trained 2 epochs rather than 12, makes the search win **54.8% [52.3, 57.2]** of 800 paired
+    games against the same search without it, and 55% at 100 simulations. It doubles the cost of a decision, and
+    at equal time it ties a search with twice the simulations (53.0% [48.3, 57.7]).
+  - Alone, without search, the networks lose to `bot` (35–42%).
+- **17lands statistics.** In 100,000 games of `bot` against itself, card win rates correlate with 17lands' at
+  **0.21 on commons and 0.39 on all cards**. Sampling noise would allow ~0.98, so the gap is the bot's bias.
+  - DraftZero's imitation networks reached 0.34–0.41 on commons on XMage (docs/019).
+  - gorge's bot misjudges the same cards they did: removal and counterspells rank low, creatures high.
+  - **Search helps:** 8,000 games of `az@10` against itself reach 0.30 on commons, against 0.17 for the same number
+    of `bot`'s games.
+  - Random play and the trained policy alone score about 0.
+- **Porting DraftZero's network was blocked** (§6). Its weights are in a private Hugging Face repo this environment
+  can't reach. Its input is MageZero's encoding of XMage positions, which gorge doesn't produce. A faithful port
+  would take weeks; distilling it is the better route.
+- **RunPod was blocked too** (§7): this environment's network policy refuses `api.runpod.io` and `huggingface.co`.
+  Everything ran in the container; **$0 of the $10 was spent**.
 
 ## 1. Setup
 
@@ -69,6 +99,15 @@ On the eval decks, 4 workers on this container's 4 vCPUs (`gorge/bench.sh`; one 
 | `az@100` against `bot` | 1,942 | 486 | 28 | 255 ms | 19.1 |
 | `az@25` against itself | **4,390** | 1,097 | 59 | 52 ms | 21.1 |
 | `az@100` against `az@25` | 1,659 | 415 | 53 | 161 ms (both seats) | 19.9 |
+| *During training (§4):* | | | | | |
+| `az@2` against itself (cheap value data) | 49,614 | 12,403 | 43 | 3.5 ms | 19.3 |
+| `az@50` against itself (gen-0 self-play) | 2,231 | 558 | 55 | 115 ms | 20.2 |
+| a network's policy alone against `bot` | 99,891 | 24,973 | – | – | 20.9 |
+| a network's policy alone against itself | 29,238 | 7,310 | – | – | 26.5 |
+| `az@25` + 2-epoch network against `az@25` | 3,281 | 820 | 57 | 74 ms (both seats) | 20.5 |
+| **`az@25` + 2-epoch network against itself** | **2,528** | 632 | 52 | 106 ms | 20.1 |
+| *For card statistics (§5):* | | | | | |
+| `az@10` against itself (all decks) | 16,275 | 4,068 | 49 | 16 ms | 19.6 |
 
 - **A simulation costs about 2–2.5 ms** of one core, with gorge's heuristic leaf. Cost grows linearly with the budget.
   The search answers only the decisions with two or more candidates: about 28 a seat a game, out of about 250
@@ -77,13 +116,15 @@ On the eval decks, 4 workers on this container's 4 vCPUs (`gorge/bench.sh`; one 
   - Built-in bots: gorge's `bot` plays ~150,000–175,000 FDN games an hour on one core. XMage's cheapest real bot
     played 0.32–0.61 games a second on a laptop core (docs/015), 1,150–2,200 an hour: about 100× slower.
   - Search: experiment #4's MLP searching both seats at 100 simulations played 92 games an hour on a 27-worker RTX
-    3090 pod, 3.4 a worker (docs/020). gorge's `az@25` self-play plays ~1,100 a worker, and `az@100` against `bot` ~490.
-    The searches differ. A gorge simulation runs further, about 15 engine decisions per tree edge against MageZero's
-    1.4 (gorge's search-benchmark replication). gorge searches fewer decisions a game, about 59 against about 169.
-    Its leaf here is a heuristic, not a network (§4 prices the network).
+    3090 pod, 3.4 a worker (docs/020). gorge's network-guided search for both seats plays ~630 a worker at 25
+    simulations (~1,100 without the network), and `az@100` against `bot` ~490. The searches differ. A gorge
+    simulation runs further, about 15 engine decisions per tree edge against MageZero's 1.4 (gorge's
+    search-benchmark replication). gorge searches fewer decisions a game, about 55 against about 169. gorge's network
+    is also ~50 times smaller than the MLP (§4.1).
 - **In dollars**, assuming a RunPod vCPU runs gorge as fast as this container's: an 8-vCPU `cpu5c` pod ($0.28 an
-  hour) would play about 1.2 million `bot` games, or about 8,800 `az@25` self-play games, an hour: about 4 million
-  and 31,000 games a dollar. docs/020's best XMage figure is 183 games a dollar at 100 simulations.
+  hour) would play about 1.2 million `bot` games an hour, about 8,800 `az@25` self-play games, or about 5,000 with
+  the network: about 4 million, 31,000 and 18,000 games a dollar. docs/020's best XMage figure is 183 games a dollar
+  at 100 simulations.
 
 ## 3. Strength without a network
 
@@ -97,6 +138,14 @@ Paired games on the eval decks:
 | `az@100` against `bot` | **77.5%** [72.6, 82.4] | 200 |
 | `az@100` against `az@25` | **61.0%** [55.7, 66.3] | 200 |
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/025-ladder-dark.png">
+  <img alt="Dot plot of each policy's score against gorge's bot, with 95% intervals, on the eval decks. az@100 with no network 77.5% (200 games); az@25 with the gen-1 network 69.3% (300); az@25 with no network 67.0% (400); az@10 with no network 61.8% (400); the gen-1 network alone 34.6% (2,000); random 14.3% (2,000). A dashed line marks 50%." src="img/025-ladder-light.png">
+</picture>
+
+*Figure 1. Score against gorge's `bot`. Search beats it, more so with more simulations; the trained network adds
+little at 25 simulations (§4) and loses to it on its own.*
+
 - **More search wins more, without a network.** Each step up in budget adds 5–10 points against `bot`, and `az@100`
   beats `az@25` 61% of the time. That is win rate. Agreement with top players' decisions, which gorge's replication
   of our search benchmark (docs/016) measured, stayed flat from 100 to 10,000 simulations there.
@@ -108,8 +157,8 @@ Paired games on the eval decks:
 
 ## 4. Training a network by self-play
 
-DraftZero's networks can't be loaded here (§6), so we trained a new one with gorge's own tools: one AlphaZero
-generation, then a value-only variant on cheap games.
+DraftZero's networks can't be loaded here (§6), so we trained new ones with gorge's own tools: one AlphaZero
+generation, two variants of it, and a value trained on cheap games.
 
 ### 4.1 The recipe
 
@@ -171,12 +220,93 @@ answer.
 
 - **The policy alone is weaker than `bot`**, as experiment #4's imitation policy was against MageZero's searching
   heuristic (38–40%, docs/019 §4.2), and as gorge's distilled students were (27% against `bot`).
-- **Inside the search the network neither helps nor hurts** at 25 simulations. Its value is as good a leaf as gorge's
-  heuristic, no better.
+- **Inside the search, gen 1 neither helps nor hurts** at 25 simulations. Its value is as good a leaf as gorge's
+  heuristic, no better. (Trained for 2 epochs instead, it helps: §4.4–4.5.)
 - **The prior is expensive.** With the network's prior and value, a searched decision took about 110 ms against
   52 ms without the network (the prior is evaluated at every point the walk passes). The value alone added ~12%.
 
-DRAFT more
+### 4.3 More value data from cheap games
+
+gorge's own review of its networks (`docs/superpowers/reports/2026-09-28-spellbench-policy-networks.md`) ranks
+"value pretraining on cheap self-play" first: every game labels every position, and the value is what the search
+uses. So we trained a value on 6.5 times the data:
+
+- **Cheap games:** `az@2` against itself on the train decks. With two simulations the search never overrides the bot,
+  so these are `bot`'s games, recorded at every decision with two or more candidates: **640,904 positions from 15,000
+  games in 18 minutes** (49,600 games an hour).
+- **Training:** the value on each game's result (no search value to blend), 3 epochs. The policy head copies `bot`'s
+  answers and isn't used: in the search we give this network's value with a uniform prior.
+
+| | gen 1 (99k searched positions) | cheap-game value (641k positions) |
+|---|---|---|
+| Value AUC on the eval decks' searched positions | 0.810 | 0.810 |
+| … within a deck matchup | 0.766 | 0.771 |
+| … by turn: 1–6 / 7–12 / 13+ | 0.673 / 0.746 / 0.866 | 0.658 / 0.724 / 0.877 |
+| Log loss (base rate 0.693) | 0.553 | **0.525** |
+| `az@25` with this value as the leaf, against `az@25` | 50.0% [46.1, 53.9] | **51.3%** [47.6, 55.0] |
+
+Six and a half times the positions, from a weaker player, gave the same ranking of positions with better calibration,
+and the same result in games.
+
+### 4.4 Two variants of gen 1
+
+The same gen-0 corpus, trained two other ways:
+
+- **2 epochs instead of 12**, where the value's holdout loss was lowest (§4.2). Its prior is close to uniform.
+- **A fixed bonus for `bot`'s answer** (`-residual-init 2`, gorge's best setting for a network playing alone). The
+  network can't otherwise tell which candidate is `bot`'s.
+
+| | gen 1 (12 epochs) | 2 epochs | `bot` bonus |
+|---|---|---|---|
+| Policy: picks the search's move / picks `bot`'s move (eval decks) | 57.6% / 55.5% | 47.1% / 56.1% | 53.3% / **92.4%** |
+| Value: log loss / AUC within a matchup (eval decks) | 0.553 / 0.766 | **0.530 / 0.773** | 0.558 / 0.766 |
+| Policy alone against `bot` | 34.6% | – | **42.1%** [40.8, 43.4] |
+| `az@25` + network against `az@25` | 51.0% [46.9, 55.1] | **54.0%** [50.9, 57.1] | **34.0%** [29.8, 38.2] |
+| `az@25` + network's value only against `az@25` | 50.0% [46.1, 53.9] | 52.7% [49.1, 56.2] | – |
+
+- **The bonus trades search for imitation.** It makes the network pick `bot`'s move 92% of the time. Alone, that
+  is better than gen 1 (42% against `bot`). As the search's prior it is ruinous, 34% against the plain search,
+  because the search then rarely looks past `bot`'s move. gorge measured the same with a `bot`-copying prior
+  (−21.7 points).
+- **The 2-epoch network is the only one whose interval clears 50%,** and only just: one result among eight network
+  arms, so we replayed it on fresh deck pairs (§4.5).
+
+### 4.5 Confirming the 2-epoch network, and what it costs
+
+| Match | Score | Games |
+|---|---|---:|
+| `az@25` + 2-epoch network against `az@25`, first run (§4.4) | 54.0% [50.9, 57.1] | 300 |
+| the same, 250 fresh deck pairs on another seed | **55.2%** [51.8, 58.6] | 500 |
+| **both runs** | **54.8%** [52.3, 57.2] | 800 |
+| `az@100` + 2-epoch network against `az@100` | 55.3% [49.9, 60.8] | 150 |
+| `az@100` + cheap-game value (uniform prior) against `az@100` | 50.0% [44.7, 55.3] | 150 |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/025-networks-dark.png">
+  <img alt="Dot plot of each trained network inside the search against the same search without it, with 95% intervals. At 25 simulations: gen 1 trained 2 epochs, prior and value, 54.8% (800 games); its value only 52.7%; gen 1 prior and value 51.0%; gen 1 value 50.0%; gen 1 prior 47.3%; the cheap-game value 51.3%; gen 1 with a bonus for bot's move 34.0% (300 games each). At 100 simulations: the cheap-game value 50.0% and gen 1 trained 2 epochs 55.3% (150 games each). A dashed line marks 50%." src="img/025-networks-light.png">
+</picture>
+
+*Figure 2. Every network arm against the same search without the network. Only the 2-epoch network clears 50%.*
+
+- **The gain holds up: about +5 points at equal simulations,** at 25 and at 100. That is the size of experiment #1's
+  edge over plain search on XMage (55.8%, with a search that could see hidden cards: docs/003), here from 48 minutes
+  of self-play on 4 vCPUs and an honest search. Experiment #2's networks scored 45–50% (docs/019 §5.1).
+- **Where it comes from is not settled.** The 2-epoch network's value alone scored 52.7% [49.1, 56.2], and the
+  cheap-game value, which ranks positions as well, scored 50% at both budgets. The softly learned prior, or a value
+  trained on positions the search itself visits, may each contribute.
+
+**At equal time it ties doubling the search.** The network's prior makes a decision about twice as expensive (§4.2),
+so the fair comparison is with twice the simulations:
+
+| Match | Score | Games | Time per searched decision |
+|---|---|---:|---|
+| `az@50` against `az@25` (no network) | 54.7% [50.3, 59.0] | 300 | 115 ms against 52 ms |
+| `az@25` + 2-epoch network against `az@25` (above) | 54.8% [52.3, 57.2] | 800 | ~96 ms against 52 ms |
+| `az@25` + 2-epoch network against `az@50` | 53.0% [48.3, 57.7] | 300 | about equal (106 ms, both seats) |
+
+One generation of self-play bought what doubling the simulations buys, at the same cost. That isn't a win yet in
+compute, but it's where AlphaZero's loop starts. The network's cost is mostly its prior, evaluated at every point
+the walk passes: its value alone adds ~12% (§4.2).
 
 ## 5. 17lands statistics
 
@@ -201,8 +331,9 @@ remains is the policy's bias, and the engine's.
 | `random` | 20,000 | 39,998 | ~0.9 | −0.03 | 0.07 | 8.1 pts | −0.10 |
 | gen 1's policy alone (§4) | 20,000 | 39,974 | ~0.9 | −0.03 | 0.07 | 7.0 pts | −0.15 |
 | `bot` | 100,000 | 200,000 | ~0.98 | **0.21** | **0.39** | 5.2 pts | 0.13 |
+| `bot`, 8,000 of those games (20 random subsamples: median [5–95%]) | 8,000 | 16,000 | ~0.78 | 0.17 [0.06, 0.24] | 0.32 [0.28, 0.37] | | |
+| **`az@10`** | 8,000 | 16,000 | ~0.78 | **0.30** | **0.36** | 5.7 pts | 0.04 |
 | `az@50`, gen 0's self-play (train decks; early moves sampled) | 1,800 | 3,600 | ~0.6 | 0.24 | 0.29 | 6.1 pts | 0.07 |
-| DRAFT az10 | | | | | | | |
 | *docs/019, on XMage: experiment #4's transformer policy* | *10,000* | *~17,700* | *0.82* | *0.41* | *0.43* | *~5 pts* | |
 | *docs/019: experiment #4's MLP policy* | *10,000* | *~17,700* | *0.82* | *0.34* | *0.40* | *~5 pts* | |
 | *17lands* | | | | | | *2.5 pts* | |
@@ -210,8 +341,20 @@ remains is the policy's bias, and the engine's.
 - **`bot` carries real signal, but less than DraftZero's imitation policies.** On every non-basic card it nearly
   matches experiment #4's networks (0.39 against 0.40–0.43). On commons it falls to half (0.21 against 0.34–0.41).
   The gap is bias, not noise: with 200,000 player-games, 17lands' own data would reach ~0.98.
+- **Search makes the commons' ratings more human.** At the same 8,000 games, `az@10` reaches 0.30 on commons, above
+  all 20 equal-sized subsamples of `bot`'s games (at most 0.25). On all cards its 0.36 sits inside the subsamples'
+  range (0.28 to 0.39). Ten simulations a decision bring the commons near experiment #4's MLP (0.34), as docs/019 §4.4 expected
+  of self-play with search.
 - **gen 1's policy rates cards no better than random play.** It loses to `bot` 35–65 (§4), and its card ratings
   look like random play's.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="img/025-gih-dark.png">
+  <img alt="Three scatter plots of each card's simulated games-in-hand win rate (vertical) against 17lands' (horizontal), commons in blue and other cards in grey, with 17lands' three best commons ringed. Random self-play, 39,998 player-games: Spearman -0.03 on commons, 0.07 on all cards; the three best commons sit near 44%. gorge's bot, 200,000 player-games: 0.21 and 0.39; Bake into a Pie at about 51%, Stab and Burst Lightning near 47%. Search at 10 simulations, 16,000 player-games: 0.30 and 0.36; Bake into a Pie about 50%, Stab 48%, Burst Lightning 44%." src="img/025-gih-light.png">
+</picture>
+
+*Figure 3. Card win rates when drawn, in self-play against 17lands. Better play lines the cards up more with
+17lands' order, but removal (ringed) stays near or below the middle for every policy.*
 
 **Card by card, `bot`'s 100,000 games** (91 commons; win rates relative to each source's commons average, 50.3% for
 the simulation and 54.0% for 17lands):
@@ -244,15 +387,17 @@ the simulation and 54.0% for 17lands):
 - **The same blind spot as DraftZero's networks.** Removal and counterspells sink: Bake into a Pie, Stab, Burst
   Lightning and Refute, four of 17lands' six best commons, rank 43rd to 79th. Experiment #4's policies made the same
   mistake on XMage (Burst Lightning 83rd and 77th, docs/019 §4.4). Creatures rise: gorge's bot and experiment #4's
-  policies both put Dazzling Angel, Vanguard Seraph and Felidar Savior near the top. Cards that need judgement to use well rank low for any
-  policy that plays without looking ahead. That includes sacrifice outlets (Hungry Ghoul, 87th) and Involuntary
-  Employment, which steals a creature for a turn.
+  policies both put Dazzling Angel, Vanguard Seraph and Felidar Savior near the top. Cards that need judgement to
+  use well rank low for any policy that plays without looking ahead. That includes sacrifice outlets (Hungry Ghoul,
+  87th) and Involuntary Employment, which steals a creature for a turn.
 - **Card rates spread twice as wide as 17lands'** (5.2 points across the commons against 2.5), as in docs/019.
 - **Colour pairs:** white-green first (57.4%), black-red last (43.3%), and the blue pairs other than white-blue near
   the bottom (blue-black 44.6%, blue-red 44.1%). The bot plays slow, controlling decks badly. Spearman with 17lands'
   colour-pair win rates: 0.13.
-
-DRAFT results
+- **Search repairs some of it, not the removal.** In `az@10`'s self-play Stab rises from 66th to 53rd and Hungry
+  Ghoul from 87th to 67th. Bake into a Pie (44th), Burst Lightning (76th) and Refute (78th) stay low. We haven't
+  tested why. Two guesses: removal pays off over a longer horizon than ten simulations reach, and inside the search
+  the opponent is `bot`, which misjudges the same cards.
 
 ## 6. Porting DraftZero's network
 
@@ -326,10 +471,11 @@ In rough order of value for the cost:
 2. **Distil DraftZero instead of porting it** (§6): run experiment #4's MLP on its 12.1M human positions, rebuild
    them in gorge, and train gorge's network on the MLP's policy and value plus the human moves. That brings in what
    the human data taught, which a 50-simulation search can't (§4).
-3. **Sharper targets for the AlphaZero loop**: hundreds of simulations, or gorge's planned Gumbel root selection
-   with completed-Q targets, which suits 25–100 simulations. Train with early stopping, and gate every
-   generation (§4).
-4. **A better leaf than gorge's heuristic**, which the network matched but did not beat (§4).
+3. **Keep the AlphaZero loop going from the 2-epoch network** (§4.5), with sharper targets: hundreds of
+   simulations, or Gumbel root selection with completed-Q targets, which gorge's own review recommends for 25–100
+   simulations. Train with early stopping, and gate every generation against the last.
+4. **Find out why the 2-epoch network helps** where equally good values don't (§4.5): its prior, or its value's
+   training positions. That decides what the next generation should train on.
 5. **A real mulligan decision** for gorge's bot, and an audit of its other stand-ins (§1.2, §7).
 6. **Guess the opponent's deck** from 17lands decks, as docs/019 §4.6 did on XMage, so the search no longer knows
    the opponent's list.
@@ -345,14 +491,16 @@ python tools/extract_decks.py --set FDN --format PremierDraft --min-winrate 0.60
 python gorge/decks.py                  # the pool as gorge decks: data/gorge/{decks/,pool.tsv}
 bash gorge/build.sh                    # gorge at gorge/GORGE_REF, plus dzgorge (GORGE_DIR, default ../ext/gorge)
 bash gorge/bench.sh                    # §2-3: data/gorge/runs/bench/
-SIMS=50 PAIRS=1800 bash gorge/azloop.sh 0                     # §4: gen-0 self-play and the gen-1 network
-NET=data/gorge/runs/az/gen1.gpol bash gorge/evalnet.sh         # §4: the network's games
-bash gorge/gih_runs.sh                 # §5: self-play for card statistics
+bash gorge/gih_runs.sh                 # §5: bot and random self-play for card statistics
+SIMS=50 PAIRS=1800 bash gorge/azloop.sh 0                     # §4.1-4.2: gen-0 self-play (48 min) and gen 1
+bash gorge/experiments.sh              # §4.2-4.5, §5: held-out positions, every network, their games (~3.5 h)
 python gorge/analyze.py wins data/gorge/runs/bench/*.jsonl
 python gorge/analyze.py gih data/gorge/runs/gih/bot.jsonl
 python tools/imitation_scale/gih_ceiling.py --n 2000 20000 100000 300000 --rarity common all --reps 20
 python gorge/figures.py                # this doc's figures
 ```
 
-Game records, visit corpora and checkpoints stay under `data/gorge/` (gitignored). Every run is a pure function of
-its seeds and the gorge pin, apart from timings.
+Game records, visit corpora and checkpoints stay under `data/gorge/` (gitignored); this session's are not
+published, because Hugging Face is unreachable from it (§7). Every game is a pure function of its seed, its policies
+and the gorge pin, and `dzgorge` writes games and visit records in game order, so the networks retrain identically.
+(Gen 0's corpus was written by an earlier build in completion order and sorted afterwards, `gorge/sortcorpus.py`.)
