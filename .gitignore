@@ -38,6 +38,8 @@ data/search_bench/
 data/compute_bench/
 data/imitation_scale/
 data/imitation_graph/
+# gorge (docs/025): deck files, game records, visit corpora and checkpoints
+data/gorge/
 
 # Private notes: access details for machines other people lend us. This repo is public, so
 # hostnames, usernames and login steps stay out of git.
