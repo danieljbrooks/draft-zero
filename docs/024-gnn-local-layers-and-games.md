@@ -168,6 +168,21 @@ back from disk (~1,800 major faults a second). **Block-local sampling** (`sample
 blocks at a time, so every row is still seen once an epoch and a batch still draws from ~64 places, but the disk reads
 contiguous runs. Resumed from its checkpoint: GPU 0 at 57-78%, ~6,500 states a second (r1's GPU at batch 256).
 
+### The full run's curves so far
+
+![Six panels of validation curves against training rows seen on all the training games: set NLL, non-Pass top-1, attack accuracy, target top-1, value AUC and value log-loss. The GNN full run (blue, 4.5 epochs so far, learning rate at its peak) reaches set NLL ~0.216 and top-1 ~0.853 at 49M rows; docs/023's GNN (orange, 3 epochs, cosine) ends at 0.213; the MLP (green, 1 epoch) ends at 0.227 at 11M rows and the transformer (purple, 3 epochs) at 0.234. The full run's value curves are noisier and below docs/023's.](img/024-full-curves-light.png)
+
+*Figure 3. Validation curves on all the training games (6:30 PM PT, 4.5 epochs): the full run against docs/023's GNN
+and experiment #4's MLP and transformer, scored on experiment #4's rows for the latter two.*
+
+- **Both GNNs sit well below the flat networks at every equal number of rows seen**: at 11M rows (one epoch) the
+  MLP reaches 0.227 and the full run 0.236 with its rate still at the peak; past one epoch the MLP gains nothing
+  (experiment #4), while the GNN keeps falling (0.216 at 49M rows).
+- **docs/023's run leads the full run at equal rows,** as round 8's three-epoch run led its eight-epoch runs: its
+  rate decayed throughout. The full run's held rate trades that for room to keep improving; its decay (epochs
+  12.8-16) decides. The held rate also shows in the value curves, which are noisy (log-loss 0.52-0.56) and below
+  docs/023's.
+
 ## 5b. The preview ladder: docs/023's network in games
 
 docs/023's full GNN (`gnn/main`, three epochs at width 256) against MageZero's heuristic bot at 100 simulations, PIMC
