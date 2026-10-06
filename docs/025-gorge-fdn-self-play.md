@@ -133,7 +133,50 @@ generation, then a value-only variant on cheap games.
 
 ### 4.2 Results
 
-DRAFT
+**Generation 0** played 1,800 games in 48 minutes: 2,230 games an hour, 115 ms a searched decision, 55 searched
+decisions a game. That gave **98,997 searched decisions** to train on. In 44% of them the search overrode `bot`'s
+answer.
+
+**What the network learned**, on 8,680 searched decisions from 150 further `az@50` games on the *eval* decks
+(`policytrain -visits-eval`):
+
+| | gen 1 |
+|---|---|
+| Policy: cross-entropy with the search's visits | 1.077 (uniform: 1.086; the visits' own entropy: 1.042) |
+| Policy: picks the search's most-visited move | 57.6% (always `bot`'s answer: 56.4%) |
+| Value: AUC, all positions | **0.810** (the 50-simulation search's own root value: 0.801) |
+| Value: AUC within a deck matchup | 0.766 (the search's root value: 0.775) |
+| Value: AUC by turn: 1–6 / 7–12 / 13+ | 0.673 / 0.746 / 0.866 |
+| Value: log loss | 0.553 (base rate: 0.693) |
+
+- **The visit counts carry little to learn.** At 50 simulations over at most 6 candidates, the visits are nearly
+  uniform: their entropy, 1.042, is close to the uniform 1.086. The network closes a fifth of that small gap. gorge
+  hit the same wall on its constructed decks ("M1b").
+- **The value is the useful part.** It ranks positions about as well as a 50-simulation search does, at the cost of
+  one evaluation. Like gorge's own value heads and DraftZero's (docs/019 §4.1), it is weak early in the game.
+- **12 epochs overfit the value.** Its holdout log loss was best after 2 epochs (0.518) and 0.563 after 12, while the
+  policy's holdout top-1 kept rising (0.495 → 0.553). gorge's trainer has no early stopping, so we also trained a
+  2-epoch network (below).
+
+**In games** (paired, eval decks):
+
+| Match | Score | Games |
+|---|---|---:|
+| gen 1's policy alone against `bot` | **34.6%** [33.0, 36.3] | 2,000 |
+| gen 1's policy alone against `random` | 67.3% [65.6, 69.1] | 2,000 |
+| `az@25` + gen 1 (prior and value) against `az@25` | **51.0%** [46.9, 55.1] | 300 |
+| `az@25` + gen 1's value only against `az@25` | **50.0%** [46.1, 53.9] | 300 |
+| `az@25` + gen 1's prior only against `az@25` | 47.3% [43.3, 51.4] | 300 |
+| `az@25` + gen 1 against `bot` | 69.3% [65.2, 73.5] (`az@25` alone: 67.0%) | 300 |
+
+- **The policy alone is weaker than `bot`**, as experiment #4's imitation policy was against MageZero's searching
+  heuristic (38–40%, docs/019 §4.2), and as gorge's distilled students were (27% against `bot`).
+- **Inside the search the network neither helps nor hurts** at 25 simulations. Its value is as good a leaf as gorge's
+  heuristic, no better.
+- **The prior is expensive.** With the network's prior and value, a searched decision took about 110 ms against
+  52 ms without the network (the prior is evaluated at every point the walk passes). The value alone added ~12%.
+
+DRAFT more
 
 ## 5. 17lands statistics
 
@@ -150,8 +193,64 @@ its full data (`tools/imitation_scale/gih_ceiling.py`, 20 samples each, medians)
 | Commons | 0.46 | 0.82 | 0.96 | 0.99 |
 | All non-basic cards | 0.43 | 0.80 | 0.95 | 0.98 |
 
-gorge's speed puts every policy here except the searches above 100,000 player-games, where noise no longer limits
-the correlation: what remains is the policy's bias, and the engine's.
+gorge's speed puts the cheap policies at 40,000–200,000 player-games, where noise barely limits the correlation: what
+remains is the policy's bias, and the engine's.
+
+| Self-play | Games | Player-games | Ceiling (commons) | Spearman, commons | Spearman, all cards | Spread of commons' rates | Colour pairs |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `random` | 20,000 | 39,998 | ~0.9 | −0.03 | 0.07 | 8.1 pts | −0.10 |
+| gen 1's policy alone (§4) | 20,000 | 39,974 | ~0.9 | −0.03 | 0.07 | 7.0 pts | −0.15 |
+| `bot` | 100,000 | 200,000 | ~0.98 | **0.21** | **0.39** | 5.2 pts | 0.13 |
+| `az@50`, gen 0's self-play (train decks; early moves sampled) | 1,800 | 3,600 | ~0.6 | 0.24 | 0.29 | 6.1 pts | 0.07 |
+| DRAFT az10 | | | | | | | |
+| *docs/019, on XMage: experiment #4's transformer policy* | *10,000* | *~17,700* | *0.82* | *0.41* | *0.43* | *~5 pts* | |
+| *docs/019: experiment #4's MLP policy* | *10,000* | *~17,700* | *0.82* | *0.34* | *0.40* | *~5 pts* | |
+| *17lands* | | | | | | *2.5 pts* | |
+
+- **`bot` carries real signal, but less than DraftZero's imitation policies.** On every non-basic card it nearly
+  matches experiment #4's networks (0.39 against 0.40–0.43). On commons it falls to half (0.21 against 0.34–0.41).
+  The gap is bias, not noise: with 200,000 player-games, 17lands' own data would reach ~0.98.
+- **gen 1's policy rates cards no better than random play.** It loses to `bot` 35–65 (§4), and its card ratings
+  look like random play's.
+
+**Card by card, `bot`'s 100,000 games** (91 commons; win rates relative to each source's commons average, 50.3% for
+the simulation and 54.0% for 17lands):
+
+*17lands' six best commons, and where `bot`'s self-play ranks them (of 91):*
+
+| 17lands rank | Card | 17lands | `bot` (rank) |
+|---|---|---|---|
+| 1 | Bake into a Pie | +4.0 | +0.2 (43) |
+| 2 | Burst Lightning | +3.9 | −3.4 (69) |
+| 3 | Stab | +3.9 | −2.9 (66) |
+| 4 | Dazzling Angel | +3.8 | +9.9 (2) |
+| 5 | Luminous Rebuke | +3.7 | +5.3 (18) |
+| 6 | Refute | +3.6 | −5.5 (79) |
+
+*`bot`'s six best and three worst commons, and where 17lands ranks them:*
+
+| `bot` rank | Card | `bot` | 17lands (rank) |
+|---|---|---|---|
+| 1 | Cackling Prowler | +10.2 | +0.1 (46) |
+| 2 | Dazzling Angel | +9.9 | +3.8 (4) |
+| 3 | Vanguard Seraph | +9.4 | +0.5 (41) |
+| 4 | Felidar Savior | +9.4 | +3.4 (10) |
+| 5 | Treetop Snarespinner | +9.0 | +0.6 (39) |
+| 6 | Apothecary Stomper | +8.4 | −2.4 (75) |
+| 89 | Axgard Cavalry | −10.5 | −1.8 (73) |
+| 90 | Involuntary Employment | −10.6 | +1.6 (28) |
+| 91 | Sure Strike | −11.5 | −1.6 (70) |
+
+- **The same blind spot as DraftZero's networks.** Removal and counterspells sink: Bake into a Pie, Stab, Burst
+  Lightning and Refute, four of 17lands' six best commons, rank 43rd to 79th. Experiment #4's policies made the same
+  mistake on XMage (Burst Lightning 83rd and 77th, docs/019 §4.4). Creatures rise: gorge's bot and experiment #4's
+  policies both put Dazzling Angel, Vanguard Seraph and Felidar Savior near the top. Cards that need judgement to use well rank low for any
+  policy that plays without looking ahead. That includes sacrifice outlets (Hungry Ghoul, 87th) and Involuntary
+  Employment, which steals a creature for a turn.
+- **Card rates spread twice as wide as 17lands'** (5.2 points across the commons against 2.5), as in docs/019.
+- **Colour pairs:** white-green first (57.4%), black-red last (43.3%), and the blue pairs other than white-blue near
+  the bottom (blue-black 44.6%, blue-red 44.1%). The bot plays slow, controlling decks badly. Spearman with 17lands'
+  colour-pair win rates: 0.13.
 
 DRAFT results
 
@@ -219,7 +318,23 @@ benchmark. The tables and the weights are on Hugging Face, so this also needs th
 
 ## 8. Next steps
 
-DRAFT
+In rough order of value for the cost:
+
+1. **Open the network.** Allow `api.runpod.io` and `huggingface.co` and add the keys (§7). The $10 budget buys
+   about 300 vCPU-hours on RunPod's CPU pods ($0.03–0.035 a vCPU-hour, docs/020), some 15 times what this session
+   used.
+2. **Distil DraftZero instead of porting it** (§6): run experiment #4's MLP on its 12.1M human positions, rebuild
+   them in gorge, and train gorge's network on the MLP's policy and value plus the human moves. That brings in what
+   the human data taught, which a 50-simulation search can't (§4).
+3. **Sharper targets for the AlphaZero loop**: hundreds of simulations, or gorge's planned Gumbel root selection
+   with completed-Q targets, which suits 25–100 simulations. Train with early stopping, and gate every
+   generation (§4).
+4. **A better leaf than gorge's heuristic**, which the network matched but did not beat (§4).
+5. **A real mulligan decision** for gorge's bot, and an audit of its other stand-ins (§1.2, §7).
+6. **Guess the opponent's deck** from 17lands decks, as docs/019 §4.6 did on XMage, so the search no longer knows
+   the opponent's list.
+7. **Audit gorge's FDN cards against XMage** on recorded 17lands turns (docs/008's turn replay), starting with the
+   cards whose simulated win rates are furthest from 17lands' (§5).
 
 ## Reproducing
 

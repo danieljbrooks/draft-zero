@@ -121,8 +121,9 @@ def ladder(mode: str) -> Path | None:
 
 
 GIH_PANELS = [
+    ("random against itself", "gih/random.jsonl"),
     ("gorge's bot against itself", "gih/bot.jsonl"),
-    ("gen-0 search (az@50) against itself", "az/gen0.selfplay.jsonl"),
+    ("search (az@10) against itself", "gih/az10.jsonl"),
 ]
 
 
@@ -133,9 +134,11 @@ def gih(mode: str) -> Path | None:
     if not panels:
         return None
     rar = analyze.rarity()
-    fig, axes = plt.subplots(1, len(panels), figsize=(5.2 * len(panels) + 0.6, 5.6), dpi=160, squeeze=False)
+    fig, axes = plt.subplots(1, len(panels), figsize=(4.6 * len(panels) + 0.8, 5.6), dpi=160, squeeze=False,
+                             sharex=True, sharey=True)
     fig.patch.set_facecolor(t["surface"])
-    fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.12, wspace=0.22)
+    fig.subplots_adjust(left=0.07, right=0.985, top=0.76, bottom=0.11, wspace=0.08)
+    fig.canvas.draw()
     for ax, (title, p) in zip(axes[0], panels):
         r = analyze.gih_report(analyze.load([p]), 30)
         ax.set_facecolor(t["surface"])
@@ -143,7 +146,7 @@ def gih(mode: str) -> Path | None:
         common = [x for x in rows if rar.get(x[0]) == "common"]
         other = [x for x in rows if rar.get(x[0]) != "common"]
         ax.scatter([100 * x[3] for x in other], [100 * x[2] for x in other], s=14, color=t["faint"],
-                   edgecolors="none", label="uncommons, rares, mythics", zorder=2)
+                   edgecolors="none", label="uncommons, rares and mythics", zorder=2)
         ax.scatter([100 * x[3] for x in common], [100 * x[2] for x in common], s=22, color=t["search"],
                    edgecolors=t["surface"], linewidths=0.8, label="commons", zorder=3)
         ax.set_title(f"{title}\n{r['player_games']:,} player-games · Spearman {r['commons']['spearman']:.2f} commons, "
@@ -155,19 +158,33 @@ def gih(mode: str) -> Path | None:
         ax.set_axisbelow(True)
         for side in ("top", "right"):
             ax.spines[side].set_visible(False)
-        # Label the commons the simulation rates furthest from 17lands, relative to each source's commons mean.
-        if common:
-            ms = sum(x[2] for x in common) / len(common)
-            mh = sum(x[3] for x in common) / len(common)
-            far = sorted(common, key=lambda x: abs((x[2] - ms) - (x[3] - mh)), reverse=True)[:4]
-            for c, _n, s, h in far:
-                ax.annotate(c, (100 * h, 100 * s), xytext=(5, 3), textcoords="offset points", fontsize=8,
-                            color=t["ink2"])
-    fig.text(0.02, 0.96, "Card win rates when drawn: gorge self-play against 17lands", color=t["ink"], fontsize=13,
+    ax0 = axes[0][0]
+    ax0.set_xlim(33, 70)
+    ax0.set_ylim(15, 75)
+    fig.canvas.draw()
+    # Label 17lands' three best commons in every panel, so the eye can follow them across policies. A label that
+    # would collide with one already placed is dropped.
+    ref = json.loads(analyze.REFERENCE.read_text())["cards"]
+    best = sorted((c for c in ref if rar.get(c) == "common"), key=lambda c: -ref[c]["gih_wr"])[:3]
+    for ax, (title, p) in zip(axes[0], panels):
+        r = analyze.gih_report(analyze.load([p]), 30)
+        pts = sorted([(100 * s_, 100 * h, c) for c, _n, s_, h in r["all"]["rows"] if c in best])
+        # Labels sit right of the cloud, at least 4 points apart, each joined to its card by a thin line.
+        label_y = []
+        for y, _x, _c in pts:
+            label_y.append(max(y, label_y[-1] + 4) if label_y else y)
+        for (y, x, c), ly in zip(pts, label_y):
+            ax.scatter([x], [y], s=46, facecolors="none", edgecolors=t["ink"], linewidths=1.2, zorder=4)
+            ax.annotate(c, (x, y), xytext=(61.0, ly), textcoords="data", fontsize=8, color=t["ink"],
+                        ha="left", va="center",
+                        arrowprops=dict(arrowstyle="-", color=t["ink2"], linewidth=0.7, shrinkA=0, shrinkB=4))
+    fig.text(0.02, 0.965, "Card win rates when drawn: gorge self-play against 17lands", color=t["ink"], fontsize=13,
              fontweight="bold", ha="left", va="top")
-    fig.text(0.02, 0.91, "Each dot is a card with 30+ games in hand; simulated rates centre near 50% because "
-             "self-play is zero-sum.", color=t["ink2"], fontsize=9.5, ha="left", va="top")
-    leg = axes[0][-1].legend(loc="lower right", frameon=False, fontsize=8.5)
+    fig.text(0.02, 0.915, "Each dot is a card with 30+ games in hand. Ringed: 17lands' three best commons (Bake into a "
+             "Pie, Burst Lightning, Stab).", color=t["ink2"], fontsize=9.5, ha="left", va="top")
+    handles, labels = axes[0][0].get_legend_handles_labels()
+    leg = fig.legend(handles[::-1], labels[::-1], loc="upper left", bbox_to_anchor=(0.015, 0.89), ncol=2,
+                     frameon=False, fontsize=9, handletextpad=0.3, columnspacing=1.6)
     for text in leg.get_texts():
         text.set_color(t["ink2"])
     path = OUT / f"025-gih-{mode}.png"
