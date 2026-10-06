@@ -250,6 +250,8 @@ final class Bench {
         base.priorBonus = Worker.optDouble(opt, "priorBonus", 0.1);
         base.policyOnly = Worker.optBool(opt, "policyOnly", false);
         base.policyTemp = Worker.optDouble(opt, "policyTemp", 1.0);
+        base.rootNoise = Worker.optDouble(opt, "rootNoise", 0.0);
+        base.rootNoiseAlpha = Worker.optDouble(opt, "rootNoiseAlpha", 0.3);
         if (base.budget < 1) throw new IllegalArgumentException("budget must be >= 1");
         JsonObject evalOpt = opt.has("evaluator") && opt.get("evaluator").isJsonObject() ? opt.getAsJsonObject("evaluator") : new JsonObject();
         String evalType = Worker.optString(evalOpt, "type", "offline");
@@ -283,6 +285,8 @@ final class Bench {
         c.maxIterations = b.maxIterations;
         c.policyOnly = b.policyOnly;
         c.policyTemp = b.policyTemp;
+        c.rootNoise = b.rootNoise;
+        c.rootNoiseAlpha = b.rootNoiseAlpha;
         c.priors = b.priors;
         c.priorTemp = b.priorTemp;
         c.priorBonus = b.priorBonus;

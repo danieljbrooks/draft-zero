@@ -105,6 +105,13 @@ public final class BenchSearch {
          */
         public boolean policyOnly = false;
         public double policyTemp = 1.0;
+        /**
+         * Self-play exploration (docs/021 §1.4): mix Dirichlet(rootNoiseAlpha) noise into the root's priors,
+         * prior = (1 - rootNoise) x prior + rootNoise x noise, as AlphaZero does. Tree search (PIMC) only;
+         * 0 (the default) leaves the search as it was. Never set for evaluation games.
+         */
+        public double rootNoise = 0.0;
+        public double rootNoiseAlpha = 0.3;
 
         /** A copy with another seed (the game player searches each decision with its own). */
         public Config copyWithSeed(long newSeed) {
@@ -121,6 +128,8 @@ public final class BenchSearch {
             c.maxIterations = maxIterations;
             c.policyOnly = policyOnly;
             c.policyTemp = policyTemp;
+            c.rootNoise = rootNoise;
+            c.rootNoiseAlpha = rootNoiseAlpha;
             c.priors = priors;
             c.priorTemp = priorTemp;
             c.priorBonus = priorBonus;
@@ -151,6 +160,8 @@ public final class BenchSearch {
             if (priors && !hasNet()) throw new IllegalArgumentException("priors need a network (evaluator.type remote or graph)");
             if (policyOnly && !hasNet()) throw new IllegalArgumentException("policyOnly needs a network (evaluator.type remote or graph)");
             if (!(policyTemp >= 0.0)) throw new IllegalArgumentException("policyTemp must be >= 0, got " + policyTemp);
+            if (!(rootNoise >= 0.0 && rootNoise <= 1.0)) throw new IllegalArgumentException("rootNoise must be in [0, 1], got " + rootNoise);
+            if (!(rootNoiseAlpha > 0.0)) throw new IllegalArgumentException("rootNoiseAlpha must be > 0, got " + rootNoiseAlpha);
         }
     }
 
@@ -308,6 +319,7 @@ public final class BenchSearch {
         evaluate(root, world.root, cfg, st); // MageZero scores the root before searching; not a simulation
         rootNet(root, world.root, cfg, st);
         expandTree(root, world, cfg, st);
+        if (cfg.rootNoise > 0 && root.kids != null && root.kids.size() > 1) rootNoise(root.kids, cfg);
         int maxIt = cfg.maxIterations > 0 ? cfg.maxIterations : 4 * cfg.budget + 200;
         while (st.sims < cfg.budget && st.iterations < maxIt && !root.kids.isEmpty()) {
             if (System.nanoTime() > deadline) {
@@ -363,6 +375,35 @@ public final class BenchSearch {
         res.rootValue = root.value;
         res.rootNet = root.hasNet ? root.net : null;
         return res;
+    }
+
+    /** Self-play exploration: Dirichlet(alpha) noise mixed into the root's priors (Config.rootNoise). */
+    static void rootNoise(List<Node> kids, Config cfg) {
+        Random rng = new Random(cfg.seed ^ 0x2545F4914F6CDD1DL);
+        double[] g = new double[kids.size()];
+        double sum = 0;
+        for (int i = 0; i < g.length; i++) {
+            g[i] = gamma(cfg.rootNoiseAlpha, rng);
+            sum += g[i];
+        }
+        if (!(sum > 0)) return;
+        for (int i = 0; i < g.length; i++) {
+            Node k = kids.get(i);
+            k.prior = (1 - cfg.rootNoise) * k.prior + cfg.rootNoise * g[i] / sum;
+        }
+    }
+
+    /** A Gamma(shape, 1) sample (Marsaglia and Tsang; shape < 1 by the boost x U^(1/shape)). */
+    static double gamma(double shape, Random rng) {
+        if (shape < 1) return gamma(shape + 1, rng) * Math.pow(rng.nextDouble(), 1.0 / shape);
+        double d = shape - 1.0 / 3, c = 1 / Math.sqrt(9 * d);
+        while (true) {
+            double x = rng.nextGaussian(), v = 1 + c * x;
+            if (v <= 0) continue;
+            v = v * v * v;
+            double u = rng.nextDouble();
+            if (u < 1 - 0.0331 * x * x * x * x || Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+        }
     }
 
     private static void expandTree(Node node, World world, Config cfg, Stats st) {

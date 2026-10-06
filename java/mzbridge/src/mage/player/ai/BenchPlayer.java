@@ -13,6 +13,9 @@ import mage.player.ai.encoder.ActionEncoder;
 import mage.player.ai.score.GameStateEvaluator3;
 import mage.players.Player;
 import mage.players.PlayerScript;
+import com.google.gson.JsonObject;
+import org.draftzero.mzbridge.GraphRecord;
+import org.draftzero.mzbridge.graph.FeatureGraph;
 
 import java.util.*;
 import java.util.function.Function;
@@ -58,6 +61,8 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
     /** priority choices the engine could not carry out (MageZero's "failed to activate chosen
      *  ability"): the player passed instead */
     public transient int activationFailures;
+    /** graph-network decisions whose record couldn't be encoded (they are left out of the records) */
+    public transient int graphRecordFailures;
     public transient long searchNanos;
     private transient Random rng;
 
@@ -90,6 +95,13 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
         public final double q;
         public final int turn;
         public final double heuristic;
+        /** per option (legal's order): the search's backed-up value (NaN unvisited) and its prior (docs/021) */
+        public double[] optQ, optPrior;
+        /** the option played (an index into legal), -1 unknown */
+        public int played = -1;
+        /** a graph network's record (docs/021): the state graph and each option's nodes
+         *  (GraphRecord.encodeArrays); legal is then the options' positions 0..k-1 */
+        public JsonObject graph;
 
         Rec(int[] features, String type, int[] legal, int[] visits, double q, int turn, double heuristic) {
             this.features = features;
@@ -113,6 +125,9 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
     /** ismcts (one information-set tree over the belief worlds, re-dealt every simulation) or pimc
      *  (MageZero's tree search on one sampled world: Play sets beliefWorlds to 1) */
     public String method = "ismcts";
+    /** self-play exploration (docs/021 §1.4): for the player's first sampleTurns turns, play an option drawn in
+     *  proportion to its visits instead of the most visited one. 0 (the default): always the most visited */
+    public int sampleTurns = 0;
     public transient int beliefCalls, worldsBuilt, worldsFailed, openFallbacks;
 
     public BenchPlayer(String name, RangeOfInfluence range, int skill) {
@@ -237,6 +252,9 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
                 bestKey = e.getKey();
             }
         }
+        if (bestKey != null && bestN > 0 && sampleTurns > 0 && (game.getTurnNum() + 1) / 2 <= sampleTurns) {
+            bestKey = sampleByVisits(byKey.keySet(), visits);   // exploration: a draw in proportion to the visits
+        }
         MCTSNode best;
         if (bestKey == null || bestN <= 0) {
             fallbacks++;   // no searched option matches one of MageZero's: play its first
@@ -244,8 +262,14 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
         } else {
             best = byKey.get(bestKey);
         }
-        // the training record, as MageZero's calculateActions writes it (flat networks only: a graph
-        // network's self-play records would need the graph and its option nodes, docs/022 §7)
+        Map<String, BenchSearch.RootChild> rootKids = new HashMap<>();
+        for (BenchSearch.RootChild k : res.children) rootKids.putIfAbsent(k.key, k);
+        if (record && cfg.gnn != null) {
+            Rec g = graphRecord(game, action, r, byKey, visits, rootKids, best, res);
+            if (g != null) records.add(g);
+        }
+        // the training record, as MageZero's calculateActions writes it (flat networks; a graph network's is
+        // graphRecord's)
         int[] vec = new int[ActionEncoder.ACTION_DIM];
         boolean ok = cfg.gnn == null;
         for (Map.Entry<String, MCTSNode> e : byKey.entrySet()) {
@@ -260,22 +284,108 @@ public class BenchPlayer extends ComputerPlayerMCTS2 {
             stateEncoder.addLabeledState(r.stateVector, vec, res.rootQ == null ? 0.0 : res.rootQ, action, true);
         }
         if (ok && record && r.stateVector != null) {
-            // one entry per distinct action index (options sharing an index are one to the network)
+            // one entry per distinct action index (options sharing an index are one to the network): visits
+            // and priors add, values average by visits
             Map<Integer, Integer> byIdx = new TreeMap<>();
+            Map<Integer, Double> priorBy = new HashMap<>(), qw = new HashMap<>();
             for (Map.Entry<String, MCTSNode> e : byKey.entrySet()) {
-                byIdx.merge(e.getValue().getActionIndex(game) % ActionEncoder.ACTION_DIM, visits.getOrDefault(e.getKey(), 0), Integer::sum);
+                int idx = e.getValue().getActionIndex(game) % ActionEncoder.ACTION_DIM;
+                int v = visits.getOrDefault(e.getKey(), 0);
+                byIdx.merge(idx, v, Integer::sum);
+                BenchSearch.RootChild k = rootKids.get(e.getKey());
+                if (k != null) {
+                    priorBy.merge(idx, k.prior, Double::sum);
+                    if (k.q != null && v > 0) qw.merge(idx, k.q * v, Double::sum);
+                }
             }
             int[] legal = new int[byIdx.size()], vis = new int[byIdx.size()];
-            int i = 0;
+            double[] oq = new double[byIdx.size()], op = new double[byIdx.size()];
+            int i = 0, played = -1, bestIdx = best.getActionIndex(game) % ActionEncoder.ACTION_DIM;
             for (Map.Entry<Integer, Integer> e : byIdx.entrySet()) {
                 legal[i] = e.getKey();
-                vis[i++] = e.getValue();
+                vis[i] = e.getValue();
+                oq[i] = e.getValue() > 0 && qw.containsKey(e.getKey()) ? qw.get(e.getKey()) / e.getValue() : Double.NaN;
+                op[i] = priorBy.getOrDefault(e.getKey(), Double.NaN);
+                if (e.getKey() == bestIdx) played = i;
+                i++;
             }
-            records.add(new Rec(r.stateVector.stream().mapToInt(Integer::intValue).sorted().toArray(), String.valueOf(action),
+            Rec rec = new Rec(r.stateVector.stream().mapToInt(Integer::intValue).sorted().toArray(), String.valueOf(action),
                     legal, vis, res.rootQ == null ? 0.0 : res.rootQ, game.getTurnNum(),
-                    GameStateEvaluator3.evaluateNormalized(getId(), game)));
+                    GameStateEvaluator3.evaluateNormalized(getId(), game));
+            rec.optQ = oq;
+            rec.optPrior = op;
+            rec.played = played;
+            records.add(rec);
         }
         return best;
+    }
+
+    /** An option drawn in proportion to its visits (self-play exploration); null if nothing was visited. */
+    private String sampleByVisits(Collection<String> keys, Map<String, Integer> visits) {
+        long tot = 0;
+        for (String k : keys) tot += Math.max(0, visits.getOrDefault(k, 0));
+        if (tot <= 0) return null;
+        long x = (long) (rng.nextDouble() * tot);
+        for (String k : keys) {
+            x -= Math.max(0, visits.getOrDefault(k, 0));
+            if (x < 0) return k;
+        }
+        return null;
+    }
+
+    /**
+     * A graph network's training record (docs/021): the root's state graph as the search encodes it (the
+     * searcher's seat, the opponent's hand hidden: GraphNet.infer), each option as the graph node that stands
+     * for it (GraphNet.optionNodeId; a yes/no question's options are [no, yes] with no nodes, read by the use
+     * head), and per option its visits, backed-up value and prior. An attack is recorded as the graph-encoder
+     * branch asks it, a target choice between Stop Choosing (no) and the defending player (yes), as the
+     * imitation tables do. Null at decisions no policy head reads (CHOOSE_NUM, MAKE_CHOICE).
+     */
+    private Rec graphRecord(Game game, ActionEncoder.ActionType action, MCTSNode2 r, Map<String, MCTSNode> byKey,
+                            Map<String, Integer> visits, Map<String, BenchSearch.RootChild> rootKids, MCTSNode best,
+                            BenchSearch.Result res) {
+        if (action != ActionEncoder.ActionType.PRIORITY && action != ActionEncoder.ActionType.CHOOSE_TARGET
+                && action != ActionEncoder.ActionType.CHOOSE_USE) return null;
+        GraphNet.Ask q;
+        FeatureGraph.GraphArrays a;
+        try {
+            q = GraphNet.ask(r);
+            a = GraphRecord.arrays(r.getGame(), r.targetPlayer, r.playerId, q.ask, false);
+        } catch (RuntimeException e) {
+            graphRecordFailures++;
+            return null;
+        }
+        boolean use = action == ActionEncoder.ActionType.CHOOSE_USE && !q.attack;
+        List<String> keys = new ArrayList<>(byKey.keySet());
+        if (use) {   // the use head's options are [no, yes]
+            keys.sort(Comparator.comparing(k -> byKey.get(k).getUseAction()));
+            if (keys.size() != 2) return null;
+        }
+        int n = keys.size();
+        List<List<UUID>> options = new ArrayList<>(n);
+        int[] legal = new int[n], vis = new int[n];
+        double[] oq = new double[n], op = new double[n];
+        int played = -1;
+        for (int i = 0; i < n; i++) {
+            String k = keys.get(i);
+            MCTSNode c = byKey.get(k);
+            UUID id = use ? null : GraphNet.optionNodeId(q, c);
+            options.add(id == null ? List.of() : List.of(id));
+            legal[i] = i;
+            vis[i] = visits.getOrDefault(k, 0);
+            BenchSearch.RootChild rc = rootKids.get(k);
+            oq[i] = rc != null && rc.q != null ? rc.q : Double.NaN;
+            op[i] = rc != null ? rc.prior : Double.NaN;
+            if (c == best) played = i;
+        }
+        String type = q.attack ? "CHOOSE_TARGET" : action.name();
+        Rec rec = new Rec(new int[0], type, legal, vis, res.rootQ == null ? 0.0 : res.rootQ, game.getTurnNum(),
+                GameStateEvaluator3.evaluateNormalized(getId(), game));
+        rec.graph = GraphRecord.encodeArrays(a, type, q.ask.text, options);
+        rec.optQ = oq;
+        rec.optPrior = op;
+        rec.played = played;
+        return rec;
     }
 
     // ------------------------------------------------------------------ policy-only play

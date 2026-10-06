@@ -194,6 +194,16 @@ def main(argv=None) -> int:
     ap.add_argument("--bot2", required=True, help="as --bot1")
     ap.add_argument("--ports", default="50052", help="inference servers, comma-separated (network bots)")
     ap.add_argument("--graph-ports", default="50062", help="graph inference servers (gnn bots), comma-separated")
+    ap.add_argument("--bot2-ports", default=None,
+                    help="bot2's own inference servers (default: --ports): two versions of one network play each "
+                         "other (docs/021); the pair's two games then share their seed, as for two different bots")
+    ap.add_argument("--bot2-graph-ports", default=None, help="bot2's own graph servers (default: --graph-ports)")
+    ap.add_argument("--root-noise", type=float, default=0.0,
+                    help="self-play exploration (docs/021 §1.4): Dirichlet noise mixed into each search's root priors "
+                         "(AlphaZero: 0.25); PIMC only. Never for evaluation games")
+    ap.add_argument("--root-noise-alpha", type=float, default=0.3)
+    ap.add_argument("--sample-turns", type=int, default=0,
+                    help="self-play exploration: each seat plays an option drawn by visit counts for its first N turns")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--heap", default="3g")
     ap.add_argument("--max-turns", type=int, default=50)
@@ -222,7 +232,12 @@ def main(argv=None) -> int:
     pairs = deck_pairs(stems, a.pairs, a.seed)
     ports = [int(p) for p in a.ports.split(",")]
     gports = [int(p) for p in a.graph_ports.split(",")]
-    tasks = [t for t in shard_tasks(game_tasks(pairs, a.seed, mirror=a.bot1 == a.bot2), a.shard) if a.min_pair <= t["pair"] <= (a.max_pair if a.max_pair is not None else t["pair"])]
+    ports2 = [int(p) for p in a.bot2_ports.split(",")] if a.bot2_ports else ports
+    gports2 = [int(p) for p in a.bot2_graph_ports.split(",")] if a.bot2_graph_ports else gports
+    separate = bool(a.bot2_ports or a.bot2_graph_ports)
+    explore = {k: v for k, v in (("rootNoise", a.root_noise), ("rootNoiseAlpha", a.root_noise_alpha),
+                                 ("sampleTurns", a.sample_turns)) if a.root_noise or a.sample_turns}
+    tasks = [t for t in shard_tasks(game_tasks(pairs, a.seed, mirror=a.bot1 == a.bot2 and not separate), a.shard) if a.min_pair <= t["pair"] <= (a.max_pair if a.max_pair is not None else t["pair"])]
     done_keys = set()
     games_file = out / "games.jsonl"
     if games_file.exists():
@@ -251,17 +266,20 @@ def main(argv=None) -> int:
     def play(i_t):
         i, t = i_t
         port, gport = ports[i % len(ports)], gports[i % len(gports)]
+        port2, gport2 = ports2[i % len(ports2)], gports2[i % len(gports2)]
         # the decks keep their seats (deck1 in A, which plays first), the bots swap seats: over a
         # pair each bot plays each deck once and goes first once, so deck strength and the play
         # order cancel in the pair
         bot_a, bot_b = (a.bot2, a.bot1) if t["swap"] else (a.bot1, a.bot2)
+        # each bot reads its own servers: bot1 --ports/--graph-ports, bot2 --bot2-ports/--bot2-graph-ports
+        (pa, ga), (pb, gb) = ((port2, gport2), (port, gport)) if t["swap"] else ((port, gport), (port2, gport2))
         deck_a, deck_b = t["deck1"], t["deck2"]
         opts = dict(deckA=str(dzpaths.deck_path(deck_a, Path(a.deck_root)).resolve()),
                     deckB=str(dzpaths.deck_path(deck_b, Path(a.deck_root)).resolve()),
-                    seatA=seat_options(bot_a, a.budget, port, a.search_timeout, belief, deck_b, a.policy_fallback_budget, gport,
-                                       a.method),
-                    seatB=seat_options(bot_b, a.budget, port, a.search_timeout, belief, deck_a, a.policy_fallback_budget, gport,
-                                       a.method),
+                    seatA={**seat_options(bot_a, a.budget, pa, a.search_timeout, belief, deck_b, a.policy_fallback_budget, ga,
+                                          a.method), **explore},
+                    seatB={**seat_options(bot_b, a.budget, pb, a.search_timeout, belief, deck_a, a.policy_fallback_budget, gb,
+                                          a.method), **explore},
                     seed=t["game_seed"], starting="A", maxTurns=a.max_turns, record=a.record)
         g = {**t, "botA": bot_a, "botB": bot_b, "budget": a.budget, "closed_decklists": belief is not None,
              "method": a.method}

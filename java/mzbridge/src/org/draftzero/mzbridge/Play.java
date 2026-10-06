@@ -54,7 +54,11 @@ import java.util.*;
  *            maxTurns       the game stops after this turn (default 50; a stopped game has no winner)
  *            record         return each seat's training records (state features, the decision type,
  *                           the turn, each legal option's action index and visit count, the
- *                           search's root value)
+ *                           search's root value; per option its backed-up value and prior, and the
+ *                           option played; with a graph network, the state graph and each option's
+ *                           nodes instead of the features: BenchPlayer.graphRecord, docs/021)
+ *            a seat's rootNoise, rootNoiseAlpha (Bench.config) and sampleTurns (BenchPlayer): self-play
+ *                           exploration, docs/021 §1.4; off by default
  *   response winner ("A", "B", or null), turns, seats {A, B: decisions, singleOption, fallbacks,
  *            policyDecisions, policySearched, inHand {card name: copies seen in hand at the seat's
  *            decisions}, sims, evals, netEvals, engineSteps, searchSeconds, timedOut}, records when asked,
@@ -145,6 +149,8 @@ final class Play {
         p.noNoise = true;
         p.method = Worker.optString(s, "method", "ismcts");
         if (!List.of("ismcts", "pimc").contains(p.method)) throw new IllegalArgumentException("method must be ismcts or pimc");
+        p.sampleTurns = Worker.optInt(s, "sampleTurns", 0);
+        if (p.sampleTurns < 0) throw new IllegalArgumentException("sampleTurns must be >= 0");
         JsonObject bel = seat == null ? null : Worker.optObject(seat, "belief");
         if (bel != null) {
             p.belief = new BeliefClient(Worker.optString(bel, "host", "127.0.0.1"), Worker.optInt(bel, "port", 50070),
@@ -212,7 +218,10 @@ final class Play {
         s.addProperty("engineSteps", p.stats.engineSteps);
         s.addProperty("policyRefreshes", p.stats.policyRefreshes);
         s.addProperty("netPriors", p.stats.netPriors);
-        if (p.cfg != null && p.cfg.gnn != null) s.addProperty("graphPolicyMisses", p.stats.graphPolicyMisses);
+        if (p.cfg != null && p.cfg.gnn != null) {
+            s.addProperty("graphPolicyMisses", p.stats.graphPolicyMisses);
+            s.addProperty("graphRecordFailures", p.graphRecordFailures);
+        }
         s.addProperty("timedOut", p.stats.timedOut);
         s.addProperty("searchSeconds", Math.round(p.searchNanos / 1e6) / 1000.0);
         s.addProperty("redeals", p.stats.redeals);
@@ -276,6 +285,16 @@ final class Play {
         }
     }
 
+    /** Doubles as JSON numbers, NaN (an unvisited option's value) as null. */
+    private static JsonArray nums(double[] xs) {
+        JsonArray a = new JsonArray();
+        for (double x : xs) {
+            if (Double.isFinite(x)) a.add(Math.round(x * 1e5) / 1e5);
+            else a.add(com.google.gson.JsonNull.INSTANCE);
+        }
+        return a;
+    }
+
     /** A seat's training records (BenchPlayer.Rec): features, the decision type, the turn, every
      *  legal option's action index with its visit count, and the search's root value. */
     private static JsonArray records(BenchPlayer p) {
@@ -294,6 +313,10 @@ final class Play {
             o.add("visits", visits);
             o.addProperty("q", r.q);
             o.addProperty("heuristic", r.heuristic);
+            if (r.optQ != null) o.add("opt_q", nums(r.optQ));
+            if (r.optPrior != null) o.add("opt_prior", nums(r.optPrior));
+            if (r.played >= 0) o.addProperty("played", r.played);
+            if (r.graph != null) o.add("graph", r.graph);
             out.add(o);
         }
         return out;

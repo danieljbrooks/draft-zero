@@ -131,6 +131,24 @@ public final class GraphNet {
         }
     }
 
+    /**
+     * The engine id of the graph node that stands for option `c` at a decision asked as `q`, as
+     * Policy.logit reads it: a priority option's ability (Pass's fixed node), a target, Stop Choosing or
+     * the defending player for an attack; null for a yes/no question (the use head reads it, no node).
+     */
+    static UUID optionNodeId(Ask q, MCTSNode c) {
+        switch (q.type) {
+            case PRIORITY:
+                return c.getPriorityAction() == null ? null : GraphRecord.actionId(c.getPriorityAction());
+            case CHOOSE_TARGET:
+                return c.getTargetAction();
+            case CHOOSE_USE:
+                return q.attack ? (c.getUseAction() ? q.defender : STOP_CHOOSING) : null;
+            default:
+                return null;
+        }
+    }
+
     /** What the graph encoder is asked at a search node, from MageZero's paused simulation player. */
     static final class Ask {
         final ActionEncoder.ActionType type;

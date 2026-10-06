@@ -8,6 +8,8 @@
     dz gameplay <tool> ...        human gameplay data (docs/008): 17lands, arena, bridge, coach,
                                   turnreplay, imitation, pairs, belief, fingerprints, ids, replay,
                                   reconstruct, labels
+    dz selfplay <role> ...        the self-play loop (docs/021): worker, trainer, controller, local,
+                                  status, stop
 """
 import argparse
 import json
@@ -37,6 +39,9 @@ def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "gameplay":
         return gameplay(argv[1:])
+    if argv and argv[0] == "selfplay":
+        from draftzero.selfplay.cli import main as selfplay
+        return selfplay(argv[1:]) or 0
     ap = argparse.ArgumentParser(prog="dz", description="DraftZero")
     sub = ap.add_subparsers(dest="cmd", required=True)
 

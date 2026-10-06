@@ -1,0 +1,35 @@
+# The self-play loop with MageZero's graph network (docs/021). Every role reads this file:
+#
+#   one machine:   dz selfplay local --config configs/selfplay_gnn.yml --store runs/selfplay/gnn-1 --max-hours 24
+#   many machines: dz selfplay trainer    --config configs/selfplay_gnn.yml --store "hf://danbrooks/draftzero-selfplay-games?weights=<private repo>"
+#                  dz selfplay controller --config configs/selfplay_gnn.yml --store <the same>
+#                  dz selfplay worker     --config configs/selfplay_gnn.yml --store <the same>      (on every game machine)
+#
+# The values below are a starting point for docs/021's small experiments, not a tuned recipe.
+run: gnn-selfplay-1
+network: gnn
+start: runs/gnn/full_r1/best_policy.pt.gz     # the full run's best checkpoint (docs/024); hf:// paths work too
+play:
+  method: pimc
+  simulations: 1000                           # docs/021 §1.5: large, set by experiment
+  root_noise: 0.25
+  sample_turns: 3
+  past_share: 0.2
+worker:
+  heap: 3g
+trainer:
+  min_new_games: 200
+  publish_every_s: 3600
+  window_games: 5000
+  reuse: 4.0
+  lr: 3.0e-5
+  kl_weight: 1.0
+  kl_weight_end: 0.1
+  kl_anneal_versions: 20
+  human_share: 0.0                            # 0.15 once the human graph tables are on the trainer's machine:
+  human_tables_dir: null                      #   e.g. data/imitation_graph/h5
+eval:
+  every_versions: 2
+  simulations: 100
+  pairs: 500
+  opponent: start

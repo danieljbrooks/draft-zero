@@ -94,10 +94,15 @@ public final class GraphRecord {
      * array of node indices per legal option; missing, the options with no node (absent when 0).
      */
     static JsonObject encode(Game game, UUID me, Ask ask, boolean perfectInfo) {
-        FeatureGraph.GraphArrays a = arrays(game, me, me, ask, perfectInfo);
+        return encodeArrays(arrays(game, me, me, ask, perfectInfo), ask.type, ask.text, ask.options);
+    }
+
+    /** A graph already encoded (`arrays`) in the record layout of `encode`, its options given as the engine
+     *  ids of their nodes: the game player's self-play records use it (docs/021). */
+    public static JsonObject encodeArrays(FeatureGraph.GraphArrays a, String type, String text, List<List<UUID>> options) {
         JsonObject r = new JsonObject();
-        r.addProperty("type", ask.type);
-        r.addProperty("text", ask.text);
+        r.addProperty("type", type);
+        r.addProperty("text", text);
         r.addProperty("ids", b64(a.ids));
         r.addProperty("values", b64(a.values));
         r.addProperty("edge_child", b64(a.edgeChild));
@@ -105,7 +110,7 @@ public final class GraphRecord {
         r.addProperty("edge_label", b64(a.edgeLabel));
         JsonArray opts = new JsonArray();
         int missing = 0;
-        for (List<UUID> ids : ask.options) {
+        for (List<UUID> ids : options) {
             JsonArray o = new JsonArray();
             for (UUID id : ids) {
                 Integer k = a.localIndex.get(id);

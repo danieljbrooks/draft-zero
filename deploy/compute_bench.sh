@@ -10,7 +10,8 @@
 #   games    self-play il_bc@$BUDGET (closed decklists, records kept) for $GAMES_MIN minutes: $WORKERS JVMs of
 #            $HEAP, $REPLICAS inference servers on $SERVER_DEVICE (cpu or cuda), load every 10 s
 #            (tools/compute_bench/monitor.py). Unfinished games are dropped when the time is up
-#   sb       sb-v2's held-out decisions (the same $SB_LIMIT on every machine) at each of $SB_BUDGETS simulations
+#   sb       sb-v2's held-out decisions (the same $SB_LIMIT on every machine) at each of $SB_BUDGETS simulations,
+#            with each of $SB_METHODS (default ismcts; "pimc1 ismcts" compares PIMC on one belief world, docs/021)
 #   tables   the games' records -> soft tables (tools/imitation_scale/selfplay_tables.py)
 #   train    the trainer from the MLP, $TRAIN_STEPS steps: stage 6's recipe on those tables (configs/
 #            compute_bench_soft.yml) and the imitation recipe on two small 17lands tables (compute_bench_human.yml),
@@ -55,6 +56,7 @@ GAMES_MIN=${GAMES_MIN:-25}
 SB_BUDGETS=${SB_BUDGETS:-100 1000}
 SB_HEAP=${SB_HEAP:-2500m}
 SB_LIMIT=${SB_LIMIT:-112}
+SB_METHODS=${SB_METHODS:-ismcts}
 TRAIN_STEPS=${TRAIN_STEPS:-400}
 TRAIN_THREADS=${TRAIN_THREADS:-$QUOTA $(( QUOTA / 2 ))}
 GPU_TRAIN_STEPS=${GPU_TRAIN_STEPS:-3000}
@@ -179,10 +181,10 @@ phase_sb() {   # the budgets below 10,000 in one run.py call (one pool: the firs
   for B in $SB_BUDGETS; do if [ "$B" -ge 10000 ]; then big="$big $B"; else small="${small:+$small,}$B"; fi; done
   if [ -n "$small" ]; then
     local Wk; Wk=$(wcap "$SB_HEAP" "$WORKERS")
-    log "sb: $SB_LIMIT decisions at $small simulations, $Wk workers, heap $SB_HEAP"
+    log "sb: $SB_LIMIT decisions at $small simulations ($SB_METHODS), $Wk workers, heap $SB_HEAP"
     # SB_MAX_MIN caps a small machine's run: the decisions done by then are kept (each is compared item by item)
     MZB_JAVA_OPTS="${JAVA_OPTS:-}" tmo $(( ${SB_MAX_MIN:-600} * 60 )) python tools/search_bench/run.py --items data/search_bench/sb-v2 \
-      --split test --out "$OUT/sb" --evaluator remote --ports "$PORTS" --grid priors --methods ismcts --budgets "$small" \
+      --split test --out "$OUT/sb" --evaluator remote --ports "$PORTS" --grid priors --methods "${SB_METHODS// /,}" --budgets "$small" \
       --leaf net --net mlpd1 --workers "$Wk" --heap "$SB_HEAP" --limit "$SB_LIMIT" >> "$OUT/sb/run.log" 2>&1
     pkill -f "[o]rg.draftzero.mzbridge.Worker" 2>/dev/null
     log "sb: $(grep finished "$OUT/sb/run.log" | tail -2 | tr '\n' ' ') ($(cat "$OUT"/sb/decisions/*.jsonl 2>/dev/null | wc -l) decisions)"
@@ -192,7 +194,7 @@ phase_sb() {   # the budgets below 10,000 in one run.py call (one pool: the firs
     local L=${SB_LIMIT_10K:-$Wk}
     log "sb: $L decisions at $B simulations, $Wk workers, heap $H"
     MZB_JAVA_OPTS="${JAVA_OPTS:-}" python tools/search_bench/run.py --items data/search_bench/sb-v2 --split test \
-      --out "$OUT/sb" --evaluator remote --ports "$PORTS" --grid priors --methods ismcts --budgets "$B" --leaf net \
+      --out "$OUT/sb" --evaluator remote --ports "$PORTS" --grid priors --methods "${SB_METHODS// /,}" --budgets "$B" --leaf net \
       --net mlpd1 --workers "$Wk" --heap "$H" --limit "$L" >> "$OUT/sb/run.log" 2>&1
     log "sb: $(grep finished "$OUT/sb/run.log" | tail -1)"
   done

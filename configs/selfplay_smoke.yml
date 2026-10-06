@@ -1,0 +1,45 @@
+# The self-play loop's smoke test (docs/021 §3.4): every role on one machine, tiny everything, two versions.
+#
+#   dz selfplay local --config configs/selfplay_smoke.yml --store runs/selfplay/smoke/store \
+#       --work-dir runs/selfplay/smoke --max-hours 1
+#
+# Passes when: the trainer publishes versions 1 and 2, the worker switches to each and uploads games played by it,
+# and both evaluation jobs (v1, v2 against v0) close with scored games. ~10 minutes on a laptop CPU.
+run: smoke
+network: gnn
+start: runs/gnn/full_r1/best_policy.pt.gz
+play:
+  simulations: 8
+  sample_turns: 2
+  max_turns: 20
+  past_share: 0.3
+  search_timeout: 300
+  game_timeout: 900
+worker:
+  workers: 2
+  heap: 2g
+  servers: 1
+  device: cpu
+  pairs_per_chunk: 1
+  poll_s: 5
+trainer:
+  min_new_games: 4
+  publish_every_s: 0
+  window_games: 100
+  reuse: 1.0
+  batch_rows: 16
+  warmup_steps: 5
+  heldout_share: 0.25
+  full_every_versions: 2
+  device: cpu
+  poll_s: 5
+  max_versions: 2
+eval:
+  every_versions: 1
+  simulations: 8
+  pairs: 2
+  shard_pairs: 1
+  shard_expected_s: 600
+controller:
+  poll_s: 5
+  status_every_s: 0
