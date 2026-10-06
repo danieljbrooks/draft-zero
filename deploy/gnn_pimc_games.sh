@@ -8,7 +8,7 @@
 # RUN: policy (gnn_policy_greedy against heuristic@100), gnnN (gnn@N against heuristic@100), or h2hN (gnn@N against
 # the MLP's il_bc@N; MLP=<flat checkpoint> in the environment). After deploy/exp4_games_setup.sh.
 # Env: REPLICAS (3 graph servers: one serves ~650 states a second), DECKLISTS (closed | open), MLP, TAG (a name tag:
-# pimc-gnn-<TAG>-gnn100, e.g. the network's), SHARD (I/N: this pod's deck pairs, pair % N == I; not topped up).
+# pimc-gnn-<TAG>-gnn100, e.g. the network's), SHARD (I/N: this pod's deck pairs, pair % N == I; not topped up), PAIRS0 (deck pairs to start: 50).
 set -u
 cd "$(dirname "$0")/.."
 export PATH=$HOME/venv/bin:/root/venv/bin:$PATH
@@ -30,7 +30,7 @@ for item in "$@"; do
           : "${MLP:?h2h needs MLP=<a flat checkpoint>}" ;;
     *) log "unknown run $RUN"; exit 2 ;;
   esac
-  PAIRS=50 ROUND=0
+  PAIRS=${PAIRS0:-50} ROUND=0
   while :; do
     log "$NAME: $B1 against $B2, PIMC ($DECKLISTS decklists), $PAIRS pairs, $W workers, heap $HEAP"
     bash deploy/gnn_games_run.sh "$NAME${SHARD:+-s${SHARD%/*}}" "$MODEL" "${REPLICAS:-3}" --bot1 "$B1" --bot2 "$B2" \
