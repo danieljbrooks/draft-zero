@@ -33,9 +33,10 @@ full run's length needn't be fixed in advance.
    network, with his checkpoint layout. Width stays 256 (Dan: for speed).
 2. **"At high data scale":** the most promising shapes again on 30% of the games.
 3. **A full-scale run** of the best recipe on all the training games, **on Dama's RTX 6000s** (r1).
-4. **Evaluation**, on cheap rented GPUs (RTX 3070/3090, Community): 100 paired games at 0, 100, 300, 1,000 and
-   3,000 simulations against the baseline (MageZero's heuristic bot at 100), with PIMC as in docs/019 §4.6; and
-   10,000 policy-only self-play games for docs/019 §4.4's 17lands analysis. Games an hour and games per dollar.
+4. **Evaluation**, on cheap rented GPUs (RTX 3070/3090, Community): 100 paired games at 0, 100, 300 and 1,000
+   simulations against the baseline (MageZero's heuristic bot at 100), with PIMC as in docs/019 §4.6 (3,000 dropped
+   for expediency: Dan, 5 October, 10:15 PM PT); and 10,000 policy-only self-play games for docs/019 §4.4's 17lands
+   analysis. Games an hour and games per dollar.
 
 ## 1. Fitting all the rows on r1
 
@@ -214,8 +215,8 @@ three point the GNN's way, by 3-8 points. Records: HF `gnn/games/runs/pimc-gnn-s
 | 3,000 (projected, x10) | ~37 h | ~2.7 | ~3.4 h | | ~$0.063 |
 | greedy self-play (docs/023's network, 40-game test) | – | ~530 | 49 s | – | $0.0003 |
 
-For the final model's ladder: ~55 pod-hours (~$9) for 0-3,000 simulations, ~19 for 10,000 self-play games (~$3),
-spread over several pods so it finishes in under a day.
+For the final model: ~18 pod-hours (~$3) for the ladder at 0-1,000 simulations (3,000 dropped), ~19 for 10,000
+self-play games (~$3), spread over several pods so it finishes within the day.
 
 ## Pods and spend
 
