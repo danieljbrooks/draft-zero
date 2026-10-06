@@ -12,7 +12,7 @@ what im most interested in though at high data scale"). All times are Pacific.*
 | 1. Code: `local_depth`, the streamed cache, the wsd schedule | done, on main | laptop | – |
 | 2. Round 7: local layers at 10%, three epochs | **done**: local depth 3, 3 passes x depth 2 and FFN 1,024 gain ~0.008 in set NLL | r1 | free |
 | 3. Round 8: long runs (8 epochs of 30%) | **done**: FFN 1,024 (0.2210, the best value head, 1.04x the base's cost) chosen; 3 passes x depth 2 ties it at 2x the cost; base 0.2221; dropout 0.2 0.2286 | r1 | free |
-| 4. The full run | **running** on r1's GPU 0 (~2,000 s an epoch): all the games, width 256, FFN 1,024. **Extended to 24 epochs at 9.7** (no overfitting, still improving; Dan: train until ~6 AM): the rate holds to epoch 19.2 (~3:30 AM PT), the run ends ~6:15 AM PT. Best so far: set NLL 0.2068 (epoch 8.2) | r1 | free |
+| 4. The full run | **decaying** on r1's GPU 0 since epoch 17.84 (2:20 AM PT; Dan: the policy had levelled off at the held rate): cosine from 1e-4 to 1e-5 over 4.45 epochs, ends at 22.29 (~4:20 AM PT). Best before the decay: set NLL 0.2032 (epoch 14.7) | r1 | free |
 | 5. Games | a preview ladder of docs/023's network: **policy alone 42.7%, 100 simulations 64.1%** (103 games each; the MLP's PIMC: 40%, 57%); 300 simulations running | Community A4000 | ~$1.20 so far |
 | 6. 17lands analysis (docs/019 §4.4) | | laptop | – |
 
@@ -173,6 +173,11 @@ contiguous runs. Resumed from its checkpoint: GPU 0 at 57-78%, ~6,500 states a s
 averaged) with no sign of overfitting (value log-loss flat at 0.52-0.53), and r1 is otherwise idle overnight: stopped at
 its checkpoint and resumed with `max_epochs: 24` while still holding the peak rate (wsd moves the decay to epochs
 19.2-24).
+
+**The decay started early (2:20 AM PT).** By epoch 17.5 the set NLL had been level at ~0.205 since epoch ~14 (best
+0.2032 at 14.7) and the value log-loss was drifting up (0.518 at epoch 7, ~0.540 at 16-17.5). On Dan's call the run
+stopped at its checkpoint (epoch 17.84) and resumed with `max_epochs: 22.29`, which puts wsd's decay start (80% of
+the steps) at the current step: a cosine from 1e-4 to 1e-5 over the remaining 4.45 epochs.
 
 ### The full run's curves so far
 
