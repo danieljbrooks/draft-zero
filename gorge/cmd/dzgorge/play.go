@@ -213,6 +213,13 @@ func runPlay(args []string) int {
 		done, a, b, draw, stall, errs, visits int
 		turns                                 int64
 	}
+	// Games finish out of order; they are written in game order, so the output files (and a
+	// network trained on the corpus) are a pure function of the flags.
+	type finished struct {
+		line, member []byte
+	}
+	pending := map[int]finished{}
+	next := 0
 	ch := make(chan job)
 	var wg sync.WaitGroup
 	for k := 0; k < nw; k++ {
@@ -223,11 +230,20 @@ func runPlay(args []string) int {
 				rec, member := playOne(jb, specs, dc, reg, *maxTurns, *maxIntents, *mulligans, *corpus != "")
 				line, _ := json.Marshal(rec)
 				mu.Lock()
-				w.Write(line)
-				w.WriteByte('\n')
-				if member != nil {
-					if _, err := corpusF.Write(member); err != nil {
-						panic(err)
+				pending[jb.game] = finished{line, member}
+				for {
+					f, ok := pending[next]
+					if !ok {
+						break
+					}
+					delete(pending, next)
+					next++
+					w.Write(f.line)
+					w.WriteByte('\n')
+					if f.member != nil {
+						if _, err := corpusF.Write(f.member); err != nil {
+							panic(err)
+						}
 					}
 				}
 				tally.done++

@@ -12,8 +12,11 @@ Magic rules engine that compiles Forge's card scripts, and for training and eval
 | `decks.py` | writes the 31,516-deck pool (`tools/extract_decks.py`'s output) as gorge deck files, under the XMage pool's names, so `assets/decks.tsv`'s train/eval split applies |
 | `bench.sh` | the throughput and strength benchmark (docs/025 §2–3) |
 | `azloop.sh` | one AlphaZero-style generation: search self-play on the train decks, then `policytrain` on the searched decisions (§4) |
+| `evalnet.sh` | a trained network's games on the eval decks: alone against `bot` and `random`, and inside the search against the search without it (§4) |
 | `gih_runs.sh` | self-play for 17lands card statistics (§5) |
 | `analyze.py` | win rates with paired confidence intervals, games-in-hand win rates against 17lands, throughput |
+| `sortcorpus.py` | puts a visit corpus in game order; `dzgorge` now writes in game order itself |
+| `figures.py` | docs/025's figures |
 
 ## Quick start
 
