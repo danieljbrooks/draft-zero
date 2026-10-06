@@ -321,6 +321,25 @@ def test_block_sampler_covers_every_row_once_an_epoch(toy):
                                                for b in np.unique(w // 4))
 
 
+def test_refit_one_head_on_a_finished_network(toy, tmp_path):
+    quiet = lambda *a, **k: None   # noqa: E731
+    cfg = toy_cfg(toy, max_epochs=2, lr=3e-3)
+    data = gs.load_data(cfg, log=quiet)
+    gs.Trainer(cfg, data, tmp_path / "base", log=quiet).run()
+    base, _, _, _ = gs.load_checkpoint(tmp_path / "base" / "final.pt.gz")
+    rcfg = toy_cfg(toy, max_epochs=1, lr=3e-3, init_checkpoint=str(tmp_path / "base" / "final.pt.gz"),
+                   train_only=["value_head"], policy_weight=0.0, binary_weight=0.0, target_weight=0.0, value_weight=1.0)
+    tr = gs.Trainer(rcfg, data, tmp_path / "refit", log=quiet)
+    assert all(not p.requires_grad for n, p in tr.model.named_parameters() if not n.startswith("value_head"))
+    tr.run()
+    after, _, _, _ = gs.load_checkpoint(tmp_path / "refit" / "final.pt.gz")
+    sb, sa = base.state_dict(), after.state_dict()
+    assert all(torch.equal(sb[k], sa[k]) for k in sb if not k.startswith("value_head"))
+    assert any(not torch.equal(sb[k], sa[k]) for k in sb if k.startswith("value_head"))
+    with pytest.raises(ValueError):
+        gs.Trainer({**rcfg, "train_only": ["nope"]}, data, tmp_path / "bad", log=quiet)
+
+
 def test_graph_trainer_rejects_misaligned_tables(toy, tmp_path):
     import shutil
     d = tmp_path / "bad"

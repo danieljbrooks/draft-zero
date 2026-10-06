@@ -94,6 +94,9 @@ DEFAULTS: dict[str, Any] = {
     "wsd_decay_frac": 0.2,         # lr_schedule wsd: warm up, hold the peak, cosine down over this last share of the
                                    # steps. Resuming with a larger max_epochs before the decay starts extends the hold
     "emb_lr_mult": 1.0,            # the leaf and edge-label embeddings' learning rate = lr x this
+    "init_checkpoint": None,       # a graph checkpoint whose weights start the run (its vocabs must be the data's)
+    "train_only": None,            # parameter-name prefixes to train, the rest frozen (e.g. [value_head]: re-fit
+                                   # one head on a finished network's features, docs/024)
     "emb_init_std": None,          # re-draw the leaf, edge-label, type and value embeddings and CLS from N(0, std);
                                    # null: upstream's N(0, 1) (experiment #4's transformer trained well only at 0.02)
     "weight_decay": 0.0, "grad_clip": 1.0,
@@ -959,12 +962,28 @@ class Trainer:
                     e.weight.normal_(0.0, float(cfg["emb_init_std"]))
                 self.model.edge_embedding.weight[0].zero_()          # the unknown label stays the padding row
                 self.model.cls.normal_(0.0, float(cfg["emb_init_std"]))
-        emb = [p for n, p in self.model.named_parameters() if n in ("embedding.weight", "edge_embedding.weight")]
-        rest = [p for n, p in self.model.named_parameters() if n not in ("embedding.weight", "edge_embedding.weight")]
+        if cfg["init_checkpoint"]:
+            m0, v0, e0, _ = load_checkpoint(cfg["init_checkpoint"])
+            if not (np.array_equal(np.asarray(v0.ids), np.asarray(data.vocab.ids))
+                    and np.array_equal(np.asarray(e0.ids), np.asarray(data.edge_vocab.ids))):
+                raise ValueError(f"{cfg['init_checkpoint']}: its vocabs differ from this data's")
+            self.model.load_state_dict(m0.state_dict())
+            log(f"graph_supervised: weights from {cfg['init_checkpoint']}")
+        if cfg["train_only"]:
+            keep = tuple(cfg["train_only"])
+            for n, p in self.model.named_parameters():
+                p.requires_grad_(n.startswith(keep))
+            n_train = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            if not n_train:
+                raise ValueError(f"train_only {list(keep)} matches no parameter")
+            log(f"graph_supervised: training only {list(keep)} ({n_train:,} parameters), the rest frozen")
+        named = [(n, p) for n, p in self.model.named_parameters() if p.requires_grad]
+        emb = [p for n, p in named if n in ("embedding.weight", "edge_embedding.weight")]
+        rest = [p for n, p in named if n not in ("embedding.weight", "edge_embedding.weight")]
         kw = {"fused": True} if self.dev.type == "cuda" else {}
-        self.opt = torch.optim.AdamW([{"params": rest, "lr_mult": 1.0},
-                                      {"params": emb, "lr_mult": float(cfg["emb_lr_mult"])}],
-                                     lr=cfg["lr"], weight_decay=cfg["weight_decay"], **kw)
+        groups = [g for g in ({"params": rest, "lr_mult": 1.0}, {"params": emb, "lr_mult": float(cfg["emb_lr_mult"])})
+                  if g["params"]]
+        self.opt = torch.optim.AdamW(groups, lr=cfg["lr"], weight_decay=cfg["weight_decay"], **kw)
         self.ema = EMA(self.model, float(cfg["ema_decay"])) if cfg["ema_decay"] else None
         self.sampler = Sampler(self.train_tables, cfg["batch_rows"], cfg["seed"], cfg["sample_block_rows"],
                                cfg["sample_window_blocks"])
