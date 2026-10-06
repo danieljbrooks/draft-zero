@@ -12,7 +12,7 @@ what im most interested in though at high data scale"). All times are Pacific.*
 | 1. Code: `local_depth`, the streamed cache, the wsd schedule | done, on main | laptop | – |
 | 2. Round 7: local layers at 10%, three epochs | **done**: local depth 3, 3 passes x depth 2 and FFN 1,024 gain ~0.008 in set NLL | r1 | free |
 | 3. Round 8: long runs (8 epochs of 30%) | **done**: FFN 1,024 (0.2210, the best value head, 1.04x the base's cost) chosen; 3 passes x depth 2 ties it at 2x the cost; base 0.2221; dropout 0.2 0.2286 | r1 | free |
-| 4. The full run | **running** on r1's GPU 0 at ~6,500 states/s (block-local sampling since 4:55 PM PT): all the games, width 256, FFN 1,024; 16 epochs end ~12:30-1 AM PT, the decay starts ~10:45 PM PT | r1 | free |
+| 4. The full run | **running** on r1's GPU 0 (~2,000 s an epoch): all the games, width 256, FFN 1,024. **Extended to 24 epochs at 9.7** (no overfitting, still improving; Dan: train until ~6 AM): the rate holds to epoch 19.2 (~3:30 AM PT), the run ends ~6:15 AM PT. Best so far: set NLL 0.2068 (epoch 8.2) | r1 | free |
 | 5. Games | a preview ladder of docs/023's network: **policy alone 42.7%, 100 simulations 64.1%** (103 games each; the MLP's PIMC: 40%, 57%); 300 simulations running | Community A4000 | ~$1.20 so far |
 | 6. 17lands analysis (docs/019 §4.4) | | laptop | – |
 
@@ -167,6 +167,11 @@ back from disk (~1,800 major faults a second). **Block-local sampling** (`sample
 `sample_window_blocks: 64`): the order visits random blocks of 32 consecutive rows and shuffles the rows of 64
 blocks at a time, so every row is still seen once an epoch and a batch still draws from ~64 places, but the disk reads
 contiguous runs. Resumed from its checkpoint: GPU 0 at 57-78%, ~6,500 states a second (r1's GPU at batch 256).
+
+**Extended to 24 epochs (10:05 PM PT).** At 9.2 epochs the set NLL was still falling (~0.0015 an epoch, evaluations
+averaged) with no sign of overfitting (value log-loss flat at 0.52-0.53), and r1 is otherwise idle overnight: stopped at
+its checkpoint and resumed with `max_epochs: 24` while still holding the peak rate (wsd moves the decay to epochs
+19.2-24).
 
 ### The full run's curves so far
 
