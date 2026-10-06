@@ -12,8 +12,8 @@ what im most interested in though at high data scale"). All times are Pacific.*
 | 1. Code: `local_depth`, the streamed cache, the wsd schedule | done, on main | laptop | – |
 | 2. Round 7: local layers at 10%, three epochs | **done**: local depth 3, 3 passes x depth 2 and FFN 1,024 gain ~0.008 in set NLL | r1 | free |
 | 3. Round 8: long runs (8 epochs of 30%) | **done**: FFN 1,024 (0.2210, the best value head, 1.04x the base's cost) chosen; 3 passes x depth 2 ties it at 2x the cost; base 0.2221; dropout 0.2 0.2286 | r1 | free |
-| 4. The full run | **decaying** on r1's GPU 0 since epoch 17.84 (2:20 AM PT; Dan: the policy had levelled off at the held rate): cosine from 1e-4 to 1e-5 over 4.45 epochs, ends at 22.29 (~4:20 AM PT). Best before the decay: set NLL 0.2032 (epoch 14.7) | r1 | free |
-| 5. Games | a preview ladder of docs/023's network: **policy alone 42.7%, 100 simulations 64.1%** (103 games each; the MLP's PIMC: 40%, 57%); 300 simulations running | Community A4000 | ~$1.20 so far |
+| 4. The full run | **done** 4:31 AM PT (22.3 epochs, ~12 h of training on r1): test set NLL **0.2027**, top-1 0.859 (docs/023's GNN 0.2142, the MLP 0.2289). The value head overfit; temperature-calibrated (T = 1.61), on HF `gnn/full_r1/best_policy_calibrated.pt.gz` | r1 | free |
+| 5. Games | the full network's ladder (0, 100, 300, 1,000 simulations; 3,000 dropped) and 10,000 self-play games launching on 7 Community pods (~6:00 AM PT) | RunPod | ~$1.40 so far |
 | 6. 17lands analysis (docs/019 §4.4) | | laptop | – |
 
 **Dan's added goals (9:10 AM PT):** save and plot every run's curves, to audit whether the network is still learning
@@ -193,6 +193,40 @@ and experiment #4's MLP and transformer, scored on experiment #4's rows for the 
   rate decayed throughout. The full run's held rate trades that for room to keep improving; its decay (epochs
   12.8-16) decides. The held rate also shows in the value curves, which are noisy (log-loss 0.52-0.56) and below
   docs/023's.
+
+### The full run's result (test split)
+
+The run ended at 4:31 AM PT: 22.3 epochs, the rate held at 1e-4 to epoch 17.8 then cosine to 1e-5, ~12 hours on r1's
+GPU 0. Every network scored on the same test rows (experiment #4's on this build's rows):
+
+| Test split | Set NLL | Top-1 acted | Attacks | Blocks | Targets | Value AUC | Value log-loss | Calibration error |
+|---|---|---|---|---|---|---|---|---|
+| **full run, best policy, calibrated** (epoch 19.8, T = 1.61) | **0.2027** | **0.859** | **0.893** | **0.810** | **0.819** | 0.783 | 0.539 | **0.023** |
+| full run, best policy, raw | 0.2027 | 0.859 | 0.893 | 0.810 | 0.819 | 0.783 | 0.581 | 0.082 |
+| full run, final (epoch 22.3) | 0.2029 | 0.858 | 0.893 | 0.808 | 0.818 | 0.783 | 0.587 | 0.086 |
+| full run, epoch 7 (`best_value`) | 0.2129 | 0.850 | 0.881 | 0.789 | 0.801 | **0.792** | **0.527** | 0.023 |
+| full run, value head re-fit on the frozen final network | 0.2029 | 0.858 | 0.893 | 0.808 | 0.818 | 0.781 | 0.562 | 0.056 |
+| *docs/023's GNN (3 epochs)* | *0.2142* | *0.847* | *0.878* | *0.783* | *0.779* | *0.797* | *0.526* | |
+| *experiment #4's MLP* | *0.2289* | *0.829* | *0.873* | *0.750* | *0.730* | *0.784* | *0.552* | |
+| *experiment #4's transformer* | *0.2346* | *0.825* | *0.862* | *0.748* | *0.709* | *0.781* | *0.549* | |
+
+- **The policy is the best we have trained:** 0.011 below docs/023's GNN in test set NLL and 0.026 below the MLP;
+  top-1 +1.2 and +3.0 points, targets +4.0 and +8.9, blocks +2.7 and +6.0.
+- **The value head overfit.** Its validation log-loss was best at epoch 7 (0.518) and ended at 0.575, against ~0.43
+  on training rows: one noisy bit per game, shown ~350 times over 22 epochs, from positions of a game that a
+  network can recognise (two specific decklists). AlphaGo met the same failure (Silver et al., 2016: "successive
+  positions are strongly correlated ... the regression target is shared for the entire game") and fixed it with one
+  position per game from 30M self-play games. The policy, with 10.9M distinct labels, kept generalising.
+- **Re-fitting the value head on the frozen network didn't fix it:** the frozen features already identify the training
+  games, so the new head re-learned their results (training loss 0.38, validation back up to 0.588 after a brief dip),
+  and the ranking (AUC) can't move without new features.
+- **Temperature calibration fixes the overconfidence:** P(win) = sigmoid(2x / T), with one number T fitted on half the
+  validation games (`tools/imitation_scale/value_temperature.py`): T = 1.61; on the other half, log-loss 0.584 ->
+  0.544 and calibration error 0.084 -> 0.020; on test, 0.581 -> 0.539 and 0.082 -> 0.023, the AUC unchanged by
+  construction. T is folded into the value head's last layer: one ordinary network. **The games use it** (Dan).
+- **For self-play:** the warm policy is the asset; the value will be retrained on fresh self-play games anyway (the
+  cure for this overfitting), ideally with few positions per game or search root values as targets. For future
+  imitation runs: stop or detach the value head at its best epoch while the policy trains on.
 
 ## 5b. The preview ladder: docs/023's network in games
 
