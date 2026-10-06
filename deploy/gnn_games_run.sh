@@ -9,7 +9,8 @@
 #          --bot1 gnn@100 --bot2 heuristic@100 --pairs 50 --workers 28 --heap 2500m
 #        MLP=models/exp4/mlp_1ep/best_policy.pt.gz bash deploy/gnn_games_run.sh gnn100-mlp100 <gnn> 2 \
 #          --bot1 gnn@100 --bot2 il_bc@100 --pairs 50 --workers 28 --heap 2500m
-# Env: MLP (a flat checkpoint for the il_bc / policy bots), MLP_REPLICAS (2).
+# Env: MLP (a flat checkpoint for the il_bc / policy bots), MLP_REPLICAS (2), VALUE_MODEL (the graph servers take the
+# value from this checkpoint instead: graph_server.py --value-model).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 NAME=$1 MODEL=$2 REPLICAS=$3; shift 3
@@ -24,7 +25,7 @@ for i in $(seq 0 $((REPLICAS - 1))); do
   p=$((50062 + 100 * i)); GPORTS="${GPORTS:+$GPORTS,}$p"
   curl -s -m 2 "localhost:$p/healthz" > /dev/null && continue
   nohup python tools/imitation_scale/graph_server.py --model "$MODEL" --port "$p" --threads 16 \
-    > "$OUT/logs/graph_server_$p.log" 2>&1 < /dev/null &
+    ${VALUE_MODEL:+--value-model "$VALUE_MODEL"} > "$OUT/logs/graph_server_$p.log" 2>&1 < /dev/null &
 done
 PORTS=""
 if [ -n "${MLP:-}" ]; then

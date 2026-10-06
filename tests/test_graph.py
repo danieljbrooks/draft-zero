@@ -351,6 +351,30 @@ def test_graph_trainer_rejects_misaligned_tables(toy, tmp_path):
         gs.load_data(toy_cfg(d), splits=("val",), vocabs=(gs.build_vocabs([], 0, 0)), log=lambda *a, **k: None)
 
 
+def test_graph_server_takes_the_value_from_a_second_model(monkeypatch):
+    from types import SimpleNamespace
+    srv = tool("graph_server")
+
+    def net(value):     # a stand-in network: per-node policy scores, one value per state
+        def forward(g):
+            n, s = len(g.node_type), len(g.node_offsets) - 1
+            return SimpleNamespace(priority=torch.arange(n, dtype=torch.float32), target=torch.zeros(n),
+                                   use=torch.zeros(s, 2), value=torch.full((s,), value))
+        return forward
+
+    state = (np.zeros(3, np.int64), np.zeros(3, np.int64), np.zeros(3, np.int64), np.array([1, 2]), np.array([0, 0]),
+             np.ones(2, np.int64))
+    monkeypatch.setattr(srv, "DEVICE", torch.device("cpu"))
+    monkeypatch.setattr(srv, "MODEL", net(0.25))
+    p = srv.Pending([state, state])
+    srv.run_batch([p])
+    assert [o["value"] for o in p.out] == [0.25, 0.25] and p.out[1]["policy_priority"] == [3.0, 4.0, 5.0]
+    monkeypatch.setattr(srv, "VALUE_MODEL", net(-0.5))
+    p = srv.Pending([state, state])
+    srv.run_batch([p])
+    assert [o["value"] for o in p.out] == [-0.5, -0.5] and p.out[1]["policy_priority"] == [3.0, 4.0, 5.0]
+
+
 def test_play_graph_bots_read_the_graph_server():
     play = tool("play")
     o = play.seat_options("gnn@300", 1000, 50052, 300, graph_port=50062)
