@@ -42,7 +42,7 @@ act_weights: {opp_priority: 3.0, replay_priority: 3.0}
 batch_rows: 256
 sample_block_rows: 32           # read the 37 GB memory map in 32-row runs, shuffled within 64-block windows: at r1's
 sample_window_blocks: 64        # 40 GiB a random order faulted every page from disk (2,182 states/s, GPU idle; docs/024)
-max_epochs: 16                 # ~10 h on r1 at ~5,100 states/s; extended while validation improves (Dan: up to ~48 h)
+max_epochs: 24                 # 16 to start; extended to 24 at epoch 9.3 (Dan, 10 PM PT: no overfitting, train until ~6 AM)
 time_budget_s: 180000           # 50 h
 eval_every_steps: 10650        # about a quarter epoch (~42.6k steps of 256 states)
 ckpt_every_s: 10800             # every 3 h (r1's home has ~11 GB free)
