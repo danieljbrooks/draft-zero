@@ -89,21 +89,64 @@ with the lowest held-out loss (early stopping). Each run writes its curves (`cur
 
 Positions a second for one training step at batch 512 (`python -m dzg.bench`, on a held-out shard):
 
-| Network | RTX 3090 (RunPod community) | RTX PRO 6000 (r1) |
+| Network | RTX 3090 (RunPod community, `dzg.bench`) | RTX PRO 6000 (r1, during the runs) |
 |---|---:|---:|
-| MLP | 29,600 | PENDING |
-| Transformer | 21,800 | PENDING |
-| GNN | 18,200 | PENDING |
+| MLP | 29,600 | 47,000–92,000 |
+| Transformer | 21,800 | 44,000–57,000 |
+| GNN | 18,200 | ~47,000 |
 
-PENDING
+**Training is never the bottleneck.** Every network in this report trained in 1–3 minutes on r1, because the best
+checkpoint always came within an epoch (§3). An hour of self-play makes about 600,000 positions; a 3090 trains on
+them in about 25 seconds an epoch.
 
 ### 2.2 Games an hour, and per dollar
 
-PENDING
+Two rented RunPod community pods, with the search on the eval decks: one seat searching against gorge's bot (as
+in evaluation), or both seats searching (as in self-play). Without a network the GPU is idle, so the host CPU sets
+the speed:
+
+- **RTX 3080 Ti pod**, $0.18 an hour: an AMD Threadripper 7960X (Zen 4), 20 vCPUs of quota.
+- **RTX 3090 pod**, $0.22 an hour: an AMD EPYC 7C13 (Zen 3), 17.85 vCPUs.
+
+![Games an hour by simulations per searched decision, on log scales, for the two pods with and without a network](img/027-speed-light.png)
+
+*Figure 2. Games an hour against simulations per searched decision. Cost grows linearly with the simulations; the
+Zen 4 pod is about twice as fast as the Zen 3 one; a network costs the 3090 pod about a factor of four.*
+
+| Simulations | 3080 Ti, vs bot | 3080 Ti, self-play | 3090, vs bot | 3090, self-play | 3090 + transformer, vs bot | 3090 + transformer, self-play |
+|---|---:|---:|---:|---:|---:|---:|
+| 100 | **14,900** | 7,800 | 9,500 | 4,200 | 2,400 | 1,200 |
+| 1,000 | **1,040** | 650 | 500 | 290 | 190 | |
+| 10,000 | **55** | 44 | 24 | | | |
+| *Games a dollar, 100 simulations* | ***82,900*** | *43,400* | *43,100* | *19,300* | *10,900* | *5,500* |
+
+- **At 100 simulations a $0.18 pod plays 43,000 self-play games a dollar without a network, and a $0.22 one about
+  5,500 with the transformer.** docs/020's best figure for DraftZero's search on XMage was 183 games a dollar, so gorge
+  is roughly 30 to 240 times cheaper per game.
+- **10,000 simulations is slow in any engine:** 20 seconds per searched decision on the Zen 4 pod, 44 self-play games
+  an hour. A game has about 55 searched decisions.
+- **r1** (Dama's, free; a Ryzen 9950X with a 30-core quota) played generation 0's 12,000 self-play games at 100
+  simulations at 14,600 an hour, and loop A's self-play with the transformer in both seats at about 4,000 an hour.
+- **The MLP and the GNN on the 3090 pod**, at 100 simulations: the MLP plays 2,200 games an hour against bot and 1,400
+  in self-play; the GNN 1,500 and 800.
 
 ### 2.3 What a network costs inside the search
 
-PENDING
+A simulation without a network costs about 1.5–2 ms of one core. With a network it needs about one new evaluation
+(two calls, one of them cached), and the evaluation is the expensive part:
+
+| How the network runs | Cost of an evaluation | Searched decision at 50 simulations (Mac, both seats) |
+|---|---|---:|
+| No network (gorge's heuristic leaf) | – | 55 ms |
+| The MLP in-process, in Go (`gonet=`; matches PyTorch to 3e-7) | 1–2 ms on one core | 325 ms |
+| The same MLP through the Python server (`remote=`) | 2–12 ms waiting, depending on load | 960 ms |
+
+- **Through the server, the wait is Python's,** not the GPU's: a forward pass takes the same 2–7 ms for 1 state or
+  256, and one server process was 93% busy at 3,200 states a second on the 3090 pod. Three server processes sharing
+  the GPU raised games an hour by 65%.
+- **In-process, the MLP's size is the cost:** about 4 million multiply-adds an evaluation in pure Go. PENDING: the
+  small MLPs (§4.5).
+- **So a network costs a factor of 3–6 in games an hour today,** and at equal time it ties the plain search (§4.4).
 
 ## 3. Generation 1: three architectures on the same games
 
