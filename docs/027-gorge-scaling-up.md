@@ -518,6 +518,29 @@ generation-1′ transformer in both seats (`autopay:oppnodes:topk=6`, mulligans 
   original search with the cheap-games network (48.8%). The full search's `morekinds`, which came later, is the
   change that mattered (§4.5).
 
+### 4.7 A loop of cheap games with the in-engine MLP
+
+The last experiment combines what worked: the full search, many cheap games, and a small MLP inside the engine, over
+generations (r1, mulligans on). C1 plays 40 minutes of cheap full-search games (25 simulations, one searched decision
+in four recorded) without a network; each later generation plays 40 minutes of cheap games with the previous
+generation's MLP in the search (`topk=6`), and its MLP (width 64) is trained from scratch on every cheap game so far.
+Each plays the full search without a network, and its predecessor, at 100 simulations (600 paired games each).
+
+| Generation | Cheap games played (40 min on r1) | Positions trained on | Held-out value log loss | Against the full search without a network | Against the previous generation |
+|---|---:|---:|---:|---:|---:|
+| C1 (no network in its games) | 41,855 | 637,000 | 0.452 | 56.5% | |
+| C2 (C1's MLP in its games) | 7,699 | 751,000 | **0.442** | **57.8%** | 52.2% |
+| C3 (C2's MLP in its games) | PENDING | PENDING | PENDING | PENDING | PENDING |
+
+- **C1 reproduces the best bot's network** (§4.5, whose weights were lost with its pod): 56.5% against the full search,
+  within chance of the 58.2% of the original.
+- **Each generation adds a little:** C2's value is better (log loss 0.442 against 0.452) and it beat C1 52.2% of 600,
+  within chance on its own.
+- **The network makes cheap games 5.5 times slower:** 11,500 games an hour with C1's MLP in the engine against 63,000
+  without it, so C2 trained on far fewer new games. This is the cost §5.3 traces to building the network's input.
+
+The networks of this report are on Hugging Face (private `draftzero-checkpoints`, folder `gorge027/`).
+
 ## 5. gorge's search, and what AlphaZero-style training needs
 
 ### 5.1 How the search decides today
@@ -575,6 +598,39 @@ cheaper than XMage (183 games a dollar, docs/020).
 Where the network's cost goes, in-process: only about a third is the MLP's arithmetic; the rest is building its input
 (projecting the player's view and encoding every card) for every evaluation. Two changes would cut most of it:
 encoding a position incrementally as the walk changes it, and evaluating several simulations' leaves together.
+
+### 5.4 Against XMage and mtg-kernel
+
+The three engines split a game into decisions differently, so their searches spend their simulations differently.
+At 100 simulations a decision (1,000 in brackets), with the heuristic leaf:
+
+| | XMage + MageZero (DraftZero) | mtg-kernel (docs/025) | gorge, original search | gorge, full search (our patches) |
+|---|---|---|---|---|
+| Searched decisions a game, both seats | **~169** | 98–117 | 51–53 | ~59 |
+| What is searched | every decision with 2+ options: priority, each target, a yes/no per attacker and per blocker, modes, X | every decision with 2+ options except the mulligan; a whole combat is one move | casting or passing, the attack (up to 6 whole plans), the block, single targets | the same, plus modes, may-abilities, small choices and multiple targets |
+| Candidates per searched decision | mean 3.0, no cap | mean 2.6–3.0, no cap | mean 3.2, at most 6 | at most 6 |
+| Tree edges from the root to a leaf | **5.7** (11.1) | 4.4 (7.6) | 4.4 (7.9) | not measured |
+| Turns from the root to a leaf | 0.26 (0.69) | 0.84 (1.3) | **2.3** (4.3) | not measured |
+| The opponent's decisions in the tree | yes | yes | no: gorge's bot plays them | yes |
+| One simulation | ~63 ms | **85–125 µs** | 1.5–2.5 ms | ~1.4 ms |
+| Games an hour at 100 simulations | 92 (a 3090 pod) | **32,800–46,800** (a 3090 pod) | 4,200–14,600 | ~10,800 |
+
+*Sources: docs/016, 020 (XMage); docs/025 and its run records, with depths measured from 124 self-play games a bot
+(mtg-kernel); docs/026–027 and gorge's replication of our search benchmark (gorge). Depths come from different
+setups, so read them as orders of magnitude.*
+
+- **XMage searches the most decisions, at the finest grain:** one question per attacking creature, about 16 tree
+  edges a turn. mtg-kernel makes a combat one move (about 5 edges a turn). gorge's bot answers about 90% of a seat's
+  decisions, and the search spends about 2 edges a turn.
+- **Tree depth is similar everywhere** (4–6 edges at 100 simulations, 8–11 at 1,000), **but the game time it covers is
+  not:** a quarter of a turn on XMage, almost a turn on mtg-kernel, more than two turns on gorge, where most of the
+  look-ahead is the bot playing, the opponent included.
+- **Most of the speed difference is the engines,** before any network: a simulation costs ~63 ms on XMage, ~2 ms on
+  gorge and ~85 µs on mtg-kernel, where our harness runs the network in Rust inside the engine (about 40 µs an
+  evaluation, docs/025). In gorge, the in-engine MLP costs 1–2 ms an evaluation, mostly building its input (§5.3).
+- **A fair comparison** would play the same FDN deck pairs on each engine with one re-dealt world, the heuristic leaf
+  and 100 and 1,000 simulations, and count searched decisions a seat and each leaf's depth in edges, opponent edges,
+  engine steps and turns in the same way.
 
 ## 6. What limits learning
 
