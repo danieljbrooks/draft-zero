@@ -42,12 +42,28 @@ import (
 //	                             points where it picks what is worst for the seat (PUCT on 1 - Q), its
 //	                             prior the net's on the opponent's own view, instead of gorge's bot
 //	                             answering them (azmcts Options.OpponentNodes; needs gorge/patches/0004)
+//	   :oppfull                  with :oppnodes (which it needs): the opponent's points mirror the seat's
+//	                             settings -- under :autopay its bot pays automatically and its casts are
+//	                             searched candidates, under :topk=K the net's prior ranks and cuts its
+//	                             candidates too (azmcts Options.OpponentMirror; gorge/patches/0007).
+//	                             Without it the opponent's points ignore :autopay and :topk
 //	   :mull                     the London mulligan by land count (gorge/patches/0005): keep 2-5 lands
 //	                             of 7 (also after one mulligan), after two keep unless 0 or 7, and
 //	                             bottom toward ceil(K/2) lands, highest mana value spells first. Any
 //	                             bot, az or prior seat; play -mull-heuristic sets it on every seat.
 //	                             Without it the seat mulligans on gorge's 1/3 coin
 //	   :keep7                    never mulligan (the control for :mull in a game with -mulligans N)
+//	   :morekinds                the fuller search (gorge/patches/0007): besides priority, attackers,
+//	                             blockers and single targets, a decision's modes, a may trigger's yes/no,
+//	                             a choice among at most cands= options (X, a number, a name, cost cards,
+//	                             dig/search picks; never a mana-payment window) and multi-target picks
+//	                             are searched, each legal option set a candidate (the bot's first). With
+//	                             :oppnodes the opponent's are tree points too, and with :oppfull:autopay
+//	                             as well the opponent pays automatically and its casts are searched
+//	                             candidates
+//	   :kinds=LIST               the searched kinds by name, comma-separated: priority, attackers,
+//	                             blockers, target, modes, optional, choose, multitarget, or all (=
+//	                             :morekinds); the default is the first four
 //	prior:net=gen1.gpol          the network's policy alone: the argmax of its prior over the
 //	                             candidates the search would build, no simulation
 //	az:sims=100:remote=unix:/tmp/dzg.sock
@@ -76,6 +92,8 @@ type policySpec struct {
 	Mull      botpolicy.MulliganRule // :mull / :keep7; zero is gorge's 1/3 coin
 	TopK      int
 	OppNodes  bool
+	OppFull   bool         // :oppfull
+	Kinds     azmcts.Kinds // :kinds= / :morekinds; zero is azmcts.AllKinds
 }
 
 func parsePolicy(s string) (*policySpec, error) {
@@ -133,6 +151,12 @@ func parsePolicy(s string) (*policySpec, error) {
 			p.TopK, err = strconv.Atoi(v)
 		case "oppnodes":
 			p.OppNodes = true
+		case "oppfull":
+			p.OppFull = true
+		case "morekinds":
+			p.Kinds = azmcts.FullKinds()
+		case "kinds":
+			p.Kinds, err = azmcts.ParseKinds(v)
 		default:
 			return nil, fmt.Errorf("policy %q: unknown key %q", s, k)
 		}
@@ -190,6 +214,9 @@ func (p *policySpec) azConfig() azmcts.SeatConfig {
 	cfg := azmcts.DefaultSeatConfig()
 	cfg.Search.Sims = p.Sims
 	cfg.Search.Kinds = azmcts.AllKinds()
+	if p.Kinds != (azmcts.Kinds{}) {
+		cfg.Search.Kinds = p.Kinds
+	}
 	cfg.Search.HeuristicLeaf = p.HeurLeaf
 	cfg.Search.UniformPrior = p.UniPrior
 	if p.CPUCT >= 0 {
@@ -205,6 +232,7 @@ func (p *policySpec) azConfig() azmcts.SeatConfig {
 	cfg.Mulligan = p.Mull
 	cfg.Search.PriorTopK = p.TopK
 	cfg.Search.OpponentNodes = p.OppNodes
+	cfg.Search.OpponentMirror = p.OppFull
 	// Honest worlds only: the seat never searches the real engine's hidden zones. The
 	// prior-only student asks for no world at all; redeal just satisfies NewSeat.
 	cfg.World = azmcts.WorldRedeal

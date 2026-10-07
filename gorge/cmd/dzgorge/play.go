@@ -67,6 +67,10 @@ type azAgg struct {
 	msX1000                                                            atomic.Int64
 	topKPoints, topKCuts, topKBefore                                   atomic.Int64
 	oppPoints, oppExpanded                                             atomic.Int64
+	// The fuller search (:morekinds, :kinds=): root searches and in-walk points per fuller kind
+	// (azmcts.ExtraKindNames), and the opponent's payment points (:oppnodes:oppfull with :autopay).
+	extraSearched, extraPoints [azmcts.NumExtraKinds]atomic.Int64
+	oppPayPoints               atomic.Int64
 }
 
 var azStats azAgg
@@ -213,6 +217,11 @@ func runPlay(args []string) int {
 			azStats.msX1000.Add(int64(d.MS * 1000))
 			azStats.oppPoints.Add(int64(d.Stats.OppPoints))
 			azStats.oppExpanded.Add(int64(d.Stats.OppExpanded))
+			azStats.oppPayPoints.Add(int64(d.Stats.OppPayPoints))
+			for x := range azStats.extraSearched {
+				azStats.extraSearched[x].Add(int64(d.Stats.ExtraSearched[x]))
+				azStats.extraPoints[x].Add(int64(d.Stats.ExtraPoints[x]))
+			}
 		}
 	}
 	outF, err := os.Create(*out)
@@ -348,6 +357,25 @@ func runPlay(args []string) int {
 			// the opponent's tree points, and those points expanded, per searched decision.
 			sum["az_opp_points_per_searched"] = float64(op) / float64(n)
 			sum["az_opp_expanded_per_searched"] = float64(oe) / float64(n)
+		}
+		if op := azStats.oppPayPoints.Load(); op > 0 {
+			// :oppnodes:oppfull with :autopay: the opponent's priority points over the payment vocabulary.
+			sum["az_opp_pay_points_per_searched"] = float64(op) / float64(n)
+		}
+		extraS, extraP := map[string]int64{}, map[string]float64{}
+		for x, name := range azmcts.ExtraKindNames {
+			if v := azStats.extraSearched[x].Load(); v > 0 {
+				extraS[name] = v
+			}
+			if v := azStats.extraPoints[x].Load(); v > 0 {
+				extraP[name] = float64(v) / float64(n)
+			}
+		}
+		if len(extraS)+len(extraP) > 0 {
+			// :morekinds / :kinds=: searched decisions of the fuller kinds, and their points inside
+			// simulations per searched decision.
+			sum["az_extra_searched"] = extraS
+			sum["az_extra_points_per_searched"] = extraP
 		}
 	}
 	if azStats.asked.Load() > 0 {
