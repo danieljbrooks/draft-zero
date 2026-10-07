@@ -1,0 +1,21 @@
+diff --git a/internal/azmcts/seat.go b/internal/azmcts/seat.go
+index 4b08f074..04618441 100644
+--- a/internal/azmcts/seat.go
++++ b/internal/azmcts/seat.go
+@@ -139,7 +139,15 @@ func NewSeat(seed uint64, net *policynet.Model, cfg SeatConfig) (*Seat, error) {
+ 	default:
+ 		return nil, fmt.Errorf("azmcts: world source %q: want %s or %s", cfg.World, WorldClairvoyant, WorldRedeal)
+ 	}
+-	return &Seat{def: seat.NewBot(seed), seed: seed, net: net, cfg: cfg}, nil
++	def := seat.NewBot(seed)
++	if cfg.Search.AutoPayment {
++		// The seat's own answers (candidate 0, every unsearched decision) come
++		// from the auto-pay bot, as the walk's do (env.go): a manual bot's
++		// answer before a cast is a mana tap, which the auto-payment
++		// vocabulary never offers, so every cast decision would be skipped.
++		def = def.EnableAutoPayMana()
++	}
++	return &Seat{def: def, seed: seed, net: net, cfg: cfg}, nil
+ }
+ 
+ // Decide is the plain Seat half: the wrapped bot.

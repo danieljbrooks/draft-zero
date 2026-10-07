@@ -25,6 +25,10 @@ import (
 //	   :worlds=K                 K deals per decision instead of one per simulation
 //	   :explore[:nonoise]        generation: sample moves by visits on turns 1-4 (+ root noise)
 //	   :cpuct=1.5 :fpu=0.1 :cands=N
+//	   :autopay                  mana paid automatically: every cast (and pass) at a priority stop is a
+//	                             candidate, so the search decides what to cast and when (the seat's own
+//	                             bot is gorge's auto-pay bot; needs gorge/patches/0002). bot:autopay is
+//	                             that bot alone
 //	prior:net=gen1.gpol          the network's policy alone: the argmax of its prior over the
 //	                             candidates the search would build, no simulation
 //	az:sims=100:remote=unix:/tmp/dzg.sock
@@ -45,6 +49,7 @@ type policySpec struct {
 	CPUCT     float64
 	FPU       float64
 	Cands     int
+	AutoPay   bool
 }
 
 func parsePolicy(s string) (*policySpec, error) {
@@ -90,6 +95,8 @@ func parsePolicy(s string) (*policySpec, error) {
 			p.FPU, err = strconv.ParseFloat(v, 64)
 		case "cands":
 			p.Cands, err = strconv.Atoi(v)
+		case "autopay":
+			p.AutoPay = true
 		default:
 			return nil, fmt.Errorf("policy %q: unknown key %q", s, k)
 		}
@@ -151,6 +158,7 @@ func (p *policySpec) azConfig() azmcts.SeatConfig {
 	if p.Cands > 0 {
 		cfg.Search.Limit = p.Cands
 	}
+	cfg.Search.AutoPayment = p.AutoPay
 	// Honest worlds only: the seat never searches the real engine's hidden zones. The
 	// prior-only student asks for no world at all; redeal just satisfies NewSeat.
 	cfg.World = azmcts.WorldRedeal
@@ -167,6 +175,9 @@ func (p *policySpec) seat(seed uint64) (seat.Seat, error) {
 	case "random":
 		return builtins.New(builtins.Uniform, builtins.AutoPay, seed^builtins.UniformSeed), nil
 	case "bot":
+		if p.AutoPay {
+			return seat.NewBot(seed).EnableAutoPayMana(), nil
+		}
 		return seat.NewBot(seed), nil
 	default:
 		return azmcts.NewSeat(seed, p.model, p.azConfig())
