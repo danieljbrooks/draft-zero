@@ -49,3 +49,13 @@ are gorge's `bot`'s. The London mulligan round is off by default: the bot mullig
 
 gorge is Apache-2.0. The Forge card scripts it compiles are GPL-3.0; `build.sh` fetches them into the gorge
 checkout's `.cards/`, and nothing here contains them. Decks come from 17lands' public data (CC BY 4.0).
+
+## DraftZero's networks in gorge's search (docs/027)
+
+| File | What |
+|---|---|
+| `dzg/` | Python: MLP, transformer and GNN networks on gorge's entity encoding; training (`python -m dzg.train`), the batching inference server (`python -m dzg.serve`), the export for the engine (`python -m dzg.export`); `dzg/SPEC.md` is the data and socket contract |
+| `patches/0001`–`0007` | opt-in changes to gorge's search, applied by `build.sh`: an external scorer, casts searched before mana is tapped (`autopay`), network-chosen candidates (`topk=K`), the opponent in the tree (`oppnodes`, `oppfull`), a land-count mulligan (`-mull-heuristic`), recording of the new decisions, and modes, choices and multiple targets searched (`morekinds`) |
+| `cmd/dzgorge` | also: `remote=` (a served network), `gonet=` (the MLP inside the engine), `pack` (visit corpora to training shards), `-record-features entity`, `-record-every K` |
+| `dzg_gen.sh`, `dzg_eval.sh`, `dzg_loop.sh`, `dzg_tune.sh`, `dzg_bench.sh` | a generation's self-play, paired evaluation arms, the generation loop, tuning arms (any spec against any spec), games an hour |
+| `dzg_mirror.sh`, `dzg_collect.py`, `dzg_figures.py` | gather results from every machine, tabulate them, draw docs/027's figures |
