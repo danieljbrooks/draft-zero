@@ -1,0 +1,3 @@
+# Self-play for 17lands-style card stats: every generated deck (120), uniform-random-inclusion decks
+gih_random_selfplay	1800	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/gen_all_v1.tsv --bot1 random --bot2 random --seed 21 --threads 14 --n-pairs 50000
+gih_mcts100_selfplay	7200	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/gen_all_v1.tsv --bot1 mcts:100 --bot2 mcts:100 --seed 22 --threads 14 --n-pairs 12600

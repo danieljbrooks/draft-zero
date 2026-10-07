@@ -1,0 +1,7 @@
+# Stage 2 (py/model.py, data.py, train.py, parity.py, loop.py). Verified with torch 2.14.1, numpy 2.5.3, Python 3.12.
+# With uv (0.12.7), no virtualenv needed, from any directory outside the mtg-kernel clone (its .python-version
+# pins an interpreter pyenv may not have):
+#   uv run --no-project --python 3.12 --with torch --with numpy python mtgkernel/py/train.py ...
+# or: uv run --no-project --python 3.12 --with-requirements mtgkernel/py/requirements.txt python ...
+torch>=2.4
+numpy>=1.26

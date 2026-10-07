@@ -1,0 +1,89 @@
+{
+ "ladder": [
+  [
+   "Heuristic search",
+   {
+    "300": [
+     "pod1/ladder_v1/ladder_mcts300_vs_mcts100/games.jsonl",
+     "pod1/ladder_v2/ladder2_mcts300_vs_mcts100/games.jsonl"
+    ],
+    "1000": [
+     "pod1/ladder_v1/ladder_mcts1000_vs_mcts100/games.jsonl",
+     "pod1/ladder_v2/ladder2_mcts1000_vs_mcts100/games.jsonl"
+    ],
+    "3000": [
+     "pod1/ladder_v1/ladder_mcts3000_vs_mcts100/games.jsonl",
+     "pod1/ladder_v2/ladder2_mcts3000_vs_mcts100/games.jsonl"
+    ],
+    "10000": [
+     "pod1/ladder_v2/ladder2_mcts10000_vs_mcts100/games.jsonl"
+    ]
+   }
+  ],
+  [
+   "Network-guided search, generation 0",
+   {
+    "100": [
+     "pod2/ei2/eval_g0/g0_pmcts100_vs_mcts100/games.jsonl"
+    ],
+    "300": [
+     "pod2/ei2/eval_g0/g0_pmcts300_vs_mcts100/games.jsonl"
+    ],
+    "1000": [
+     "pod1/ei2/eval_g0/g0_pmcts1000_vs_mcts100/games.jsonl"
+    ]
+   }
+  ],
+  [
+   "Network-guided search, generation 2",
+   {
+    "100": [
+     "pod2/ei2/eval_g2/g2_pmcts100_vs_mcts100/games.jsonl"
+    ],
+    "300": [
+     "pod2/ei2/eval_g2/g2_pmcts300_vs_mcts100/games.jsonl"
+    ],
+    "1000": [
+     "pod1/ei2/eval_g2/g2_pmcts1000_vs_mcts100/games.jsonl"
+    ]
+   }
+  ]
+ ],
+ "dollars": [
+  [
+   "mtg-kernel: random moves",
+   16200000,
+   false
+  ],
+  [
+   "mtg-kernel: network policy alone",
+   16900000,
+   false
+  ],
+  [
+   "mtg-kernel: heuristic search, 100",
+   213000,
+   false
+  ],
+  [
+   "mtg-kernel: network-guided search, 100",
+   149000,
+   true
+  ],
+  [
+   "mtg-kernel: network-guided search, 1,000",
+   14500,
+   true
+  ],
+  [
+   "XMage: network-guided search, 100 (docs/020)",
+   183,
+   false
+  ],
+  [
+   "XMage: network-guided search, 1,000 (docs/020)",
+   18,
+   false
+  ]
+ ]
+}

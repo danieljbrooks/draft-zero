@@ -1,0 +1,1 @@
+gih_mcts1000_selfplay	10800	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/gen_all_v1.tsv --bot1 mcts:1000 --bot2 mcts:1000 --seed 23 --threads 14 --n-pairs 3000

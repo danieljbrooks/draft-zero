@@ -1,0 +1,5 @@
+# setup.sh's pinned, patched mtg-kernel clone
+/.deps/
+/target/
+# run outputs (py/loop.py defaults, dzk play --out / --data-out)
+/runs/

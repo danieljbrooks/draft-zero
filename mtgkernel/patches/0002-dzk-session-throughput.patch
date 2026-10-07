@@ -1,0 +1,169 @@
+diff --git a/mtg-kernel/src/rl.rs b/mtg-kernel/src/rl.rs
+index f4caf9b0..d777c4e8 100644
+--- a/mtg-kernel/src/rl.rs
++++ b/mtg-kernel/src/rl.rs
+@@ -1801,6 +1801,32 @@ pub fn observe_policy_v5(
+     Ok(observation)
+ }
+ 
++/// draft-zero (dzk) throughput patch: `observe_policy_v5`'s observation (the
++/// same builder, `FullArtifact` text mode and fail-closed checks) with the
++/// artifact-integrity `visible_projection_hash` left 0. The hash is a pure
++/// function of the other fields (serialized, then hashed); computing it is
++/// most of the cost of a policy step for an in-process consumer.
++pub fn observe_policy_v5_without_projection_hash_v1(
++    state: &GameState,
++    surface: &PolicySurfaceV5,
++    acting_player: PlayerId,
++    step_index: u64,
++    physical_decision_id: u64,
++    substep_index: u32,
++    substep_count: u32,
++) -> Result<ObservationV5> {
++    build_policy_observation_v5(PolicyObservationBuildV5 {
++        state,
++        surface,
++        acting_player,
++        step_index,
++        physical_decision_id,
++        substep_index,
++        substep_count,
++        text_mode: ObservationTextModeV2::FullArtifact,
++    })
++}
++
+ /// Builds the complete model-semantic typed policy observation without
+ /// serializing it solely to populate the artifact-integrity hash. This is
+ /// restricted to the flat encoder, which classifies the hash plus human-readable
+diff --git a/mtg-kernel/src/rl_session.rs b/mtg-kernel/src/rl_session.rs
+index facebef0..332c90ce 100644
+--- a/mtg-kernel/src/rl_session.rs
++++ b/mtg-kernel/src/rl_session.rs
+@@ -4249,6 +4249,9 @@ pub struct RlEpisodeSessionV1 {
+     limited_incremental_trigger_order: bool,
+     #[cfg(feature = "limited-fdn-fixtures")]
+     limited_trigger_order: Option<LimitedTriggerOrderV1>,
++    /// draft-zero (dzk) throughput patch: observe without the visible-projection
++    /// hash. Off unless `set_skip_visible_projection_hash_v1` turns it on.
++    skip_visible_projection_hash_v1: bool,
+ }
+ 
+ #[derive(Clone)]
+@@ -4608,6 +4611,7 @@ impl RlEpisodeSessionV1 {
+             limited_incremental_trigger_order: foundations_combat,
+             #[cfg(feature = "limited-fdn-fixtures")]
+             limited_trigger_order: None,
++            skip_visible_projection_hash_v1: false,
+         };
+         session.advance_to_decision_or_terminal_profiled(None);
+         Ok(session)
+@@ -4848,6 +4852,7 @@ impl RlEpisodeSessionV1 {
+             limited_incremental_trigger_order: false,
+             #[cfg(feature = "limited-fdn-fixtures")]
+             limited_trigger_order: None,
++            skip_visible_projection_hash_v1: false,
+         };
+         session.advance_to_decision_or_terminal_profiled(None);
+         Ok(session)
+@@ -4892,6 +4897,7 @@ impl RlEpisodeSessionV1 {
+                 limited_incremental_trigger_order: false,
+                 #[cfg(feature = "limited-fdn-fixtures")]
+                 limited_trigger_order: None,
++                skip_visible_projection_hash_v1: false,
+             })
+         })?;
+         session.advance_to_decision_or_terminal_profiled(profile);
+@@ -4958,6 +4964,78 @@ impl RlEpisodeSessionV1 {
+         &self.surface
+     }
+ 
++    /// draft-zero (dzk) throughput patch: from the next observation on, build
++    /// observations with `observe_policy_v5_without_projection_hash_v1` (the
++    /// same observation with `visible_projection_hash` = 0). No rule, action,
++    /// identity or RNG effect; the JSONL server never sets it.
++    pub fn set_skip_visible_projection_hash_v1(&mut self, skip: bool) {
++        self.skip_visible_projection_hash_v1 = skip;
++    }
++
++    /// draft-zero (dzk) throughput patch: `step` without building its response
++    /// (a deep copy of the observation and every legal action); read the new
++    /// decision through the borrowing accessors below.
++    pub fn step_quiet_v1(
++        &mut self,
++        episode_id: u64,
++        expected_step: u64,
++        selected_index: u32,
++        selected_action_id: &str,
++    ) -> Result<(), RlSessionError> {
++        self.apply_step_profiled(
++            episode_id,
++            expected_step,
++            selected_index,
++            selected_action_id,
++            None,
++        )
++    }
++
++    /// draft-zero (dzk) throughput patch: borrowed views of what
++    /// `current_response` copies (`None` / 0 at a terminal, as it reports).
++    fn current_decision_ref_v1(&self) -> Option<&CurrentDecisionV1> {
++        if self.terminal.is_some() {
++            return None;
++        }
++        self.current.as_ref()
++    }
++
++    pub fn current_actor_v1(&self) -> Option<PlayerId> {
++        self.current_decision_ref_v1().map(|current| current.actor)
++    }
++
++    pub fn current_legal_action_count_v1(&self) -> usize {
++        self.current_decision_ref_v1()
++            .map_or(0, |current| current.candidates.len())
++    }
++
++    pub fn current_legal_action_v1(&self, index: usize) -> Option<&LegalActionV5> {
++        self.current_decision_ref_v1()?
++            .candidates
++            .get(index)
++            .map(|candidate| &candidate.record)
++    }
++
++    pub fn current_observation_v1(&self) -> Option<&ObservationV5> {
++        self.current_decision_ref_v1()
++            .map(|current| &current.observation)
++    }
++
++    /// `(physical_decision_id, substep_index, substep_count)` of the current decision.
++    pub fn current_substep_v1(&self) -> Option<(u64, u32, u32)> {
++        self.current_decision_ref_v1().map(|current| {
++            (
++                current.physical_decision_id,
++                current.substep_index,
++                current.substep_count,
++            )
++        })
++    }
++
++    pub fn terminal_v1(&self) -> Option<&RlSessionTerminalV1> {
++        self.terminal.as_ref()
++    }
++
+     pub fn privileged_environment_hash(&self) -> u64 {
+         self.compute_environment_hash(self.current.as_ref())
+             .expect("session environment serializes")
+@@ -5331,8 +5409,13 @@ impl RlEpisodeSessionV1 {
+             ));
+             return;
+         };
++        let observe = if self.skip_visible_projection_hash_v1 {
++            crate::rl::observe_policy_v5_without_projection_hash_v1
++        } else {
++            observe_policy_v5
++        };
+         let observation = match measure_optional(&mut profile, RlPhaseV1::Observe, || {
+-            observe_policy_v5(
++            observe(
+                 &self.state,
+                 &self.surface,
+                 actor,

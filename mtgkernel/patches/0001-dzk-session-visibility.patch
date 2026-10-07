@@ -1,0 +1,45 @@
+diff --git a/mtg-kernel/src/rl_session.rs b/mtg-kernel/src/rl_session.rs
+index 92e2de84..facebef0 100644
+--- a/mtg-kernel/src/rl_session.rs
++++ b/mtg-kernel/src/rl_session.rs
+@@ -4562,7 +4562,7 @@ impl RlEpisodeSessionV1 {
+     }
+ 
+     #[allow(clippy::too_many_arguments)]
+-    pub(crate) fn reset_with_custom_decks_and_london_v1(
++    pub fn reset_with_custom_decks_and_london_v1(
+         episode_id: u64,
+         env_seed: u64,
+         max_physical_decisions: u64,
+@@ -4946,6 +4946,18 @@ impl RlEpisodeSessionV1 {
+         &self.state
+     }
+ 
++    /// draft-zero (dzk) visibility patch: mutable state access, used only on
++    /// a cloned session to re-deal hidden cards for search determinization.
++    pub fn game_state_mut_v1(&mut self) -> &mut crate::state::GameState {
++        &mut self.state
++    }
++
++    /// draft-zero (dzk) visibility patch: read-only policy surface, used to
++    /// re-observe a re-dealt clone with the public `observe_policy_v5`.
++    pub fn policy_surface_v1(&self) -> &PolicySurfaceV5 {
++        &self.surface
++    }
++
+     pub fn privileged_environment_hash(&self) -> u64 {
+         self.compute_environment_hash(self.current.as_ref())
+             .expect("session environment serializes")
+diff --git a/mtg-kernel/src/state.rs b/mtg-kernel/src/state.rs
+index f1ae55cb..9593205a 100644
+--- a/mtg-kernel/src/state.rs
++++ b/mtg-kernel/src/state.rs
+@@ -2265,7 +2265,7 @@ impl GameState {
+     /// disposable clone. The sole production caller is the additive V3 search
+     /// sampler. Never derive `seed` from this state's real random stream.
+     /// Preserve mode and past physical-owner shuffle counters.
+-    pub(crate) fn resample_future_randomness_for_search_v3(&mut self, seed: u64) {
++    pub fn resample_future_randomness_for_search_v3(&mut self, seed: u64) {
+         match &mut self.randomness {
+             GameRandomnessState::Legacy(rng) => *rng = SplitMix64::seed(seed),
+             GameRandomnessState::EnvironmentV2(v2) => {

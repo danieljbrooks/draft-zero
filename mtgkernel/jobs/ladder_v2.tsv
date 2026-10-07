@@ -1,0 +1,7 @@
+# Ladder v2: 5x the games of v1 (310 pairs = the 62 eval lines x 5 seeds' worth of pair indices = 620 paired games each)
+ladder2_mcts100_vs_random	3600	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:100 --bot2 random --seed 32 --threads 14 --n-pairs 310
+ladder2_mcts300_vs_mcts100	3600	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:300 --bot2 mcts:100 --seed 33 --threads 14 --n-pairs 310
+ladder2_mcts1000_vs_mcts100	5400	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:1000 --bot2 mcts:100 --seed 34 --threads 14 --n-pairs 310
+ladder2_mcts3000_vs_mcts100	7200	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:3000 --bot2 mcts:100 --seed 36 --threads 14 --n-pairs 310
+ladder2_mcts10000_vs_mcts100	10800	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:10000 --bot2 mcts:100 --seed 37 --threads 14 --n-pairs 124
+ladder2_mcts1000w4_vs_mcts1000	5400	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:1000,worlds=4 --bot2 mcts:1000 --seed 38 --threads 14 --n-pairs 124

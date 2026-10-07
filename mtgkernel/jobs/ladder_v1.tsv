@@ -1,0 +1,6 @@
+# Baseline ladder on the eval pairs (30 held-out generated decks + the two human fixture decks), 62 pairs = 124 paired games each
+ladder_mcts100_vs_random	1800	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:100 --bot2 random --seed 12 --threads 14
+ladder_mcts300_vs_mcts100	3600	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:300 --bot2 mcts:100 --seed 13 --threads 14
+ladder_mcts1000_vs_mcts100	5400	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:1000 --bot2 mcts:100 --seed 14 --threads 14
+ladder_mcts100w4_vs_mcts100	3600	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:100,worlds=4 --bot2 mcts:100 --seed 15 --threads 14
+ladder_mcts3000_vs_mcts100	10800	--decks-dir decks/gen_v1:decks/fixtures --pairs pairs/eval_v1.tsv --bot1 mcts:3000 --bot2 mcts:100 --seed 16 --threads 14

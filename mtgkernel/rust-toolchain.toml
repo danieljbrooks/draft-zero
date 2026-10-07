@@ -1,0 +1,4 @@
+[toolchain]
+# Same toolchain as the pinned mtg-kernel (its rust-toolchain.toml).
+channel = "1.94.1"
+profile = "minimal"

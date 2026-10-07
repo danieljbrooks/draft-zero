@@ -208,6 +208,10 @@ state fields at every turn and every decision.
 
 ## 4. mtg-kernel's Limited support
 
+*Update, 6 October: milestone 4 is done (PR #140 merged). Both fixture decks play complete games with London
+mulligans, and 38 FDN cards plus the basics are playable. [docs/025](025-mtg-kernel-fdn-self-play.md) runs
+self-play and training on them.*
+
 FDN support is an extra step, not a blocker, and it's now under way. The maintainer took on
 [mtg-kernel#110](https://github.com/jackmaiorino/mtg-kernel/issues/110) on 2026-09-30, with a
 seven-milestone plan. It uses our FDN pair A decks and the 286-card FDN list as test fixtures.

@@ -1,0 +1,31 @@
+[package]
+name = "dzk"
+version = "0.1.0"
+edition = "2021"
+description = "draft-zero's FDN self-play harness on mtg-kernel (engine wrapper, bots, game records, bench)"
+publish = false
+
+# Our own workspace root, so no enclosing workspace absorbs this crate. The pinned mtg-kernel
+# clone is excluded: it stays a member of its own workspace (it inherits `edition` from it).
+[workspace]
+exclude = [".deps"]
+
+[dependencies]
+mtg-kernel = { path = ".deps/mtg-kernel/mtg-kernel", features = ["limited-fdn-fixtures"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Only for mtg-kernel's custom-deck content identity (already in its dependency tree).
+sha2 = "0.10"
+# Global allocator for the dzk binary: the system allocator limited thread scaling (stage 1's perf review:
+# a thread-local allocator prototype gave +35-90% at 6 threads).
+mimalloc = { version = "0.1", default-features = false }
+# Training-data shards (`dzk play --data-out`): one gzip member per game (pure-Rust miniz backend).
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[[bin]]
+name = "dzk"
+path = "src/bin/dzk.rs"
