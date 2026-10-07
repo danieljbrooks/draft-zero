@@ -62,7 +62,9 @@ func packCorpus(path string, w *shardWriter) error {
 		if err := dec.Decode(&rec); err == io.EOF {
 			return nil
 		} else if err != nil {
-			return err
+			// A run killed mid-write leaves a truncated last game: keep what came before.
+			fmt.Fprintf(os.Stderr, "pack: %s: stopped at a bad record (%v)\n", path, err)
+			return nil
 		}
 		if err := w.add(&rec); err != nil {
 			return err
