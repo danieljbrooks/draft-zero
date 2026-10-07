@@ -1,9 +1,9 @@
-"""Draw docs/025's figures from the game records under data/gorge/runs/.
+"""Draw docs/026's figures from the game records under data/gorge/runs/.
 
     python gorge/figures.py
 
-Writes docs/img/025-ladder-{light,dark}.png (score against gorge's bot, with 95% intervals over deck pairs) and
-docs/img/025-gih-{light,dark}.png (games-in-hand win rates in self-play against 17lands'). Colours are slots of the
+Writes docs/img/026-ladder-{light,dark}.png (score against gorge's bot, with 95% intervals over deck pairs) and
+docs/img/026-gih-{light,dark}.png (games-in-hand win rates in self-play against 17lands'). Colours are slots of the
 validated default categorical palette (the same as docs/015's plot), in both modes.
 """
 
@@ -97,7 +97,7 @@ def ladder(mode: str) -> Path | None:
         if side == "B":
             s, lo, hi = 1 - s, 1 - hi, 1 - lo
         rows.append((label, s, lo, hi, r["games"], role))
-    return dots(mode, rows, "025-ladder", "Score against gorge's bot",
+    return dots(mode, rows, "026-ladder", "Score against gorge's bot",
                 "Score against gorge's bot (paired games on the eval decks, 95% intervals over deck pairs)",
                 (("search", "gorge's search, heuristic leaf"), ("net", "with the trained network"), ("other", "random")))
 
@@ -108,7 +108,7 @@ def networks(mode: str) -> Path | None:
         r = pooled(paths)
         if r is not None:
             rows.append((label, r["score"], r["lo"], r["hi"], r["games"], role))
-    return dots(mode, rows, "025-networks", "Each network inside the search, against the same search without it",
+    return dots(mode, rows, "026-networks", "Each network inside the search, against the same search without it",
                 "Score against the search without the network (az@25; @100 rows: az@100)",
                 (), xlim=(25, 75), left=0.33)
 
@@ -226,7 +226,7 @@ def gih(mode: str) -> Path | None:
                      frameon=False, fontsize=9, handletextpad=0.3, columnspacing=1.6)
     for text in leg.get_texts():
         text.set_color(t["ink2"])
-    path = OUT / f"025-gih-{mode}.png"
+    path = OUT / f"026-gih-{mode}.png"
     fig.savefig(path, facecolor=t["surface"])
     plt.close(fig)
     return path

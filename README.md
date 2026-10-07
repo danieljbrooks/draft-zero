@@ -40,7 +40,7 @@ Checkpoints from experiment #2 are in the private Hugging Face repo `danbrooks/d
   search looks like.
 - **[Rules engines](docs/015-rules-engine-comparison.md):** faster engines than XMage for a limited
   agent.
-- **[Self-play on gorge](docs/025-gorge-fdn-self-play.md):** FDN games, search, an AlphaZero generation and 17lands
+- **[Self-play on gorge](docs/026-gorge-fdn-self-play.md):** FDN games, search, an AlphaZero generation and 17lands
   statistics on the fast Go engine (code in [`gorge/`](gorge/README.md)).
   - Speed on 4 vCPUs: 611,000 bot games an hour; 4,400 an hour with search for both seats.
   - The trained network adds ~5 points to the search at equal simulations.
@@ -90,7 +90,7 @@ ran on an older MageZero fork (`mz-engine`, `bcc76de`) and the v0.1 XMage build
 | `java/mzbridge/` | a long-lived XMage worker, no fork change: builds any `StateSpec` and answers build / encode / coach / bench / replay_turn requests. `bench` runs the search benchmark's searches (MageZero-style MCTS, PIMC, IS-MCTS) |
 | `tools/gameplay/` | experiment scripts for the gameplay-data study |
 | `tools/search_bench/` | the search benchmark ([docs/012](docs/012-search-benchmark.md), [docs/016](docs/016-search-benchmark-results.md)): decision set, runner, leak test, analysis, pod plans |
-| `gorge/` | FDN on the gorge engine ([docs/025](docs/025-gorge-fdn-self-play.md)): a Go driver built into a pinned gorge checkout, the deck pool in gorge's format, benchmark, training and evaluation scripts, 17lands analysis |
+| `gorge/` | FDN on the gorge engine ([docs/026](docs/026-gorge-fdn-self-play.md)): a Go driver built into a pinned gorge checkout, the deck pool in gorge's format, benchmark, training and evaluation scripts, 17lands analysis |
 | `tools/compute_bench/` | the compute benchmark ([docs/020](docs/020-cpu-benchmarks.md)): pod driver, CPU-pod grabber, vCPU census and probe, load monitor, summaries, tables and figures; the battery is `deploy/compute_bench.sh` |
 | `assets/` | small versioned inputs: deck metadata, action vocab, GIH reference |
 | `assets/sample/` | 80 decks and pools, so a fresh clone runs without the full pool |

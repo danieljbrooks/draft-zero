@@ -2,7 +2,7 @@
 
 Code for playing DraftZero's FDN Limited decks on [gorge](https://github.com/adams-shaun/gorge), a pure-Go
 Magic rules engine that compiles Forge's card scripts, and for training and evaluating networks there. Results:
-[docs/025](../docs/025-gorge-fdn-self-play.md).
+[docs/026](../docs/026-gorge-fdn-self-play.md).
 
 | File | What |
 |---|---|
@@ -10,14 +10,14 @@ Magic rules engine that compiles Forge's card scripts, and for training and eval
 | `build.sh` | clones gorge at `GORGE_REF`, fetches and compiles the card corpus, copies `cmd/dzgorge` into the checkout and builds `dzgorge`, `policytrain` and `botbench` |
 | `cmd/dzgorge/` | the driver (Go). It is built inside gorge's module because it uses gorge's internal packages: the search (`internal/azmcts`), the network (`internal/policynet`) and the game runner (`internal/bench`) |
 | `decks.py` | writes the 31,516-deck pool (`tools/extract_decks.py`'s output) as gorge deck files, under the XMage pool's names, so `assets/decks.tsv`'s train/eval split applies |
-| `bench.sh` | the throughput and strength benchmark (docs/025 §2–3) |
+| `bench.sh` | the throughput and strength benchmark (docs/026 §2–3) |
 | `azloop.sh` | one AlphaZero-style generation: search self-play on the train decks, then `policytrain` on the searched decisions (§4) |
 | `evalnet.sh` | a trained network's games on the eval decks: alone against `bot` and `random`, and inside the search against the search without it (§4) |
-| `experiments.sh` | every run behind docs/025 §4.2–4.5 and §5 after gen 0, in order: the held-out positions, the networks, their games, the confirmations |
+| `experiments.sh` | every run behind docs/026 §4.2–4.5 and §5 after gen 0, in order: the held-out positions, the networks, their games, the confirmations |
 | `gih_runs.sh` | self-play for 17lands card statistics (§5) |
 | `analyze.py` | win rates with paired confidence intervals, games-in-hand win rates against 17lands, throughput |
 | `sortcorpus.py` | puts a visit corpus in game order; `dzgorge` now writes in game order itself |
-| `figures.py` | docs/025's figures |
+| `figures.py` | docs/026's figures |
 
 ## Quick start
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# docs/025 §4.2–4.5 and §5, after gen-0 (gorge/azloop.sh 0): the exact runs behind the doc's tables, in order.
+# docs/026 §4.2–4.5 and §5, after gen-0 (gorge/azloop.sh 0): the exact runs behind the doc's tables, in order.
 # Each step skips work whose output exists. Takes about 3.5 hours on 4 vCPUs.
 #
 #   bash gorge/experiments.sh

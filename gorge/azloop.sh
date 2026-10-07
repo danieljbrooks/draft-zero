@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One AlphaZero-style generation on gorge (docs/025 §4): search self-play on the TRAIN decks
+# One AlphaZero-style generation on gorge (docs/026 §4): search self-play on the TRAIN decks
 # records every searched decision's visit counts, gorge's trainer (policytrain -visits-corpus) fits
 # a policy+value network to them, and the network is then played on the EVAL decks.
 #

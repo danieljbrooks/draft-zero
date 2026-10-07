@@ -3,9 +3,12 @@
 *6 October 2026. Dan asked how far DraftZero can train on [gorge](https://github.com/adams-shaun/gorge), the
 fast Go rules engine compared in [docs/015](015-rules-engine-comparison.md): play FDN Limited games, measure games
 an hour, port a DraftZero model or train a new one, and evaluate it against baselines and 17lands, as in
-[docs/019](019-imitation-learning-report.md). The code is in [`gorge/`](../gorge/README.md). Every number here
-was measured on gorge `c9a422b70` (6 October) in this session's 4-vCPU cloud container (Intel Xeon, 2.8 GHz).
-RunPod spend: $0 (§7).*
+[docs/019](019-imitation-learning-report.md). [docs/025](025-mtg-kernel-fdn-self-play.md) asks the same of
+mtg-kernel. **The code is on the
+[`claude/gorge-fdn-selfplay`](https://github.com/danieljbrooks/draft-zero/tree/claude/gorge-fdn-selfplay) branch**
+(folder [`gorge/`](https://github.com/danieljbrooks/draft-zero/tree/claude/gorge-fdn-selfplay/gorge)), not on main.
+Every number here was measured on gorge `c9a422b70` (6 October) in this session's 4-vCPU cloud container (Intel
+Xeon, 2.8 GHz). RunPod spend: $0 (§7).*
 
 ## Summary
 
@@ -139,8 +142,8 @@ Paired games on the eval decks:
 | `az@100` against `az@25` | **61.0%** [55.7, 66.3] | 200 |
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="img/025-ladder-dark.png">
-  <img alt="Dot plot of each policy's score against gorge's bot, with 95% intervals, on the eval decks. az@100 with no network 77.5% (200 games); az@25 with the gen-1 network 69.3% (300); az@25 with no network 67.0% (400); az@10 with no network 61.8% (400); the gen-1 network alone 34.6% (2,000); random 14.3% (2,000). A dashed line marks 50%." src="img/025-ladder-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="img/026-ladder-dark.png">
+  <img alt="Dot plot of each policy's score against gorge's bot, with 95% intervals, on the eval decks. az@100 with no network 77.5% (200 games); az@25 with the gen-1 network 69.3% (300); az@25 with no network 67.0% (400); az@10 with no network 61.8% (400); the gen-1 network alone 34.6% (2,000); random 14.3% (2,000). A dashed line marks 50%." src="img/026-ladder-light.png">
 </picture>
 
 *Figure 1. Score against gorge's `bot`. Search beats it, more so with more simulations; the trained network adds
@@ -282,8 +285,8 @@ The same gen-0 corpus, trained two other ways:
 | `az@100` + cheap-game value (uniform prior) against `az@100` | 50.0% [44.7, 55.3] | 150 |
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="img/025-networks-dark.png">
-  <img alt="Dot plot of each trained network inside the search against the same search without it, with 95% intervals. At 25 simulations: gen 1 trained 2 epochs, prior and value, 54.8% (800 games); its value only 52.7%; gen 1 prior and value 51.0%; gen 1 value 50.0%; gen 1 prior 47.3%; the cheap-game value 51.3%; gen 1 with a bonus for bot's move 34.0% (300 games each). At 100 simulations: the cheap-game value 50.0% and gen 1 trained 2 epochs 55.3% (150 games each). A dashed line marks 50%." src="img/025-networks-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="img/026-networks-dark.png">
+  <img alt="Dot plot of each trained network inside the search against the same search without it, with 95% intervals. At 25 simulations: gen 1 trained 2 epochs, prior and value, 54.8% (800 games); its value only 52.7%; gen 1 prior and value 51.0%; gen 1 value 50.0%; gen 1 prior 47.3%; the cheap-game value 51.3%; gen 1 with a bonus for bot's move 34.0% (300 games each). At 100 simulations: the cheap-game value 50.0% and gen 1 trained 2 epochs 55.3% (150 games each). A dashed line marks 50%." src="img/026-networks-light.png">
 </picture>
 
 *Figure 2. Every network arm against the same search without the network. Only the 2-epoch network clears 50%.*
@@ -349,8 +352,8 @@ remains is the policy's bias, and the engine's.
   look like random play's.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="img/025-gih-dark.png">
-  <img alt="Three scatter plots of each card's simulated games-in-hand win rate (vertical) against 17lands' (horizontal), commons in blue and other cards in grey, with 17lands' three best commons ringed. Random self-play, 39,998 player-games: Spearman -0.03 on commons, 0.07 on all cards; the three best commons sit near 44%. gorge's bot, 200,000 player-games: 0.21 and 0.39; Bake into a Pie at about 51%, Stab and Burst Lightning near 47%. Search at 10 simulations, 16,000 player-games: 0.30 and 0.36; Bake into a Pie about 50%, Stab 48%, Burst Lightning 44%." src="img/025-gih-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="img/026-gih-dark.png">
+  <img alt="Three scatter plots of each card's simulated games-in-hand win rate (vertical) against 17lands' (horizontal), commons in blue and other cards in grey, with 17lands' three best commons ringed. Random self-play, 39,998 player-games: Spearman -0.03 on commons, 0.07 on all cards; the three best commons sit near 44%. gorge's bot, 200,000 player-games: 0.21 and 0.39; Bake into a Pie at about 51%, Stab and Burst Lightning near 47%. Search at 10 simulations, 16,000 player-games: 0.30 and 0.36; Bake into a Pie about 50%, Stab 48%, Burst Lightning 44%." src="img/026-gih-light.png">
 </picture>
 
 *Figure 3. Card win rates when drawn, in self-play against 17lands. Better play lines the cards up more with
@@ -484,7 +487,8 @@ In rough order of value for the cost:
 
 ## Reproducing
 
-From the repo root, with Go 1.25+ and Python 3 with numpy (matplotlib for the figures):
+From the repo root, on the `claude/gorge-fdn-selfplay` branch, with Go 1.25+ and Python 3 with numpy (matplotlib
+for the figures):
 
 ```bash
 python tools/extract_decks.py --set FDN --format PremierDraft --min-winrate 0.60   # 17lands game data

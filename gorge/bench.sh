@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Throughput and strength benchmark on the eval split (docs/025 §2-3).
+# Throughput and strength benchmark on the eval split (docs/026 §2-3).
 #
 #   bash gorge/bench.sh [workers]      # -> data/gorge/runs/bench/*.jsonl{,.summary.json}
 set -euo pipefail

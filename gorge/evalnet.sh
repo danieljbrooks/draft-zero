@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Evaluate one trained network on the EVAL decks (docs/025 §4), paired games:
+# Evaluate one trained network on the EVAL decks (docs/026 §4), paired games:
 #   the policy alone against the bot and against random; and inside the search, against the
 #   network-free search at the same budget (prior and leaf; leaf only; prior only).
 #

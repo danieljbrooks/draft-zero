@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Self-play for 17lands card statistics (docs/025 §5): each policy against itself on decks drawn
+# Self-play for 17lands card statistics (docs/026 §5): each policy against itself on decks drawn
 # from the whole pool, one game per deck pair.
 #
 #   bash gorge/gih_runs.sh            # -> data/gorge/runs/gih/*.jsonl
