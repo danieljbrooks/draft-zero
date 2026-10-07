@@ -1,0 +1,53 @@
+diff --git a/internal/policynet/net.go b/internal/policynet/net.go
+index bba4f29a..fe9c50f0 100644
+--- a/internal/policynet/net.go
++++ b/internal/policynet/net.go
+@@ -154,10 +154,27 @@ type Model struct {
+ 	EntW []float32 // EntK*(EntityRawWidth+H), row-major: EntW[q*entInW+i]
+ 	EntB []float32 // EntK
+ 	EntP []float32 // (EntityGroups*2*EntK)*H, row-major: EntP[p*H+j]
++
++	// Ext, when non-nil, answers Score and Value in place of this model's own
++	// weights: an EXTERNAL scorer (for example a network served from another
++	// process). Every other field is then unused except Features, which still
++	// names the encoding the caller builds. Opt-in: nil (the default) changes
++	// nothing.
++	Ext External
++}
++
++// External is a scorer outside this package: the per-option logits and the
++// win probability for an encoded state, as Model.Score and Model.Value.
++type External interface {
++	Score(st State, opts []Option) []float32
++	Value(st State) float32
+ }
+ 
++// NewExternal is a Model whose Score and Value are ext's, encoding under fs.
++func NewExternal(ext External, fs FeatureSet) *Model { return &Model{Features: fs, Ext: ext} }
++
+ // HasValue reports whether the model carries a value head.
+-func (m *Model) HasValue() bool { return m.ValueHidden > 0 }
++func (m *Model) HasValue() bool { return m.ValueHidden > 0 || m.Ext != nil }
+ 
+ // InitValue adds a value head of width valueHidden to m, drawn from rng. The
+ // trainer passes a rng SEPARATE from the policy's (seeded from the run seed),
+@@ -210,6 +227,9 @@ func (m *Model) valueForward(s, a []float32) float32 {
+ // model without a value head (HasValue false) returns 0.5, the no-information
+ // answer.
+ func (m *Model) Value(st State) float32 {
++	if m.Ext != nil {
++		return m.Ext.Value(st)
++	}
+ 	if !m.HasValue() {
+ 		return 0.5
+ 	}
+@@ -520,6 +540,9 @@ func (m *Model) residual(o Option) float32 {
+ // the state trunk is computed once, then each option gets its own head
+ // forward. The returned slice parallels opts.
+ func (m *Model) Score(st State, opts []Option) []float32 {
++	if m.Ext != nil {
++		return m.Ext.Score(st, opts)
++	}
+ 	s, c := m.stateTrunkEnt(st)
+ 	out := make([]float32, len(opts))
+ 	for i := range opts {

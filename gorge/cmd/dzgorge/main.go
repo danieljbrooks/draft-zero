@@ -7,6 +7,7 @@
 //
 //	dzgorge play     -a <policy> -b <policy> -pairs N -out games.jsonl [-corpus visits.jsonl.gz]
 //	dzgorge coverage                                  which pool decks gorge fully supports
+//	dzgorge pack     -in visits.jsonl.gz -out DIR     a visit corpus as dzg training shards (gorge/dzg)
 //
 // A game draws two different decks from the pool's split. With -a != -b each deck
 // pair is played twice on the same seed, the policies swapping seats, so each
@@ -28,12 +29,14 @@ func main() {
 		os.Exit(runPlay(os.Args[2:]))
 	case "coverage":
 		os.Exit(runCoverage(os.Args[2:]))
+	case "pack":
+		os.Exit(runPack(os.Args[2:]))
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: dzgorge play|coverage [flags]  (-h for each)")
+	fmt.Fprintln(os.Stderr, "usage: dzgorge play|coverage|pack [flags]  (-h for each)")
 	os.Exit(2)
 }

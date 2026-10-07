@@ -22,6 +22,13 @@ fi
 export GOFLAGS="${GOFLAGS:--p=4 -trimpath}"
 [ -d .cards/cardsfolder ] || make fetch-cards
 ls .cards/ir-*.gob.gz >/dev/null 2>&1 || make compile-cards
+# DraftZero's opt-in patches to gorge (gorge/patches): applied once, kept across rebuilds.
+for p in "$HERE"/patches/*.patch; do
+  [ -e "$p" ] || continue
+  if git apply --reverse --check "$p" 2>/dev/null; then continue; fi
+  git apply "$p"
+  echo "applied $(basename "$p")"
+done
 rm -rf cmd/dzgorge && cp -r "$HERE/cmd/dzgorge" cmd/dzgorge
 go vet ./cmd/dzgorge
 go build -o bin/dzgorge ./cmd/dzgorge

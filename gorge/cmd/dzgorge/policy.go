@@ -27,10 +27,15 @@ import (
 //	   :cpuct=1.5 :fpu=0.1 :cands=N
 //	prior:net=gen1.gpol          the network's policy alone: the argmax of its prior over the
 //	                             candidates the search would build, no simulation
+//	az:sims=100:remote=unix:/tmp/dzg.sock
+//	                             the network served by python -m dzg.serve (gorge/dzg): an MLP,
+//	                             transformer or GNN reading gorge's entity encoding, in place
+//	                             of a .gpol (also prior:remote=...)
 type policySpec struct {
 	Raw, Kind string
 	Sims      int
 	Net       string
+	Remote    string
 	model     *policynet.Model
 	HeurLeaf  bool
 	UniPrior  bool
@@ -43,6 +48,11 @@ type policySpec struct {
 }
 
 func parsePolicy(s string) (*policySpec, error) {
+	// remote=unix:/path and remote=tcp:host:port contain colons: take the rest of the spec.
+	rest := ""
+	if i := strings.Index(s, ":remote="); i >= 0 {
+		s, rest = s[:i], s[i+len(":remote="):]
+	}
 	parts := strings.Split(s, ":")
 	p := &policySpec{Raw: s, Kind: parts[0], Sims: azmcts.DefaultOptions().Sims, CPUCT: -1, FPU: -1, Cands: -1}
 	switch p.Kind {
@@ -87,8 +97,21 @@ func parsePolicy(s string) (*policySpec, error) {
 			return nil, fmt.Errorf("policy %q: %s: %w", s, k, err)
 		}
 	}
-	if p.Kind == "prior" && p.Net == "" {
-		return nil, fmt.Errorf("policy %q: prior needs net=", s)
+	if rest != "" {
+		p.Raw, p.Remote = s+":remote="+rest, rest
+	}
+	if p.Kind == "prior" && p.Net == "" && p.Remote == "" {
+		return nil, fmt.Errorf("policy %q: prior needs net= or remote=", s)
+	}
+	if p.Net != "" && p.Remote != "" {
+		return nil, fmt.Errorf("policy %q: net= and remote= are exclusive", s)
+	}
+	if p.Remote != "" {
+		m, err := remoteModel(p.Remote)
+		if err != nil {
+			return nil, fmt.Errorf("policy %q: %w", s, err)
+		}
+		p.model = m
 	}
 	if p.Net != "" {
 		m, err := policynet.LoadCheckpointFile(p.Net)
@@ -104,6 +127,9 @@ func parsePolicy(s string) (*policySpec, error) {
 	}
 	return p, nil
 }
+
+// recordFeatures is the encoding visit corpora are written in (play -record-features).
+var recordFeatures = policynet.FeaturesMZ
 
 func (p *policySpec) searches() bool { return p.Kind == "az" || p.Kind == "prior" }
 
@@ -128,7 +154,7 @@ func (p *policySpec) azConfig() azmcts.SeatConfig {
 	cfg.Worlds = p.Worlds
 	cfg.Explore, cfg.NoNoise = p.Explore, p.NoNoise
 	cfg.PriorOnly = p.Kind == "prior"
-	cfg.RecordFeatures = policynet.FeaturesMZ
+	cfg.RecordFeatures = recordFeatures
 	return cfg
 }
 

@@ -91,7 +91,18 @@ func runPlay(args []string) int {
 	// whatever the hand holds (botpolicy/policy.go), and every seat here delegates that ask to it.
 	mulligans := fs.Int("mulligans", 0, "London mulligans each player may take (0 skips the round)")
 	progress := fs.Int("progress", 0, "print progress every N games (0 = about 20 times)")
+	recFeat := fs.String("record-features", "mz", "encoding of the -corpus records: mz, or entity for dzg's networks (dzgorge pack)")
+	fs.IntVar(&remoteConns, "remote-conns", remoteConns, "connections to each remote= network server")
+	fs.IntVar(&remoteBatch, "remote-batch", remoteBatch, "most states in one remote request")
+	fs.DurationVar(&remoteWait, "remote-wait", remoteWait, "how long a remote request waits for more states")
+	fs.IntVar(&remoteCache, "remote-cache", remoteCache, "cached remote evaluations (states)")
 	fs.Parse(args)
+	if f, err := policynet.ParseFeatureSet(*recFeat); err != nil || f.Diagnostic() {
+		fmt.Fprintf(os.Stderr, "play: -record-features %q: want mz or entity\n", *recFeat)
+		return 2
+	} else {
+		recordFeatures = f
+	}
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "play: -out is required")
 		return 2
@@ -316,6 +327,9 @@ func runPlay(args []string) int {
 		sum["az_no_world_sims"] = azStats.noWorld.Load()
 		sum["az_all_failed"] = azStats.allFailed.Load()
 		sum["az_prior_fallbacks"] = azStats.priorFallbacks.Load()
+	}
+	for k, v := range remoteStats() {
+		sum[k] = v
 	}
 	js, _ := json.MarshalIndent(sum, "", " ")
 	if err := os.WriteFile(*out+".summary.json", js, 0o644); err != nil {
