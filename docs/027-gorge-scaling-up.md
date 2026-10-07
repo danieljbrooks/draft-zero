@@ -518,6 +518,29 @@ generation-1′ transformer in both seats (`autopay:oppnodes:topk=6`, mulligans 
   original search with the cheap-games network (48.8%). The full search's `morekinds`, which came later, is the
   change that mattered (§4.5).
 
+### 4.7 A loop of cheap games with the in-engine MLP
+
+The last experiment combines what worked: the full search, many cheap games, and a small MLP inside the engine, over
+generations (r1, mulligans on). C1 plays 40 minutes of cheap full-search games (25 simulations, one searched decision
+in four recorded) without a network; each later generation plays 40 minutes of cheap games with the previous
+generation's MLP in the search (`topk=6`), and its MLP (width 64) is trained from scratch on every cheap game so far.
+Each plays the full search without a network, and its predecessor, at 100 simulations (600 paired games each).
+
+| Generation | Cheap games played (40 min on r1) | Positions trained on | Held-out value log loss | Against the full search without a network | Against the previous generation |
+|---|---:|---:|---:|---:|---:|
+| C1 (no network in its games) | 41,855 | 637,000 | 0.452 | 56.5% | |
+| C2 (C1's MLP in its games) | 7,699 | 751,000 | **0.442** | **57.8%** | 52.2% |
+| C3 (C2's MLP in its games) | PENDING | PENDING | PENDING | PENDING | PENDING |
+
+- **C1 reproduces the best bot's network** (§4.5, whose weights were lost with its pod): 56.5% against the full search,
+  within chance of the 58.2% of the original.
+- **Each generation adds a little:** C2's value is better (log loss 0.442 against 0.452) and it beat C1 52.2% of 600,
+  within chance on its own.
+- **The network makes cheap games 5.5 times slower:** 11,500 games an hour with C1's MLP in the engine against 63,000
+  without it, so C2 trained on far fewer new games. This is the cost §5.3 traces to building the network's input.
+
+The networks of this report are on Hugging Face (private `draftzero-checkpoints`, folder `gorge027/`).
+
 ## 5. gorge's search, and what AlphaZero-style training needs
 
 ### 5.1 How the search decides today
