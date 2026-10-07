@@ -31,6 +31,8 @@ func main() {
 		os.Exit(runCoverage(os.Args[2:]))
 	case "pack":
 		os.Exit(runPack(os.Args[2:]))
+	case "gonet-check": // hidden: the in-process network against PyTorch (gonet_check.go)
+		os.Exit(runGonetCheck(os.Args[2:]))
 	default:
 		usage()
 	}

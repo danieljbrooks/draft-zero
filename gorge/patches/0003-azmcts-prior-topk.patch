@@ -1,0 +1,858 @@
+diff --git a/internal/azmcts/candidates.go b/internal/azmcts/candidates.go
+index 989e56e1..14a43dd2 100644
+--- a/internal/azmcts/candidates.go
++++ b/internal/azmcts/candidates.go
+@@ -676,6 +676,19 @@ func actionsKey(acts []searchprobe.Action) Key {
+ // could not be formed (every candidate -Inf or NaN) and fell back to uniform.
+ // The view is projected into pv (view.ProjectInto), a fresh one when nil.
+ func priors(net *policynet.Model, e *rules.Engine, d *decision.Decision, bot decision.Intent, kind string, cands []cand, pv *view.View) ([]float64, bool) {
++	return priorsWith(net, e, d, bot, kind, cands, pv, false)
++}
++
++// priorsWith is priors; payCasts is the PriorTopK ranking prior's form
++// (rankedPrior). There a payment candidate with no legacy cast option is
++// scored as the plain cast option it stands for (payCastOption), appended
++// after d's own options and encoded as one more option of the list,
++// instead of the whole prior falling back to uniform: under auto-pay no
++// mana floats, so the engine offers almost no legacy cast and the ordinary
++// prior could rank no cast at all. The bot's payment candidate's scored
++// option is marked BotPick, as MarkBotPicks marks a choice answer's. With
++// no such candidate and a choice answer the two forms are the same prior.
++func priorsWith(net *policynet.Model, e *rules.Engine, d *decision.Decision, bot decision.Intent, kind string, cands []cand, pv *view.View, payCasts bool) ([]float64, bool) {
+ 	if net == nil {
+ 		return uniform(len(cands)), false
+ 	}
+@@ -685,16 +698,57 @@ func priors(net *policynet.Model, e *rules.Engine, d *decision.Decision, bot dec
+ 	view.ProjectInto(pv, e.G, e, d.Player, d)
+ 	v := *pv
+ 	st := policynet.EncodeStateWith(net.Features, v, d.Player, nil)
+-	enc := make([]policynet.Option, len(d.Options))
+-	for i := range d.Options {
+-		enc[i] = policynet.EncodeOptionWith(net.Features, v, d.Player, d.Kind, d.Options[i], i, len(d.Options))
++	opts := d.Options
++	// synth[i] is the index in opts of candidate i's synthetic cast option,
++	// -1 for none; nil when no candidate has one.
++	var synth []int
++	if payCasts {
++		for i, c := range cands {
++			o, ok := payCastOption(e, d, c)
++			if !ok {
++				continue
++			}
++			if synth == nil {
++				synth = make([]int, len(cands))
++				for j := range synth {
++					synth[j] = -1
++				}
++				opts = append(make([]decision.Option, 0, len(d.Options)+len(cands)), d.Options...)
++			}
++			o.Index = len(opts)
++			synth[i] = len(opts)
++			opts = append(opts, o)
++		}
++	}
++	enc := make([]policynet.Option, len(opts))
++	for i := range opts {
++		enc[i] = policynet.EncodeOptionWith(net.Features, v, d.Player, d.Kind, opts[i], i, len(opts))
++	}
++	seat.MarkBotPicks(d, enc[:len(d.Options)], bot)
++	if payCasts && bot.Payment != nil {
++		for i, c := range cands {
++			if c.in.Payment == nil || c.in.Payment.ActionID != bot.Payment.ActionID {
++				continue
++			}
++			if choices, ok := c.scoreChoices(); ok {
++				for _, k := range choices {
++					if k >= 0 && k < len(d.Options) {
++						enc[k].BotPick = true
++					}
++				}
++			} else if synth != nil && synth[i] >= 0 {
++				enc[synth[i]].BotPick = true
++			}
++		}
+ 	}
+-	seat.MarkBotPicks(d, enc, bot)
+ 	scores := net.Score(st, enc)
+ 	subset := kind == "attackers" || kind == "blockers"
+ 	logits := make([]float64, len(cands))
+ 	for i, c := range cands {
+ 		choices, ok := c.scoreChoices()
++		if !ok && synth != nil && synth[i] >= 0 {
++			choices, ok = synth[i:i+1], true
++		}
+ 		if !ok {
+ 			// A payment cast with no legacy option has no option score.
+ 			return uniform(len(cands)), true
+@@ -708,6 +762,82 @@ func priors(net *policynet.Model, e *rules.Engine, d *decision.Decision, bot dec
+ 	return p, false
+ }
+ 
++// payCastOption is the option a network scores payment candidate c by when
++// its action has no legacy cast option (score nil): the plain cast of its
++// object, as paymentActs keys it. ok is false for any other candidate (a
++// choice, a payment scored by its legacy option, a root macro) and when
++// e's pending decision is not d (no payment action to read).
++func payCastOption(e *rules.Engine, d *decision.Decision, c cand) (decision.Option, bool) {
++	if c.in.Payment == nil || c.macro != nil {
++		return decision.Option{}, false
++	}
++	if _, ok := c.scoreChoices(); ok {
++		return decision.Option{}, false
++	}
++	if pd := e.Pending(); pd == nil || pd.Seq != d.Seq || pd.Player != d.Player {
++		return decision.Option{}, false
++	}
++	// Built and kept on the pending decision when the vocabulary was
++	// enumerated: this reads them again, it builds nothing.
++	for _, a := range e.EnsurePaymentActions() {
++		if a.ID == c.in.Payment.ActionID {
++			return decision.Option{Kind: "cast", Obj: a.Cast.Object, Player: d.Player, Label: a.Label}, true
++		}
++	}
++	return decision.Option{}, false
++}
++
++// rankedPrior is a searched point's candidates and prior. With k == 0 (no
++// PriorTopK, or no network prior) they are cands and priors' prior. With
++// k > 0 the ranking prior (priorsWith's payCasts form) is formed over every
++// candidate and priorTopK cuts it: before is priorTopK's.
++func rankedPrior(net *policynet.Model, k int, e *rules.Engine, d *decision.Decision, bot decision.Intent, kind string, cands []cand, pv *view.View) (kept []cand, prior []float64, fell bool, before int) {
++	if k <= 0 {
++		prior, fell = priors(net, e, d, bot, kind, cands, pv)
++		return cands, prior, fell, 0
++	}
++	prior, fell = priorsWith(net, e, d, bot, kind, cands, pv, true)
++	kept, prior, before = priorTopK(cands, prior, k)
++	return kept, prior, fell, before
++}
++
++// priorTopK is Options.PriorTopK's cut: cands[0] -- the bot's answer, the
++// tie-winner -- then the k-1 other candidates of highest prior, prior
++// descending with ties to the lower index (the enumeration order, so a
++// uniform prior keeps the first k), their prior renormalised over the kept
++// ones. before is len(cands) when the cut dropped a candidate, 0 when it
++// kept them all (reordered all the same, the prior unchanged). Neither
++// input is modified.
++func priorTopK(cands []cand, prior []float64, k int) ([]cand, []float64, int) {
++	order := make([]int, 0, len(cands))
++	for i := 1; i < len(cands); i++ {
++		order = append(order, i)
++	}
++	sort.SliceStable(order, func(a, b int) bool { return prior[order[a]] > prior[order[b]] })
++	before := 0
++	if len(order) > k-1 {
++		order, before = order[:k-1], len(cands)
++	}
++	kept := append(make([]cand, 0, len(order)+1), cands[0])
++	p := append(make([]float64, 0, len(order)+1), prior[0])
++	sum := prior[0]
++	for _, i := range order {
++		kept = append(kept, cands[i])
++		p = append(p, prior[i])
++		sum += prior[i]
++	}
++	if before > 0 {
++		for i := range p {
++			if sum > 0 {
++				p[i] /= sum
++			} else {
++				p[i] = 1 / float64(len(p))
++			}
++		}
++	}
++	return kept, p, before
++}
++
+ // softmax normalises logits; ok is false when no logit is finite or any is
+ // NaN or +Inf.
+ func softmax(logits []float64) ([]float64, bool) {
+diff --git a/internal/azmcts/env.go b/internal/azmcts/env.go
+index 9d1fce7c..aab0d4ad 100644
+--- a/internal/azmcts/env.go
++++ b/internal/azmcts/env.go
+@@ -34,6 +34,10 @@ type walkConfig struct {
+ 	// uniformPrior keeps the uniform prior at in-walk points even with a
+ 	// network (Options.UniformPrior).
+ 	uniformPrior bool
++	// priorTopK is the PriorTopK in effect (Options.priorTopK): 0, or the
++	// candidates rankedPrior keeps at every in-walk point of the searching
++	// seat, which then enumerates past limit (enumLimit).
++	priorTopK int
+ 	// rootPerWorld re-derives the root candidates in every world
+ 	// (Options.RootPerWorld).
+ 	rootPerWorld bool
+@@ -109,6 +113,25 @@ func (c *walkConfig) priorView() *view.View {
+ 	return &c.views.prior
+ }
+ 
++// enumLimit is the searching seat's enumeration cap at an in-walk point:
++// limit, or under priorTopK every candidate (BenchCandidateLimit), for
++// rankedPrior to cut.
++func (c *walkConfig) enumLimit() int {
++	if c.priorTopK > 0 {
++		return BenchCandidateLimit
++	}
++	return c.limit
++}
++
++// candKeys is cands' keys, in order.
++func candKeys(cands []cand) []Key {
++	keys := make([]Key, len(cands))
++	for i, c := range cands {
++		keys[i] = c.key
++	}
++	return keys
++}
++
+ // worldEnvs adapts a WorldSource to the tree's EnvSource.
+ type worldEnvs struct {
+ 	src WorldSource
+@@ -348,18 +371,24 @@ func (e *engineEnv) advance() (*Point, error) {
+ 			}
+ 		}
+ 		if pd.Player == e.cfg.actor {
+-			if cands, kind, _, ok, cut := enumerateCutInto(e.obs, e.e, pd, in, e.cfg.kinds, e.cfg.limit, e.cfg.autoPayment, e.cfg.enumBoard); ok {
++			if cands, kind, _, ok, cut := enumerateCutInto(e.obs, e.e, pd, in, e.cfg.kinds, e.cfg.enumLimit(), e.cfg.autoPayment, e.cfg.enumBoard); ok {
+ 				if cut {
+ 					e.cfg.stats.Truncated++
+ 				}
+ 				if e.cfg.nameKeys {
+ 					cands = nameKeys(e.obs, e.e, pd, cands, e.cfg.rootRefs)
+ 				}
++				// Under priorTopK the network keeps the point's best
++				// candidates (after nameKeys, which may merge two).
++				cands, prior, fell, before := rankedPrior(e.cfg.priorNet(), e.cfg.priorTopK, e.e, pd, in, kind, cands, e.cfg.priorView())
+ 				e.cur, e.cands = pd, cands
+-				prior, fell := priors(e.cfg.priorNet(), e.e, pd, in, kind, cands, e.cfg.priorView())
+ 				if fell {
+ 					e.cfg.stats.PriorFallbacks++
+ 				}
++				if e.cfg.priorTopK > 0 {
++					countTopK(e.cfg.stats, true, before)
++					return &Point{Keys: candKeys(cands), Prior: prior, cut: cut, fell: fell, ranked: true, before: before}, nil
++				}
+ 				keys := make([]Key, len(cands))
+ 				for i, c := range cands {
+ 					keys[i] = c.key
+diff --git a/internal/azmcts/nodecache.go b/internal/azmcts/nodecache.go
+index 017fea98..dd1f3a3f 100644
+--- a/internal/azmcts/nodecache.go
++++ b/internal/azmcts/nodecache.go
+@@ -296,6 +296,7 @@ func skipped(nodes []*node, st *Stats) {
+ 		if n.pt.fell {
+ 			st.PriorFallbacks++
+ 		}
++		countTopK(st, n.pt.ranked, n.pt.before)
+ 	}
+ }
+ 
+diff --git a/internal/azmcts/options.go b/internal/azmcts/options.go
+index 28926b00..43c35dcc 100644
+--- a/internal/azmcts/options.go
++++ b/internal/azmcts/options.go
+@@ -79,6 +79,25 @@ type Options struct {
+ 	// network then supplies only the leaf value (the search benchmark's
+ 	// "priors off", upstream experiment #2's setting).
+ 	UniformPrior bool
++	// PriorTopK lets the network choose the candidates. Limit cuts a
++	// decision's candidates in enumeration order before any prior is
++	// formed, and past the bot's answer and Pass that order is the
++	// enumerator's (a priority decision's other plays sort by key bytes),
++	// not quality: a strong play can be cut while a weak one is searched.
++	// With PriorTopK > 0 and a network prior in use (a net, UniformPrior
++	// off), every searched point -- the root and every in-walk point -- is
++	// enumerated in full (BenchCandidateLimit), the prior is formed over
++	// every candidate, and the bot's candidate (index 0, still the
++	// tie-winner) is kept with the PriorTopK-1 others of highest prior,
++	// prior descending (ties to the enumeration order), the kept prior
++	// renormalised; Limit is then unused. A prior that falls back to
++	// uniform ties every candidate, so the cut keeps the enumeration's
++	// first PriorTopK. Under AutoPayment the ranking prior also scores a
++	// payment cast that has no legacy cast option -- the usual case, nothing
++	// floats -- as the plain cast option it stands for, where the ordinary
++	// prior falls back to uniform (priorsWith). 0 is off; without a network
++	// prior it does nothing. Stats.PriorTopK* count it.
++	PriorTopK int
+ 
+ 	// AbsoluteUnvisitedQ replaces first-play urgency: an unvisited child's Q
+ 	// is the constant UnvisitedQ instead of its parent's Q minus FPU. The
+@@ -238,6 +257,15 @@ type Stats struct {
+ 	// those decisions are never searched, so this row is where stage 0 sees
+ 	// how often the search meets a cast only after mana has floated.
+ 	PrioritySkipped [NumBaseKinds][NumSkipReasons]int
++
++	// PriorTopKPoints counts searched points -- the root and in-walk
++	// decisions, a discarded simulation's included -- whose candidates
++	// Options.PriorTopK ranked by the network prior; PriorTopKCuts those
++	// where the ranking dropped a candidate, and PriorTopKBefore sums those
++	// points' candidate counts before the cut (MeanPriorTopKBefore).
++	PriorTopKPoints int
++	PriorTopKCuts   int
++	PriorTopKBefore int
+ }
+ 
+ // The searched kinds, indexing Stats' per-kind breakdowns.
+@@ -332,6 +360,9 @@ func (s *Stats) Add(o Stats) {
+ 	s.NodeSaves += o.NodeSaves
+ 	s.NodeResumes += o.NodeResumes
+ 	s.NodeEvicts += o.NodeEvicts
++	s.PriorTopKPoints += o.PriorTopKPoints
++	s.PriorTopKCuts += o.PriorTopKCuts
++	s.PriorTopKBefore += o.PriorTopKBefore
+ 	for k := range s.KindSearched {
+ 		s.KindSearched[k] += o.KindSearched[k]
+ 		for r := range s.KindSkipped[k] {
+@@ -354,6 +385,15 @@ func (s Stats) MeanLeafEdges() float64 { return perCompleted(s.LeafEdges, s.Comp
+ // MeanLeafTurns is LeafTurns per completed simulation (0 with none).
+ func (s Stats) MeanLeafTurns() float64 { return perCompleted(s.LeafTurns, s.Completed) }
+ 
++// MeanPriorTopKBefore is the candidates a PriorTopK cut ranked, per cut (0
++// with none).
++func (s Stats) MeanPriorTopKBefore() float64 {
++	if s.PriorTopKCuts == 0 {
++		return 0
++	}
++	return float64(s.PriorTopKBefore) / float64(s.PriorTopKCuts)
++}
++
+ func perCompleted(sum, n int) float64 {
+ 	if n == 0 {
+ 		return 0
+diff --git a/internal/azmcts/search.go b/internal/azmcts/search.go
+index 8320ade5..4fd42221 100644
+--- a/internal/azmcts/search.go
++++ b/internal/azmcts/search.go
+@@ -113,6 +113,9 @@ func (o Options) Validate(net *policynet.Model) error {
+ 		return fmt.Errorf("azmcts: Dirichlet epsilon %g must be in [0,1]", o.DirichletEps)
+ 	case o.NodeCache < 0:
+ 		return fmt.Errorf("azmcts: node cache %d must be >= 0 (0 is off)", o.NodeCache)
++	case o.PriorTopK < 0 || o.PriorTopK == 1:
++		// One kept candidate is the bot's alone: nothing would be searched.
++		return fmt.Errorf("azmcts: prior top-k %d must be 0 (off) or >= 2", o.PriorTopK)
+ 	case o.Kinds == (Kinds{}):
+ 		return errors.New("azmcts: no searched decision kinds")
+ 	case o.Discount < 0 || o.Discount > 1 || o.Discount != o.Discount:
+@@ -133,6 +136,27 @@ func (o Options) Validate(net *policynet.Model) error {
+ 	return nil
+ }
+ 
++// priorTopK is the PriorTopK in effect with net: 0 unless a network supplies
++// the prior (a net, UniformPrior off).
++func (o Options) priorTopK(net *policynet.Model) int {
++	if o.PriorTopK <= 0 || net == nil || o.UniformPrior {
++		return 0
++	}
++	return o.PriorTopK
++}
++
++// countTopK counts one PriorTopK point in st: ranked, and cut when before
++// (rankedPrior's) is positive.
++func countTopK(st *Stats, ranked bool, before int) {
++	if ranked {
++		st.PriorTopKPoints++
++	}
++	if before > 0 {
++		st.PriorTopKCuts++
++		st.PriorTopKBefore += before
++	}
++}
++
+ // Search runs the tree at the searching seat's current decision (spec §1-§2)
+ // and returns the answer to play. A decision that is not searched -- not a
+ // searched kind, fewer than two candidates, a bot answer outside the
+@@ -165,7 +189,13 @@ func Search(ctx context.Context, root Root, src WorldSource, net *policynet.Mode
+ 	var envBoard, enumBoard boardScratch
+ 	views := searchViews.Get().(*viewScratch)
+ 	defer searchViews.Put(views)
+-	cands, kind, why, ok, cut, botFound := rootCands(root.Observer, root, opts.Kinds, opts.Limit, opts.AutoPayment, &enumBoard)
++	// Under PriorTopK the network, not the enumeration order, chooses the
++	// candidates: every point enumerates in full and rankedPrior cuts.
++	topK, limit := opts.priorTopK(net), opts.Limit
++	if topK > 0 {
++		limit = BenchCandidateLimit
++	}
++	cands, kind, why, ok, cut, botFound := rootCands(root.Observer, root, opts.Kinds, limit, opts.AutoPayment, &enumBoard)
+ 	res.Kind = kind
+ 	if cut {
+ 		res.Stats.Truncated, res.Stats.RootTruncated = 1, 1
+@@ -180,6 +210,17 @@ func Search(ctx context.Context, root Root, src WorldSource, net *policynet.Mode
+ 		}
+ 		return res, nil
+ 	}
++	priorNet := net
++	if opts.UniformPrior {
++		priorNet = nil
++	}
++	// The prior comes before the Result's candidate lists: under PriorTopK
++	// it decides which candidates they hold.
++	cands, prior, fell, before := rankedPrior(priorNet, topK, root.Engine, root.Decision, root.Bot, kind, cands, &views.prior)
++	if fell {
++		res.Stats.PriorFallbacks++
++	}
++	countTopK(&res.Stats, topK > 0, before)
+ 	res.Candidates = make([]decision.Intent, len(cands))
+ 	res.Keys = make([]Key, len(cands))
+ 	res.Labels = make([]string, len(cands))
+@@ -190,14 +231,6 @@ func Search(ctx context.Context, root Root, src WorldSource, net *policynet.Mode
+ 			res.Labels[i] = c.macro.Label
+ 		}
+ 	}
+-	priorNet := net
+-	if opts.UniformPrior {
+-		priorNet = nil
+-	}
+-	prior, fell := priors(priorNet, root.Engine, root.Decision, root.Bot, kind, cands, &views.prior)
+-	if fell {
+-		res.Stats.PriorFallbacks++
+-	}
+ 	res.Prior = prior
+ 	if opts.Sims <= 0 {
+ 		return res, nil
+@@ -214,7 +247,7 @@ func Search(ctx context.Context, root Root, src WorldSource, net *policynet.Mode
+ 	}
+ 	rootPt := &Point{Keys: res.Keys, Prior: treePrior}
+ 	cfg := &walkConfig{
+-		net: net, heuristicLeaf: opts.HeuristicLeaf, kinds: opts.Kinds, limit: opts.Limit, maxSteps: opts.MaxSteps,
++		net: net, heuristicLeaf: opts.HeuristicLeaf, kinds: opts.Kinds, limit: opts.Limit, priorTopK: topK, maxSteps: opts.MaxSteps,
+ 		envSeed: splitmix(opts.Seed ^ 0x656e762d73656564), actor: root.Decision.Player, autoPayment: opts.AutoPayment,
+ 		uniformPrior: opts.UniformPrior, rootPerWorld: opts.RootPerWorld,
+ 		nameKeys: opts.NameKeys, rootRefs: root.Observer.Introduced(),
+diff --git a/internal/azmcts/tree.go b/internal/azmcts/tree.go
+index a0421b27..66220890 100644
+--- a/internal/azmcts/tree.go
++++ b/internal/azmcts/tree.go
+@@ -45,6 +45,11 @@ type Point struct {
+ 	// a stored point without producing it again, counts them exactly as a
+ 	// re-walk would have.
+ 	cut, fell bool
++	// ranked and before are, likewise, the PriorTopK counters producing it
++	// counted: ranked one PriorTopKPoints, before > 0 one PriorTopKCuts and
++	// before PriorTopKBefore.
++	ranked bool
++	before int
+ }
+ 
+ // Leaf is the value of the position a walk stopped at, for the searching
+diff --git a/internal/azmcts/priortopk_test.go b/internal/azmcts/priortopk_test.go
+new file mode 100644
+index 00000000..60cb026f
+--- /dev/null
++++ b/internal/azmcts/priortopk_test.go
+@@ -0,0 +1,416 @@
++package azmcts
++
++import (
++	"context"
++	"math"
++	"reflect"
++	"sort"
++	"testing"
++
++	"github.com/adams-shaun/gorge/botpolicy"
++	"github.com/adams-shaun/gorge/decision"
++	"github.com/adams-shaun/gorge/internal/policynet"
++	"github.com/adams-shaun/gorge/internal/searchprobe"
++	"github.com/adams-shaun/gorge/rules"
++	"github.com/adams-shaun/gorge/seat"
++	"github.com/adams-shaun/gorge/view"
++)
++
++// hashScorer is a policynet.External test double: every option scores a
++// fixed function of its encoded identity (its slot and hashed rows, never
++// its position), so the prior ranks candidates in an order unrelated to
++// the enumeration's; every state is worth 0.5.
++type hashScorer struct{}
++
++func (hashScorer) Score(_ policynet.State, opts []policynet.Option) []float32 {
++	out := make([]float32, len(opts))
++	for i, o := range opts {
++		h := uint64(14695981039346656037)
++		mix := func(x uint64) {
++			h ^= x
++			h *= 1099511628211
++		}
++		for _, f := range o.Slots {
++			mix(uint64(f.Row))
++		}
++		mix(0xff)
++		for _, f := range o.Hashed {
++			mix(uint64(f.Row))
++		}
++		out[i] = float32(h%1000)/250 - 2 // [-2, 2)
++	}
++	return out
++}
++
++func (hashScorer) Value(policynet.State) float32 { return 0.5 }
++
++func hashNet() *policynet.Model { return policynet.NewExternal(hashScorer{}, policynet.FeaturesMZ) }
++
++// keysOf is cands' keys.
++func keysOf(cands []cand) []Key {
++	out := make([]Key, len(cands))
++	for i, c := range cands {
++		out[i] = c.key
++	}
++	return out
++}
++
++// The cut keeps candidate 0 whatever its prior, then the k-1 others of
++// highest prior in descending order, ties to the lower index, and
++// renormalises; with nothing to drop it keeps every candidate and the
++// prior's values.
++func TestPriorTopKKeepsTheBotAndTheBestPriors(t *testing.T) {
++	cands := make([]cand, 6)
++	for i := range cands {
++		cands[i].key = Key(rune('a' + i))
++	}
++	prior := []float64{0.05, 0.1, 0.3, 0.1, 0.25, 0.2}
++	kept, p, before := priorTopK(cands, prior, 3)
++	if want := []Key{"a", "c", "e"}; !reflect.DeepEqual(keysOf(kept), want) || before != 6 {
++		t.Fatalf("k 3: kept %v (before %d), want %v (before 6)", keysOf(kept), before, want)
++	}
++	for i, want := range []float64{0.05 / 0.6, 0.3 / 0.6, 0.25 / 0.6} {
++		if !near(p[i], want) {
++			t.Fatalf("k 3: prior %v, want the kept prior renormalised", p)
++		}
++	}
++	// b and d tie at 0.1: the lower index is kept first.
++	kept, _, _ = priorTopK(cands, prior, 5)
++	if want := []Key{"a", "c", "e", "f", "b"}; !reflect.DeepEqual(keysOf(kept), want) {
++		t.Fatalf("k 5: kept %v, want %v", keysOf(kept), want)
++	}
++	kept, p, before = priorTopK(cands, prior, 6)
++	if want := []Key{"a", "c", "e", "f", "b", "d"}; !reflect.DeepEqual(keysOf(kept), want) || before != 0 {
++		t.Fatalf("k 6: kept %v (before %d), want every candidate reordered %v (before 0)", keysOf(kept), before, want)
++	}
++	if !reflect.DeepEqual(p, []float64{0.05, 0.3, 0.25, 0.2, 0.1, 0.1}) {
++		t.Fatalf("k 6: prior %v, want the values unchanged", p)
++	}
++	// A uniform prior (a fallback) keeps the enumeration's first k.
++	kept, _, _ = priorTopK(cands, uniform(6), 3)
++	if want := []Key{"a", "b", "c"}; !reflect.DeepEqual(keysOf(kept), want) {
++		t.Fatalf("uniform: kept %v, want %v", keysOf(kept), want)
++	}
++	if cands[1].key != "b" || prior[1] != 0.1 {
++		t.Fatal("priorTopK modified its inputs")
++	}
++}
++
++// wantTopK is the cut computed independently of priorTopK: the full
++// enumeration's candidate 0, then the k-1 others of highest ranking prior.
++func wantTopK(full []cand, prior []float64, k int) []Key {
++	idx := make([]int, 0, len(full))
++	for i := 1; i < len(full); i++ {
++		idx = append(idx, i)
++	}
++	sort.SliceStable(idx, func(a, b int) bool { return prior[idx[a]] > prior[idx[b]] })
++	out := []Key{full[0].key}
++	for _, i := range idx[:min(len(idx), k-1)] {
++		out = append(out, full[i].key)
++	}
++	return out
++}
++
++// Search under PriorTopK with a network: the root's candidates are the
++// bot's plus the K-1 others of highest network prior over the FULL
++// enumeration -- not the enumeration's first K -- with the bot's answer
++// still candidate 0 and the Result's lists aligned. Over several roots at
++// least one cut must differ from the Limit-style first-K cut.
++func TestSearchPriorTopKKeepsTheNetworksBest(t *testing.T) {
++	const k = 3
++	net := hashNet()
++	roots := measureRoots(t, 10)
++	differs, cuts, inWalk := 0, 0, 0
++	for i, r := range roots {
++		full, kind, _, ok, _ := enumerateCut(searchprobe.NewCollector(r.d.Player), r.e, r.d, r.bot, AllKinds(), BenchCandidateLimit, false)
++		if !ok {
++			t.Fatalf("%s: no candidates", r.name)
++		}
++		prior, fell := priorsWith(net, r.e, r.d, r.bot, kind, full, nil, true)
++		if fell {
++			t.Fatalf("%s: the ranking prior fell back", r.name)
++		}
++		want := wantTopK(full, prior, k)
++		if len(full) > k && !reflect.DeepEqual(want, keysOf(full[:k])) {
++			differs++
++		}
++		opts := DefaultOptions()
++		opts.Sims, opts.Seed, opts.PriorTopK, opts.HeuristicLeaf = 24, uint64(i)+1, k, true
++		res := searchAt(t, r.e, r.d, r.bot, net, opts)
++		checkResult(t, r.d, r.bot, res, opts.Sims)
++		if !reflect.DeepEqual(res.Keys, want) {
++			t.Fatalf("%s: kept %v, want %v", r.name, res.Keys, want)
++		}
++		if !sameIntent(res.Candidates[0], r.bot) {
++			t.Fatalf("%s: candidate 0 %+v is not the bot's answer %+v", r.name, res.Candidates[0], r.bot)
++		}
++		byKey := make(map[Key]decision.Intent, len(full)) // lookup only
++		for _, c := range full {
++			byKey[c.key] = c.in
++		}
++		for j, in := range res.Candidates {
++			if !reflect.DeepEqual(in, byKey[res.Keys[j]]) {
++				t.Fatalf("%s: candidate %d is not its key's intent: %+v vs %+v", r.name, j, in, byKey[res.Keys[j]])
++			}
++		}
++		st := res.Stats
++		if st.PriorTopKPoints < 1 || (len(full) > k && st.PriorTopKCuts < 1) {
++			t.Fatalf("%s: %d candidates, top-k points %d cuts %d", r.name, len(full), st.PriorTopKPoints, st.PriorTopKCuts)
++		}
++		if len(full) > k {
++			cuts++
++		}
++		inWalk += st.PriorTopKPoints - 1
++	}
++	if differs == 0 || cuts == 0 || inWalk == 0 {
++		t.Fatalf("the roots never exercised the cut: %d differ from the first-k cut, %d cut, %d in-walk ranked points", differs, cuts, inWalk)
++	}
++	t.Logf("%d roots: %d cut, %d differ from the first-%d cut; %d in-walk ranked points", len(roots), cuts, differs, k, inWalk)
++}
++
++// topKWalk walks one clairvoyant world from root r under top-k k, always
++// playing each point's candidate 0 (the bot's answer: the same walk
++// whatever k is), and returns the points it reached.
++func topKWalk(t *testing.T, r measureRoot, net *policynet.Model, k int, autoPay bool, steps int) ([]*Point, Stats) {
++	t.Helper()
++	obs := searchprobe.NewCollector(r.d.Player)
++	full, kind, _, ok, _ := enumerateCut(obs, r.e, r.d, r.bot, AllKinds(), BenchCandidateLimit, autoPay)
++	if !ok {
++		t.Fatalf("%s: no candidates", r.name)
++	}
++	cands, prior, _, _ := rankedPrior(net, k, r.e, r.d, r.bot, kind, full, nil)
++	var st Stats
++	cfg := &walkConfig{
++		net: net, kinds: AllKinds(), limit: BenchCandidateLimit, priorTopK: k, maxSteps: 2000,
++		envSeed: 0x70707, actor: r.d.Player, autoPayment: autoPay, rootRefs: obs.Introduced(),
++		root: &Point{Keys: keysOf(cands), Prior: prior}, rootCands: cands, rootDec: r.d, stats: &st,
++	}
++	src, err := newTestClairvoyant(r.e, obs)
++	if err != nil {
++		t.Fatal(err)
++	}
++	w, err := src.World(0)
++	if err != nil {
++		t.Fatal(err)
++	}
++	env, err := newEngineEnv(w, cfg)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var pts []*Point
++	pt := env.Root()
++	for i := 0; i < steps && pt != nil; i++ {
++		if pt, err = env.Play(pt.Keys[0]); err != nil {
++			t.Fatalf("%s: step %d: %v", r.name, i, err)
++		}
++		if pt != nil {
++			pts = append(pts, pt)
++		}
++	}
++	return pts, st
++}
++
++// In the walk every searched point is cut the root's way: walked with a
++// small k, each point is the first k candidates of the same point walked
++// with nothing cut (every candidate ranked by prior), its prior that
++// point's renormalised -- under both payment vocabularies.
++func TestPriorTopKCutsEveryInWalkPoint(t *testing.T) {
++	const k = 2
++	net := hashNet()
++	var checked [2]int
++	for a, auto := range []bool{false, true} {
++		roots := measureRoots(t, 6)
++		if auto {
++			roots = autoPayRoots(t, 4)
++		}
++		for _, r := range roots {
++			small, sst := topKWalk(t, r, net, k, auto, 40)
++			all, ast := topKWalk(t, r, net, BenchCandidateLimit, auto, 40)
++			if len(small) != len(all) {
++				t.Fatalf("auto %v %s: the walks reached %d and %d points", auto, r.name, len(small), len(all))
++			}
++			cut := 0
++			for i, p := range small {
++				q := all[i]
++				n := min(k, len(q.Keys))
++				if !reflect.DeepEqual(p.Keys, q.Keys[:n]) {
++					t.Fatalf("auto %v %s point %d: kept %v, want the first %d of %v", auto, r.name, i, p.Keys, n, q.Keys)
++				}
++				sum := 0.0
++				for _, x := range q.Prior[:n] {
++					sum += x
++				}
++				for j := range p.Prior {
++					if !near(p.Prior[j], q.Prior[j]/sum) {
++						t.Fatalf("auto %v %s point %d: prior %v, want %v renormalised", auto, r.name, i, p.Prior, q.Prior[:n])
++					}
++				}
++				for j := 2; j < len(q.Prior); j++ {
++					if q.Prior[j] > q.Prior[j-1] {
++						t.Fatalf("auto %v %s point %d: the others are not prior-descending: %v", auto, r.name, i, q.Prior)
++					}
++				}
++				if len(q.Keys) > k {
++					cut++
++					if !p.ranked || p.before != len(q.Keys) {
++						t.Fatalf("auto %v %s point %d: ranked %v before %d, want a cut of %d", auto, r.name, i, p.ranked, p.before, len(q.Keys))
++					}
++				}
++			}
++			if sst.PriorTopKPoints != len(small) || sst.PriorTopKCuts != cut || ast.PriorTopKCuts != 0 || sst.PriorFallbacks != 0 {
++				t.Fatalf("auto %v %s: stats %d points %d cuts %d fallbacks (no-cut walk %d cuts), want %d points %d cuts",
++					auto, r.name, sst.PriorTopKPoints, sst.PriorTopKCuts, sst.PriorFallbacks, ast.PriorTopKCuts, len(small), cut)
++			}
++			checked[a] += cut
++		}
++	}
++	if checked[0] == 0 || checked[1] == 0 {
++		t.Fatalf("in-walk points cut: %d manual, %d auto-pay; want some of each", checked[0], checked[1])
++	}
++	t.Logf("in-walk points cut: %d manual, %d auto-pay", checked[0], checked[1])
++}
++
++// autoPayRoots finds up to n seat-0 priority roots the auto-pay bot
++// answers inside the auto-pay vocabulary, with at least three candidates
++// and a payment cast the engine offers no legacy cast option for (the
++// candidates the ordinary prior cannot score).
++func autoPayRoots(t *testing.T, n int) []measureRoot {
++	t.Helper()
++	var out []measureRoot
++	for s := uint64(0); len(out) < n && s < 16; s++ {
++		cfg := testConfig(t, "mono-red-prowess", "mono-blue-tempo", 91000000+s)
++		e := rules.New(cfg)
++		e.Advance()
++		rngs := searchprobe.BotRandoms(cfg.Seed, 2)
++		board := botpolicy.NewBoard(2)
++		for steps := 0; steps < 6000 && !e.G.Over; steps++ {
++			d := e.Pending()
++			in := botpolicy.Decide(botpolicy.BoardFromGameInto(e.G, e, d.Player, &board), d, rngs[d.Player])
++			if d.Player == 0 && d.Kind == decision.KPriority && e.G.Turn >= 3 {
++				e.EnsurePaymentActions()
++				auto, err := seat.NewBot(7).EnableAutoPayMana().Decide(context.Background(), view.Project(e.G, e, d.Player, d), *d)
++				if err == nil {
++					cands, _, _, ok, _ := enumerateCut(searchprobe.NewCollector(0), e, d, auto, AllKinds(), BenchCandidateLimit, true)
++					unscored := false
++					for _, c := range cands {
++						_, scored := c.scoreChoices()
++						unscored = unscored || !scored
++					}
++					if ok && len(cands) >= 3 && unscored {
++						out = append(out, measureRoot{name: "autopay", e: e, d: d, bot: auto})
++						break
++					}
++				}
++			}
++			if err := e.Submit(in); err != nil {
++				t.Fatal(err)
++			}
++		}
++	}
++	if len(out) == 0 {
++		t.Fatal("no auto-pay root with an unscored payment cast")
++	}
++	return out
++}
++
++// Under auto-pay the ordinary prior cannot score a payment cast with no
++// legacy option and falls back to uniform; the ranking prior scores it as
++// the plain cast it stands for, so the network chooses among the casts.
++func TestPriorTopKRanksPaymentCasts(t *testing.T) {
++	net := hashNet()
++	for _, r := range autoPayRoots(t, 3) {
++		full, kind, _, ok, _ := enumerateCut(searchprobe.NewCollector(0), r.e, r.d, r.bot, AllKinds(), BenchCandidateLimit, true)
++		if !ok {
++			t.Fatal("no candidates")
++		}
++		if _, fell := priors(net, r.e, r.d, r.bot, kind, full, nil); !fell {
++			t.Fatal("the ordinary prior scored a payment cast with no legacy option")
++		}
++		p, fell := priorsWith(net, r.e, r.d, r.bot, kind, full, nil, true)
++		if fell {
++			t.Fatal("the ranking prior fell back")
++		}
++		distinct := map[float64]bool{}
++		sum := 0.0
++		for _, x := range p {
++			distinct[x] = true
++			sum += x
++		}
++		if len(distinct) < 2 || math.Abs(sum-1) > 1e-9 {
++			t.Fatalf("ranking prior %v: want a normalised, non-uniform prior", p)
++		}
++		opts := DefaultOptions()
++		opts.Sims, opts.Seed, opts.PriorTopK, opts.AutoPayment, opts.HeuristicLeaf = 16, 9, 2, true, true
++		res := searchAt(t, r.e, r.d, r.bot, net, opts)
++		checkResult(t, r.d, r.bot, res, opts.Sims)
++		if want := wantTopK(full, p, 2); !reflect.DeepEqual(res.Keys, want) {
++			t.Fatalf("kept %v, want %v", res.Keys, want)
++		}
++		if res.Stats.PriorFallbacks != 0 || res.Stats.PriorTopKCuts < 1 {
++			t.Fatalf("stats: %d fallbacks, %d top-k cuts", res.Stats.PriorFallbacks, res.Stats.PriorTopKCuts)
++		}
++	}
++}
++
++// PriorTopK is inert without a network prior: with no network, or with
++// UniformPrior, the Result is the one without it, byte for byte.
++func TestPriorTopKIsInertWithoutANetworkPrior(t *testing.T) {
++	roots := measureRoots(t, 4)
++	for i, r := range roots {
++		for _, uni := range []bool{false, true} {
++			var net *policynet.Model
++			if uni {
++				net = hashNet()
++			}
++			opts := DefaultOptions()
++			opts.Sims, opts.Seed, opts.UniformPrior, opts.HeuristicLeaf = 24, uint64(i)+5, uni, true
++			off := searchAt(t, r.e, r.d, r.bot, net, opts)
++			opts.PriorTopK = 2
++			on := searchAt(t, r.e, r.d, r.bot, net, opts)
++			if !reflect.DeepEqual(off, on) {
++				t.Fatalf("%s uniform %v: PriorTopK changed a search without a network prior", r.name, uni)
++			}
++			if on.Stats.PriorTopKPoints != 0 {
++				t.Fatalf("%s uniform %v: %d top-k points counted", r.name, uni, on.Stats.PriorTopKPoints)
++			}
++		}
++	}
++}
++
++// Under PriorTopK the search stays a pure function of its inputs, and the
++// node cache stays exact: the counters a stored point carries (ranked,
++// before) are counted again on a cached walk.
++func TestPriorTopKIsDeterministicAndCacheExact(t *testing.T) {
++	net := hashNet()
++	for i, r := range measureRoots(t, 4) {
++		run := func(cache int) Result {
++			opts := DefaultOptions()
++			opts.Sims, opts.Seed, opts.PriorTopK, opts.NodeCache, opts.HeuristicLeaf = 60, uint64(i)+11, 3, cache, true
++			return searchAt(t, r.e, r.d, r.bot, net, opts)
++		}
++		off := run(0)
++		if again := run(0); !reflect.DeepEqual(off, again) {
++			t.Fatalf("%s: two top-k searches differ", r.name)
++		}
++		for _, cache := range []int{1, 3, DefaultNodeCache} {
++			if d := sameResult(off, run(cache)); d != "" {
++				t.Fatalf("%s cache %d: the cached top-k search differs: %s", r.name, cache, d)
++			}
++		}
++	}
++}
++
++func TestValidateRefusesAOneCandidateTopK(t *testing.T) {
++	for _, k := range []int{-1, 1} {
++		opts := DefaultOptions()
++		opts.PriorTopK = k
++		if err := opts.Validate(nil); err == nil {
++			t.Fatalf("PriorTopK %d accepted", k)
++		}
++	}
++	opts := DefaultOptions()
++	opts.PriorTopK = 2
++	if err := opts.Validate(hashNet()); err != nil {
++		t.Fatal(err)
++	}
++}

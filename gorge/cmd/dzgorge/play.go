@@ -65,6 +65,8 @@ type job struct {
 type azAgg struct {
 	asked, searched, sims, refused, noWorld, allFailed, priorFallbacks atomic.Int64
 	msX1000                                                            atomic.Int64
+	topKPoints, topKCuts, topKBefore                                   atomic.Int64
+	oppPoints, oppExpanded                                             atomic.Int64
 }
 
 var azStats azAgg
@@ -89,7 +91,9 @@ func runPlay(args []string) int {
 	maxIntents := fs.Int("max-intents", 20000, "decision cap per game; a capped game is a stall")
 	// Off by default: gorge's bot answers keep/mulligan with a fixed 1/3 chance of a mulligan,
 	// whatever the hand holds (botpolicy/policy.go), and every seat here delegates that ask to it.
+	// -mull-heuristic (or a seat's :mull key) replaces the coin with a land-count rule.
 	mulligans := fs.Int("mulligans", 0, "London mulligans each player may take (0 skips the round)")
+	mullHeur := fs.Bool("mull-heuristic", false, "every bot, az and prior seat mulligans by land count (the :mull key) unless its spec says :keep7")
 	progress := fs.Int("progress", 0, "print progress every N games (0 = about 20 times)")
 	fs.IntVar(&recordEvery, "record-every", 1, "write one searched decision in K to -corpus (cheap games for the value)")
 	recFeat := fs.String("record-features", "mz", "encoding of the -corpus records: mz, or entity for dzg's networks (dzgorge pack)")
@@ -97,6 +101,8 @@ func runPlay(args []string) int {
 	fs.IntVar(&remoteBatch, "remote-batch", remoteBatch, "most states in one remote request")
 	fs.DurationVar(&remoteWait, "remote-wait", remoteWait, "how long a remote request waits for more states")
 	fs.IntVar(&remoteCache, "remote-cache", remoteCache, "cached remote evaluations (states)")
+	fs.IntVar(&gonetCache, "gonet-cache", gonetCache, "cached gonet= evaluations (states; 0 = none)")
+	fs.IntVar(&gonetCardCache, "gonet-card-cache", gonetCardCache, "cached gonet= card vectors (0 = none)")
 	fs.Parse(args)
 	if f, err := policynet.ParseFeatureSet(*recFeat); err != nil || f.Diagnostic() {
 		fmt.Fprintf(os.Stderr, "play: -record-features %q: want mz or entity\n", *recFeat)
@@ -114,6 +120,9 @@ func runPlay(args []string) int {
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 2
+		}
+		if *mullHeur && p.Mull == botpolicy.MulliganCoin {
+			p.Mull = botpolicy.MulliganLands
 		}
 		specs[i] = p
 	}
@@ -195,10 +204,15 @@ func runPlay(args []string) int {
 		azStats.noWorld.Add(int64(d.Stats.NoWorld))
 		azStats.allFailed.Add(int64(d.Stats.AllFailed))
 		azStats.priorFallbacks.Add(int64(d.Stats.PriorFallbacks))
+		azStats.topKPoints.Add(int64(d.Stats.PriorTopKPoints))
+		azStats.topKCuts.Add(int64(d.Stats.PriorTopKCuts))
+		azStats.topKBefore.Add(int64(d.Stats.PriorTopKBefore))
 		if d.Searched {
 			azStats.searched.Add(1)
 			azStats.sims.Add(int64(d.Stats.Completed))
 			azStats.msX1000.Add(int64(d.MS * 1000))
+			azStats.oppPoints.Add(int64(d.Stats.OppPoints))
+			azStats.oppExpanded.Add(int64(d.Stats.OppExpanded))
 		}
 	}
 	outF, err := os.Create(*out)
@@ -224,6 +238,7 @@ func runPlay(args []string) int {
 	var tally struct {
 		done, a, b, draw, stall, errs, visits int
 		turns                                 int64
+		mull                                  [2]int // mulligans taken, by side (A, B)
 	}
 	// Games finish out of order; they are written in game order, so the output files (and a
 	// network trained on the corpus) are a pure function of the flags.
@@ -273,6 +288,9 @@ func runPlay(args []string) int {
 					tally.errs++
 				}
 				tally.turns += int64(rec.Turns)
+				for s := 0; s < 2; s++ {
+					tally.mull[jb.sides[s]] += rec.Mull[s]
+				}
 				if tally.done%every == 0 || tally.done == len(jobs) {
 					el := time.Since(t0).Seconds()
 					fmt.Fprintf(os.Stderr, "[%d/%d %.0fs] %.1f games/s  A %d  B %d  draw %d  stall %d  error %d  A score %.3f\n",
@@ -316,12 +334,21 @@ func runPlay(args []string) int {
 		"visit_records":             tally.visits,
 		"max_turns":                 *maxTurns,
 		"mulligans":                 *mulligans,
+		"mull_heuristic":            *mullHeur,
+		"a_mulligans_per_game":      float64(tally.mull[0]) / float64(max(1, tally.done)),
+		"b_mulligans_per_game":      float64(tally.mull[1]) / float64(max(1, tally.done)),
 	}
 	if n := azStats.searched.Load(); n > 0 {
 		sum["az_decisions_asked"] = azStats.asked.Load()
 		sum["az_decisions_searched"] = n
 		sum["az_ms_per_searched"] = float64(azStats.msX1000.Load()) / 1000 / float64(n)
 		sum["az_completed_sims_per_searched"] = float64(azStats.sims.Load()) / float64(n)
+		if op, oe := azStats.oppPoints.Load(), azStats.oppExpanded.Load(); op+oe > 0 {
+			// oppnodes at work (azmcts Stats.OppPoints, OppExpanded): selections made at
+			// the opponent's tree points, and those points expanded, per searched decision.
+			sum["az_opp_points_per_searched"] = float64(op) / float64(n)
+			sum["az_opp_expanded_per_searched"] = float64(oe) / float64(n)
+		}
 	}
 	if azStats.asked.Load() > 0 {
 		sum["az_redeal_refused"] = azStats.refused.Load()
@@ -329,7 +356,17 @@ func runPlay(args []string) int {
 		sum["az_all_failed"] = azStats.allFailed.Load()
 		sum["az_prior_fallbacks"] = azStats.priorFallbacks.Load()
 	}
+	if n := azStats.topKPoints.Load(); n > 0 {
+		// topk=K: decisions (root and in-simulation) the network ranked, those where it cut, and
+		// the mean candidates it ranked at a cut.
+		sum["az_topk_points"] = n
+		sum["az_topk_cuts"] = azStats.topKCuts.Load()
+		sum["az_topk_mean_before"] = float64(azStats.topKBefore.Load()) / float64(max(1, azStats.topKCuts.Load()))
+	}
 	for k, v := range remoteStats() {
+		sum[k] = v
+	}
+	for k, v := range gonetStats() {
 		sum[k] = v
 	}
 	js, _ := json.MarshalIndent(sum, "", " ")
