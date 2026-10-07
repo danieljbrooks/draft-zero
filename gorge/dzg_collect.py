@@ -10,6 +10,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 import sys
 
 MACHINES = {"dz3090": "RTX 3090 (community)", "dzpod": "RTX 3080 Ti (community)", "r1": "r1 (2x RTX PRO 6000)"}
@@ -28,13 +29,47 @@ def runs(root):
     return out
 
 
+def capped_runs(root, done):
+    """Benchmark runs killed by their time cap have no summary: games an hour is then the workers
+    times 3,600 s over the mean wall time of the games that finished. The workers come from the
+    "== TAG: N pairs, W workers" lines dzg_bench.sh writes to its logs in the same directory."""
+    out = []
+    for p in sorted(glob.glob(os.path.join(root, "*", "runs", "bench-*", "*.jsonl"))):
+        if p + ".summary.json" in done:
+            continue
+        games = []
+        for line in open(p):
+            try:
+                games.append(json.loads(line))
+            except ValueError:
+                pass  # a line cut short by the time cap
+        if not games:
+            continue
+        name = os.path.basename(p)[: -len(".jsonl")]
+        workers = None
+        for log in glob.glob(os.path.join(os.path.dirname(p), "*.log")):
+            for line in open(log, errors="replace"):
+                m = re.match(r"== (\S+): \d+ pairs, (\d+) workers", line)
+                if m and m.group(1) == name:
+                    workers = int(m.group(2))
+        rel = os.path.relpath(p, root)
+        mean_s = sum(g["ms"] for g in games) / len(games) / 1000
+        out.append({"_machine": rel.split(os.sep)[0], "_path": rel, "_name": name,
+                    "_dir": os.path.basename(os.path.dirname(p)), "games": len(games), "workers": workers,
+                    "mean_game_s": mean_s, "games_per_hour": workers * 3600 / mean_s if workers else None,
+                    "a_score": float("nan"), "_capped": True})
+    return out
+
+
 def main(root):
     rs = runs(root)
+    done = {os.path.join(root, s["_path"]) for s in rs}
+    rs += capped_runs(root, done)
     with open(os.path.join(root, "table.tsv"), "w") as f:
         f.write("machine\tdir\tname\ta\tb\tgames\ta_score\tgames_per_hour\taz_ms_per_searched\tworkers\n")
         for s in rs:
             f.write("\t".join(str(x) for x in (s["_machine"], s["_dir"], s["_name"], s.get("a"), s.get("b"), s.get("games"),
-                                               round(s.get("a_score", 0), 4), round(s.get("games_per_hour", 0)),
+                                               round(s.get("a_score", 0), 4), round(s.get("games_per_hour") or 0),
                                                round(s.get("az_ms_per_searched", 0) or 0, 1), s.get("workers"))) + "\n")
     # games an hour: the bench directories
     speed = []
@@ -45,6 +80,7 @@ def main(root):
         mach = "3090" if "3090" in s["_dir"] else "3080 Ti"
         speed.append({"machine": mach, "net": net, "mode": mode, "sims": int(sims), "games": s.get("games"),
                       "games_per_hour": s.get("games_per_hour"), "ms_per_searched": s.get("az_ms_per_searched"),
+                      "capped": bool(s.get("_capped")),
                       "series": f"{mach}, {'no network' if net == 'none' else net}, "
                                 f"{'self-play' if mode == 'selfplay' else 'search vs bot'}"})
     json.dump(speed, open(os.path.join(root, "speed.json"), "w"), indent=1)

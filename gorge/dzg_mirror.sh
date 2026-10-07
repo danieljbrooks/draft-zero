@@ -8,7 +8,7 @@ DZ="$(cd "$(dirname "$0")/.." && pwd)"
 for spec in "$@"; do
   host="${spec%%=*}"; repo="${spec#*=}"; name="$host"; [ "$host" = research ] && name=r1
   mkdir -p "$DZ/data/gorge/results/$name"
-  rsync -a --prune-empty-dirs --include='*/' --include='*.summary.json' --include='curves.jsonl' \
+  rsync -a --prune-empty-dirs --include='*/' --include='bench-*/*.jsonl' --include='*.summary.json' --include='curves.jsonl' \
     --include='config.json' --include='*.log' --include='host.txt' --include='train-*.json' --exclude='*' \
     "$host:$repo/data/gorge/runs" "$DZ/data/gorge/results/$name/" || echo "mirror $host failed"
 done

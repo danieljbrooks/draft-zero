@@ -34,8 +34,8 @@ for net in $NETS; do
       echo "== $tag: $pairs pairs, $w workers"
       play "$MAXMIN" -split eval -a "$a" -b "$b" -pairs "$pairs" -workers "$w" -seed "$SEED" -out "$OUT/$tag.jsonl" \
         > "$OUT/$tag.log" 2>&1 || echo "  ($tag stopped: exit $?)"
-      grep -E '"(games|games_per_hour|az_ms_per_searched|az_decisions_searched|remote_states_per_batch|remote_wait_ms_per_miss)"' \
-        "$OUT/$tag.jsonl.summary.json" 2>/dev/null | tr -d '\n' ; echo
+      { grep -E '"(games|games_per_hour|az_ms_per_searched|az_decisions_searched|remote_states_per_batch|remote_wait_ms_per_miss)"' \
+        "$OUT/$tag.jsonl.summary.json" 2>/dev/null || echo "  (no summary: $(wc -l < "$OUT/$tag.jsonl") games finished)"; } | tr -d '\n'; echo
     done
   done
   stop_servers
