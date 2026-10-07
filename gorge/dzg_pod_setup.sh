@@ -18,5 +18,6 @@ cd /root/dz-gorge && git pull -q --ff-only
 mkdir -p /root/ext
 GORGE_DIR=/root/ext/gorge GOFLAGS="-p=$(nproc) -trimpath" bash gorge/build.sh
 python3 gorge/decks.py --decks /root/decks.jsonl
+python3 -c "import numpy" 2>/dev/null || pip install -q --break-system-packages numpy
 python3 -c "import torch, numpy; print('torch', torch.__version__, 'cuda', torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')"
 echo POD_SETUP_DONE
