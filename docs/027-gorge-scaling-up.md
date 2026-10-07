@@ -244,11 +244,13 @@ PENDING: generations figure
 | 1 (generation 0's games) | **55.8%** | | 55.2% | |
 | 2 | 55.3% | 46.7% | **56.3%** | 49.8% |
 | 3 | 54.5% | 50.3% | **59.5%** | 51.2% |
-| 4 | **54.7%** | 53.2% | PENDING | PENDING |
+| 4 | 54.7% | 53.2% | **58.2%** | 53.2% |
+| 5 | | | PENDING | PENDING |
 
-**Loop A didn't improve; loop B may have.** Loop A scores about 55% against plain search at every generation and
-about 50% against the one before it. Loop B rose from 55.2% to 59.5% over two generations. Each step is within
-chance, so loop B continues (generations 4 and 5, below). The training curves say why: every generation's best network came at its first check, a quarter of an
+**Loop A didn't improve; loop B did, a little.** Loop A scores about 55% against plain search at every generation, and
+its second generation lost to its first. Loop B rose from 55.2% to 59.5% and 58.2%, and every generation beat the one
+before it (49.8%, 51.2%, 53.2%). Each step alone is within chance; the steady direction is not proof, but it is the
+only sign in this report of generations compounding. The training curves say why: every generation's best network came at its first check, a quarter of an
 epoch in, and loop A's value got slightly worse each time (held-out log loss 0.449, 0.455, 0.457, 0.457). Started
 from the last network, which had already memorised generation 0's 12,000 games, training overfits at once; 3,000
 new games a generation are too few to move it.
@@ -408,11 +410,49 @@ searched every decision kind, every legal option, and both players.
 
 ### 5.3 How much slower
 
-PENDING: measured cost of each change, and the estimate for full AlphaZero-style self-play.
+Measured at 100 simulations, both seats searching, against today's plain self-play:
+
+| Change | Cost per game | Measured on |
+|---|---|---|
+| Casts searched and the opponent in the tree, mulligans on | none (16,800 games an hour against 14,600) | r1, generation 0′ |
+| Modes, choices and multiple targets searched too | about 10% more searched decisions, the same time per decision | Mac, 200 games |
+| A network served on the GPU (the transformer) | **3.5×** (4,200 → 1,200 games an hour) | 3090 pod |
+| A network in the engine (Go), any size | about 2.2× per searched decision | Mac |
+
+**Estimate: AlphaZero-style self-play with the full search is 2.5 to 4 times slower than today's plain search,**
+almost all of it the network. On r1 that is about 4,000–6,000 self-play games an hour; on a $0.18 RTX 3080 Ti pod
+about 2,000–3,000, some 11,000–17,000 games a dollar, still far cheaper than XMage (183 games a dollar, docs/020).
+PENDING: generation 1′'s measured self-play rate.
+
+Where the network's cost goes, in-process: only about a third is the MLP's arithmetic; the rest is building its input
+(projecting the player's view and encoding every card) for every evaluation. Two changes would cut most of it:
+encoding a position incrementally as the walk changes it, and evaluating several simulations' leaves together.
 
 ## 6. What limits learning
 
-PENDING
+1. **Games, not positions, limit the value.** A game's positions share one result, so the value memorises games after
+   half an epoch, and positions sampled more densely from the same games add nothing. More games do help: the value
+   trained on 57,000 cheap games won 58.2% of 2,000 games against plain search, against 55.8% for 12,000 slower games.
+   gorge plays 75,000 cheap games an hour on r1, so this is the cheapest lever we have.
+2. **The original search capped what any network could add.** With six candidates around the bot's move and the bot
+   playing the opponent, every network scored 53–59% whatever its architecture, targets or value accuracy. Letting the
+   search decide what the bot used to (modes, choices, casts) is worth more than any network change: the full search
+   with the network reaches 61%.
+3. **Visit counts teach the policy almost nothing at 100 simulations;** sharper targets help the loop. With at most six
+   candidates the visits are nearly uniform. Loop B's completed-Q targets and blended value improved over four
+   generations where loop A's did not.
+4. **Warm-starting each generation overfits at once.** Every generation's best network came at its first check; loop
+   A's value got slightly worse each time. Training each generation from scratch on all games, or a much lower learning
+   rate, is the next thing to try.
+5. **A network costs more than it gives at equal time today,** in the original search: the transformer at 100
+   simulations ties plain search at 200–400. Small in-process MLPs do better (53.8% against plain search at 200), and the
+   cost is mostly input encoding, which can be cut (§5.3).
+6. **Architecture matters little at this data size.** The MLP, the transformer and the GNN are within chance of each
+   other in every test, and a 0.6M-parameter MLP is as good as all of them.
+7. **The search's settings don't matter;** what it decides does. Exploration constant, first-play urgency, prior and
+   value temperatures and fixed deals all landed within chance.
+8. **Beating gorge's bot is a misleading measure.** The original search, which simulates that bot, beats it by more
+   than the full search does, while losing to the full search head to head.
 
 ## Reproducing
 
