@@ -47,7 +47,11 @@ def capped_runs(root, done):
             continue
         name = os.path.basename(p)[: -len(".jsonl")]
         workers = None
-        for log in glob.glob(os.path.join(os.path.dirname(p), "*.log")):
+        here = os.path.dirname(p)
+        # the bench directory's own logs, or the queue's log beside it named after it (bench-x.log)
+        for log in glob.glob(os.path.join(here, "*.log")) + [here + ".log"]:
+            if not os.path.exists(log):
+                continue
             for line in open(log, errors="replace"):
                 m = re.match(r"== (\S+): \d+ pairs, (\d+) workers", line)
                 if m and m.group(1) == name:

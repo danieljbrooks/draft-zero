@@ -18,6 +18,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.ticker  # noqa: E402,F401
 
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
 GREY = "#8a8a85"
@@ -161,6 +162,55 @@ def gens(out, path):
     print("wrote", out)
 
 
+BLUES = ["#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]  # sequential: more games, darker
+
+
+def scaling(out, path, valset="evaldecks"):
+    """The value's data scaling, SCALING.json: {"series": [{"run": dir, "games": n}, ...] (one data source,
+    in order), "points": [{"run": dir, "games": n, "label": text}, ...] (other sources)}. Left: the best
+    held-out value log loss by training games; right: the held-out value log loss by epoch for each run of
+    the series (more games, darker)."""
+    d = json.load(open(path))
+    fig, (al, ar) = _fig(10, 3.9, 2)
+
+    def best(run):
+        _, ev = _read_curves(run)
+        b = min(ev, key=lambda e: e["eval"]["holdout"]["total"])
+        return b["eval"][valset]["value_logloss"], ev
+
+    xs, ys = [], []
+    for k, r in enumerate(d["series"]):
+        v, ev = best(r["run"])
+        xs.append(r["games"])
+        ys.append(v)
+        c = BLUES[min(k + 1, len(BLUES) - 1)]
+        ar.plot([e["epoch"] for e in ev], [e["eval"][valset]["value_logloss"] for e in ev], color=c, lw=2,
+                label=f"{r['games']:,} games")
+    al.plot(xs, ys, color=SERIES[0], lw=2, marker="o", ms=6)
+    al.annotate(d.get("series_label", "series"), (xs[1], ys[1]), xytext=(8, 4), textcoords="offset points",
+                fontsize=8, color=INK2)
+    for i, p in enumerate(d.get("points", [])):
+        v, _ = best(p["run"])
+        c = SERIES[(i + 1) % len(SERIES)]
+        al.plot([p["games"]], [v], marker="D", ms=7, color=c, mec=SURF, mew=1.2, ls="none")
+        al.annotate(p["label"], (p["games"], v), xytext=(6, -12 if i % 2 else 6), textcoords="offset points",
+                    fontsize=8, color=INK2)
+    al.set_xscale("log")
+    ticks = [t for t in (1000, 3000, 10000, 30000, 100000) if min(xs) / 1.5 <= t <= max(xs) * 1.5 * 2]
+    al.set_xticks(ticks)
+    al.set_xticklabels([f"{t // 1000}k" for t in ticks])
+    al.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
+    al.set_xlim(min(xs) / 1.3, max(max(xs), *(p["games"] for p in d.get("points", []))) * 2.2)
+    al.set_xlabel("games trained on")
+    al.set_title("Best held-out value log loss", fontsize=10, loc="left")
+    ar.set_xlabel("epochs")
+    ar.set_title("Held-out value log loss while training", fontsize=10, loc="left")
+    ar.legend(fontsize=7.5, frameon=False)
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURF)
+    print("wrote", out)
+
+
 def main(argv):
     cmd, out, rest = argv[1], argv[2], argv[3:]
     if cmd == "curves":
@@ -169,6 +219,8 @@ def main(argv):
         speed(out, rest[0])
     elif cmd == "scores":
         scores(out, rest[0], rest[1] if len(rest) > 1 else "")
+    elif cmd == "scaling":
+        scaling(out, rest[0])
     elif cmd == "gens":
         gens(out, rest[0])
     else:
