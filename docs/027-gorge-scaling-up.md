@@ -303,6 +303,73 @@ sits between plain search at 200 and at 400. It costs more than that in time on 
 **At 1,000 simulations the network still helps:** the gen-1 transformer won 54.5% of 200 paired games against plain
 search at 1,000 simulations, the same edge as at 100.
 
+### 4.5 Tuning: what makes a winning bot in this engine
+
+Each change below played 600 paired games against the original plain search at 100 simulations, on the same deck
+pairs, with the network trained on the 60,000 cheap games (§4.3) unless it says "no network". The search changes are
+described in §5; "mulligans" means both seats mulligan with the land-count heuristic (§5.2).
+
+**The search's own settings matter little:**
+
+| Setting (with the network) | Score |
+|---|---:|
+| The defaults (c = 1.5, first-play urgency 0.1, a fresh deal each simulation) | 54.0–58.2% |
+| Exploration constant c = 3 | 55.8% |
+| First-play urgency 0 / 0.3 | 56.8% / 56.7% |
+| 8 fixed deals per decision instead of one per simulation | 55.8% (no network: 50.2%) |
+| Prior sharpened (temperature 0.5) / flattened (2.0) | 54.3% / 56.2% |
+| Value sharpened (temperature 0.7) / flattened (1.5) | 53.7% / 54.0% |
+
+**Changing what the search decides matters more** (mulligans on; the network's arms use `topk=6`):
+
+| Search | No network | With the network |
+|---|---:|---:|
+| The original search | | 54.0–58.2% |
+| Casts and timing searched (`autopay`) | 51.8% | **59.5%** |
+| The opponent in the tree (`oppnodes`) | 50.7% | |
+| Modes, may-abilities, choices and multiple targets searched (`morekinds`) | **56.8%** | |
+| **All of them** (`autopay:oppnodes:oppfull:morekinds`) | 55.3% | **61.0%** |
+| All of them, against gorge's bot | 71.8% (the original search: 76.3%) | |
+
+- **The best bot so far is the full search with the network: 61.0%** against the original plain search, about
+  twice the network's gain in the original search. PENDING: confirmation on 1,400 more games.
+- **Searching the decisions the bot used to make is worth more than any setting:** modes, choices and the like alone
+  add 6.8 points without a network.
+- **The full search beats gorge's bot by less than the original search does** (71.8% against 76.3%), while beating
+  the original search head to head. The original search plays a best response to the bot it simulates, so it exploits
+  that bot best; the full search no longer assumes its opponent is the bot.
+
+**Small networks are as good.** Two small MLPs (widths 128 and 64, 1.3M and 0.6M parameters, most of it the shared
+feature table), trained on the same games as the transformer, have the same held-out value (log loss 0.431, AUC 0.880)
+and play at least as well, run inside the engine (`gonet=`, no GPU):
+
+| In-process network, original search, 100 simulations | Against plain search at 100 | Against plain search at 200 |
+|---|---:|---:|
+| MLP, width 64 | **57.3%** | **53.8%** |
+| MLP, width 128 | 56.8% | 53.7% |
+| *the transformer (served on a GPU), for comparison* | *55.8%* | *51.3%* |
+
+PENDING: the full search with the small MLP.
+
+### 4.6 Self-play under the new search
+
+The networks above learned from games of the original search. Generation 0′ is the new search's own: 12,000 games at
+100 simulations with casts searched and the opponent in the tree (`autopay:oppnodes`, before `morekinds` existed),
+mulligans on, plus 40,000 cheap games at 25 simulations; 1.2 million searched decisions, at 16,800 games an hour on
+r1 (the original search: 14,600). Its visit counts are a little more informative (entropy 0.98 against a uniform
+1.06; the original search's 1.04 against 1.12), and a transformer and an MLP trained on them reach a held-out value
+log loss of 0.468 and 0.463 on the new search's positions.
+
+| Match (mulligans on) | Score |
+|---|---:|
+| new search + gen-0′ transformer against the new search without it | 55.3% |
+| new search without a network against the original plain search | 51.7% |
+| new search + gen-0′ transformer against the original plain search | 55.7% |
+| new search + gen-0′ transformer against the original search + the cheap-games network | 48.8% |
+
+PENDING: generation 1′ (self-play with the gen-0′ network in both seats, then a network trained on every game with
+loop B's targets).
+
 ## 5. gorge's search, and what AlphaZero-style training needs
 
 ### 5.1 How the search decides today
@@ -333,8 +400,8 @@ searched every decision kind, every legal option, and both players.
 |---|---|---|---|
 | The network decides what to cast and when | the bot's mana tapping decides; casts are met after mana floats | automatic payment, so every castable spell and pass is a candidate before mana is tapped | **done** (`autopay`, `gorge/patches/0002`) |
 | The network's prior chooses the candidates | 6 candidates around the bot's answer | enumerate every legal option, keep the bot's plus the prior's best | **done** (`topk=K`, `gorge/patches/0003`) |
-| Both players search (self-play means the network plays both sides) | the opponent is the bot inside every simulation | the opponent's decisions become tree nodes, chosen from the opponent's side with the network's prior | **done** (`oppnodes`, `gorge/patches/0004`); the opponent's own land plays and mana are still the bot's |
-| Every decision kind | 4 kinds | modes, X, may-abilities, multiple targets, scry-like choices | PENDING |
+| Both players search (self-play means the network plays both sides) | the opponent is the bot inside every simulation | the opponent's decisions become tree nodes, chosen from the opponent's side with the network's prior | **done** (`oppnodes`, `gorge/patches/0004`; `oppfull` in 0007 also gives the opponent's points automatic payment and network-chosen candidates) |
+| Every decision kind | 4 kinds | modes, may-abilities, small choices (X, names, cards) and multiple targets searched and recorded | **done** (`morekinds`, `gorge/patches/0007`); scry-like ordering and large choices are still the bot's |
 | Mulligans | the bot mulligans a random third of its hands, so we turned mulligans off | a land-count heuristic to start (no mulligan model yet) | **done** (`-mulligans 2 -mull-heuristic`, `gorge/patches/0005`): 2–5 lands keep; beats gorge's random mulligan 55.6% of 40,000 bot games |
 | A network the search can afford | 2–9 ms a call through Python, about one call a simulation | in-process inference, or several simulations batched per call | not started |
 | Sharp policy targets at 100 simulations | visit counts over ≤6 candidates, nearly uniform | Gumbel root selection with completed-Q targets | the targets tested offline (§4.1) |
