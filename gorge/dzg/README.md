@@ -17,6 +17,8 @@ and the socket protocol. The package needs only numpy and torch (written against
 | `serve.py` | The inference server: Unix or TCP socket, one thread per connection, one forward thread that runs every queued request in one forward pass, throughput logging |
 | `client.py` | A Python client for the protocol (tests, benchmarks) |
 | `bench.py` | Collate, loader, training and inference throughput (direct, through the socket server, and from several client processes at once), written as JSON |
+| `export.py` | `python -m dzg.export best.pt best.dzgw`: an `mlp` checkpoint as a `.dzgw` file (a JSON header, then raw little-endian float32 tensors) for gorge's in-process Go network (`cmd/dzgorge/gonet.go`, the policy key `gonet=PATH`); other archs are refused |
+| `gonet_parity.py` | Parity inputs for the Go network: N shard records and the PyTorch model's outputs as JSON, which `dzgorge gonet-check -net best.dzgw -parity parity.json` compares (and times with `-bench N`) |
 | `tests/` | pytest, CPU only, about 10 seconds |
 
 A `Batch` holds the states' dense features, the sparse bag (rows, values, offsets for `F.embedding_bag`), the cards
