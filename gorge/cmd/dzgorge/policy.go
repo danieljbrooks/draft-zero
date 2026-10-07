@@ -131,6 +131,9 @@ func parsePolicy(s string) (*policySpec, error) {
 // recordFeatures is the encoding visit corpora are written in (play -record-features).
 var recordFeatures = policynet.FeaturesMZ
 
+// recordEvery keeps one searched decision in K in the corpus (play -record-every).
+var recordEvery = 1
+
 func (p *policySpec) searches() bool { return p.Kind == "az" || p.Kind == "prior" }
 
 func (p *policySpec) azConfig() azmcts.SeatConfig {

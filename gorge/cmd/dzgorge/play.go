@@ -91,6 +91,7 @@ func runPlay(args []string) int {
 	// whatever the hand holds (botpolicy/policy.go), and every seat here delegates that ask to it.
 	mulligans := fs.Int("mulligans", 0, "London mulligans each player may take (0 skips the round)")
 	progress := fs.Int("progress", 0, "print progress every N games (0 = about 20 times)")
+	fs.IntVar(&recordEvery, "record-every", 1, "write one searched decision in K to -corpus (cheap games for the value)")
 	recFeat := fs.String("record-features", "mz", "encoding of the -corpus records: mz, or entity for dzg's networks (dzgorge pack)")
 	fs.IntVar(&remoteConns, "remote-conns", remoteConns, "connections to each remote= network server")
 	fs.IntVar(&remoteBatch, "remote-batch", remoteBatch, "most states in one remote request")
@@ -374,6 +375,9 @@ func playOne(jb job, specs []*policySpec, dc *deckCache, reg *cards.Registry, ma
 			pairKey := jb.decks[0] + "|" + jb.decks[1]
 			gid := fmt.Sprintf("p%07dg%d", jb.pair, jb.leg)
 			az.SetRecorder(func(r policynet.VisitRecord) {
+				if recordEvery > 1 && (r.Sequence+uint64(jb.game))%uint64(recordEvery) != 0 {
+					return // -record-every: keep one searched decision in K, spread over the game
+				}
 				r.GameID, r.Deck, r.Seed, r.Opponent = gid, pairKey, jb.seed, opp
 				vrecs = append(vrecs, r)
 			})
