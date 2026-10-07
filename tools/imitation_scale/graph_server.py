@@ -17,8 +17,11 @@ an RTX 3090 under 28+ concurrent searches, limited by its per-request Python wor
 states a second at batch 32): run two or three replicas per pod on separate ports (play.py --graph-ports).
 
 It loads any checkpoint graph_supervised.py saves (any `arch`), and MageZero's own graph checkpoints.
+--value-model takes the value from a second checkpoint with the same vocab (another of the run's checkpoints, e.g.
+the epoch its value head was best: docs/024 §5), at the cost of a second forward pass.
 
-    python tools/imitation_scale/graph_server.py --model runs/gnn/main/best.pt.gz --port 50062 [--device cpu]
+    python tools/imitation_scale/graph_server.py --model runs/gnn/main/best.pt.gz --port 50062 [--device cpu] \
+        [--value-model runs/gnn/main/best_value.pt.gz]
 """
 from __future__ import annotations
 
@@ -41,7 +44,7 @@ from flask import Flask, Response, request  # noqa: E402
 from draftzero.gameplay import graph_net as gn  # noqa: E402
 from draftzero.gameplay import graph_supervised as gs  # noqa: E402
 
-MODEL = VOCAB = EDGE_VOCAB = DEVICE = DTYPE = None
+MODEL = VALUE_MODEL = VOCAB = EDGE_VOCAB = DEVICE = DTYPE = None
 MAX_BATCH = 64
 LINGER_S = 0.0
 Q: Queue = Queue(maxsize=8192)
@@ -89,8 +92,9 @@ def run_batch(batch: list[Pending]) -> None:
     g = collate(states).to(DEVICE)
     with torch.no_grad(), (torch.autocast(DEVICE.type, dtype=DTYPE) if DTYPE is not None else torch.autocast("cpu", enabled=False)):
         o = MODEL(g)
+        v = o.value if VALUE_MODEL is None else VALUE_MODEL(g).value
     pri, tgt = o.priority.float().cpu().numpy(), o.target.float().cpu().numpy()
-    use, val = o.use.float().cpu().numpy(), o.value.float().cpu().numpy()
+    use, val = o.use.float().cpu().numpy(), v.float().cpu().numpy()
     STATS["forward_s"] += time.perf_counter() - t0
     STATS["batches"] += 1
     STATS["states"] += len(states)
@@ -149,10 +153,19 @@ def stats():
     return {**STATS, "states_per_batch": STATS["states"] / max(1, STATS["batches"])}
 
 
+def load_value_model(path: str, device):
+    """A second checkpoint for the value only: its vocabs must be the policy model's, since both read one encoding."""
+    model, vocab, edge_vocab, _ = gs.load_checkpoint(path, device)
+    if not (np.array_equal(vocab.ids, VOCAB.ids) and np.array_equal(edge_vocab.ids, EDGE_VOCAB.ids)):
+        raise SystemExit(f"--value-model {path}: its vocab differs from --model's")
+    return model.eval()
+
+
 def main() -> None:
-    global MODEL, VOCAB, EDGE_VOCAB, DEVICE, DTYPE, MAX_BATCH, LINGER_S
+    global MODEL, VALUE_MODEL, VOCAB, EDGE_VOCAB, DEVICE, DTYPE, MAX_BATCH, LINGER_S
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", required=True, help="a graph checkpoint (path or hf://)")
+    ap.add_argument("--value-model", help="take the value from this checkpoint instead (same vocab)")
     ap.add_argument("--port", type=int, default=50062)
     ap.add_argument("--threads", type=int, default=16, help="HTTP threads")
     ap.add_argument("--device", default="auto")
@@ -166,9 +179,11 @@ def main() -> None:
     DTYPE = torch.bfloat16 if DEVICE.type == "cuda" else None
     MAX_BATCH, LINGER_S = a.max_batch, a.linger_ms / 1000.0
     MODEL, VOCAB, EDGE_VOCAB, meta = gs.load_checkpoint(a.model, DEVICE)
+    if a.value_model:
+        VALUE_MODEL = load_value_model(a.value_model, DEVICE)
     threading.Thread(target=worker_loop, daemon=True).start()
     print(f"[graph_server] {a.model} on :{a.port} device={DEVICE} leaves={len(VOCAB)} edge_labels={len(EDGE_VOCAB)} "
-          f"arch={meta['arch']}", flush=True)
+          f"arch={meta['arch']}" + (f" value from {a.value_model}" if a.value_model else ""), flush=True)
     waitress.serve(app, host="127.0.0.1", port=a.port, threads=a.threads, _quiet=True)
 
 

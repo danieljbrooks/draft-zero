@@ -2,12 +2,12 @@
 # Pod setup for experiment #4's games and search bench (docs/018, phase C): the v0.2 XMage bundle and its card
 # database, the bridge, the eval pool's decks with the belief service's decks.jsonl, sb-v2's items, and a network, all from the project's HF
 # repo. About 5 minutes on a RunPod pod (from the repo root).
-#   HF_TOKEN=<read token> bash deploy/exp4_games_setup.sh [<checkpoint in the HF repo>]
-# The checkpoint defaults to stage 3's best_policy; it lands in models/exp4/ under its repo path.
+#   HF_TOKEN=<read token> bash deploy/exp4_games_setup.sh [<checkpoint in the HF repo> ...]
+# The checkpoint defaults to stage 3's best_policy; each lands in models/ under its repo path.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${HF_TOKEN:?set HF_TOKEN to a token that can read danbrooks/draftzero-checkpoints}"
-export CKPT=${1:-exp4/stage3/best_policy.pt.gz}
+export CKPT=${1:-exp4/stage3/best_policy.pt.gz} CKPTS="${*:-exp4/stage3/best_policy.pt.gz}"
 export HF_HUB_DISABLE_PROGRESS_BARS=1
 
 # NO_BOOTSTRAP=1 on a box whose Python and JDK are already set up and shared (the second machine): bootstrap's
@@ -43,10 +43,12 @@ if not os.path.exists(f"{root}/decks.jsonl"):
 if not os.path.exists("data/gameplay/deckpool_FDN_PremierDraft.npz"):
     os.makedirs("data/gameplay", exist_ok=True)
     shutil.copy(get("exp4/games/deckpool_FDN_PremierDraft.npz"), "data/gameplay/deckpool_FDN_PremierDraft.npz")
+for ck in os.environ["CKPTS"].split():
+    dst = os.path.join("models", ck)
+    if not os.path.exists(dst):
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy(get(ck), dst)
 dst = os.path.join("models", os.environ["CKPT"])
-if not os.path.exists(dst):
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
-    shutil.copy(get(os.environ["CKPT"]), dst)
 print("   xmage/lib jars:", len(os.listdir("xmage/lib")), "| decks:", len(os.listdir(f"{root}/top_player_FDN_decks")),
       "| network:", dst, os.path.getsize(dst))
 PY

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # docs/022 stage 5: one game run on a pod, after deploy/exp4_games_setup.sh (the bundle, decks, belief data): <replicas>
-# graph servers of the GNN on the GPU (tools/imitation_scale/graph_server.py; one process feeds ~650 states a second,
+# graph servers of the GNN on the GPUs (tools/imitation_scale/graph_server.py; one process feeds ~650 states a second,
 # docs/022 §2.2, so a 28-worker run wants 2-3), value servers of a flat network too when MLP is set (for gnn against
 # mlp), the belief service for closed decklists, then play.py into runs/gnn/games/<name>. Results go to the HF repo
 # (gnn/games/runs/<name>/) every 10 minutes and at the end; a stopped run resumes where it left off.
@@ -9,7 +9,8 @@
 #          --bot1 gnn@100 --bot2 heuristic@100 --pairs 50 --workers 28 --heap 2500m
 #        MLP=models/exp4/mlp_1ep/best_policy.pt.gz bash deploy/gnn_games_run.sh gnn100-mlp100 <gnn> 2 \
 #          --bot1 gnn@100 --bot2 il_bc@100 --pairs 50 --workers 28 --heap 2500m
-# Env: MLP (a flat checkpoint for the il_bc / policy bots), MLP_REPLICAS (2).
+# Env: MLP (a flat checkpoint for the il_bc / policy bots), MLP_REPLICAS (2), VALUE_MODEL (the graph servers take the
+# value from this checkpoint instead: graph_server.py --value-model).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 NAME=$1 MODEL=$2 REPLICAS=$3; shift 3
@@ -20,11 +21,13 @@ log() { echo "[$(TZ=America/Los_Angeles date '+%a %-I:%M %p PT')] gnn games $NAM
 
 wait_up() { for k in $(seq 1 120); do curl -s -m 2 "localhost:$1/healthz" > /dev/null && return 0; sleep 2; done; return 1; }
 GPORTS=""
+NGPU=$(nvidia-smi -L 2>/dev/null | grep -c ^GPU); [ "$NGPU" -ge 1 ] || NGPU=1
 for i in $(seq 0 $((REPLICAS - 1))); do
   p=$((50062 + 100 * i)); GPORTS="${GPORTS:+$GPORTS,}$p"
   curl -s -m 2 "localhost:$p/healthz" > /dev/null && continue
-  nohup python tools/imitation_scale/graph_server.py --model "$MODEL" --port "$p" --threads 16 \
-    > "$OUT/logs/graph_server_$p.log" 2>&1 < /dev/null &
+  # replicas round-robin over the machine's GPUs (r1 has two)
+  CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-$((i % NGPU))} nohup python tools/imitation_scale/graph_server.py --model "$MODEL" --port "$p" --threads 16 \
+    ${VALUE_MODEL:+--value-model "$VALUE_MODEL"} > "$OUT/logs/graph_server_$p.log" 2>&1 < /dev/null &
 done
 PORTS=""
 if [ -n "${MLP:-}" ]; then

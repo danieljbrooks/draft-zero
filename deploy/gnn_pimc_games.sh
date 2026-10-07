@@ -8,7 +8,8 @@
 # RUN: policy (gnn_policy_greedy against heuristic@100), gnnN (gnn@N against heuristic@100), or h2hN (gnn@N against
 # the MLP's il_bc@N; MLP=<flat checkpoint> in the environment). After deploy/exp4_games_setup.sh.
 # Env: REPLICAS (3 graph servers: one serves ~650 states a second), DECKLISTS (closed | open), MLP, TAG (a name tag:
-# pimc-gnn-<TAG>-gnn100, e.g. the network's), SHARD (I/N: this pod's deck pairs, pair % N == I; not topped up), PAIRS0 (deck pairs to start: 50).
+# pimc-gnn-<TAG>-gnn100, e.g. the network's), SHARD (I/N: this pod's deck pairs, pair % N == I; not topped up), PAIRS0 (deck pairs to start: 50),
+# VALUE_MODEL (the value from another checkpoint, e.g. the run's best_value: deploy/gnn_games_run.sh).
 set -u
 cd "$(dirname "$0")/.."
 export PATH=$HOME/venv/bin:/root/venv/bin:$PATH
