@@ -121,8 +121,10 @@ On the eval decks, 4 workers on this container's 4 vCPUs (`gorge/bench.sh`; one 
   - Search: experiment #4's MLP searching both seats at 100 simulations played 92 games an hour on a 27-worker RTX
     3090 pod, 3.4 a worker (docs/020). gorge's network-guided search for both seats plays ~630 a worker at 25
     simulations (~1,100 without the network), and `az@100` against `bot` ~490. The searches differ. A gorge
-    simulation runs further, about 15 engine decisions per tree edge against MageZero's 1.4 (gorge's
-    search-benchmark replication). gorge searches fewer decisions a game, about 55 against about 169. gorge's network
+    simulation runs further in game time with about as many tree edges: at 100 simulations a leaf is about 2.3
+    turns ahead against about a quarter of a turn in MageZero (4.4 tree edges against 5.7), because gorge's bot plays
+    about 15 engine decisions per tree edge (docs/027 §5.4; this sentence earlier misquoted MageZero's 1.4, which is
+    tree decisions per action). gorge searches fewer decisions a game, about 55 against about 169. gorge's network
     is also ~50 times smaller than the MLP (§4.1).
 - **In dollars**, assuming a RunPod vCPU runs gorge as fast as this container's: an 8-vCPU `cpu5c` pod ($0.28 an
   hour) would play about 1.2 million `bot` games an hour, about 8,800 `az@25` self-play games, or about 5,000 with
