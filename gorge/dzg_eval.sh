@@ -9,6 +9,7 @@
 #   prior    its prior only (heuristic leaf)        alone   its policy alone against gorge's bot
 #   prev     the full search against the full search with the network PREV (a previous generation)
 #   double   the full search against the search without a network at twice the simulations
+#   plainN   the full search against the search without a network at N simulations (equal time)
 set -euo pipefail
 source "$(dirname "$0")/dzg_lib.sh"
 NET="${NET:?NET=checkpoint}"; OUT="${OUT:?OUT=dir}"; SIMS="${SIMS:-100}"; PAIRS="${PAIRS:-300}"
@@ -26,6 +27,7 @@ for arm in $ARMS; do
     alone)  a="prior:remote=$addr";               b="bot" ;;
     prev)   a="$base:remote=$addr";               b="$base:remote=$paddr" ;;
     double) a="$base:remote=$addr";               b="az:sims=$((2 * SIMS))" ;;
+    plain*) a="$base:remote=$addr";               b="az:sims=${arm#plain}" ;;
     *) echo "unknown arm $arm"; exit 2 ;;
   esac
   pairs=$PAIRS

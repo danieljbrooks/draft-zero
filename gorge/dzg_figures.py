@@ -91,10 +91,86 @@ def curves(out, runs, valset="evaldecks"):
     print("wrote", out)
 
 
+def speed(out, path):
+    """Games an hour by simulations (log-log), one line per (machine, network, mode) row group of
+    SPEED.json: [{"series": label, "sims": n, "games_per_hour": x}, ...]. Series keep their order."""
+    rows = json.load(open(path))
+    order = list(dict.fromkeys(r["series"] for r in rows))
+    fig, (ax,) = _fig(7.5, 4.2)
+    for i, name in enumerate(order):
+        pts = sorted((r["sims"], r["games_per_hour"]) for r in rows if r["series"] == name)
+        c = GREY if name.lower().startswith("no network") and i > 3 else SERIES[i % len(SERIES)]
+        ls = "--" if "self-play" in name else "-"
+        ax.plot([p[0] for p in pts], [p[1] for p in pts], color=c, lw=2, ls=ls, marker="o", ms=5)
+        x, y = pts[-1]
+        ax.annotate(name, (x, y), xytext=(6, 0), textcoords="offset points", fontsize=8, color=INK2, va="center")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("simulations per searched decision")
+    ax.set_ylabel("games an hour")
+    ax.set_xlim(right=ax.get_xlim()[1] * 6)
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURF)
+    print("wrote", out)
+
+
+def scores(out, path, title=""):
+    """Dot plot of paired-game scores, SCORES.json: [{"label": ..., "score": 0.535, "games": 600,
+    "group": i}, ...], top to bottom; a dashed line at 50%. Labels carry n."""
+    rows = json.load(open(path))
+    fig, (ax,) = _fig(7.5, 0.42 * len(rows) + 1.0)
+    for k, r in enumerate(rows):
+        y = len(rows) - 1 - k
+        c = SERIES[r.get("group", 0) % len(SERIES)]
+        ax.plot([r["score"] * 100], [y], marker="o", ms=8, color=c, mec=SURF, mew=1.5)
+        ax.text(r["score"] * 100 + 0.6, y, f"{r['score'] * 100:.1f}%", fontsize=8, va="center", color=INK)
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels([f"{r['label']}  (n={r['games']:,})" for r in rows][::-1], fontsize=8.5, color=INK)
+    ax.axvline(50, color=GREY, lw=1, ls="--")
+    ax.set_xlabel("score (%)")
+    lo = min(r["score"] for r in rows) * 100
+    hi = max(r["score"] for r in rows) * 100
+    ax.set_xlim(min(45, lo - 2), max(60, hi + 4))
+    ax.grid(axis="y", visible=False)
+    if title:
+        ax.set_title(title, fontsize=10, loc="left")
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURF)
+    print("wrote", out)
+
+
+def gens(out, path):
+    """Score against the search without a network by generation, GENS.json:
+    {"series": [{"label": ..., "points": [[gen, score, games], ...]}, ...], "ylabel": ...}."""
+    d = json.load(open(path))
+    fig, (ax,) = _fig(7.5, 4.0)
+    for i, s in enumerate(d["series"]):
+        pts = sorted(s["points"])
+        c = SERIES[i % len(SERIES)]
+        ax.plot([p[0] for p in pts], [p[1] * 100 for p in pts], color=c, lw=2, marker="o", ms=6, label=s["label"])
+        g, sc, n = pts[-1]
+        ax.annotate(s["label"], (g, sc * 100), xytext=(8, 0), textcoords="offset points", fontsize=8.5, color=INK2,
+                    va="center")
+    ax.axhline(50, color=GREY, lw=1, ls="--")
+    ax.set_xlabel("generation")
+    ax.set_ylabel(d.get("ylabel", "score against the search without a network (%)"))
+    ax.set_xticks(sorted({p[0] for s in d["series"] for p in s["points"]}))
+    ax.set_xlim(right=ax.get_xlim()[1] + 0.8)
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURF)
+    print("wrote", out)
+
+
 def main(argv):
     cmd, out, rest = argv[1], argv[2], argv[3:]
     if cmd == "curves":
         curves(out, rest)
+    elif cmd == "speed":
+        speed(out, rest[0])
+    elif cmd == "scores":
+        scores(out, rest[0], rest[1] if len(rest) > 1 else "")
+    elif cmd == "gens":
+        gens(out, rest[0])
     else:
         raise SystemExit(f"unknown figure {cmd}")
 
