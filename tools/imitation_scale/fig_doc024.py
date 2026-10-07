@@ -2,7 +2,8 @@
 rate by colour pair in greedy self-play. The card win-rate scatter (024-gih) comes from tools/imitation_scale/fig_gih.py.
 
     docs/img/024-ladder-{light,dark}.png   win rate against heuristic@100 by the network's simulations (PIMC, guessed
-                                           decks): the full GNN, docs/023's GNN and the MLP (docs/019 §4.6)
+                                           decks): the full GNN, docs/023's GNN and the MLP (docs/019 §4.6), and the full
+                                           GNN's policy with its epoch-7 value head at 1,000 (a hollow diamond)
     docs/img/024-colours-{light,dark}.png  deck win rate by colour pair: the GNN's, the MLP's and the transformer's
                                            greedy self-play, and 17lands' top players
 
@@ -39,6 +40,8 @@ LADDER = {
                             "300": [f"{E}/pimc-mlp-ilbc300"],
                             "1000": [f"{E}/pimc-mlp-ilbc1000-s*", f"{E}/pimc-mlp-ilbc1000-top"]},
 }
+# the full GNN's policy with the value from its epoch-7 checkpoint (graph_server.py --value-model; docs/024 §5)
+HYBRID = ("Full run's policy, epoch-7 value head", "1000", [f"{G}/pimc-gnn-full-v7-gnn1000-s*"])
 SELFPLAY = {"GNN": [f"{G}/gnn-full-selfplay-t0-s*"], "MLP": [f"{E}/mlp-selfplay-t0"],
             "Transformer": [f"{E}/c1-selfplay-t0-s*"]}
 # 17lands' top players' deck win rate by main colours (docs/018, C1; docs/019's figure 6)
@@ -102,7 +105,7 @@ def style(ax, t, grid="y"):
     ax.tick_params(colors=t["ink2"], labelsize=8.5, length=0)
 
 
-def ladder(table, theme):
+def ladder(table, hybrid, theme):
     t = THEMES[theme]
     xs = {b: i for i, b in enumerate(BUDGETS)}
     fig, ax = plt.subplots(figsize=(8.6, 4.8), facecolor=t["surface"])
@@ -119,18 +122,24 @@ def ladder(table, theme):
         above = all(sc >= table[(n, b)][0] for n in list(LADDER)[1:] if (n, b) in table)
         ax.annotate(f"{100 * sc:.1f}%", (xs[b], 100 * sc), textcoords="offset points", xytext=(0, 10 if above else -11),
                     ha="center", va="bottom" if above else "top", fontsize=9, color=t["ink"], weight="bold")
+    hx = xs[HYBRID[1]] + 0.13       # beside the budget's other points, clear of the MLP's
+    ax.plot(hx, 100 * hybrid, "D", ms=8, color=t["surface"], markeredgecolor=t["series"][0], markeredgewidth=2, zorder=6)
+    ax.annotate(f"{100 * hybrid:.1f}%", (hx, 100 * hybrid), textcoords="offset points", xytext=(9, 0), ha="left",
+                va="center", fontsize=9, color=t["ink"], weight="bold")
     ax.axhline(50, color=t["muted"], lw=1, ls=(0, (4, 3)), zorder=1)
     ax.text(len(BUDGETS) - 0.55, 49, "even with the baseline", fontsize=8, color=t["muted"], ha="right", va="top")
     ax.set_ylim(30, 82)
     ax.set_yticks(range(30, 81, 10), [f"{v}%" for v in range(30, 81, 10)])
     ax.set_ylabel("Games won against the baseline (about 100 each)", fontsize=9, color=t["ink2"])
     ax.set_xticks(range(len(BUDGETS)), [LABELS[b] for b in BUDGETS], fontsize=8.5, color=t["ink2"])
-    ax.set_xlim(-0.4, len(BUDGETS) - 0.5)
+    ax.set_xlim(-0.4, len(BUDGETS) - 0.35)
     ax.set_xlabel("Search: the network's simulations per decision (PIMC, guessed decks)", fontsize=9, color=t["ink2"])
     ax.set_title("Against MageZero's heuristic bot at 100 simulations", loc="left", fontsize=10, color=t["ink"])
     style(ax, t)
     ax.legend(handles=[Line2D([], [], color=t["series"][k], lw=2, marker="o", ls="-" if k != 1 else (0, (4, 2)),
-                              label=n) for k, n in enumerate(LADDER)],
+                              label=n) for k, n in enumerate(LADDER)]
+             + [Line2D([], [], color=t["surface"], marker="D", markeredgecolor=t["series"][0], markeredgewidth=2, ms=7,
+                       lw=0, label=HYBRID[0])],
               loc="lower right", frameon=False, fontsize=8.5, labelcolor=t["ink2"])
     fig.tight_layout()
     p = OUT / f"024-ladder-{theme}.png"
@@ -183,8 +192,11 @@ def main() -> int:
     rates = {n: colour_rates(p) for n, p in SELFPLAY.items()}
     for n, r in rates.items():
         print(n, " ".join(f"{k} {r[k]:.3f}" for k in sorted(r, key=lambda k: -r[k])))
+    h = list(ladder_scores(HYBRID[2]).values())
+    hybrid = sum(h) / len(h)
+    print(f"{HYBRID[0]:26s} {HYBRID[1]:>5s}: {100 * hybrid:.1f}% of {len(h)}")
     for theme in THEMES:
-        ladder(table, theme)
+        ladder(table, hybrid, theme)
         colours(rates, theme)
     return 0
 

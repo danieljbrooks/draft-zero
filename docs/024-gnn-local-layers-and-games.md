@@ -6,9 +6,9 @@ Dan's request after Will's review ("this looks great! also try to ablate GNN loc
 what im most interested in though at high data scale"). All times are Pacific. Training ran on r1, the machine with
 two RTX PRO 6000s that Dama lent us.*
 
-**Status (Tuesday 6 October, 1:30 PM PT): done.** The sweep, the full run, the ladder, 10,000 self-play games and the
-17lands analysis are all finished; the network is on Hugging Face (`danbrooks/draftzero-checkpoints`,
-`gnn/full_r1/best_policy_calibrated.pt.gz`).
+**Status (Tuesday 6 October, 11:15 PM PT): done.** The sweep, the full run, the ladder, 10,000 self-play games, the
+17lands analysis and a follow-up test of the value head (§5) are all finished; the network is on Hugging Face
+(`danbrooks/draftzero-checkpoints`, `gnn/full_r1/best_policy_calibrated.pt.gz`).
 
 ## Summary
 
@@ -22,6 +22,7 @@ two RTX PRO 6000s that Dama lent us.*
 | ... at 100 simulations | 62.5% of 104 | **64.1%** of 103 | 57.0% of 100 | |
 | ... at 300 simulations | **69.2%** of 104 | 68.0% of 103 | 60.2% of 103 | |
 | ... at 1,000 simulations | 69.3% of 101 | | **73.8%** of 103 | |
+| ... at 1,000, with the epoch-7 value head (§5) | **72.8%** of 103 | | | |
 | Self-play card ratings against 17lands: commons | 0.27 | | 0.34 | **0.41** |
 | ... every non-basic card | 0.39 | | 0.40 | **0.43** |
 
@@ -38,13 +39,15 @@ policy against itself; 17lands' own games would reach about 0.80 at this sample 
   temperature calibration fixed its overconfidence (§4).
 - **In games, it beats the MLP with little or no search, and stops gaining past 300 simulations.** It won 45%, 62.5%
   and 69% at 0, 100 and 300 simulations, 5 to 10 points above the MLP, but 69% at 1,000, where the MLP reached 74%.
-  It plays no better than docs/023's GNN, despite the better offline scores (§5).
+  Its value head from epoch 7, before it overfit, scored 72.8% at 1,000, which is within chance of both, so the test
+  doesn't pin the flat top on the value head. It plays no better than docs/023's GNN, despite the better offline
+  scores (§5).
 - **Its own self-play rates cards less like 17lands than the flat networks did** (0.27 on commons, against the
   MLP's 0.34 and the transformer's 0.41), and twice as many of its games reach the 50-turn cap. Better imitation of
   single decisions did not make policy-only self-play more human-like (§6).
 - **Cost:** searched games are CPU-bound, and every pod type cost about the same per core-hour. A game cost $0.0008
   with the policy alone, $0.0035 at 100 simulations, $0.011 at 300 and $0.02-0.03 at 1,000; a policy-only self-play
-  game cost ~$0.0003. The whole evaluation cost ~$5 of RunPod time (§7).
+  game cost ~$0.0003. The evaluation cost ~$5 of RunPod time and the value-head test ~$8 more (§7).
 
 ## The plan (Dan, 5 October)
 
@@ -240,20 +243,46 @@ left out, and one capped at 50 turns would count as half (none were).
 | 300 | **69.2%** of 104 | 68.0% of 103 | 60.2% of 103 |
 | 1,000 | 69.3% of 101 | | **73.8%** of 103 |
 
-![Line chart of games won against the heuristic bot by the network's simulations per decision, PIMC with guessed decks. The full GNN (blue): 44.7%, 62.5%, 69.2%, 69.3% at 0, 100, 300 and 1,000 simulations. docs/023's GNN (orange, dashed): 42.7%, 64.1%, 68.0% at 0 to 300. The MLP (green): 40.0%, 57.0%, 60.2%, 73.8%. A dashed line marks 50%.](img/024-ladder-light.png)
+![Line chart of games won against the heuristic bot by the network's simulations per decision, PIMC with guessed decks. The full GNN (blue): 44.7%, 62.5%, 69.2%, 69.3% at 0, 100, 300 and 1,000 simulations. docs/023's GNN (orange, dashed): 42.7%, 64.1%, 68.0% at 0 to 300. The MLP (green): 40.0%, 57.0%, 60.2%, 73.8%. A hollow blue diamond at 1,000 marks the full GNN's policy with its epoch-7 value head: 72.8%. A dashed line marks 50%.](img/024-ladder-light.png)
 
 *Figure 4. Win rate against the heuristic bot by search budget: the full GNN, docs/023's GNN and the MLP, each
-point about 100 paired games.*
+point about 100 paired games. The diamond: the full GNN's policy with its epoch-7 value head (below).*
 
 - **With little or no search, the GNN beats the MLP:** on the same deck pairs it scores 6.0, 5.0 and 9.6 points more
   at 0, 100 and 300 simulations. At ~100 games a point, each gap alone could be chance; all three pointing the same
   way, and docs/023's GNN doing the same, is the evidence. This is where the policy matters most.
 - **Its gain stops at 300 simulations,** while the MLP's continues: 69.3% at 1,000, 4.8 points below the MLP on the
-  same deck pairs (again within chance at this sample size). Deeper searches lean more on the value head, which is
-  the full run's weak spot (§4), but the calibrated head scores like the MLP's on test (AUC 0.783 against 0.784), so
-  this is a hypothesis, not a finding.
+  same deck pairs (again within chance at this sample size). Deeper searches lean more on the value head, the full
+  run's weak spot (§4); the test below finds no clear effect.
 - **The better policy didn't show in games:** the full run and docs/023's GNN score within 3 points of each other at
   every budget (+2.9, −1.9 and +1.9 points on the same deck pairs), despite 0.011 in test set NLL.
+
+### Is the value head why the gain stops? (Tuesday afternoon and evening)
+
+At 1,000 simulations the search leans on the value head more than at 300, and the full run's value head overfit after
+epoch 7 (§4). So we replayed the 1,000-simulation rung with the full run's policy and **the value head of its epoch-7
+checkpoint** (`best_value`: test value log-loss 0.527 and AUC 0.792, against the calibrated head's 0.539 and 0.783).
+The graph server takes the value from a second checkpoint (`graph_server.py --value-model`), so each evaluation runs
+both networks. The deck pairs, seats and shuffles are the rung's.
+
+| 1,000 simulations, the same 101 games | Won |
+|---|---|
+| Full run's policy, its own value head (calibrated) | 69.3% |
+| **Full run's policy, epoch-7 value head** | **72.3%** |
+| MLP (docs/019 §4.6) | 73.3% |
+
+*The epoch-7 arm won 72.8% of all its 103 games (figure 4's diamond); the table compares the games all three
+played.*
+
+- **The earlier value head scores 2.9 points more on the same games,** well within chance: the two arms' results
+  differ in 29 of the 101 games, 16 going the epoch-7 head's way and 13 the other. It ties the MLP (73.3% each).
+- **So the test doesn't pin the flat top on the value head.** If the overfit value costs anything at 1,000
+  simulations, it's a few points, below what ~100 games can show. The flat top itself (69.2% at 300, 69.3% at 1,000)
+  may be partly chance: the MLP's ladder sags at 300 too (60.2%) before its 73.8% at 1,000.
+- **Interim counts mislead here:** at 95 games the epoch-7 head led by 7.7 points; the last, longest games mostly
+  went the other way.
+- **Two networks per evaluation double the server's work:** on Secure RTX 3090s the games took a median 2.1-2.4 hours
+  (the rung's own: ~1 hour on Community pods), ~$0.12 a game (§7).
 
 ## 6. Do the cards rank like 17lands? (docs/019 §4.4)
 
@@ -369,6 +398,8 @@ cents each). The ladder's first three budgets ran on a **Secure** RTX 3090 for t
 | PIMC, 1,000 simulations | Community RTX 3090, 16 vCPU, $0.22/h | 12 | 51 min | ~11 | $0.019 |
 | PIMC, 1,000 simulations | Community RTX A4000, 13.6-core quota, $0.17/h | 12 | 67 min | ~6.6 | $0.026 |
 | PIMC, 1,000 simulations | Community RTX 3090, 25 vCPU, $0.22/h | 9 | 65 min | ~6.4 | $0.034 |
+| PIMC, 1,000 simulations, epoch-7 value head (two networks) | Secure RTX 3090, 32 vCPU, $0.50/h | 13-14 | 124-142 min | ~4.1-4.6 | $0.11-0.12 |
+| PIMC, 1,000 simulations, epoch-7 value head | r1, Dama's (free) | 6 | 34 min | ~8.7 | free |
 | Greedy self-play (policy only) | r1, Dama's (free) | 6 | ~6 s | ~1,330 | free |
 | Greedy self-play, docs/023's network | Community RTX A4000, $0.17/h | 12 | 49 s | ~530 | $0.0003 |
 
@@ -380,7 +411,9 @@ long tail.*
   (a game at 1,000 costs 5-10 times one at 100).
 - **A GNN game is slow next to the MLP's:** at 100 simulations, a median 8.6 minutes against the MLP's 2.8 (docs/019
   §4.6, on a different 3090), because every simulation waits on the graph server. Serving the network faster is
-  the main speed-up left.
+  the main speed-up left. With two networks per evaluation, a 3090 pod's GPU was the limit: at 99% busy with four
+  server processes it fed 26 workers ~220 evaluations a second, 8 a worker, while r1's faster GPU and CPU gave each of
+  its 6 workers ~29.
 - **10,000 policy-only self-play games** took ~7.5 hours on r1 (three shards of 3,334 games, 2.4-2.6 hours each),
   and would take ~19 pod-hours (~$3) on a Community A4000 or 3090.
 
@@ -402,12 +435,15 @@ While the full run trained, docs/023's three-epoch GNN played the ladder's first
 | `eval-ladder` (Secure RTX 3090, 32 vCPU, $0.50/h) | 0, 100 and 300 simulations | Tue ~6:25 AM | 10:21 AM | ~$1.97 |
 | `eval-k1-s1` (Community RTX A4000, $0.17/h) | 1,000 simulations, shard 2 | Tue ~6:28 AM | 11:42 AM | ~$0.89 |
 | seven pods with broken CUDA (five 3070s, two 3090s) | removed by `fleet_up.sh`'s check | Tue 5-6:30 AM | minutes later | ~$0.15 |
-| r1 (Dama's two RTX PRO 6000s) | rounds 7-8, the full run, the 10,000 self-play games | | | free |
-| **Total** | | | | **~$6.30** |
+| `eval-v7-s1` (Secure RTX 3090, 32 vCPU, $0.50/h; no Community stock) | the value-head test, shard 2 of 3 | Tue ~2:13 PM | 10:51 PM | ~$4.32 |
+| `eval-v7-s2` (Secure RTX 3090, 32 vCPU, $0.50/h) | the value-head test, shard 3 | Tue ~2:37 PM | 10:06 PM | ~$3.75 |
+| r1 (Dama's two RTX PRO 6000s) | rounds 7-8, the full run, the 10,000 self-play games, the value-head test's shard 1 | | closed by Dama Tue ~10 PM | free |
+| **Total** | | | | **~$14.40** |
 
 
 **Records** (Hugging Face `danbrooks/draftzero-checkpoints`): the network and its test results in `gnn/full_r1/`
 (`best_policy_calibrated.pt.gz` is the one evaluated; also `best_policy`, `best_value`, `final`,
 `value_temperature.json`); the games in `gnn/games/runs/`: `pimc-gnn-full-*` (the ladder), `gnn-full-selfplay-t0-s0..2`
-(self-play) and `pimc-gnn-stage3-*` (the preview). Figures: `tools/imitation_scale/fig_doc024.py` (4, 6),
+(self-play), `pimc-gnn-full-v7-*` (the value-head test) and `pimc-gnn-stage3-*` (the preview); rounds 7-8's curves in
+`gnn/sweeps/r1/` (`sweep_r1g`, `r1h`, `r8g`, `r8h`, `r8i`; their checkpoints went with r1). Figures: `tools/imitation_scale/fig_doc024.py` (4, 6),
 `fig_gih.py` (5) and `fig_mlp_curves.py` (1-3).
