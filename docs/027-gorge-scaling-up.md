@@ -351,7 +351,19 @@ and play at least as well, run inside the engine (`gonet=`, no GPU):
 | MLP, width 128 | 56.8% | 53.7% |
 | *the transformer (served on a GPU), for comparison* | *55.8%* | *51.3%* |
 
-PENDING: the full search with the small MLP.
+**The best bot in this report is the full search with the width-64 MLP inside the engine** (mulligans on, 600 paired
+games each, on the second 3090 pod):
+
+| The full search + the width-64 MLP (in the engine), 100 simulations, against | Score | Games an hour |
+|---|---:|---:|
+| the original plain search at 100 | **62.3%** | 5,000 |
+| the full search without a network at 100 | 55.3% | 5,600 |
+| the full search without a network at 200 (about equal time) | 50.8% | 4,600 |
+| *for comparison: the full search + the transformer on the GPU, against the full search without a network* | *55.2%* | *2,100* |
+
+The small in-process network matches the GPU-served transformer inside the full search at two and a half times the
+games an hour, and at about equal time it ties the full search with twice the simulations: the first network in this
+report that pays for itself.
 
 ### 4.6 Self-play under the new search
 
