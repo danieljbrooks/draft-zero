@@ -237,7 +237,11 @@ far, starting from the last network's weights:
 - **Loop A** (r1): AlphaZero's targets, visit counts and the game's result.
 - **Loop B** (the RTX 3080 Ti): completed-Q policy targets (`c_scale` 0.03) and the blended value target.
 
-PENDING: generations figure
+![Score against plain search by generation for loops A and B](img/027-generations-light.png)
+
+*Figure 4. Each generation's network inside the search at 100 simulations against plain search, 600 paired games per
+point; a difference of about 4 points is within chance. Loop A uses AlphaZero's targets; loop B completed-Q policy
+targets and a value blended with the search's.*
 
 | Generation | Loop A against plain search | Loop A against its previous generation | Loop B against plain search | Loop B against its previous generation |
 |---|---:|---:|---:|---:|
