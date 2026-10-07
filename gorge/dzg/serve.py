@@ -58,6 +58,9 @@ class _Req:
 
 
 class Server:
+    prior_temp = 1.0   # option logits are divided by this (serve --prior-temp)
+    value_temp = 1.0   # the value logit is divided by this (serve --value-temp)
+
     def __init__(self, model, device, amp: str = "bf16", max_batch: int = 4096, log_every: float = 30.0,
                  validate: bool = True, merge: bool = True, max_merge: int = 4096):
         self.model, self.device, self.amp = model.eval(), device, amp
@@ -191,8 +194,8 @@ class Server:
             b = b.to(self.device)
             with torch.inference_mode(), M.autocast(self.device, self.amp):
                 scores, vlogit = self.model(b)
-            value = torch.sigmoid(vlogit.float()).cpu().numpy()
-            s = scores.float().cpu().numpy()
+            value = torch.sigmoid(vlogit.float() / self.value_temp).cpu().numpy()
+            s = (scores.float() / self.prior_temp).cpu().numpy()
             td = time.perf_counter()
         vo = so = 0
         for r in group:
@@ -358,6 +361,8 @@ def main(argv=None) -> None:
     ap.add_argument("--log-every", type=float, default=30.0, help="seconds between throughput lines")
     ap.add_argument("--no-validate", action="store_true", help="skip request validation")
     ap.add_argument("--torch-threads", type=int, default=None)
+    ap.add_argument("--prior-temp", type=float, default=1.0, help="divide the option logits by T (T < 1 sharpens the prior)")
+    ap.add_argument("--value-temp", type=float, default=1.0, help="divide the value logit by T (T > 1 pulls values to 0.5)")
     args = ap.parse_args(argv)
     if args.torch_threads:
         torch.set_num_threads(args.torch_threads)
@@ -365,6 +370,7 @@ def main(argv=None) -> None:
     model, info = build_model(args, device)
     srv = Server(model, device, args.amp, args.max_batch, args.log_every, validate=not args.no_validate,
                  merge=not args.no_merge, max_merge=args.max_merge)
+    srv.prior_temp, srv.value_temp = args.prior_temp, args.value_temp
     srv.warmup()
     srv.bind(args.socket, args.tcp)
 

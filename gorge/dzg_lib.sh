@@ -5,6 +5,7 @@
 #   PY        python with torch and numpy (default: python3)
 #   DEVICE    the server's torch device (default auto)
 #   SERVERS   dzg.serve processes per network, spread over the GPUs (default 1)
+#   SERVE_ARGS extra dzg.serve arguments (e.g. --prior-temp 0.5)
 
 DZ="${DZ:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 GORGE_DIR="${GORGE_DIR:-$(cd "$DZ/.." && pwd)/ext/gorge}"
@@ -28,7 +29,8 @@ serve() {
       local ngpu; ngpu=$(nvidia-smi -L | wc -l)
       dev="cuda:$((i % ngpu))"
     fi
-    PYTHONPATH="$DZ/gorge" "$PY" -m dzg.serve "${src[@]}" --socket "$sock" --device "$dev" \
+    # shellcheck disable=SC2086
+    PYTHONPATH="$DZ/gorge" "$PY" -m dzg.serve "${src[@]}" --socket "$sock" --device "$dev" ${SERVE_ARGS:-} \
       > "$logdir/serve$i.log" 2>&1 &
     SERVER_PIDS+=($!)
     addrs+="${addrs:+,}unix:$sock"
