@@ -70,6 +70,7 @@ DEFAULTS: dict[str, Any] = {
         "policy_weight": 1.0,               # x the self-play policy loss (0: value only)          docs/028's arms:
         "policy_target": "visits",          # visits | cq (the behaviour policy tilted by the search's values)
         "cq_scale": 10.0,                   # cq's tilt per unit of value above the root's
+        "visit_temp": 1.0,                  # visits targets sharpened to visits^(1/visit_temp)
         "train_only": None,                 # parameter-name prefixes to train (None: all)
         "value_head_init": "keep",          # keep | reset | shrink (shrink and perturb the value head)
         "kl_mask_use": False,               # no KL on yes/no rows (the start's use head never trained)

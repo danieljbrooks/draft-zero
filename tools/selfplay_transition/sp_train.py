@@ -15,7 +15,7 @@ arms differ only in their recipe. Each arm is the spec's `base` plus its own ove
       human_val: {config: configs/gnn_full_r1.yml, tables_dir: data/imitation_graph/slim, every: 2}
       trainer: {...}           # GnnTrainer's settings (draftzero.selfplay.config's trainer keys)
       phases:                  # optional: run in phases, each a share of the steps with its own trainer overrides
-        - {share: 0.25, trainer: {policy_weight: 0, train_only: [value_head]}}
+        - {share: 0.25, td_lambda: 1.0, trainer: {policy_weight: 0, train_only: [value_head]}}
         - {share: 0.75}
     arms:
       lam95: {td_lambda: 0.95}
@@ -198,6 +198,10 @@ def main(argv=None) -> None:
     t0 = time.time()
     for pi, (ph, ps) in enumerate(zip(phases, phase_steps)):
         tr.cfg = merge(tcfg, ph.get("trainer") or {})
+        if ph.get("td_lambda") is not None:      # this phase's value target (e.g. the result first, then TD)
+            rows["z_td"] = retd(rows, float(ph["td_lambda"]))
+            tr.prepare(rows)
+            log(f"sp_train: phase {pi}: td_lambda {ph['td_lambda']}")
         if "train_only" in (ph.get("trainer") or {}) or pi > 0:
             tr.set_trainable(tr.cfg.get("train_only"))
         done = 0

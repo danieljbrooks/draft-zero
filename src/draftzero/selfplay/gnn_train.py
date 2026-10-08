@@ -15,7 +15,8 @@ machine can resume. Each update trains reuse x (new positions) / batch_rows step
 
 Options for docs/028's transition arms (all off by default, which is the loop's recipe above):
     policy_weight     x the self-play policy loss (0: train the value only, through the whole network)
-    policy_target     visits (the search's visit shares) | cq: the behaviour policy tilted by the search's values,
+    policy_target     visits (the search's visit shares, sharpened to visits^(1/visit_temp) when visit_temp < 1:
+                      exploration's one- and two-visit options mostly drop out) | cq: the behaviour policy tilted by the search's values,
                       pi'(a) ~ pi_b(a) exp(cq_scale (Q(a) - Q_root)), an unvisited option at Q_root (docs/028 §2)
     train_only        parameter-name prefixes to train (graph_supervised's), the rest frozen; None: everything
     value_head_init   keep | reset (fresh value head) | shrink (shrink and perturb it: 0.4 w + 0.1 std(w) noise)
@@ -221,6 +222,13 @@ class GnnTrainer:
         if t.n == 0:
             return 0
         self.vmask = value_mask(t.game, int(c["value_per_game"]), self.rng) & np.isfinite(t.aux["z_td"])
+        vt = float(c.get("visit_temp", 1.0))
+        p = t.aux["opt_p"].astype(np.float64)
+        if vt != 1.0 and len(p):
+            row = np.repeat(np.arange(t.n), np.diff(t.row_opt_ptr))
+            p = p ** (1.0 / vt)
+            p = p / np.maximum(np.bincount(row, weights=p, minlength=t.n)[row], 1e-12)
+        t.aux["opt_p_train"] = p.astype(np.float32)
         if c.get("policy_target", "visits") == "cq":
             self.behaviour = copy.deepcopy(self.model).eval()      # the network that played these games
             for p in self.behaviour.parameters():
@@ -278,7 +286,7 @@ class GnnTrainer:
                 with torch.no_grad():
                     p = self._cq_target(bd, t, r, ob)
             else:
-                _, p = gn.gather(t.row_opt_ptr, r, t.aux["opt_p"])
+                _, p = gn.gather(t.row_opt_ptr, r, t.aux.get("opt_p_train", t.aux["opt_p"]))
                 p = torch.from_numpy(np.ascontiguousarray(p, np.float32)).to(self.dev)
             with sv._fp32(self.dev, self.dtype):
                 logp = logp.float()
