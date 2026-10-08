@@ -3,14 +3,15 @@
 # play each arm's policy alone against the start's (paired, greedy, the evaluation decks) and score it by deck pair.
 #   source ~/sp_env.sh; bash deploy/sp_stage1.sh <spec> <games run> <arm> [<arm> ...]
 #   e.g. bash deploy/sp_stage1.sh configs/sp/stage1.yml runs/gnn/games/d0-v0-n100 visits kl cq10 cq30
-# Env: M0 (the start), PAIRS (500), WORKERS (20), TRAIN_GPU (1), SKIP_GAMES=1 (train only), EXTRA_ARMS (checkpoints
-# to evaluate without training: name=path ...). Results: runs/sp/arms/<arm>/, runs/sp/h2h/p0-<arm>/ and
-# runs/sp/stage1_p0.jsonl (one line per arm).
+# Env: M0 (the start), PAIRS (1000), WORKERS (20), TRAIN_GPU (1), SKIP_GAMES=1 (train only), EXTRA_ARMS (checkpoints
+# to evaluate without training: name=path ...), PH_PAIRS (0: skip; else also each policy alone against heuristic@100
+# on docs/024's ladder deals, seed 20261001). Results: runs/sp/arms/<arm>/, runs/sp/h2h/{p0,ph}-<arm>/ and
+# runs/sp/stage1_p0.jsonl, stage1_ph.jsonl (one line per arm).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 SPEC=$1 GAMES=$2; shift 2
 : "${M0:?set M0 to the start network}"
-PAIRS=${PAIRS:-500} WORKERS=${WORKERS:-20} GPU=${TRAIN_GPU:-1}
+PAIRS=${PAIRS:-1000} WORKERS=${WORKERS:-20} GPU=${TRAIN_GPU:-1}
 log() { echo "[$(TZ=America/Los_Angeles date '+%a %-I:%M %p PT')] stage1: $*"; }
 mkdir -p runs/sp/arms runs/sp/h2h
 B=runs/sp/batches/$(basename "$GAMES")
@@ -46,4 +47,18 @@ for e in "${EVAL[@]}"; do
   log "$arm: $res"
   echo "{\"arm\": \"$arm\", \"checkpoint\": \"$ck\", \"p0\": $res}" >> runs/sp/stage1_p0.jsonl
 done
+if [ "${PH_PAIRS:-0}" -gt 0 ]; then
+  for e in "${EVAL[@]}"; do
+    arm=${e%%=*} ck=${e#*=}
+    [ -s "$ck" ] || continue
+    run=ph-$arm
+    log "policy alone: $arm against heuristic@100 ($PH_PAIRS pairs)"
+    timeout -k 60 4h bash deploy/sp_h2h.sh "$run" "$ck" - 2 --bot1 gnn_policy_greedy --bot2 heuristic@100 \
+      --pool data/pools/eval.txt --pairs "$PH_PAIRS" --seed 20261001 --method pimc --workers "$WORKERS" --heap 2500m \
+      --max-turns 50 --search-timeout 900 --game-timeout 7200 > "runs/sp/h2h/$run.log" 2>&1
+    res=$(python tools/selfplay_transition/paired.py "runs/sp/h2h/$run")
+    log "$arm against heuristic@100: $res"
+    echo "{\"arm\": \"$arm\", \"checkpoint\": \"$ck\", \"ph\": $res}" >> runs/sp/stage1_ph.jsonl
+  done
+fi
 log "done"
