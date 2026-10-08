@@ -1,0 +1,31 @@
+# docs/028 stage 1: one training step from the start network, every arm on the same games (stage 0's d0-v0-n100).
+#   python tools/selfplay_transition/sp_train.py --spec configs/sp/stage1.yml --arm <arm> \
+#       --batches runs/sp/batches/d0 --out runs/sp/arms/<arm>
+# Stage 1b's arms build on the 1a winner: its settings are copied into each 1b arm once 1a is scored (docs/028 §4.2).
+base:
+  start: runs/gnn/full_r1/best_policy_calibrated.pt.gz
+  td_lambda: 0.99
+  heldout_share: 0.1
+  epochs: 2
+  eval_every: 400
+  lr_schedule: cosine
+  lr_min_frac: 0.1
+  select: final
+  human_val: {config: configs/gnn_full_r1.yml, tables_dir: data/imitation_graph/slim, every: 1}
+  trainer:
+    batch_rows: 256
+    lr: 3.0e-5
+    warmup_steps: 100
+    value_weight: 0.5
+    value_per_game: 16
+    kl_weight: 0.0
+    kl_weight_end: 0.0
+    kl_mask_use: true
+    cq_visit_shrink: 2.0
+    seed: 1
+arms:
+  # ---- 1a: the policy target
+  visits: {}
+  kl: {trainer: {kl_weight: 1.0, kl_weight_end: 1.0}}
+  cq10: {trainer: {policy_target: cq, cq_scale: 10.0}}
+  cq30: {trainer: {policy_target: cq, cq_scale: 30.0}}
