@@ -20,24 +20,24 @@ PIDS=()
 cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done; }
 trap cleanup EXIT
 NGPU=$(nvidia-smi -L 2>/dev/null | grep -c ^GPU); [ "$NGPU" -ge 1 ] || NGPU=1
-start_set() {   # <ckpt> <first port> -> the comma-separated ports
-  local ck=$1 p0=$2 ports="" i p
+start_set() {   # <ckpt> <first port>: sets PORTS to the comma-separated ports (no subshell: PIDS must survive)
+  local ck=$1 p0=$2 i p
+  PORTS=""
   for i in $(seq 0 $((REPLICAS - 1))); do
-    p=$((p0 + 100 * i)); ports="${ports:+$ports,}$p"
+    p=$((p0 + 100 * i)); PORTS="${PORTS:+$PORTS,}$p"
     if curl -s -m 2 "localhost:$p/healthz" > /dev/null; then log "port $p is taken: refusing to reuse it"; exit 3; fi
     CUDA_VISIBLE_DEVICES=$((i % NGPU)) nohup python tools/imitation_scale/graph_server.py --model "$ck" --port "$p" \
       --threads 16 > "$OUT/logs/graph_server_$p.log" 2>&1 < /dev/null &
     PIDS+=($!)
   done
-  echo "$ports"
 }
-APORTS=$(start_set "$A" "$BASE") || exit 3
-BARGS=()
+start_set "$A" "$BASE"; APORTS=$PORTS
+BARGS=() BPORTS=""
 if [ "$B" != "-" ]; then
-  BPORTS=$(start_set "$B" $((BASE + 400))) || exit 3
+  start_set "$B" $((BASE + 400)); BPORTS=$PORTS
   BARGS=(--bot2-graph-ports "$BPORTS")
 fi
-for p in ${APORTS//,/ } ${BPORTS:-}; do [ -n "$p" ] || continue; for q in ${p//,/ }; do wait_up "$q" || { log "server $q never came up"; exit 2; }; done; done
+for q in ${APORTS//,/ } ${BPORTS//,/ }; do wait_up "$q" || { log "server $q never came up"; exit 2; }; done
 if ! echo " $* " | grep -q -- " --open-decklists "; then
   if ! curl -s -m 2 "localhost:$BP/healthz" > /dev/null; then
     nohup python tools/imitation_scale/belief_server.py --port "$BP" > "$OUT/logs/belief.log" 2>&1 < /dev/null &
