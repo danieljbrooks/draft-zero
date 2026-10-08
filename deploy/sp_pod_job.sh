@@ -16,7 +16,7 @@ from huggingface_hub import HfApi
 out, dst = sys.argv[1], sys.argv[2]
 if os.path.isdir(out):
     HfApi(token=os.environ["HF_TOKEN"]).upload_folder(repo_id="danbrooks/draftzero-checkpoints", folder_path=out,
-        path_in_repo=dst, allow_patterns=["games.jsonl", "config.json", "summary.json", "play.log", "networks.txt"],
+        path_in_repo=dst, allow_patterns=["games.jsonl", "config.json", "summary.json", "play.log", "networks.txt", "records/*"],
         commit_message=f"docs/028 match: {dst}")
 PY
 }
