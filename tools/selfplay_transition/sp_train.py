@@ -4,7 +4,9 @@ Every arm reads the same games (batch files from draftzero.selfplay.records.pack
 arms differ only in their recipe. Each arm is the spec's `base` plus its own overrides:
 
     base:
-      start: runs/gnn/full_r1/best_policy_calibrated.pt.gz   # the network the games came from (and the KL anchor)
+      start: runs/gnn/full_r1/best_policy_calibrated.pt.gz   # the network training starts from
+      ref: null                # the KL anchor (null: start); a loop's later generations start from the last one
+                               # and keep the anchor on the original start
       td_lambda: 0.99          # the value target: MageZero's TD labels (1.0: the game result alone)
       heldout_share: 0.1       # games kept out (hashed by deck pair, the same for every arm)
       epochs: 2                # passes over the training rows (or steps:)
@@ -46,7 +48,7 @@ from draftzero.selfplay import config as sc  # noqa: E402
 from draftzero.selfplay import tables  # noqa: E402
 
 BASE = {
-    "start": None, "td_lambda": 0.99, "heldout_share": 0.1, "epochs": 2.0, "steps": None, "eval_every": 400,
+    "start": None, "ref": None, "td_lambda": 0.99, "heldout_share": 0.1, "epochs": 2.0, "steps": None, "eval_every": 400,
     "lr_schedule": "cosine", "lr_min_frac": 0.1, "select": "policy_ce", "human_val": None, "trainer": {},
     "phases": None, "max_games": None,
 }
@@ -115,6 +117,7 @@ def main(argv=None) -> None:
     ap.add_argument("--batches", type=Path, nargs="+", required=True, help="batch files or directories of them")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--device", default="auto")
+    ap.add_argument("--set", action="append", default=[], help="KEY=VALUE (YAML) over the arm, e.g. start=<ckpt>")
     a = ap.parse_args(argv)
 
     import torch
@@ -124,6 +127,9 @@ def main(argv=None) -> None:
 
     spec = yaml.safe_load(a.spec.read_text())
     cfg = arm_config(spec, a.arm)
+    for kv in a.set:
+        k, v = kv.split("=", 1)
+        cfg[k] = yaml.safe_load(v)
     a.out.mkdir(parents=True, exist_ok=True)
     logf = open(a.out / "train.log", "a")
 
@@ -145,7 +151,8 @@ def main(argv=None) -> None:
     log(f"sp_train: {a.arm}: {tables.n_rows(rows)} rows from {n_games} seat-games, "
         f"{tables.n_rows(held)} held out; td_lambda {cfg['td_lambda']}")
 
-    tr = gnn_train.GnnTrainer(start, start, tcfg, log=log)
+    ref = sc.path(cfg["ref"]) if cfg["ref"] else start
+    tr = gnn_train.GnnTrainer(start, ref, tcfg, log=log)
     n = tr.prepare(rows)
     bs = int(tcfg["batch_rows"])
     total = int(cfg["steps"]) if cfg["steps"] else max(1, math.ceil(float(cfg["epochs"]) * n / bs))
