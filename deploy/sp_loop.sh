@@ -12,7 +12,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 LOOP=$1 SPEC=$2 ARM=$3 PREV=$4 PREVB=$5 G0=$6 G1=$7
 : "${M0:?set M0 to the start network}"
-SPP=${SP_PAIRS:-250} WORKERS=${WORKERS:-20} GPU=${TRAIN_GPU:-1} PAIRS=${PAIRS:-1000} PHP=${PH_PAIRS:-150}
+SPP=${SP_PAIRS:-250} WORKERS=${WORKERS:-14} GPU=${TRAIN_GPU:-1} PAIRS=${PAIRS:-1000} PHP=${PH_PAIRS:-150}
 log() { echo "[$(TZ=America/Los_Angeles date '+%a %-I:%M %p PT')] loop $LOOP: $*"; }
 D=runs/sp/loops/$LOOP
 mkdir -p "$D" runs/sp/h2h
@@ -23,7 +23,7 @@ for g in $(seq "$G0" "$G1"); do
     log "generation $g: self-play by $PREV ($SPP pairs)"
     timeout -k 60 14h bash deploy/sp_h2h.sh "$run" "$PREV" - 4 --pool data/pools/train.txt --bot1 gnn@100 --bot2 gnn@100 \
       --method pimc --root-noise 0.25 --root-noise-alpha 0.3 --sample-turns 3 --record --pairs "$SPP" --seed $((100 * g + 1)) \
-      --workers "$WORKERS" --heap 2500m --max-turns 50 --search-timeout 1800 --game-timeout 14400 > "runs/sp/h2h/$run.log" 2>&1
+      --workers "$WORKERS" --heap ${HEAP:-1400m} --max-turns 50 --search-timeout 1800 --game-timeout 14400 > "runs/sp/h2h/$run.log" 2>&1
     mkdir -p "$B"
     python - "runs/sp/h2h/$run" "$B/r1-$LOOP-g$g.jsonl.gz" "$g" <<'PY'
 import sys
@@ -50,7 +50,7 @@ PY
       ph) opp=-;     args=(--bot2 heuristic@100 --pairs "$PHP" --seed 20261001) ;;
     esac
     timeout -k 60 4h bash deploy/sp_h2h.sh "$r" "$ck" "$opp" 2 --bot1 gnn_policy_greedy "${args[@]}" \
-      --pool data/pools/eval.txt --method pimc --workers "$WORKERS" --heap 2500m --max-turns 50 --search-timeout 900 \
+      --pool data/pools/eval.txt --method pimc --workers "$WORKERS" --heap ${HEAP:-1400m} --max-turns 50 --search-timeout 900 \
       --game-timeout 7200 > "runs/sp/h2h/$r.log" 2>&1
     res=$(python tools/selfplay_transition/paired.py "runs/sp/h2h/$r")
     log "generation $g, $kind: $res"
