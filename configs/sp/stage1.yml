@@ -29,3 +29,15 @@ arms:
   kl: {trainer: {kl_weight: 1.0, kl_weight_end: 1.0}}
   cq10: {trainer: {policy_target: cq, cq_scale: 10.0}}
   cq30: {trainer: {policy_target: cq, cq_scale: 30.0}}
+  # ---- 1b: the value and the anchor, on the 1a winner (cq10: the Q-tilted target at s = 10; docs/029)
+  b_lam1: {td_lambda: 1.0, trainer: {policy_target: cq, cq_scale: 10.0}}
+  b_lam95: {td_lambda: 0.95, trainer: {policy_target: cq, cq_scale: 10.0}}
+  b_vwarm:
+    trainer: {policy_target: cq, cq_scale: 10.0}
+    phases:
+      - {share: 0.25, td_lambda: 1.0, trainer: {policy_weight: 0.0, train_only: [value_head], lr: 3.0e-4}}
+      - {share: 0.75, td_lambda: 0.99}
+  b_vonly: {trainer: {policy_weight: 0.0, kl_weight: 10.0, kl_weight_end: 10.0}}
+  b_human: {trainer: {policy_target: cq, cq_scale: 10.0, human_share: 0.25, human_tables_dir: data/imitation_graph/slim,
+                      human_data_cache: /home/researcher/gnn-cache, human_value_weight: 0.0}}
+  b_lr1e4: {trainer: {policy_target: cq, cq_scale: 10.0, lr: 1.0e-4}}
