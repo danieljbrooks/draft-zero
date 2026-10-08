@@ -23,7 +23,7 @@ from draftzero.selfplay.config import REPO
 
 ATYPE = {"PRIORITY": 0, "CHOOSE_TARGET": 3, "CHOOSE_USE": 5}
 ARRAYS = ("ids", "values", "child", "parent", "label", "opt_node")             # concatenated, with pointers
-PER_ROW = ("graph_type", "z", "z_td", "game", "turn", "heuristic", "version", "heldout", "n_opt")
+PER_ROW = ("graph_type", "z", "z_td", "q_root", "game", "turn", "heuristic", "version", "heldout", "n_opt")
 PER_OPT = ("opt_p", "opt_q", "opt_played")
 
 
@@ -96,6 +96,7 @@ def graph_rows(batch: Path, lam: float = 0.99, heldout_share: float = 0.05) -> d
             parts["graph_type"].append(g["type"])
             parts["z"].append(np.nan if res is None else float(res))
             parts["z_td"].append(float(t))
+            parts["q_root"].append(float(r["q"]))
             parts["game"].append(gk)
             parts["turn"].append(int(r.get("turn", 0)))
             parts["heuristic"].append(float(r.get("heuristic", np.nan)))
@@ -119,7 +120,8 @@ def _pack(parts: dict, dropped: int) -> dict:
            "row_opt_ptr": ptr(parts["n_opt"]), "opt_p": cat("opt_p", np.float32), "opt_q": cat("opt_q", np.float32),
            "opt_played": cat("opt_played", bool),
            "graph_type": np.asarray(parts["graph_type"], np.int8), "z": np.asarray(parts["z"], np.float32),
-           "z_td": np.asarray(parts["z_td"], np.float32), "game": np.asarray(parts["game"], np.int64),
+           "z_td": np.asarray(parts["z_td"], np.float32), "q_root": np.asarray(parts["q_root"], np.float32),
+           "game": np.asarray(parts["game"], np.int64),
            "turn": np.asarray(parts["turn"], np.int32), "heuristic": np.asarray(parts["heuristic"], np.float32),
            "version": np.asarray(parts["version"], np.int32), "heldout": np.asarray(parts["heldout"], bool),
            "dropped": np.asarray(dropped, np.int64)}
@@ -144,7 +146,10 @@ def concat(parts: list[dict]) -> dict:
         return _pack({k: [] for k in ARRAYS + PER_ROW + PER_OPT + ("nlen", "elen", "olen")}, 0)
     out = {}
     for k in ("ids", "values", "child", "parent", "label", "opt_node", "opt_p", "opt_q", "opt_played", "graph_type",
-              "z", "z_td", "game", "turn", "heuristic", "version", "heldout"):
+              "z", "z_td", "q_root", "game", "turn", "heuristic", "version", "heldout"):
+        if k == "q_root" and not all(k in p for p in parts):     # rows cached before q_root was kept
+            out[k] = np.concatenate([p.get(k, np.full(len(p["z"]), np.nan, np.float32)) for p in parts])
+            continue
         out[k] = np.concatenate([p[k] for p in parts])
     for k in ("node_ptr", "edge_ptr", "opt_ptr", "row_opt_ptr"):
         segs, base = [np.zeros(1, np.int64)], 0
@@ -164,7 +169,8 @@ def select(rows: dict, mask: np.ndarray) -> dict:
     """The rows where `mask` is true (pointers rebuilt)."""
     from draftzero.gameplay import graph_net as gn
     r = np.flatnonzero(mask)
-    out = {k: rows[k][r] for k in ("graph_type", "z", "z_td", "game", "turn", "heuristic", "version", "heldout")}
+    out = {k: rows[k][r] for k in ("graph_type", "z", "z_td", "q_root", "game", "turn", "heuristic", "version", "heldout")
+           if k in rows}
     for arrs, ptr in ((("ids", "values"), "node_ptr"), (("child", "parent", "label"), "edge_ptr")):
         p, *xs = gn.gather(rows[ptr], r, *(rows[a] for a in arrs))
         out[ptr] = p
@@ -199,7 +205,9 @@ def to_graph_table(rows: dict, vocab, edge_vocab, name: str = "selfplay"):
                       legal_idx=legal_idx, set_indptr=set_indptr, set_idx=set_idx)
     gs.map_table(t, vocab, edge_vocab)
     t.aux["opt_p"] = rows["opt_p"]
+    t.aux["opt_q"] = rows["opt_q"]
     t.aux["z_td"] = rows["z_td"]
+    t.aux["q_root"] = rows["q_root"] if "q_root" in rows else np.full(n, np.nan, np.float32)
     return t
 
 

@@ -65,6 +65,15 @@ DEFAULTS: dict[str, Any] = {
         "human_share": 0.0,                 # share of each batch from the human tables (0: none)
         "human_tables_dir": None,           # the imitation tables (graph files beside them for the GNN)
         "human_fraction": 0.1,              # how much of the human training games to load
+        "human_data_cache": None,           # graph_supervised's memory-mapped cache of all the human rows (fast)
+        "human_value_weight": None,         # x the value loss on human rows (None: value_weight)
+        "policy_weight": 1.0,               # x the self-play policy loss (0: value only)          docs/028's arms:
+        "policy_target": "visits",          # visits | cq (the behaviour policy tilted by the search's values)
+        "cq_scale": 10.0,                   # cq's tilt per unit of value above the root's
+        "train_only": None,                 # parameter-name prefixes to train (None: all)
+        "value_head_init": "keep",          # keep | reset | shrink (shrink and perturb the value head)
+        "kl_mask_use": False,               # no KL on yes/no rows (the start's use head never trained)
+        "seed": None,
         "heldout_share": 0.05,              # self-play games kept out of training, for the offline checks
         "keep_versions": 3,                 # weights kept besides every 10th version
         "full_every_versions": 6,           # the trainer's full state (optimizer too) to the store this often
