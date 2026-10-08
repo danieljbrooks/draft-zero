@@ -93,7 +93,7 @@ def load_rows(batch_dirs: list[Path], heldout_share: float, max_games: int | Non
         raise SystemExit(f"no batch files in {batch_dirs}")
     parts = []
     for f in files:
-        cache = f.parent / "rows" / f"{f.name.removesuffix('.jsonl.gz')}-h{heldout_share:g}.npz"
+        cache = f.parent / "rows" / f"{f.name.removesuffix('.jsonl.gz')}-h{heldout_share:g}-v2.npz"
         if cache.exists() and cache.stat().st_mtime >= f.stat().st_mtime:
             parts.append(tables.load(cache))
         else:

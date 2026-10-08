@@ -28,6 +28,7 @@ def main(argv=None) -> None:
     ap.add_argument("--taus", default="1,0.5,0.25")
     ap.add_argument("--scales", default="3,10,30,100")
     ap.add_argument("--max-rows", type=int, default=40000)
+    ap.add_argument("--shrink", type=float, default=0.0, help="cq: an option's value weighs n / (n + shrink)")
     ap.add_argument("--json", type=Path)
     a = ap.parse_args(argv)
 
@@ -96,6 +97,10 @@ def main(argv=None) -> None:
     for tau in [float(x) for x in a.taus.split(",")]:
         out[f"visits_tau{tau:g}"] = stats(visits ** (1 / tau))
     adv = np.where(np.isfinite(q) & np.isfinite(qr), q - qr, 0.0)
+    if a.shrink > 0:
+        nv = t.aux["opt_n"].astype(np.float64)
+        adv = adv * np.where(np.isfinite(nv), nv / (nv + a.shrink), 1.0)
+    out["cq_visit_shrink"] = a.shrink
     out["adv_abs_mean"] = round(float(np.abs(adv[np.isfinite(q)]).mean()), 4)
     for s in [float(x) for x in a.scales.split(",")]:
         out[f"cq_s{s:g}"] = stats(pi * np.exp(s * adv))

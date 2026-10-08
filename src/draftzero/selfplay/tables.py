@@ -24,7 +24,7 @@ from draftzero.selfplay.config import REPO
 ATYPE = {"PRIORITY": 0, "CHOOSE_TARGET": 3, "CHOOSE_USE": 5}
 ARRAYS = ("ids", "values", "child", "parent", "label", "opt_node")             # concatenated, with pointers
 PER_ROW = ("graph_type", "z", "z_td", "q_root", "game", "turn", "heuristic", "version", "heldout", "n_opt")
-PER_OPT = ("opt_p", "opt_q", "opt_played")
+PER_OPT = ("opt_p", "opt_n", "opt_q", "opt_played")
 
 
 def td_targets(q: np.ndarray, result: float, lam: float) -> np.ndarray:
@@ -87,6 +87,7 @@ def graph_rows(batch: Path, lam: float = 0.99, heldout_share: float = 0.05) -> d
             parts["elen"].append(len(g["child"]))
             parts["olen"].append(olen)
             parts["opt_p"].append((v / v.sum()).astype(np.float32))
+            parts["opt_n"].append(v.astype(np.float32))
             q = r.get("opt_q") or [None] * len(v)
             parts["opt_q"].append(np.asarray([np.nan if x is None else x for x in q], np.float32))
             played = np.zeros(len(v), bool)
@@ -117,7 +118,8 @@ def _pack(parts: dict, dropped: int) -> dict:
     out = {"ids": cat("ids", np.int32), "values": cat("values", np.int16), "child": cat("child", np.uint16),
            "parent": cat("parent", np.uint16), "label": cat("label", np.int32), "opt_node": cat("opt_node", np.int32),
            "node_ptr": ptr(parts["nlen"]), "edge_ptr": ptr(parts["elen"]), "opt_ptr": ptr(olens),
-           "row_opt_ptr": ptr(parts["n_opt"]), "opt_p": cat("opt_p", np.float32), "opt_q": cat("opt_q", np.float32),
+           "row_opt_ptr": ptr(parts["n_opt"]), "opt_p": cat("opt_p", np.float32), "opt_n": cat("opt_n", np.float32),
+           "opt_q": cat("opt_q", np.float32),
            "opt_played": cat("opt_played", bool),
            "graph_type": np.asarray(parts["graph_type"], np.int8), "z": np.asarray(parts["z"], np.float32),
            "z_td": np.asarray(parts["z_td"], np.float32), "q_root": np.asarray(parts["q_root"], np.float32),
@@ -151,6 +153,8 @@ def concat(parts: list[dict]) -> dict:
             out[k] = np.concatenate([p.get(k, np.full(len(p["z"]), np.nan, np.float32)) for p in parts])
             continue
         out[k] = np.concatenate([p[k] for p in parts])
+    if all("opt_n" in p for p in parts):                         # visit counts (rows cached before: shares only)
+        out["opt_n"] = np.concatenate([p["opt_n"] for p in parts])
     for k in ("node_ptr", "edge_ptr", "opt_ptr", "row_opt_ptr"):
         segs, base = [np.zeros(1, np.int64)], 0
         for p in parts:
@@ -177,6 +181,8 @@ def select(rows: dict, mask: np.ndarray) -> dict:
         out.update(zip(arrs, xs))
     p, op, oq, opl = gn.gather(rows["row_opt_ptr"], r, rows["opt_p"], rows["opt_q"], rows["opt_played"])
     out.update(row_opt_ptr=p, opt_p=op, opt_q=oq, opt_played=opl)
+    if "opt_n" in rows:
+        out["opt_n"] = gn.gather(rows["row_opt_ptr"], r, rows["opt_n"])[1]
     opt_ids = np.repeat(rows["row_opt_ptr"][r], np.diff(p)) + (np.arange(p[-1]) - np.repeat(p[:-1], np.diff(p)))
     op2, on = gn.gather(rows["opt_ptr"], opt_ids, rows["opt_node"])
     out.update(opt_ptr=op2, opt_node=on, dropped=rows["dropped"])
@@ -206,6 +212,7 @@ def to_graph_table(rows: dict, vocab, edge_vocab, name: str = "selfplay"):
     gs.map_table(t, vocab, edge_vocab)
     t.aux["opt_p"] = rows["opt_p"]
     t.aux["opt_q"] = rows["opt_q"]
+    t.aux["opt_n"] = rows["opt_n"] if "opt_n" in rows else np.full(len(rows["opt_q"]), np.inf, np.float32)
     t.aux["z_td"] = rows["z_td"]
     t.aux["q_root"] = rows["q_root"] if "q_root" in rows else np.full(n, np.nan, np.float32)
     return t

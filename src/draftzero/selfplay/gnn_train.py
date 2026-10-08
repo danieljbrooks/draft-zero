@@ -236,8 +236,10 @@ class GnnTrainer:
         return t.n
 
     def _cq_target(self, bd: dict, t, r: np.ndarray, ob) -> torch.Tensor:
-        """pi'(a) ~ pi_b(a) exp(cq_scale (Q(a) - Q_root)): the behaviour policy tilted toward the options the search
-        valued above the root; an unvisited option (no Q) keeps Q_root (no tilt)."""
+        """pi'(a) ~ pi_b(a) exp(cq_scale w(a) (Q(a) - Q_root)): the behaviour policy tilted toward the options the
+        search valued above the root; an unvisited option (no Q) keeps Q_root (no tilt). w(a) = n(a) / (n(a) + n0)
+        discounts values from few visits (cq_visit_shrink = n0; 0: none): a rarely tried option's value is the least
+        reliable (Hamrick et al. 2021), and PIMC's one world adds noise."""
         B = len(r)
         with sv._autocast(self.dev, self.dtype):
             logb, _ = option_logprobs(self.behaviour, bd)
@@ -246,6 +248,11 @@ class GnnTrainer:
         q = torch.from_numpy(np.ascontiguousarray(q, np.float32)).to(self.dev)
         qr = torch.from_numpy(t.aux["q_root"][r]).to(self.dev)[ob.opt_row]
         adv = torch.where(torch.isfinite(q) & torch.isfinite(qr), q - qr, torch.zeros_like(q))
+        n0 = float(self.cfg.get("cq_visit_shrink", 0.0))
+        if n0 > 0:
+            _, nv = gn.gather(t.row_opt_ptr, r, t.aux["opt_n"])
+            nv = torch.from_numpy(np.ascontiguousarray(nv, np.float32)).to(self.dev)
+            adv = adv * torch.where(torch.isfinite(nv), nv / (nv + n0), torch.ones_like(nv))
         lg = logb + float(self.cfg.get("cq_scale", 10.0)) * adv
         return (lg - gn.segment_logsumexp(lg, ob.opt_row, B)[ob.opt_row]).exp()
 
