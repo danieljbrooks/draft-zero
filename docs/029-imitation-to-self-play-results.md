@@ -1,7 +1,8 @@
 # From imitation to self-play: results
 
-*Status (draft, Thursday 8 October 2026, 7 PM PT): stage 1 is finished; the 100-simulation matches and generation 2 are
-running. The plan is [docs/028](028-imitation-to-self-play-plan.md); the code is on the
+*Status (draft, Thursday 8 October 2026, 10:30 PM PT): stage 1 is finished and written up here; the 100-simulation
+matches and generation 2 are running on rented pods (r1 is down for Dama's RAM upgrade), and §5-7 will be filled in
+as they finish. The plan is [docs/028](028-imitation-to-self-play-plan.md); the code is on the
 [`selfplay-transition`](https://github.com/danieljbrooks/draft-zero/tree/selfplay-transition) branch.*
 
 docs/028 planned how to move our imitation-learned graph network (GNN, docs/022-024) to **self-play** without losing
@@ -164,17 +165,18 @@ bot.*
 
 ## 5. With search: 100 simulations against the start at 100
 
-*Running on Community pods.*
+*Running on rented pods: 300 paired games per match (200 for the value-only arm), on the evaluation decks.*
 
 | Network at 100 simulations | Against the start at 100 |
 |---|---|
 | `visits` | 55.3% of 274 paired games |
 | `cq10` | *running* |
-| `b_vonly` (value only) | *running* |
+| `b_vonly` (value only) | *queued* |
 
 ## 6. Stage 2: generation 2
 
-*Running: `cq10` plays 500 games against itself; generation 2 trains from `cq10` on those games and stage 0's.*
+*Queued: `cq10` plays 400 games against itself; generation 2 trains from `cq10` on those games and stage 0's, and is
+judged against the start and against `cq10` (policy alone, and at 100 simulations).*
 
 ## 7. What we'd do on the new engine
 
@@ -196,7 +198,10 @@ bot.*
   - 3 GB fixed it.
 - **Community pods:**
   - three RTX 3090 Ti hosts couldn't reach GitHub or Hugging Face;
-  - two 3090 hosts had broken CUDA;
-  - stock ran out for hours on Thursday morning.
-- **Cost:** about $6.20 of RunPod through stage 1 (stage 0's four pods ~$4, the ladder ~$0.70, one 100-simulation
-  match ~$1.20).
+  - one 3090 host with broken CUDA was offered again and again;
+  - stock ran out for most of Thursday.
+- **The first 100-simulation match on an RTX 4070 Ti pod crawled:** JVMs at a 1.4 GB heap spent most of their time in
+  garbage collection, with Java sizing its collector for the host's 112 CPUs. A 2.2 GB heap and capped collector
+  threads (`MZB_JAVA_OPTS="-XX:ParallelGCThreads=4 -XX:ConcGCThreads=1"`) fixed it.
+- **Cost so far:** about $6.60 of RunPod: stage 0's four pods ~$4, the ladder ~$0.70, one 100-simulation match
+  ~$1.20, failed or probe pods ~$0.30, the running match. The budget is $15.
