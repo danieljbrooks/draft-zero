@@ -62,6 +62,7 @@ def main(argv=None) -> None:
     ap.add_argument("--label", default="start network")
     ap.add_argument("--model2")
     ap.add_argument("--label2", default="trained")
+    ap.add_argument("--more", action="append", default=[], help="label=checkpoint (more networks to compare)")
     ap.add_argument("--max-rows", type=int, default=30000)
     ap.add_argument("--heldout-only", action="store_true", help="only the held-out games (10% of deck pairs)")
     ap.add_argument("--json", type=Path)
@@ -93,6 +94,9 @@ def main(argv=None) -> None:
            "search root value": bins((1 + t.aux["q_root"].astype(np.float64)) / 2, y)}
     if a.model2:
         res[a.label2] = bins(predictions(a.model2, t, dev, dtype), y)
+    extra = [m.split("=", 1) for m in a.more]
+    for lab, path in extra:
+        res[lab] = bins(predictions(path, t, dev, dtype), y)
     print(json.dumps({k: (v if not isinstance(v, dict) else {kk: vv for kk, vv in v.items() if kk != "bins"})
                       for k, v in res.items()}, indent=1))
     if a.json:
@@ -109,7 +113,9 @@ def main(argv=None) -> None:
         ax.grid(True, color=GRID, lw=0.8)
         ax.set_axisbelow(True)
         ax.plot([0, 1], [0, 1], color=INK2, lw=1, ls="--", label="perfectly calibrated")
-        series = [(a.label, BLUE), ("search root value", ORANGE)] + ([(a.label2, AQUA)] if a.model2 else [])
+        more_cols = ["#eda100", "#4a3aa7", "#e87ba4"]
+        series = ([(a.label, BLUE), ("search root value", ORANGE)] + ([(a.label2, AQUA)] if a.model2 else [])
+                  + [(lab, more_cols[i % 3]) for i, (lab, _) in enumerate(extra)])
         for name, col in series:
             r = res[name]
             pts = [b for b in r["bins"] if b["n"] >= 50]

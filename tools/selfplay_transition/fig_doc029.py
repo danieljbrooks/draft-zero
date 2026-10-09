@@ -27,7 +27,8 @@ import paired  # noqa: E402
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
 INK, INK2, GRID, SURF = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
 LABELS = {"visits": "visit counts", "kl": "visits + KL anchor", "cq10": "Q-tilted, s = 10", "cq30": "Q-tilted, s = 30",
-          "v0": "start network"}
+          "v0": "start network", "b_lam1": "+ λ 1.0 (result only)", "b_lam95": "+ λ 0.95", "b_vwarm": "+ value head first",
+          "b_vonly": "value only (policy pinned)", "b_human": "+ 25% human rows", "b_lr1e4": "+ learning rate 1e-4"}
 
 
 def style(ax):
@@ -105,12 +106,48 @@ def strength(runs: Path, arms: list[str], out: Path, p0_arms: list[str] | None =
     print(out / "029-strength-light.png")
 
 
+def stage1(results: Path, out: Path) -> None:
+    """Every stage-1 arm's policy alone: against the start's policy alone, and against heuristic@100, from a results
+    JSON ({"p0": {arm: {score, se, pairs}}, "ph": {...}})."""
+    r = json.loads(results.read_text())
+    order = ["visits", "kl", "cq10", "cq30", "b_lam1", "b_lam95", "b_vwarm", "b_vonly", "b_human", "b_lr1e4"]
+    fig, axes = plt.subplots(1, 2, figsize=(10.4, 5.4), dpi=150)
+    fig.patch.set_facecolor(SURF)
+    for ax, kind, title, ref, reflab in ((axes[0], "p0", "Policy alone against the start's policy alone", 50.0, "even"),
+                                         (axes[1], "ph", "Policy alone against heuristic@100", None, None)):
+        style(ax)
+        arms = [a for a in order if a in r[kind]]
+        if kind == "ph" and "v0" in r["ph"]:
+            ref, reflab = 100 * r["ph"]["v0"]["score"], f"start network {100 * r['ph']['v0']['score']:.1f}%"
+        y = list(range(len(arms)))[::-1]
+        vals = [100 * r[kind][a]["score"] for a in arms]
+        errs = [100 * r[kind][a]["se"] for a in arms]
+        cols = [PALETTE[0] if not a.startswith("b_") else PALETTE[1] for a in arms]
+        ax.barh(y, vals, xerr=errs, color=cols, height=0.6, error_kw={"ecolor": INK2, "lw": 1, "capsize": 3})
+        for yi, v, e, a in zip(y, vals, errs, arms):
+            ax.text(v + e + 0.3, yi, f"{v:.1f}% of {2 * r[kind][a]['pairs']:,}", va="center", fontsize=7.5, color=INK)
+        ax.set_yticks(y)
+        ax.set_yticklabels([LABELS.get(a, a) for a in arms], fontsize=8, color=INK)
+        ax.axvline(ref, color=INK2, lw=1, ls="--")
+        ax.text(ref, len(arms) - 0.35, f" {reflab}", fontsize=7.5, color=INK2, va="bottom")
+        lo = min(vals + [ref]) - 4
+        ax.set_xlim(lo, max(v + e for v, e in zip(vals, errs)) + 7)
+        ax.set_xlabel("won (%); bars: one standard error across deck pairs", fontsize=8, color=INK2)
+        ax.set_title(title, fontsize=9.5, color=INK, loc="left")
+    fig.suptitle("Stage 1: blue, the policy targets (1a); orange, value and anchor variants on the Q-tilted s = 10 target (1b)",
+                 fontsize=9.5, color=INK, x=0.01, ha="left")
+    fig.tight_layout()
+    fig.savefig(out / "029-stage1-light.png", facecolor=SURF)
+    print(out / "029-stage1-light.png")
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runs", type=Path, required=True)
     ap.add_argument("--arms", nargs="+", required=True)
     ap.add_argument("--out", type=Path, default=Path("docs/img"))
-    ap.add_argument("--only", choices=["curves", "strength"])
+    ap.add_argument("--only", choices=["curves", "strength", "stage1"])
+    ap.add_argument("--results", type=Path, help="stage 1's results JSON (for the stage1 figure)")
     ap.add_argument("--p0-arms", nargs="*", help="arms with a valid match against the start (default: --arms)")
     a = ap.parse_args(argv)
     a.out.mkdir(parents=True, exist_ok=True)
@@ -118,6 +155,8 @@ def main(argv=None) -> None:
         curves(a.runs, a.arms, a.out)
     if a.only in (None, "strength"):
         strength(a.runs, a.arms, a.out, a.p0_arms)
+    if a.only in (None, "stage1") and a.results:
+        stage1(a.results, a.out)
 
 
 if __name__ == "__main__":
