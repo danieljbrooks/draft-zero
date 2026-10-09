@@ -1,8 +1,7 @@
 # From imitation to self-play: what the literature suggests, and a plan of runs
 
-*Status (Wednesday 7 October 2026, 7 PM PT): plan written; the shared self-play games for stage 1 are being played on
-r1. Results will go in docs/029. The code is on the
-[`selfplay-transition`](https://github.com/danieljbrooks/draft-zero/tree/selfplay-transition) branch.*
+*Status: done (Friday 9 October 2026). The results are in [docs/029](029-imitation-to-self-play-results.md); the
+code is on the [`selfplay-transition`](https://github.com/danieljbrooks/draft-zero/tree/selfplay-transition) branch.*
 
 Our best network imitates top 17lands players: the graph network (GNN) from docs/022-024. This doc plans how to
 start improving it by **self-play**, where the network plays itself with search and learns from those games, without
