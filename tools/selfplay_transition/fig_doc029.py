@@ -141,12 +141,41 @@ def stage1(results: Path, out: Path) -> None:
     print(out / "029-stage1-light.png")
 
 
+def generations(results: Path, out: Path) -> None:
+    """The start, generation 1 (cq10) and generation 2, from a results JSON: {"series": {label: [[gen, score, se,
+    games], ...]}}; one line per check."""
+    r = json.loads(results.read_text())
+    fig, ax = plt.subplots(figsize=(7.4, 4.3), dpi=160)
+    fig.patch.set_facecolor(SURF)
+    style(ax)
+    for i, (label, pts) in enumerate(r["series"].items()):
+        xs = [p[0] for p in pts]
+        ys = [100 * p[1] for p in pts]
+        es = [100 * p[2] for p in pts]
+        ax.errorbar(xs, ys, yerr=es, color=PALETTE[i], lw=2, marker="o", ms=7, mec=SURF, mew=1.5, capsize=3,
+                    label=label)
+        for x, y, p in zip(xs, ys, pts):
+            if p[3]:
+                ax.annotate(f"{y:.1f}%", (x, y), textcoords="offset points", xytext=(8, [4, -12, -3][i % 3]), fontsize=7.5,
+                            color=INK2)
+    ax.axhline(50, color=INK2, lw=1, ls="--")
+    ax.set_xticks([0, 1, 2])
+    ax.set_xticklabels(["start\n(imitation)", "generation 1\n(cq10)", "generation 2"], fontsize=8.5, color=INK)
+    ax.set_ylabel("won (%), paired games; bars: one standard error", fontsize=8.5, color=INK)
+    ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="upper left")
+    ax.set_title(r.get("title", "From imitation to self-play, generation by generation"), fontsize=10, color=INK, loc="left")
+    fig.tight_layout()
+    fig.savefig(out / "029-generations-light.png", facecolor=SURF)
+    print(out / "029-generations-light.png")
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runs", type=Path, required=True)
     ap.add_argument("--arms", nargs="+", required=True)
     ap.add_argument("--out", type=Path, default=Path("docs/img"))
-    ap.add_argument("--only", choices=["curves", "strength", "stage1"])
+    ap.add_argument("--only", choices=["curves", "strength", "stage1", "generations"])
+    ap.add_argument("--gens", type=Path, help="the generations figure's JSON")
     ap.add_argument("--results", type=Path, help="stage 1's results JSON (for the stage1 figure)")
     ap.add_argument("--p0-arms", nargs="*", help="arms with a valid match against the start (default: --arms)")
     a = ap.parse_args(argv)
@@ -157,6 +186,8 @@ def main(argv=None) -> None:
         strength(a.runs, a.arms, a.out, a.p0_arms)
     if a.only in (None, "stage1") and a.results:
         stage1(a.results, a.out)
+    if a.only in (None, "generations") and a.gens:
+        generations(a.gens, a.out)
 
 
 if __name__ == "__main__":

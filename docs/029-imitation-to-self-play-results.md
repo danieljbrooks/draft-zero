@@ -1,7 +1,7 @@
 # From imitation to self-play: results
 
-*Status (draft, Friday 9 October 2026, 5 AM PT): stage 1 and the 100-simulation matches are finished; generation 2's
-last matches are running (§6), and §7's recommendations will be final when they are. The plan is [docs/028](028-imitation-to-self-play-plan.md); the code is on the
+*Status (final, Friday 9 October 2026, 1:30 PM PT): every stage planned in docs/028 ran except the plain-AlphaZero
+loop's second generation (dropped for compute, §6). The plan is [docs/028](028-imitation-to-self-play-plan.md); the code is on the
 [`selfplay-transition`](https://github.com/danieljbrooks/draft-zero/tree/selfplay-transition) branch.*
 
 docs/028 planned how to move our imitation-learned graph network (GNN, docs/022-024) to **self-play** without losing
@@ -47,8 +47,12 @@ A few terms, as in docs/028:
 6. **With search (100 simulations against the start at 100), every arm won 53-55%,** and the arms tie with each
    other. The value-only arm, whose policy is the start's, got most of the gain: with search, the retrained value
    carries the improvement.
-7. **Generation 2 held its gains and edged generation 1** (52.4% of 530 paired games, policy alone), but its value
-   stopped improving: it trained mostly on games it had already seen. A second generation needs mostly new games.
+7. **Generation 2 kept improving, smoothly:**
+   - policy alone, it beat generation 1 in 52.0% of 756 paired games;
+   - with search at 100 simulations, it beat the start in 61.6% of 142, against generation 1's 55.1% on the same deck
+     pairs (+6.9 points, about 2 standard errors).
+
+   Its value's offline numbers, though, stopped improving: it trained mostly on games it had already seen.
 
 ## 1. What ran
 
@@ -60,7 +64,7 @@ A few terms, as in docs/028:
 | 1b | six value and anchor variants on the 1a winner | r1 | §4 |
 | 1 (games) | each arm's policy alone against the start's (1,000-2,000 paired games) and against heuristic@100 (~286) | r1 | §3-4 |
 | 1 (100 simulations) | three arms at 100 simulations against the start at 100 (~180-280 paired games each) | RunPod pods (Community, one Secure) | §5 |
-| 2 | generation 2 of the recipe: 400 self-play games, training, checks | a Secure RTX 4090, then a Community RTX 4070 Ti | §6 |
+| 2 | generation 2 of the recipe: 400 self-play games, training, checks | a Secure RTX 4090, then Community RTX 4070 Ti and 5080 pods | §6 |
 
 **Training, the same for every arm:**
 - 2 passes over the 209,969 training decisions (10% of deck pairs held out by hash, the same for every arm);
@@ -80,7 +84,7 @@ The checks ran every 400 steps:
   - r1 ran 14-20 workers, about 100-130 games an hour;
   - a Community 3090 pod managed 55-75 an hour.
 - **Errors:** 4-6% of games ended in an XMage engine error (as in docs/024); none hit the 50-turn cap.
-- **Its value is optimistic and its ranking is good** (figure 1, the blue line). Over the held-out games:
+- **Its value is optimistic and its ranking is good** (figure 2, the blue line). Over the held-out games:
   - AUC 0.871;
   - mean prediction 61.7% against 55.7% won (the winner of a game makes more decisions, so more than half of the
     decisions belong to winners);
@@ -95,7 +99,7 @@ The checks ran every 400 steps:
 
 ![Four panels of validation curves over two passes of training, for four policy targets: 17lands validation set NLL (visit counts rise from 0.20 to 0.35 within half a pass; visits with a KL anchor to 0.26; the two tilted targets stay at 0.20), policy entropy on held-out self-play (visit counts 0.26 to 0.66, KL anchor 0.51, tilted s = 30 0.31, s = 10 0.27), value log-loss on held-out self-play (all four fall from 0.453 to about 0.417-0.419) and value calibration error (all four fall from 0.060 to about 0.02).](img/029-curves-light.png)
 
-*Figure 2. Stage 1a's arms as they train (`tools/selfplay_transition/fig_doc029.py`).*
+*Figure 1. Stage 1a's arms as they train (`tools/selfplay_transition/fig_doc029.py`).*
 
 | Arm | Policy target | Entropy | KL from start | 17lands NLL | Top-1 (non-Pass) | vs start's policy | vs heuristic@100 |
 |---|---|---|---|---|---|---|---|
@@ -125,7 +129,7 @@ games against the start stalled to the cap (as in docs/024's self-play). Engine 
 
 ![The calibration of the value on 26,738 held-out self-play decisions: the share of positions whose player won against the predicted chance, in ten bins. The start network (mean 61.7% against 55.7% won, calibration error 0.060) and the search's root value (59.3%, 0.066) run below the diagonal between 0.3 and 0.8; after one training step at λ 0.99 (56.8%, 0.020) and λ 1.0 (55.6%, 0.018) the curves sit near the diagonal; λ 0.95 (58.6%, 0.042) stays between.](img/029-calib-light.png)
 
-*Figure 1. The value on held-out self-play games before and after one training step (`value_calib.py`).*
+*Figure 2. The value on held-out self-play games before and after one training step (`value_calib.py`).*
 
 | Arm (on `cq10`) | Change | Value log-loss | Calibration error | Mean prediction | Human-game value log-loss | 17lands NLL | vs start's policy | vs heuristic@100 |
 |---|---|---|---|---|---|---|---|---|
@@ -136,7 +140,7 @@ games against the start stalled to the cap (as in docs/024's self-play). Engine 
 | `b_vwarm` | the value head alone first (a quarter of the steps, the result as target, lr 3e-4), then everything | 0.420 | 0.027 | 56.5% | 0.551 | 0.2013 | 52.5% | 43.8% |
 | `b_vonly` | no policy loss; the policy pinned by a KL to the start (10) | 0.420 | 0.029 | 57.2% | 0.546 | 0.2003 | 50.2% | 43.8% |
 | `b_human` | 25% of every batch from the human training decisions (their policy loss only) | 0.418 | 0.024 | 57.0% | 0.550 | **0.2003** | 52.7% | **48.4%** |
-| `b_lr1e4` | learning rate 1e-4 | 0.422 | 0.017 | 56.9% | 0.572 | 0.2027 | *pending* | 47.5% |
+| `b_lr1e4` | learning rate 1e-4 | 0.422 | 0.017 | 56.9% | 0.572 | 0.2027 | *on r1's disk (r1 down)* | 47.5% |
 
 *Value columns: the 26,738 held-out self-play decisions, where the player to move won 55.7%. Human-game value:
 17lands validation. Policy-alone matches as in §3: ~950 paired games against the start, ~286 against the heuristic
@@ -208,24 +212,35 @@ The plain-AlphaZero loop's second generation was dropped: r1 was down and Commun
 
 **In games:**
 
-| Generation 2's policy alone against | Won |
-|---|---|
-| the start's policy alone | 53.7% of 750 paired games (generation 1: 53.6% of 1,888) |
-| generation 1's policy alone | 52.4% of 530 (*final count pending*) |
-| heuristic@100 | *pending* |
-| *100 simulations against the start at 100* | *pending* |
+| Generation 2 against | Won | Generation 1 (`cq10`) against the same |
+|---|---|---|
+| the start's policy alone (policy alone) | 53.7% of 750 paired games | 53.6% of 1,888 |
+| generation 1's policy alone (policy alone) | **52.0%** of 756 | – |
+| heuristic@100 (policy alone) | **47.6%** of 290 | 47.1% of 280 (the start: 43.0% of 286) |
+| the start at 100 (both at 100 simulations) | **61.6%** of 142 (deck pairs 0-74) | 55.1% of 138 on the same deck pairs (54.3% of 276 on all 150) |
+
+*Policy alone: 11-15% of games against the start or generation 1 stalled to the 50-turn cap (counted as half), as
+in stage 1; engine errors dropped 3-4% of games.*
 
 - **No drift:**
   - the policy stayed sharp and close to people;
   - generation 2 keeps generation 1's edge over the start;
-  - it beats generation 1 head to head by a little.
-- **The value stopped improving:** most of generation 2's decisions came from stage 0's games, now trained on for a
-  third and fourth time. This is docs/027's lesson again: games, not positions, limit the value. A second generation
-  needs mostly new games.
+  - it beats generation 1 head to head by 2 points (52.0% of 756 paired games, about 2 standard errors);
+  - it scores a little higher against the heuristic bot.
+- **With search, generation 2 improved further:**
+  - 61.6% against the start at 100 simulations, where generation 1 won 55.1% on the same 69 deck pairs;
+  - +6.9 points, about 2 standard errors; the two matches differ in 25 of the 69 pairs.
+- **Its value's offline numbers did not improve:**
+  - most of generation 2's decisions came from stage 0's games, now trained on for a third and fourth time
+    (docs/027's lesson: games, not positions, limit the value);
+  - yet it played better with search;
+  - the held-out log-loss on these games is a weak guide to play, as in docs/014 and docs/024.
+
+![Three lines across the start, generation 1 and generation 2: 100 simulations against the start at 100 on deck pairs 0-74 (50%, 55.1%, 61.6%), the policy alone against the start's policy alone (50%, 53.6%, 53.7%), and the policy alone against heuristic@100 (43.0%, 47.1%, 47.6%), with one-standard-error bars.](img/029-generations-light.png)
+
+*Figure 4. Generation by generation (`fig_doc029.py --gens`).*
 
 ## 7. What we'd do on the new engine
-
-*A first version; final once §6 is complete.*
 
 1. **Measure the start on its own self-play games before training:**
    - the value's calibration (`value_calib.py`);
@@ -244,10 +259,14 @@ The plain-AlphaZero loop's second generation was dropped: r1 was down and Commun
    - The value is what improved play with search (§5).
 4. **Keep human data in the batches:** 25% human rows cost nothing with a memory-mapped cache and kept 17lands NLL at
    the start's level. A KL anchor on top of raw visits is a poor substitute for a better target.
-5. **Games, not positions:** each generation needs mostly new games; reusing old games stalled the value in
-   generation 2. Cap reuse at ~2-4 passes.
-6. **Learning rate:** 3e-5 for two passes was enough; 1e-4 moved the policy further with no gain.
-7. **Judge cheaply, then expensively:**
+5. **Games, not positions:**
+   - each generation needs mostly new games: reusing old games stalled the value's offline numbers in generation 2;
+   - cap reuse at ~2-4 passes;
+   - on a fast engine, many thousands of games a generation are cheap.
+6. **Judge a recipe over at least two generations.** Generation 2 gained 6.9 more points with search than generation
+   1, with no drift away from people. One step from the start understates where the recipe goes.
+7. **Learning rate:** 3e-5 for two passes was enough; 1e-4 moved the policy further with no gain.
+8. **Judge cheaply, then expensively:**
    - offline checks and policy-alone matches (thousands of games in an hour) for every arm;
    - search matches only for the finalists;
    - deck pairs played both ways, and scores read at a fixed size, not as they come in.
@@ -270,16 +289,22 @@ The plain-AlphaZero loop's second generation was dropped: r1 was down and Commun
   - three RTX 3090 Ti hosts couldn't reach GitHub or Hugging Face;
   - one 3090 host with broken CUDA was offered again and again;
   - stock ran out for most of Thursday.
+- **A pod's host rebooted twice on Friday morning** (RunPod's "network heartbeat" notice):
+  - the games in progress died each time;
+  - the matches resumed from their saved games.
+
+  The last pod ran the end of generation 2's match, then removed itself.
 - **The first 100-simulation match on an RTX 4070 Ti pod crawled:** JVMs at a 1.4 GB heap spent most of their time in
   garbage collection, with Java sizing its collector for the host's 112 CPUs. A 2.2 GB heap and capped collector
   threads (`MZB_JAVA_OPTS="-XX:ParallelGCThreads=4 -XX:ConcGCThreads=1"`) fixed it.
-- **Cost:** about $15.10 of RunPod so far, against a $15 budget:
-  - stage 0's four pods ~$4;
+- **Cost:** $17.10 of RunPod, against a $15 budget (Dan allowed going slightly over to finish):
+  - stage 0's four pods ~$4.20;
   - the ladder ~$0.70;
-  - the four 100-simulation matches ~$4;
+  - the stage-1 100-simulation matches ~$4.50, one on Secure;
   - generation 2's self-play and training on a Secure RTX 4090 ~$3.50;
-  - idle time ~$2. After the laptop slept, a value-only pod sat finished for two hours: fetch scripts that removed
-    pods had crashed when edited while running.
+  - generation 2's checks on a 4070 Ti and a 5080 ~$1.70;
+  - idle time ~$2. After the laptop slept, a finished pod sat for two hours: the fetch scripts that removed pods had
+    crashed when they were edited while running.
   - failed or probe pods ~$0.50.
 
-  Generation 2's checks add ~$0.70.
+  r1's time was free.
