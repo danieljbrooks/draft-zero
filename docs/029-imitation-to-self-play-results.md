@@ -1,8 +1,7 @@
 # From imitation to self-play: results
 
-*Status (draft, Thursday 8 October 2026, 10:30 PM PT): stage 1 is finished and written up here; the 100-simulation
-matches and generation 2 are running on rented pods (r1 is down for Dama's RAM upgrade), and §5-7 will be filled in
-as they finish. The plan is [docs/028](028-imitation-to-self-play-plan.md); the code is on the
+*Status (draft, Friday 9 October 2026, 5 AM PT): stage 1 and the 100-simulation matches are finished; generation 2's
+last matches are running (§6), and §7's recommendations will be final when they are. The plan is [docs/028](028-imitation-to-self-play-plan.md); the code is on the
 [`selfplay-transition`](https://github.com/danieljbrooks/draft-zero/tree/selfplay-transition) branch.*
 
 docs/028 planned how to move our imitation-learned graph network (GNN, docs/022-024) to **self-play** without losing
@@ -19,7 +18,7 @@ A few terms, as in docs/028:
 
 ## Summary
 
-**The recipe that came out of stage 1:**
+**What we found:**
 
 1. **Train the policy toward the network's own policy tilted by the search's move values, not toward the search's
    visit counts.**
@@ -27,7 +26,7 @@ A few terms, as in docs/028:
      and lost agreement with people: the 17lands validation NLL rose from 0.201 to 0.349, more than all of the GNN's
      gain over the MLP.
    - The tilted target, π'(a) ∝ π(a)·exp(s·(Q(a) − Q_root)) at s = 10, changed only the moves the search disagreed
-     with. It kept 17lands NLL at 0.201, and its policy alone played best:
+     with. It kept 17lands NLL at 0.201, and its policy alone played as well as any arm:
      - against the start's policy alone, it won 53.6% of 1,888 paired games;
      - against heuristic@100, 47.1% where the start won 43.0%.
 2. **Expect the imitation value to be optimistic, and let one pass of self-play results fix it.**
@@ -45,10 +44,11 @@ A few terms, as in docs/028:
    either of the others, policy alone.
 5. **Mixing 25% human decisions into every batch is cheap and harmless.** All 10.95M human rows load from the
    imitation run's memory-mapped cache in 7 seconds. It gave the best policy alone against the heuristic bot (48.4%).
-6. **At 100 simulations:**
-   - the visit-count network won 55.3% of 274 paired games against the start at 100;
-   - *the tilted network and the value-only network: running.*
-7. **Generation 2:** *running.*
+6. **With search (100 simulations against the start at 100), every arm won 53-55%,** and the arms tie with each
+   other. The value-only arm, whose policy is the start's, got most of the gain: with search, the retrained value
+   carries the improvement.
+7. **Generation 2 held its gains and edged generation 1** (52.4% of 530 paired games, policy alone), but its value
+   stopped improving: it trained mostly on games it had already seen. A second generation needs mostly new games.
 
 ## 1. What ran
 
@@ -59,8 +59,8 @@ A few terms, as in docs/028:
 | 1a | four policy targets, each one training step from the start on the same games | r1 | §3 |
 | 1b | six value and anchor variants on the 1a winner | r1 | §4 |
 | 1 (games) | each arm's policy alone against the start's (1,000-2,000 paired games) and against heuristic@100 (~286) | r1 | §3-4 |
-| 1 (100 simulations) | arms at 100 simulations against the start at 100 (~300 paired games) | Community pods | §5 |
-| 2 | generation 2 of the recipe | Community pods | §6 |
+| 1 (100 simulations) | three arms at 100 simulations against the start at 100 (~180-280 paired games each) | RunPod pods (Community, one Secure) | §5 |
+| 2 | generation 2 of the recipe: 400 self-play games, training, checks | a Secure RTX 4090, then a Community RTX 4070 Ti | §6 |
 
 **Training, the same for every arm:**
 - 2 passes over the 209,969 training decisions (10% of deck pairs held out by hash, the same for every arm);
@@ -165,22 +165,92 @@ bot.*
 
 ## 5. With search: 100 simulations against the start at 100
 
-*Running on rented pods: 300 paired games per match (200 for the value-only arm), on the evaluation decks.*
+Each network searched 100 simulations a decision, as did the start, on the evaluation decks (docs/024's deck-pair
+seed). These are the slowest games in the study, two GNNs searching against each other: 150 deck pairs per match, 100
+for the value-only arm.
 
-| Network at 100 simulations | Against the start at 100 |
-|---|---|
-| `visits` | 55.3% of 274 paired games |
-| `cq10` | *running* |
-| `b_vonly` (value only) | *queued* |
+| Network at 100 simulations | Against the start at 100 | Same deck pairs, compared with `cq10` |
+|---|---|---|
+| `visits` (policy: visit counts) | **55.3%** of 274 paired games | +0.2 points (133 pairs) |
+| `cq10` (policy: Q-tilted, s = 10) | 54.3% of 276 | – |
+| `b_vonly` (the value only; the policy pinned to the start's) | 53.3% of 182 | −2.2 points (89 pairs) |
+
+*Engine errors dropped 12-13 pairs per match; no game hit the 50-turn cap.*
+
+- **With search, every arm beats the start by 3-5 points.**
+- **The arms tie with each other.** Visit counts and the Q-tilted target are 0.2 points apart on the same deals (48 of
+  133 pairs differ).
+- **The value-only arm gets most of the gain.** Its policy is the start's, so the retrained value carries most of
+  the improvement with search.
+- **What the policy target buys:**
+  - with search at 100 simulations, it mattered little here;
+  - without search, the tilted target played best (§3) and kept agreement with people, where visit counts lost it.
 
 ## 6. Stage 2: generation 2
 
-*Queued: `cq10` plays 400 games against itself; generation 2 trains from `cq10` on those games and stage 0's, and is
-judged against the start and against `cq10` (policy alone, and at 100 simulations).*
+The 1a winner continued for one more generation:
+- **Self-play:** `cq10` (generation 1) played 400 games against itself (200 deck pairs, 388 finished), with stage 0's
+  settings.
+- **Training:** generation 2 trained from generation 1 with `cq10`'s recipe on stage 0's games plus the new ones:
+  1,799 games, 267,357 decisions, 2 passes, 5.5 minutes on an RTX 4090.
+
+The plain-AlphaZero loop's second generation was dropped: r1 was down and Community pods were scarce (§8).
+
+**Offline,** on the held-out games of both generations (32,891 decisions):
+
+| | Generation 1 (`cq10`) | Generation 2 |
+|---|---|---|
+| Value log-loss | **0.411** | 0.414 |
+| Value AUC | **0.891** | 0.889 |
+| Value calibration error | 0.020 | **0.017** |
+| Policy KL from the start | **0.004** | 0.012 |
+| Policy entropy | 0.261 | 0.260 |
+
+**In games:**
+
+| Generation 2's policy alone against | Won |
+|---|---|
+| the start's policy alone | 53.7% of 750 paired games (generation 1: 53.6% of 1,888) |
+| generation 1's policy alone | 52.4% of 530 (*final count pending*) |
+| heuristic@100 | *pending* |
+| *100 simulations against the start at 100* | *pending* |
+
+- **No drift:**
+  - the policy stayed sharp and close to people;
+  - generation 2 keeps generation 1's edge over the start;
+  - it beats generation 1 head to head by a little.
+- **The value stopped improving:** most of generation 2's decisions came from stage 0's games, now trained on for a
+  third and fourth time. This is docs/027's lesson again: games, not positions, limit the value. A second generation
+  needs mostly new games.
 
 ## 7. What we'd do on the new engine
 
-*To finish with §5-6.*
+*A first version; final once §6 is complete.*
+
+1. **Measure the start on its own self-play games before training:**
+   - the value's calibration (`value_calib.py`);
+   - how far the search's visit counts sit from the policy (`target_stats.py`).
+
+   Both cost minutes and predicted what went wrong here: an optimistic value, and targets 1 nat from the policy.
+2. **Policy target:** the network's own policy tilted by the search's values,
+   π'(a) ∝ π(a)·exp(s·w(a)·(Q(a) − Q_root)) with s ≈ 10-30 and w(a) = n/(n + 2).
+   - Raw visit counts carry the search's exploration, prior temperature and prior bonus, and they flatten the policy.
+   - With search at play time the two tied (§5); without search, the tilted target played better and kept agreement
+     with people.
+3. **Value target:** the game result blended with the search's root values, λ = 0.99 (MageZero's labels).
+   - One pass recalibrated the imitation value.
+   - Lower λ keeps more of the start's bias, because bootstrapped targets inherit it.
+   - λ = 1.0 forgets the most about human games.
+   - The value is what improved play with search (§5).
+4. **Keep human data in the batches:** 25% human rows cost nothing with a memory-mapped cache and kept 17lands NLL at
+   the start's level. A KL anchor on top of raw visits is a poor substitute for a better target.
+5. **Games, not positions:** each generation needs mostly new games; reusing old games stalled the value in
+   generation 2. Cap reuse at ~2-4 passes.
+6. **Learning rate:** 3e-5 for two passes was enough; 1e-4 moved the policy further with no gain.
+7. **Judge cheaply, then expensively:**
+   - offline checks and policy-alone matches (thousands of games in an hour) for every arm;
+   - search matches only for the finalists;
+   - deck pairs played both ways, and scores read at a fixed size, not as they come in.
 
 ## 8. Operations
 
@@ -203,5 +273,13 @@ judged against the start and against `cq10` (policy alone, and at 100 simulation
 - **The first 100-simulation match on an RTX 4070 Ti pod crawled:** JVMs at a 1.4 GB heap spent most of their time in
   garbage collection, with Java sizing its collector for the host's 112 CPUs. A 2.2 GB heap and capped collector
   threads (`MZB_JAVA_OPTS="-XX:ParallelGCThreads=4 -XX:ConcGCThreads=1"`) fixed it.
-- **Cost so far:** about $6.60 of RunPod: stage 0's four pods ~$4, the ladder ~$0.70, one 100-simulation match
-  ~$1.20, failed or probe pods ~$0.30, the running match. The budget is $15.
+- **Cost:** about $15.10 of RunPod so far, against a $15 budget:
+  - stage 0's four pods ~$4;
+  - the ladder ~$0.70;
+  - the four 100-simulation matches ~$4;
+  - generation 2's self-play and training on a Secure RTX 4090 ~$3.50;
+  - idle time ~$2. After the laptop slept, a value-only pod sat finished for two hours: fetch scripts that removed
+    pods had crashed when edited while running.
+  - failed or probe pods ~$0.50.
+
+  Generation 2's checks add ~$0.70.
