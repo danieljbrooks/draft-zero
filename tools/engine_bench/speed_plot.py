@@ -1,8 +1,8 @@
 """Draw docs/015's plot: each engine's speed relative to XMage, on one laptop core.
 
 The numbers are the medians measured for docs/015 (M1 Pro, one engine at a time, one core each):
-XMage, Forge, gorge and mtg-kernel on 2026-09-28, ManaBrew on 2026-09-30. They are copied here,
-not recomputed. Run from the repo root:
+XMage, Forge, gorge and mtg-kernel on 2026-09-28, ManaBrew on 2026-09-30, Argentum on 2026-10-09.
+They are copied here, not recomputed. Run from the repo root:
 
     python tools/engine_bench/speed_plot.py
 
@@ -47,6 +47,7 @@ ENGINES = [
     ("mtg-kernel", "Rust · FDN in progress", 25560.5, 6.625, 17.2),
     ("gorge", "Go · FDN 282 of 286 cards", 2703.0, 14.42, 46.13),
     ("ManaBrew", "Rust port of Forge · FDN 286 of 286 cards", 1240.27, 2.125, 520.1),
+    ("Argentum", "Kotlin · FDN 280 of 286 cards", 87.6, 0.553, 165.4),
     ("Forge", "Java · FDN 286 of 286 cards", 30.8475, 2310.54, 5525.7),
 ]
 SERIES = ("play", "copy", "step")
@@ -98,10 +99,10 @@ def draw(mode: str) -> Path:
         "xtick.color": t["muted"],
         "xtick.labelcolor": t["ink2"],
     })
-    fig, ax = plt.subplots(figsize=(10, 6.4), dpi=160)
+    fig, ax = plt.subplots(figsize=(10, 7.4), dpi=160)
     fig.patch.set_facecolor(t["surface"])
     ax.set_facecolor(t["surface"])
-    fig.subplots_adjust(left=0.27, right=0.95, top=0.79, bottom=0.17)
+    fig.subplots_adjust(left=0.27, right=0.95, top=0.81, bottom=0.18)
 
     ax.set_xscale("log")
     ax.set_xlim(0.012, 3000)
@@ -132,7 +133,7 @@ def draw(mode: str) -> Path:
     fig.text(0.03, 0.95, "Speed relative to XMage, one laptop core", color=t["ink"],
              fontsize=13, fontweight="bold", ha="left")
     fig.text(0.03, 0.915, "Random play: turns per second on the Pauper Burn mirror, the only "
-             "workload all five engines run. Copy: one copy of a mid-game state.",
+             "workload all six engines run. Copy: one copy of a mid-game state.",
              color=t["ink2"], fontsize=10, ha="left")
     fig.text(0.03, 0.89, "Search step: copy, one action, advance to the next decision.",
              color=t["ink2"], fontsize=10, ha="left")
@@ -142,12 +143,14 @@ def draw(mode: str) -> Path:
                      fontsize=9.5, handlelength=1.4, columnspacing=2.0)
     for text in leg.get_texts():
         text.set_color(t["ink2"])
-    fig.text(0.03, 0.05, "Copies and search steps are on mid-game FDN states (pair A), except "
+    fig.text(0.03, 0.07, "Copies and search steps are on mid-game FDN states (pair A), except "
              "mtg-kernel's, which has no FDN yet: a Burn state, and its step is derived (copy + "
              "one step).", color=t["muted"], fontsize=8.5, ha="left")
-    fig.text(0.03, 0.025, "ManaBrew's copy is copy-on-write (a full copy is 72 µs), and a game "
-             "resumes only at the start of a turn. XMage: 54.7 turns/s, 164 µs per copy, "
-             "1.24 ms per step.", color=t["muted"], fontsize=8.5, ha="left")
+    fig.text(0.03, 0.045, "ManaBrew's copy is copy-on-write (a full copy is 72 µs), and a game "
+             "resumes only at the start of a turn. Argentum's state is immutable: a copy shares it, and "
+             "each step builds new state.", color=t["muted"], fontsize=8.5, ha="left")
+    fig.text(0.03, 0.02, "XMage: 54.7 turns/s, 164 µs per copy, 1.24 ms per step.",
+             color=t["muted"], fontsize=8.5, ha="left")
 
     fig.canvas.draw()  # fix the layout before placing bars in display pixels
     pitch = BAR_PX + GAP_PX

@@ -1,6 +1,6 @@
 # Rules engines for a fast Limited agent: speed and MCTS support
 
-Which rules engine should a high-level Limited agent train on? This compares five candidates on
+Which rules engine should a high-level Limited agent train on? This compares six candidates on
 speed, FDN cards, and support for MCTS-style learning:
 
 - **XMage** as MageZero uses it: the MageZero v0.2.0 bundle, XMage 1.4.58, WillWroble/mage
@@ -14,13 +14,16 @@ speed, FDN cards, and support for MCTS-style learning:
   `TrevorS/manabrew`, branch `fork/parity-loop`, at `6bc6d4c` (2026-09-30). It's a Rust port of
   Forge's rules engine, checked against Java Forge. The fork adds a reinforcement-learning
   environment to [upstream](https://github.com/witchesofthehill/manabrew).
+- **[Argentum](https://github.com/wingedsheep/argentum-engine)** at `ee78f53` (2026-10-09). It's a
+  Kotlin engine and online play site with a reinforcement-learning environment and an
+  AlphaZero-style trainer modelled on MageZero. Will suggested it.
 
 **Setup:**
 - Each engine was built and timed on one laptop (M1 Pro, 16 GB): the first four on 2026-09-28,
-  ManaBrew on 2026-09-30.
-- They ran one engine at a time, one core each, with the same test (§7).
+  ManaBrew on 2026-09-30, Argentum on 2026-10-09.
+- They ran one engine at a time, one core each, with the same test (§8).
 - The workloads were experiment #1's first two eval pairs and a Pauper Burn mirror, the one deck all
-  five can play today.
+  six can play today.
 
 ## Summary
 
@@ -35,19 +38,27 @@ two to search on; ManaBrew follows Forge's rules more closely.
 - **gorge** has the cheapest search step of the engines with FDN, and a step API. Its card behaviour
   hasn't been audited: 12 FDN cards are flagged.
 - **mtg-kernel is the fastest and the best built for search, and FDN support is now in progress**
-  (§4).
+  (§5).
   - The maintainer has a seven-milestone plan in
     [mtg-kernel#110](https://github.com/jackmaiorino/mtg-kernel/issues/110), with three milestones
     in open pull requests.
   - Nothing is merged yet, and no date is promised.
+- **Argentum has the FDN cards and the most training scaffolding, but it is only a few times faster
+  than XMage** (§4).
+  - It plays 280 of the 286 FDN cards. The six it lacks are Special Guests; one of our 80 sample
+    decks uses one.
+  - Its trainer was built to fit MageZero: tree search in the JVM, the network in a separate
+    server, and several policy heads.
+  - Random play runs at 1.6–1.8× XMage's speed on Burn and FDN pair B. Big boards slow it down
+    sharply (§1).
+  - A search step takes 165 µs: 7.5× faster than XMage's, but 3.6× slower than gorge's.
+  - It's MIT-licensed.
 - **Forge and XMage have every card but are much slower.** gorge and ManaBrew play random FDN games
   16–32× faster than XMage and 31–72× faster than Forge.
-- **MageZero is the only one with a working AlphaZero training loop.**
+- **MageZero is the only one with a working AlphaZero training loop.** Argentum ships the
+  engine-side half of one (§4).
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="img/015-engine-speed-dark.png">
-  <img alt="Horizontal bars on a log scale showing each engine's speed relative to XMage, whose speed is a vertical line at 1x. Three bars per engine: random play in turns per second on the Pauper Burn mirror, copying a mid-game state, and one search step. mtg-kernel: 468x, 25x and 72x. gorge: 49x, 11x and 27x. ManaBrew: 23x, 77x and 2.4x. Forge is slower than XMage on all three: 0.56x, 0.071x and 0.22x." src="img/015-engine-speed-light.png">
-</picture>
+![Each engine's speed relative to XMage on random play, copying a state, and one search step](img/015-engine-speed-light.png)
 
 - **gorge against XMage:** 16–50× faster per turn of random play. Copies are 11× faster, and a
   search step is 27× faster.
@@ -57,6 +68,12 @@ two to search on; ManaBrew follows Forge's rules more closely.
   - But a search step is only 2.4× faster, because a game resumes only at the start of a turn.
 - **mtg-kernel against XMage:** about 470× faster per turn on Burn. Copies are 25× faster, and a
   search step is about 70× faster.
+- **Argentum against XMage:** 1.6–1.8× faster per turn of random play on Burn and FDN pair B.
+  Pair A is slower because of one very large board (§1).
+  - Its game state is immutable, so a copy just shares it (0.55 µs). Each step then builds new
+    state, and that cost lands in the search step.
+  - A search step is 7.5× faster: 165 µs, of which about two-thirds is listing the next legal
+    actions.
 - **Forge against XMage:** about half XMage's speed in play. Copies are 14× slower, and a search
   step is about 4.5× slower.
 - **With a faster engine, the network becomes the bottleneck.** On gorge or mtg-kernel, inference
@@ -77,9 +94,12 @@ two to search on; ManaBrew follows Forge's rules more closely.
 
   It's AGPL-3.0 (§3).
 - **mtg-kernel has the search and learning scaffolding today**, and about 10× gorge's raw speed. Its
-  extra step is FDN support, which the maintainer is now building (§4).
+  extra step is FDN support, which the maintainer is now building (§5).
 
-**The other two engines and Manafold:**
+**The other three engines and Manafold:**
+- **Argentum is the closest fit to MageZero's design** and has FDN, but it isn't fast. A search on
+  it would run about 7× more steps per second than on XMage, against 27× on gorge. It would also
+  need the same sampler for the opponent's unknown cards: its tree search sees them (§4).
 - **XMage stays the reference.** It has every card and the only working training loop. But its
   search sees hidden cards, and runs can't be reproduced from a seed.
 - **Forge has the best card pipeline**, which gorge and ManaBrew reuse, but it is the slowest engine
@@ -90,18 +110,23 @@ two to search on; ManaBrew follows Forge's rules more closely.
 
 One core each, medians. FDN cells show pair A / pair B.
 
-| | XMage (MageZero v0.2) | Forge | gorge | mtg-kernel | ManaBrew |
-|---|---:|---:|---:|---:|---:|
-| Random play on FDN, turns/s | 45 / 45 | 23 / 20 | 731 / 1,444 | not yet (FDN in progress) | 1,362 / 1,400 |
-| Random play on Burn, turns/s | 55 | 31 | 2,703 | 25,560 | 1,240 |
-| Built-in bot on FDN, games/s | 0.61 / 0.32 | 0.30 / 0.60 | 38 / 58 | no heuristic bot | 17 / 18 |
-| Copying a mid-game state | 164 µs, 1.3 MB | 2.3 ms, ~1.9 MB | 14 µs, 100 KB | 6.6 µs, 45 KB | 2.1 µs, 11 KB copy-on-write; 72 µs, ~600 KB full |
-| One search step | 1.2–2.4 ms | 5.5 ms | ~50 µs | ~17 µs | ~0.5 ms |
-| Built-in search, per thread | 424–806 sims/s | 30 sims/s | ~40 rollouts/s | 1,900–2,600 sims/s | none; ~50 random rollouts/s from a copy |
+| | XMage (MageZero v0.2) | Forge | gorge | mtg-kernel | ManaBrew | Argentum |
+|---|---:|---:|---:|---:|---:|---:|
+| Random play on FDN, turns/s | 45 / 45 | 23 / 20 | 731 / 1,444 | not yet (FDN in progress) | 1,362 / 1,400 | 11 / 79 (pair A: see below) |
+| Random play on Burn, turns/s | 55 | 31 | 2,703 | 25,560 | 1,240 | 88 |
+| Built-in bot on FDN, games/s | 0.61 / 0.32 | 0.30 / 0.60 | 38 / 58 | no heuristic bot | 17 / 18 | 3.0 / 2.8 |
+| Copying a mid-game state | 164 µs, 1.3 MB | 2.3 ms, ~1.9 MB | 14 µs, 100 KB | 6.6 µs, 45 KB | 2.1 µs, 11 KB copy-on-write; 72 µs, ~600 KB full | 0.55 µs; the immutable state is shared, not copied |
+| One search step | 1.2–2.4 ms | 5.5 ms | ~50 µs | ~17 µs | ~0.5 ms | ~165 µs |
+| Built-in search, per thread | 424–806 sims/s | 30 sims/s | ~40 rollouts/s | 1,900–2,600 sims/s | none; ~50 random rollouts/s from a copy | ~5,800 sims/s, with a board heuristic in place of a network |
 
 **What each row means:**
 - **Random play:** uniform over each engine's legal options. The Burn mirror is the one workload
-  all five run.
+  all six run.
+  - Argentum's pair A figure is dragged down by one game out of 12. Its random players built a
+    board of 308 permanents, and that game took 24 s. The median pair A game took 0.43 s, about
+    75 turns/s.
+  - The cause is Argentum's legal-action listing. For each of your permanents it scans the whole
+    battlefield, so its cost grows with the square of the board (§4).
 - **Built-in bot:** each engine's own cheapest real bot on both seats.
   - XMage: CP7 ("Computer - mad") at skill 2, the client's default.
   - Forge: its default AI.
@@ -110,6 +135,8 @@ One core each, medians. FDN cells show pair A / pair B.
     learning interface.
   - ManaBrew: `manabot`'s SimpleAi, a small rule bot that "casts spells when possible, otherwise
     passes priority". Forge's AI isn't ported.
+  - Argentum: its default engine AI (`AIPlayer`), which its README describes as a multi-ply
+    alpha-beta search with a board evaluator and a combat advisor.
 - **Copy:** a copy of a mid-game state (turns 5–8, permanents on both sides).
   - XMage: `Game.copy()`.
   - Forge: `GameCopier.makeCopy()`.
@@ -117,7 +144,10 @@ One core each, medians. FDN cells show pair A / pair B.
   - mtg-kernel: a `GameState` clone.
   - ManaBrew: `GameState::clone`, which shares cards until they change. Its snapshot
     (`make_snapshot`, 2.2 µs) uses the same copy.
-  - mtg-kernel is timed on a Burn state; the others on FDN pair A.
+  - Argentum: `GameEnvironment.fork()`, a new environment pointing at the same immutable state.
+    It costs one small allocation. The real cost moves into each step, which builds new state.
+  - mtg-kernel is timed on a Burn state; the others on FDN pair A. Argentum's states come from
+    its own bot's games rather than random ones.
 - **One search step:** what one node expansion costs before any network.
   - XMage: a MageZero MCTS simulation (copy the parent state, run to the next decision, compute
     features, score), from 1.2 ms at turn 5 to 2.4 ms at turn 7.
@@ -127,22 +157,28 @@ One core each, medians. FDN cells show pair A / pair B.
     not timed: a 6.6 µs clone plus 10.6 µs per step (94k steps/s).
   - ManaBrew: restore the turn-start snapshot and replay the turn up to the decision. That's 0.48–0.52
     ms on FDN, because a game can't resume mid-turn (§3).
+  - Argentum: `fork()`, one `step()` of a random legal action, then list the new position's legal
+    actions. `step()` also plays through forced choices and priority passes up to the next real
+    decision. Medians: 66 µs for fork and step, 113 µs for the listing, 165 µs together (mean
+    226 µs).
 - **Built-in search:** each engine's own search, so the rows differ in what a simulation is (§2).
+  Argentum's is its trainer's AlphaZero-style search with its default board heuristic as the
+  evaluator, 200 simulations from each of 100 mid-game states.
 
 ## 2. MCTS support
 
-| | XMage / MageZero | Forge | gorge | mtg-kernel | ManaBrew |
-|---|---|---|---|---|---|
-| Existing search | AlphaZero-style tree search with a network, tree reuse | Depth-3 search over its own plays; not MCTS | Sampled worlds, each played to the end by its bot; no tree | Information-set MCTS with a static evaluator. A network-guided version exists but runs only on x86 and isn't used in training | None |
-| Learning stack | Full loop: inference server, trainer, self-play | None | Small CPU-only neural net written in Go | Python/Torch over JSON lines, native Rust forward pass, CUDA; policy-gradient self-play | The fork adds a Rust learning environment: games on parallel threads, observation encoding, candidate tables. No Python binding, network or trainer yet |
-| Stepping a game from outside | No step API: the engine calls into player objects, and MageZero pauses it with scripted puppets | No step API: 109 controller callbacks to implement | Yes, in-process | Yes, in-process, with snapshot and restore | No step API: Forge's shape, 108 callbacks on the game's own thread. The learning environment steps it through channels. A copy resumes only at the start of a turn |
-| Reproducible from a seed | No, because card IDs are random: 5 of 6 same-seed games differed | Yes | Yes | Yes | Yes, once a seeded random-number generator is installed |
-| Hidden information | Search sees the opponent's hand and library order | Same | Per-player redacted views. Its sampler assumes both decklists are known, so Limited needs a sampler over the opponent's pool | Re-deals unseen cards from what the searcher knows. For Limited it would deal from a guess at the opponent's pool instead of their real cards | Copies hold both hands and libraries, and card IDs follow decklist order. The learning environment's encoder hides them |
-| Action identity | Hashed into 128 slots; targets by card name. Our fork adds a set-wide vocabulary | Ability text | Positional options | Stable hashed IDs | Positional candidates; card and ability IDs stable across copies |
-| Parallelism | 4 search threads in one JVM matched 1 thread's total | One process per core: the RNG and ID counters are JVM-wide | Many games per process | Many threads | Many games per process, about 8 MB each |
-| FDN cards | 286/286 | 286/286 | 282/286, plus 12 flagged as partly wrong | 7/286 today; FDN in progress (§4) | 286/286; matched Java Forge in 267 of 280 FDN games |
-| New sets | Upstream takes weeks to months; MageZero's fork must rebase | Scripted about 2–3 weeks before release | Reuses Forge's card scripts; new mechanics need Go code | Each card coded in Rust, mostly by agents (670–3,100 lines per card, including tests) | Reuses Forge's card scripts; new mechanics are ported from Forge's Java |
-| Maturity | Since 2010; MIT | Since ~2007; 130 authors in the last year; GPL-3.0 | Created 2026-09-04; 6,844 commits by 2026-09-28 (515 on 2026-09-27), mostly by AI agents; README says "not ready for parity or production use"; Apache-2.0, with card scripts fetched from Forge | Created 2026-07 from work inside an XMage fork; most commits by an automated identity; MIT | Upstream since 2026-05 (18 contributors; "pre-release"). The fork: about 1,600 commits in two weeks under one author; AGPL-3.0 |
+| | XMage / MageZero | Forge | gorge | mtg-kernel | ManaBrew | Argentum |
+|---|---|---|---|---|---|---|
+| Existing search | AlphaZero-style tree search with a network, tree reuse | Depth-3 search over its own plays; not MCTS | Sampled worlds, each played to the end by its bot; no tree | Information-set MCTS with a static evaluator. A network-guided version exists but runs only on x86 and isn't used in training | None | Engine AI: multi-ply alpha-beta search with a board evaluator. Trainer: AlphaZero-style tree search (PUCT, root noise) that calls a network over HTTP |
+| Learning stack | Full loop: inference server, trainer, self-play | None | Small CPU-only neural net written in Go | Python/Torch over JSON lines, native Rust forward pass, CUDA; policy-gradient self-play | The fork adds a Rust learning environment: games on parallel threads, observation encoding, candidate tables. No Python binding, network or trainer yet | Gym-style environment (reset, step, fork, snapshot), an HTTP server for Python trainers, and a JVM tree search, self-play loop and data writer. No network or trainer. An outside fork trained PPO policies on it (§4) |
+| Stepping a game from outside | No step API: the engine calls into player objects, and MageZero pauses it with scripted puppets | No step API: 109 controller callbacks to implement | Yes, in-process | Yes, in-process, with snapshot and restore | No step API: Forge's shape, 108 callbacks on the game's own thread. The learning environment steps it through channels. A copy resumes only at the start of a turn | Yes, in-process or over HTTP. The engine is a pure function from state and action to a new state |
+| Reproducible from a seed | No, because card IDs are random: 5 of 6 same-seed games differed | Yes | Yes | Yes | Yes, once a seeded random-number generator is installed | Yes by design: the random-number state lives in the game state. Not tested here |
+| Hidden information | Search sees the opponent's hand and library order | Same | Per-player redacted views. Its sampler assumes both decklists are known, so Limited needs a sampler over the opponent's pool | Re-deals unseen cards from what the searcher knows. For Limited it would deal from a guess at the opponent's pool instead of their real cards | Copies hold both hands and libraries, and card IDs follow decklist order. The learning environment's encoder hides them | Observations hide the opponent's hand and library. The trainer's tree search runs on the true state, so it sees them. The engine AI can sample hidden cards (off by default), from a known decklist or by reshuffling the real hidden cards |
+| Action identity | Hashed into 128 slots; targets by card name. Our fork adds a set-wide vocabulary | Ability text | Positional options | Stable hashed IDs | Positional candidates; card and ability IDs stable across copies | Integer IDs that change every step. The trainer's default hashes each action into 1,024 slots; a project supplies its own encoder |
+| Parallelism | 4 search threads in one JVM matched 1 thread's total | One process per core: the RNG and ID counters are JVM-wide | Many games per process | Many threads | Many games per process, about 8 MB each | Many games per process; batch stepping over a thread pool. Not measured |
+| FDN cards | 286/286 | 286/286 | 282/286, plus 12 flagged as partly wrong | 7/286 today; FDN in progress (§5) | 286/286; matched Java Forge in 267 of 280 FDN games | 280/286: all but six Special Guests. About 110 of the 281 non-basic FDN cards have their own scenario test |
+| New sets | Upstream takes weeks to months; MageZero's fork must rebase | Scripted about 2–3 weeks before release | Reuses Forge's card scripts; new mechanics need Go code | Each card coded in Rust, mostly by agents (670–3,100 lines per card, including tests) | Reuses Forge's card scripts; new mechanics are ported from Forge's Java | Each card written by hand in a Kotlin DSL, mostly by AI agents, with a scenario test. An Oracle-text parser cross-checks them. Doesn't use Forge's scripts |
+| Maturity | Since 2010; MIT | Since ~2007; 130 authors in the last year; GPL-3.0 | Created 2026-09-04; 6,844 commits by 2026-09-28 (515 on 2026-09-27), mostly by AI agents; README says "not ready for parity or production use"; Apache-2.0, with card scripts fetched from Forge | Created 2026-07 from work inside an XMage fork; most commits by an automated identity; MIT | Upstream since 2026-05 (18 contributors; "pre-release"). The fork: about 1,600 commits in two weeks under one author; AGPL-3.0 | Since 2026-01; about 15,000 commits by 18 contributors, 1,600 in the last month, nearly all by the maintainer working with AI agents; about 16,000 cards; runs a public play site; MIT |
 
 ## 3. ManaBrew: a Rust port of Forge
 
@@ -206,7 +242,66 @@ state fields at every turn and every decision.
 - **The fork moves fast:** about 1,600 commits in two weeks under one author, at all hours, mostly
   `fix(engine)`. Pin a commit.
 
-## 4. mtg-kernel's Limited support
+## 4. Argentum: a Kotlin engine built for reinforcement learning
+
+**What it is.** Argentum is a Kotlin rules engine with a public play site
+([magic.wingedsheep.com](https://magic.wingedsheep.com)) that runs drafts and sealed. It has three
+modules for agents:
+- **`gym`:** reset, step, fork and snapshot over an immutable game state. Its observations hide the
+  opponent's hand and library, and it can run many games in one process.
+- **`gym-server`:** the same interface over HTTP, for Python trainers.
+- **`gym-trainer`:** an AlphaZero-style tree search in the JVM, a self-play loop and a data writer.
+  The network runs in a separate server, and the policy can have several heads.
+  - Its README names MageZero as "the reference AlphaZero-for-MTG project this was designed to
+    fit".
+  - The repo tracks which cards MageZero's three Constructed test decks still need
+    (`backlog/magezero-coverage.md`).
+
+**Cards.**
+- **It plays 280 of the 286 FDN cards.** All 262 FDN booster cards are implemented. The six it
+  lacks are Special Guests: Akroma's Memorial, Condemn, Embercleave, Fiend Artisan, Goblin
+  Bushwhacker and Sphinx's Tutelage. Of our 80 sample decks, one uses one of them (Embercleave).
+- **Each card is hand-written data in a Kotlin DSL,** with no card-specific engine code. About 110
+  of the 281 non-basic FDN cards have their own scenario test.
+- **Its rules haven't been checked against another engine.** A Forge comparison harness is a
+  plan in the repo's backlog. Argentum shuffles differently from Forge, so the plan replays
+  Forge's recorded games rather than running both engines from one seed.
+- **None of our 656 games crashed or stalled** (115 random, 541 with its bot).
+
+**For training.**
+- **Speed is modest.** A search step costs about 165 µs, and two-thirds of that is listing the
+  next position's legal actions.
+- **Listing legal actions grows with the square of the board.** For each of your permanents, the
+  listing scans the whole battlefield for granted abilities. Random games that build big token
+  boards slow to seconds per decision. Bot games keep boards small.
+- **Its own measurements agree.** On the same laptop model with all 8 cores busy, it reports about
+  3,400 actions/s per thread and 0.4 ms to list the legal actions at a priority window.
+- **Copies are free,** because the state is immutable. A search can keep every node's state.
+- **The tree search sees hidden cards.** The trainer's search starts from the full game state,
+  including the opponent's hand and library order, as XMage's does.
+  - The engine AI has an option, off by default, to sample hidden cards. Without the opponent's
+    decklist, it reshuffles the real hidden cards; its source calls this "cheating-lite".
+  - For Limited we'd need a sampler over the opponent's possible pool, as with gorge and
+    mtg-kernel.
+- **Action IDs change every step.** The trainer's default encoder hashes each action into 1,024
+  slots. Our set-wide vocabulary would plug in as its action encoder.
+- **Network calls are one position per HTTP request.** GPU inference would need a batching layer,
+  the same bottleneck MageZero has today.
+- **Licence:** MIT.
+
+**An outside reinforcement-learning result.** A fork by chrismaghuhn trained
+[Argentum P1](https://huggingface.co/chrismaghuhn/argentum-p1), a policy network of about 2.7M
+parameters with no search. These numbers are from its model card; we didn't check them:
+- It first imitated the engine AI on 48,592 games, then trained by PPO self-play on about 64,000
+  games, with 65 Standard decks.
+- It won 43% against the engine AI on held-out decks.
+- Self-play ran at about 8 games/s on a 360-vCPU machine. About 0.5% of those games ended in an
+  engine exception.
+
+**It moves fast.** The repo started in 2026-01 and has about 15,000 commits. About 1,600 came in
+the last month, nearly all from the maintainer working with AI coding agents. Pin a commit.
+
+## 5. mtg-kernel's Limited support
 
 FDN support is an extra step, not a blocker, and it's now under way. The maintainer took on
 [mtg-kernel#110](https://github.com/jackmaiorino/mtg-kernel/issues/110) on 2026-09-30, with a
@@ -232,7 +327,7 @@ Status on 2026-10-01:
 - Each later set would be its own card step. That matters for simulating a set soon after its
   spoilers: Forge scripts arrive 2–3 weeks before release, and gorge and ManaBrew inherit them.
 
-## 5. mtg-kernel's speed claims
+## 6. mtg-kernel's speed claims
 
 Our roadmap quoted mtg-kernel as "about 40× faster than XMage overall, and 1,000× for training".
 - **"1,000×"** is a design target and was never measured. The XMage baseline behind it has been
@@ -244,44 +339,48 @@ Our roadmap quoted mtg-kernel as "about 40× faster than XMage overall, and 1,00
 - **Measured engine against engine on Burn:** about 470× XMage per turn of random play, and 25× on
   state copies.
 
-## 6. Side findings for current runs
+## 7. Side findings for current runs
 
 - **XMage's search threads don't add up.**
   - One search thread kept 1.6–2.2 cores busy.
   - XMage copies the whole game every time it lists legal moves: the in-place shortcut is switched
-    off (`if(false && simulation)`, §8).
+    off (`if(false && simulation)`, §9).
   - Four search threads in one JVM matched one thread's total: about 425 sims/s either way.
   - On the pods, one laptop thread's 424–806 sims/s on turn 5–7 boards compares with about 20 per
     game thread (docs/006). The two aren't directly comparable, but the gap is worth a profile.
 - **Forge calls `System.gc()` after every game** (`Match.java:103`). That costs about 0.36 s here.
   Headless Forge sims can skip it with `-XX:+DisableExplicitGC`.
 
-## 7. Method and caveats
+## 8. Method and caveats
 
 **Workloads:**
 - **FDN pair A:** `FDN_top_04956_UG` vs `FDN_top_20626_WG`.
 - **FDN pair B:** `FDN_top_07961_WR` vs `FDN_top_02581_UR`. Both pairs are from `assets/sample/`.
   Seats swap every game.
 - **Burn mirror:** mtg-kernel's Burn list, run in every engine.
+- **Argentum's random games** use its own benchmark's stall rule: a game ends after 1,000 actions
+  in one turn. It never triggered.
 - **FDN card list:** the 286 names in the 17lands FDN reference (`assets/reference/FDN_gih.json`).
 
 **Timing:**
 - Each engine ran alone, single-threaded.
-- The two JVM engines warmed up for 10–67 s first.
+- The JVM engines warmed up for 10–67 s first.
 - Game-playing measurements ran for 20–90 s each, and each copy method was timed 1,000–5,000 times.
+  Argentum's fork was timed 200,000 times, because it is so cheap.
 - Versions:
   - XMage and Forge: JDK 21.
   - gorge: Go 1.27.1.
   - mtg-kernel: Rust 1.94.1.
   - ManaBrew: Rust 1.98.1 (it needs 1.95 or newer). Its parity runs used Java Forge from its pinned
     submodule (`e7d2b93`) on JDK 21.
+  - Argentum: Kotlin 2.2 on JDK 21.0.12, run as a Gradle test with its default 2 GB heap.
 
 **Turns:** each game's own turn counter, which counts both players' turns.
 - Compare turns per second, not decisions per second.
-- The random players differ in what they count as a decision. XMage's and ManaBrew's pay mana
-  automatically; gorge's taps lands one at a time.
+- The random players differ in what they count as a decision. XMage's, ManaBrew's and Argentum's
+  pay mana automatically; gorge's taps lands one at a time.
 - Random games also run to different lengths: 22–29 turns in XMage, Forge and ManaBrew, 36–43 in
-  gorge.
+  gorge, and a median of 32–36 on FDN in Argentum (76 on Burn).
 
 **Caveats:**
 - MTG Arena was running during the first four engines' timing, using about half a core.
@@ -293,9 +392,13 @@ Our roadmap quoted mtg-kernel as "about 40× faster than XMage overall, and 1,00
 - ManaBrew's agreement with Java Forge was measured with random agents, which reach fewer lines of
   play than strong ones.
 - mtg-kernel's speed was measured on Burn and Rally. FDN boards may cost somewhat more per step.
+- Other processes were running during Argentum's timing (load average about 2.4 on 8 cores just
+  before it started).
+- Argentum's copy and search-step states came from its bot's games (402 states, turns 5–8, at
+  least 3 permanents a side), not from random games, whose boards grow very large.
 - The benchmark harnesses aren't in this repo yet.
 
-## 8. Where the claims come from
+## 9. Where the claims come from
 
 **XMage** (WillWroble/mage `cb7e9c6f`):
 - `Mage/src/main/java/mage/game/GameImpl.java:357`: the search starts from `this.copy()`, hidden
@@ -346,14 +449,35 @@ Our roadmap quoted mtg-kernel as "about 40× faster than XMage overall, and 1,00
 - `manabrew-gym/AGENTS.md:3`: the learning environment; a Python binding is planned but doesn't
   exist.
 
+**Argentum** (`ee78f53`; Kotlin sources under each module's `src/main/kotlin/com/wingedsheep/`):
+- `gym-trainer/README.md:100-101`: MageZero is the project the trainer "was designed to fit".
+- `backlog/magezero-coverage.md`: the cards MageZero's test decks still need.
+- `mtg-sets/2024/.../definitions/fdn/FoundationsSet.kt:20`: all 262 FDN booster cards implemented.
+- `gym-trainer/.../trainer/search/AlphaZeroSearch.kt:125`: the search root is the full game
+  state.
+- `gym/.../gym/GameEnvironment.kt:286`: `fork()` shares the immutable state.
+- `ai/.../ai/engine/AiProfile.kt:81`: sampling hidden cards is off by default.
+- `ai/.../ai/engine/hidden/OpponentModel.kt:8`: without a decklist, sampling is "cheating-lite".
+- `rules-engine/.../engine/legalactions/enumerators/ActivatedAbilityEnumerator.kt:92` and
+  `.../legalactions/utils/CastPermissionUtils.kt:1384`: for each of your permanents, a scan of
+  the whole battlefield.
+- `rules-engine/.../engine/core/GameInitializer.kt:175`: a game without a seed draws one from the
+  clock.
+- `gym/.../gym/contract/ActionRegistry.kt:14`: action IDs aren't stable across steps.
+- `gym-trainer/.../trainer/defaults/DynamicSlotActionFeaturizer.kt:32`: actions hashed into slots.
+- `backlog/forge-parity-harness.md`: the planned Forge comparison.
+- `docs/ai/baseline-metrics.md`: its own throughput measurements.
+
 **Plot:** `tools/engine_bench/speed_plot.py`.
 
 ## Follow-up ideas
 
+- **Ask Will what drew him to Argentum.** Its trainer was built to fit MageZero, so it may be the
+  cheapest engine to move MageZero onto. The costs are speed (§1) and a sampler for hidden cards.
 - **Follow mtg-kernel's FDN work (#110)** and test training on FDN when its games run (ROADMAP).
-- **Commit the five benchmark harnesses**, so these numbers can be rerun.
+- **Commit the six benchmark harnesses**, so these numbers can be rerun.
 - **Audit gorge's FDN behaviour against XMage**, starting with the 12 flagged cards. docs/008's turn
   replay could compare the two engines on recorded 17lands turns.
 - **If we take the ManaBrew route:** resuming a game at any decision, not just at turn start, is the
   change that makes search cheap.
-- **Profile XMage's per-thread search rate on a pod** (§6).
+- **Profile XMage's per-thread search rate on a pod** (§7).
