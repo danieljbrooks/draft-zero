@@ -308,3 +308,58 @@ in stage 1; engine errors dropped 3-4% of games.*
   - failed or probe pods ~$0.50.
 
   r1's time was free.
+
+## 9. Next steps: gorge and SpellBench
+
+### What should carry over to gorge
+
+docs/026-027 trained gorge's networks from gorge's own search, not from people. Their problems were the same as here:
+- the value memorised after half an epoch;
+- visit targets at 100 simulations were near-uniform;
+- games, not positions, limited learning.
+
+What this study adds:
+
+1. **Diagnose before training:**
+   - `target_stats.py` and `value_calib.py` take minutes;
+   - here they showed, before any training, that the visit targets sat a nat from the policy and that the value was
+     6 points optimistic.
+2. **Compare recipes on one shared batch of games.** Ten arms trained in minutes each on the same 1,411 games, so the
+   comparison isolated the recipe from the luck of the games. On gorge, where games are ~100x cheaper, the shared
+   batch can be large enough to settle the value questions this study couldn't.
+3. **Use the Q-tilted target, with care.** docs/027's completed-Q target sharpened the visits but didn't help the
+   policy alone; it was applied to networks trained from scratch. The tilt here is a small, controlled step from a
+   policy that's already good (s = 10-30, KL 0.004-0.014 per step). It applies to gorge once a gorge network starts
+   from a strong prior, for example a port of this GNN.
+4. **Separate the policy's contribution from the value's:**
+   - add a value-only arm;
+   - match each policy alone, and with search.
+
+   Here that split showed the value carrying the gain with search, which offline scores didn't predict.
+5. **λ = 0.99, mostly new games each generation, at most ~2-4 passes over any game.** Then judge over at least two
+   generations: generation 2 gained more than generation 1 here.
+
+### Putting these networks on SpellBench
+
+**Same process and architecture as the imitation network.**
+- Every network here is the same GNN, with the same vocabulary and graph encoder, fine-tuned from the imitation
+  checkpoint.
+- So whatever SpellBench builds to run the imitation GNN (`danbrooks/draftzero-fdn-gnn`) runs these too:
+  - the graph StateEncoder on its reconstructed worlds;
+  - NetGraph inference;
+  - the search.
+- A self-play network is a weight swap: re-export it with the same release tool, regenerate its goldens, and publish
+  it as a separate entry.
+
+**What does differ is how they should be run:**
+1. **With search.** Generation 2's clearest gain was at 100 simulations (61.6% against the start), and with search the
+   gain came mostly from its value. The value is now calibrated on self-play, so no temperature fix is needed.
+   - SpellBench's entry should use PIMC with our settings (100+ simulations, c_puct 1, prior temperature 1.5, prior
+     bonus 0.1, the policy as priors and the value at leaves).
+   - With different search settings, the strength we measured won't transfer.
+2. **The right network.**
+   - Generation 2 (`sp028/loops/recipe/g2`) is the strongest;
+   - `cq10` (generation 1) is the safest step from the imitation network, as human-like as it by every measure.
+   - Both are in the private repo; publishing one means the same public release as the imitation GNN.
+3. **One more head is now trained.** The yes/no head ("may" choices) never trained on human data. Self-play trained
+   it, so a SpellBench backend should route those decisions to it, not around it.
