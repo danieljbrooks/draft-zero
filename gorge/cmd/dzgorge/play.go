@@ -107,6 +107,8 @@ func runPlay(args []string) int {
 	fs.IntVar(&remoteCache, "remote-cache", remoteCache, "cached remote evaluations (states)")
 	fs.IntVar(&gonetCache, "gonet-cache", gonetCache, "cached gonet= evaluations (states; 0 = none)")
 	fs.IntVar(&gonetCardCache, "gonet-card-cache", gonetCardCache, "cached gonet= card vectors (0 = none)")
+	fs.IntVar(&azmcts.PriorRankMaxOptions, "topk-max-options", 0, "under topk=, skip the network's ranking at a "+
+		"decision with more options than this (bot answer first, enumeration order, uniform prior); 0 = always rank")
 	fs.Parse(args)
 	if f, err := policynet.ParseFeatureSet(*recFeat); err != nil || f.Diagnostic() {
 		fmt.Fprintf(os.Stderr, "play: -record-features %q: want mz or entity\n", *recFeat)

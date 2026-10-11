@@ -6,7 +6,8 @@ cd "$ROOT"
 G="${GORGE_DIR:-../ext/gorge}"
 PY="${PY:-../draft-zero-v02/.venv/bin/python}"
 FULL="autopay:oppnodes:oppfull:morekinds"
-COMMON=(-cards "$G/.cards" -decks data/gorge/decks -pool data/gorge/pool.tsv -mulligans 2 -mull-heuristic -progress 0)
+COMMON=(-cards "$G/.cards" -decks data/gorge/decks -pool data/gorge/pool.tsv -mulligans 2 -mull-heuristic -progress 0
+        -topk-max-options 64)   # patch 0008: no network ranking at a decision with >64 options (they hung games)
 
 # hardkill SECS CMD...: run CMD; after SECS send it TERM, then KILL. (An alarm signal is not enough: Go programs such as
 # dzgorge catch SIGALRM and ignore it, so the first version of this never stopped a hung game.)
