@@ -1,8 +1,8 @@
 # Searching for a self-play recipe that scales: laptop experiments on gorge
 
-*Status (Sunday 11 October 2026, 12:30 AM PT): plan written; stage 0's games are being played. Results are appended
-below as they come in (§6, the run log). Everything runs on Dan's laptop (an 8-core M1 Pro); r1 is down. The code is
-on the [`gorge-train`](https://github.com/danieljbrooks/draft-zero/tree/gorge-train) branch.*
+*Status (Sunday 11 October 2026, 6:00 AM PT): stage 0, E1 and E2 done (§6); E3's loops running. Everything runs on
+Dan's laptop (an 8-core M1 Pro); r1 is down. The code is on the
+[`gorge-train`](https://github.com/danieljbrooks/draft-zero/tree/gorge-train) branch (`gorge/recipe/`).*
 
 **The goal (Dan, 11 October): find a recipe that keeps getting better on millions of games,** not just the best bot
 a laptop can train in a day. A laptop plays about 10^5 cheap games a day, so each experiment here measures a *slope*:
@@ -125,4 +125,94 @@ sleeping paused docs/029's watchers for hours). The disk has ~15 GB free; a chea
 
 ## 6. Run log
 
-*Appended as results come in.*
+*Appended as results come in. Times are Pacific.*
+
+### Stage 0: the games (Sunday 12:10-2:15 AM)
+
+- **Held-out games:** 600 cheap games on the eval decks, 9,392 recorded decisions. Every value and policy number below
+  is measured on these (never trained on).
+- **Training games:** 40,000 cheap games on the train decks, the full search without a network, in 1 hour 50 minutes
+  on 7 cores (about 22,000 an hour). 641,027 recorded decisions, 16 per game.
+- **Storage:** a packed game took 112 KB, almost all of it the per-card features in 32-bit floats. Stored as 16-bit
+  (`gorge/recipe/shrink.py`; training reads them back unchanged, the same losses to four decimals) it takes 72 KB. The
+  laptop has about 12 GB free, so a loop keeps at most ~150,000 games packed at once.
+- **Training is cheap; games are not.** An MLP trains at about 10,000 decisions a second on the laptop's GPU. Every
+  E1 arm took 1-6 minutes, against 2 hours for the games, so the recipe question is how much each game teaches.
+
+### E1: network width against games (Sunday 2:15-3:10 AM)
+
+*Hypothesis: docs/027's value plateau near 30,000 games was the width-64 network's capacity, and wider networks keep
+improving.*
+
+Sixteen MLPs (widths 64, 128, 256 and 384; 0.6M to 6.3M parameters), each trained on stage 0's first 5k, 10k, 20k
+or 40k games with loop B's targets (completed-Q at 0.03, value half result and half the search's estimate), up to 8
+passes with early stopping.
+
+![](img/031-e1-light.png)
+
+| Games | Value log-loss, width 64 / 128 / 256 / 384 | Value AUC, best width |
+|---|---|---|
+| 5k | 0.511 / 0.507 / 0.511 / 0.511 | 0.829 |
+| 10k | 0.497 / 0.498 / 0.496 / 0.501 | 0.837 |
+| 20k | 0.491 / 0.492 / 0.493 / 0.497 | 0.839 |
+| 40k | 0.489 / 0.493 / 0.485 / 0.488 | 0.843 |
+
+*The value's log-loss is against the game's result on the held-out games; predicting the base rate alone scores
+0.691.*
+
+- **Width doesn't matter at these sizes.** At every game count the four widths are within about 0.005, close to the
+  held-out set's noise (600 games).
+- **The value still improves from 20k to 40k games, but slowly:** about 0.003-0.008 per doubling, against 0.014 from
+  5k to 10k. The policy's fit keeps falling evenly with each doubling.
+- **Every arm stopped early,** most after 3-5 passes: a network memorises the games it has seen. Small networks
+  overfit as fast as big ones.
+
+- **Strength:** the width-64 network on 40k games won only **51.7% ± 1.1 of 1,000** paired games against the zero
+  point, short of docs/027's 56-58%. E2 found why: the policy target.
+
+*Reading (E1 used loop B's targets, which E2 replaces; the 80k point in E2 is with the better ones): the plateau is
+the data's, not capacity. A cheap game's value labels are mostly luck (one result per
+16 decisions), so more of the same games buys little. What remains to test: whether better games (a network in the
+search, E3) or better labels (E2) move the curve more than more games do.*
+
+### E2: which targets (Sunday 3:10-5:45 AM)
+
+*Hypothesis: loop B's targets (docs/027 §4.2) are the right default: completed-Q for the policy, the value half
+result and half the search's estimate.*
+
+Width-128 MLPs on stage 0's first 40k games, with six target pairs; then the strength match (§2) for three of them.
+
+| Policy target | Value target | Value log-loss | Value AUC | Strength (1,000 paired games) |
+|---|---|---|---|---|
+| Visit counts | result | **0.473** | **0.853** | **55.2%** |
+| Visit counts | half result, half the search's estimate | 0.487 | 0.842 | |
+| Completed-Q 0.03 | result | 0.473 | 0.851 | 51.7% |
+| Completed-Q 0.03 | 30% the search's estimate | 0.476 | 0.850 | |
+| Completed-Q 0.03 | half and half (width 64, E1) | 0.489 | 0.841 | 51.7% |
+| Completed-Q 0.1 | half and half | 0.490 | 0.840 | |
+| Completed-Q 0.01 | half and half | 0.489 | 0.842 | |
+
+*Strength: the full search at 100 simulations with the network inside the engine against the same search without
+one (the zero point), 500 deck pairs on the eval decks. One standard error is about 1.1 points; the three matches
+share their deals.*
+
+- **Loop B's targets are not the right default here.** Docs/027's best network (56.3% of 1,400 in its final check)
+  used visit counts and the result; with completed-Q the same games give 51.7%, whichever the value target.
+- **The value's label: the result alone.** Blending in the search's root estimate makes a worse value (log-loss
+  0.487-0.490 against 0.473; AUC 0.842 against 0.853). Without a network that estimate is the heuristic's, weaker
+  than the game's result.
+- **The policy's label: visit counts, in games.** Completed-Q fits its own target more closely (cross-entropy 0.93
+  against 1.04 for visits; the uniform guess is 1.05), and the values are equal, yet it plays 3.5 points worse. The
+  prior chooses which 6 moves the search considers (`topk=6`), and at 25 simulations completed-Q follows noisy
+  estimates; a prior that is sharp and wrong drops good moves before the search sees them. Visit counts at 25
+  simulations stay close to the heuristic's spread.
+- **Regularising the value** (width 128, visits + result): weight decay 0.1 gives 0.4735, dropout 0.2 0.4747, a
+  learning rate of 3e-4 instead of 1e-3 **0.4684** (against 0.4726). The loops use 3e-4.
+- **The value overfits after about one pass** with the result as its label (best after 0.75-1.75 passes, against
+  3-6 with the blended label): the networks learn each game's luck once they see it twice. More games is the remedy,
+  which suits a recipe for millions of games.
+- **80,000 games** (stage 0 extended by 40,000 games on the same decks, Sunday 2:15-5:25 AM), width 64, visits +
+  result: value log-loss **0.4636**, AUC 0.859, against 0.4700 and 0.853 at 40,000. Still improving with each doubling
+  (about 0.006), unlike docs/027's plateau.
+
+*Next: E3, the loops, with visit counts and the result as targets, starting from the 55.2% network.*
