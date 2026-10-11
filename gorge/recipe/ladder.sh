@@ -1,23 +1,27 @@
 #!/usr/bin/env bash
-# docs/031's search ladder: a network inside the full search at more and more simulations against gorge's bot (the
-# fixed baseline), beside the search without a network at the same simulations. Doubles the simulations until a
-# match would take longer than MAX_H hours (from the last match's time) or the level SIMS_MAX.
-#   NET=<dir with best.dzgw> NAME=gen0 bash gorge/recipe/ladder.sh
+# docs/031's search ladder, one level: a network inside the full search at SIMS simulations against gorge's bot (the
+# fixed baseline), beside the search without a network at the same simulations. Each level plays at most PAIRS deck
+# pairs, fewer if the last level's speed says they would take over MAX_H hours; under MIN_PAIRS it is skipped.
+#   NET=<dir with best.dzgw> NAME=start SIMS=500 bash gorge/recipe/ladder.sh
 set -uo pipefail
 source "$(dirname "$0")/lib.sh"
-R=data/gorge/runs/r31; NAME=${NAME:?}; NET=${NET:?}; PAIRS=${PAIRS:-500}; MAX_H=${MAX_H:-4}; SIMS_MAX=${SIMS_MAX:-3200}
+R=data/gorge/runs/r31; NAME=${NAME:?}; NET=${NET:?}; n=${SIMS:?}
+PAIRS=${PAIRS:-500}; MAX_H=${MAX_H:-4}; MIN_PAIRS=${MIN_PAIRS:-50}
 mkdir -p $R/ladder
-for ((n = ${SIMS_MIN:-25}; n <= SIMS_MAX; n *= 2)); do
-  for arm in net nonet; do
-    out=$R/ladder/$NAME-$n; net=$NET/best.dzgw
-    [ $arm = nonet ] && { out=$R/ladder/nonet-$n; net=""; }
-    t0=$(date +%s)
-    vsbot "$net" "$out" $n $PAIRS
-    secs=$(( $(date +%s) - t0 ))
-    echo "$arm@$n vs bot: $(score $out.jsonl) in $(( secs / 60 )) min $(date)"
-    [ $arm = net ] && last=$secs
-  done
-  if [ $(( 2 * last )) -gt $(( MAX_H * 3600 )) ]; then echo "next level would take over $MAX_H h; stop"; break; fi
-  [ -f $R/STOP_LADDER ] && { echo "STOP_LADDER"; break; }
+rate=$R/ladder/$NAME.rate          # seconds per deck pair per simulation, both arms together, from the last level
+pairs=$PAIRS
+if [ -f $rate ]; then
+  pairs=$(awk -v r="$(cat $rate)" -v n=$n -v h=$MAX_H -v p=$PAIRS 'BEGIN { q = int(h * 3600 / (r * n)); print (q < p ? q : p) }')
+fi
+if [ "$pairs" -lt "$MIN_PAIRS" ]; then
+  echo "level $n: only $pairs pairs fit in $MAX_H h; skipped $(date)"; exit 0
+fi
+t0=$(date +%s)
+for arm in net nonet; do
+  out=$R/ladder/$NAME-$n; net=$NET/best.dzgw
+  [ $arm = nonet ] && { out=$R/ladder/nonet-$n; net=""; }
+  ta=$(date +%s)
+  MATCH_SECS=$(( MAX_H * 3600 + 3600 )) vsbot "$net" "$out" $n $pairs
+  echo "$arm@$n vs bot: $(score $out.jsonl) in $(( ($(date +%s) - ta) / 60 )) min $(date)"
 done
-echo "LADDER_DONE $NAME $(date)"
+awk -v s=$(( $(date +%s) - t0 )) -v p=$pairs -v n=$n 'BEGIN { print s / (p * n) }' > $rate

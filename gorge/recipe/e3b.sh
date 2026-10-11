@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # docs/031 E3, from generation FROM on: loops A and B interleaved as in e3.sh, each generation also against gorge's bot;
-# after each round, the next level of the search ladder (ladder.sh) for LADDER_NET, in the order LEVELS (100 first:
-# the reference for the generations' matches against the bot).
+# after each round, the next level of the search ladder (ladder.sh) for LADDER_NET: LEVELS, about x5 apart (Dan).
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 R=data/gorge/runs/r31
 export START=$R/e2/visits-result WIDTH=128 GAMES=${GAMES:-8000} GENS=1
-levels=(${LEVELS:-100 200 50 400 25 800 1600})
+levels=(${LEVELS:-100 500 3000 15000})
 li=0
 for ((k = ${FROM:-1}; k <= ${MAXGEN:-8}; k++)); do
   [ -f $R/STOP ] && { echo "STOP file"; break; }
@@ -17,7 +16,7 @@ for ((k = ${FROM:-1}; k <= ${MAXGEN:-8}; k++)); do
   [ -f $R/STOP ] && { echo "STOP file"; break; }
   if [ $li -lt ${#levels[@]} ]; then
     lad=${levels[$li]}; li=$(( li + 1 ))
-    NET=${LADDER_NET:-$R/e2/visits-result} NAME=${LADDER_NAME:-start} SIMS_MIN=$lad SIMS_MAX=$lad bash gorge/recipe/ladder.sh
+    NET=${LADDER_NET:-$R/e2/visits-result} NAME=${LADDER_NAME:-start} SIMS=$lad bash gorge/recipe/ladder.sh
   fi
 done
 echo "E3_DONE $(date)"
