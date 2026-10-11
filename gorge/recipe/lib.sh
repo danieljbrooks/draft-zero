@@ -54,16 +54,43 @@ alone() {
     -a "prior:gonet=$net" -b "bot" -out "$out.jsonl" > "$out.log" 2>&1
 }
 
-# selfplay OUT GAMES SEED [NET.dzgw] [SIMS]: cheap games (record one searched decision in four), packed
+# selfplay OUT GAMES SEED [NET.dzgw] [SIMS]: cheap games (record one searched decision in four), packed.
+# Played in chunks of CHUNK games, each with its own hard kill: gorge writes games in order, so one game that never
+# ends (a decision with a huge option list, seen once with a network in the search) would otherwise hold every later
+# game in memory until the kill, and lose them. After a killed chunk, trim.py keeps its complete games; the first
+# missing game is replayed alone (PROBE_SECS) and, if it hangs again, logged in OUT/skipped.txt and skipped. Games
+# are a pure function of the seed and pair index, so resuming a range reproduces the same games.
+_chunk() {  # _chunk OUT FIRST N SEED POLICY SECS -> echoes complete games appended
+  local out=$1 first=$2 n=$3 seed=$4 pol=$5 secs=$6
+  rm -f "$out/chunk.jsonl" "$out/chunk.gz"
+  hardkill "$secs" "$G/bin/dzgorge" play "${COMMON[@]}" -record-features entity -record-every 4 -split train \
+    -a "$pol" -b "$pol" -pairs "$n" -first-pair "$first" -workers 7 -seed "$seed" \
+    -out "$out/chunk.jsonl" -corpus "$out/chunk.gz" >> "$out/play.log" 2>&1
+  touch "$out/chunk.jsonl" "$out/chunk.gz"
+  "$PY" gorge/recipe/trim.py "$out/chunk.jsonl" "$out/chunk.gz"
+  cat "$out/chunk.jsonl" >> "$out/games.jsonl"
+  cat "$out/chunk.gz" >> "$out/visits.jsonl.gz"
+  rm -f "$out/chunk.jsonl" "$out/chunk.gz"
+}
+
 selfplay() {
-  local out=$1 n=$2 seed=$3 net=${4:-} sims=${5:-25} pol
+  local out=$1 n=$2 seed=$3 net=${4:-} sims=${5:-25} pol s m e chunk=${CHUNK:-500}
   pol="az:sims=$sims:explore:$FULL"
   [ -n "$net" ] && pol="$pol:topk=6:gonet=$net"
   mkdir -p "$out"
   [ -d "$out/pack" ] && { echo "skip $out (packed)"; return 0; }
-  hardkill $(( n + 1800 )) "$G/bin/dzgorge" play "${COMMON[@]}" -record-features entity -record-every 4 \
-    -split train -a "$pol" -b "$pol" -pairs "$n" -workers 7 -seed "$seed" -out "$out/games.jsonl" \
-    -corpus "$out/visits.jsonl.gz" > "$out/play.log" 2>&1
+  s=$(cat "$out/next" 2>/dev/null || echo 0)
+  while [ "$s" -lt "$n" ]; do
+    e=$(( s + chunk < n ? s + chunk : n ))
+    m=$(_chunk "$out" "$s" $(( e - s )) "$seed" "$pol" "${CHUNK_SECS:-900}")
+    s=$(( s + m ))
+    if [ "$s" -lt "$e" ]; then        # killed: replay the first missing game alone
+      m=$(_chunk "$out" "$s" 1 "$seed" "$pol" "${PROBE_SECS:-300}")
+      [ "$m" = 0 ] && echo "game $s (seed $seed) did not finish; skipped $(date)" | tee -a "$out/skipped.txt"
+      s=$(( s + 1 ))
+    fi
+    echo "$s" > "$out/next"
+  done
   "$G/bin/dzgorge" pack -in "$out/visits.jsonl.gz" -out "$out/pack" -shard 200000 >> "$out/play.log" 2>&1 \
     && "$PY" gorge/recipe/shrink.py "$out/pack" > /dev/null
 }
