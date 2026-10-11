@@ -26,7 +26,8 @@ for ((k = FIRST; k < FIRST + GENS; k++)); do
   echo "   $(wc -l < $cur/sp/games.jsonl) games $(date)"
   packs=("${BASE[@]}")
   for ((j = 1; j <= k; j++)); do packs+=($L/gen$j/sp/pack); done
-  packs=("${packs[@]: -$WINDOW}")
+  # the last WINDOW packs (bash 3.2 returns nothing for a negative offset past the start, so slice explicitly)
+  [ ${#packs[@]} -gt $WINDOW ] && packs=("${packs[@]:$(( ${#packs[@]} - WINDOW ))}")
   echo "   train on ${#packs[@]} packs $(date)"
   if [ "$MODE" = warm ]; then
     train $cur $WIDTH 14400 --train "${packs[@]}" --init $prev/best.pt --epochs $WARM_EPOCHS --lr $WARM_LR \
