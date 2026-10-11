@@ -48,8 +48,7 @@ def e1(out: str, root: str) -> None:
                     mec=SURF, mew=1, label=f"width {w}")
         if key == "value_logloss" and rows:
             base = next(iter(rows.values()))[0][1]["value_base_logloss"]
-            ax.axhline(base, color=GREY, lw=1, ls="--")
-            ax.text(5, base, " the base rate alone", color=INK2, fontsize=8, va="bottom")
+            title = f"{title[:-1]}; the base rate alone: {base:.3f})"
         ax.set_xscale("log", base=2)
         ax.set_xticks([5, 10, 20, 40, 80, 160])
         ax.set_xticklabels(["5k", "10k", "20k", "40k", "80k", "160k"])
