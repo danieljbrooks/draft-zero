@@ -32,7 +32,7 @@ match() {
     e=$(( s + cp < pairs ? s + cp : pairs ))
     rm -f "$out.chunk"
     hardkill "$secs" "$G/bin/dzgorge" play "${COMMON[@]}" -split eval -seed 3131 -first-pair "$s" -pairs $(( e - s )) \
-      -workers 7 -a "$a" -b "$b" -out "$out.chunk" >> "${out%.jsonl}.log" 2>&1
+      -workers "${WORKERS:-7}" -a "$a" -b "$b" -out "$out.chunk" >> "${out%.jsonl}.log" 2>&1
     touch "$out.chunk"
     m=$("$PY" -c "import sys; b=open(sys.argv[1],'rb').read(); k=b[:b.rfind(b'\n')+1]; open(sys.argv[1],'wb').write(k); print(k.count(b'\n'))" "$out.chunk")
     cat "$out.chunk" >> "$out"; rm -f "$out.chunk"
@@ -63,7 +63,7 @@ train() {
   [ -f "$out/best.dzgw" ] && { echo "skip $out (done)"; return 0; }
   mkdir -p "$out"
   PYTHONPATH=gorge hardkill "$secs" "$PY" -m dzg.train --arch mlp --config "$(mlp_cfg "$width")" \
-    --val evaldecks=data/gorge/runs/r31/val/pack --device mps --in-ram "$@" --out "$out" > "$out/train.log" 2>&1 \
+    --val evaldecks=data/gorge/runs/r31/val/pack --device "${DEVICE:-auto}" --in-ram "$@" --out "$out" > "$out/train.log" 2>&1 \
     && PYTHONPATH=gorge "$PY" -m dzg.export "$out/best.pt" "$out/best.dzgw" >> "$out/train.log" 2>&1
   tail -1 "$out/train.log"
 }
@@ -97,7 +97,7 @@ _chunk() {  # _chunk OUT FIRST N SEED POLICY SECS -> echoes complete games appen
   local out=$1 first=$2 n=$3 seed=$4 pol=$5 secs=$6
   rm -f "$out/chunk.jsonl" "$out/chunk.gz"
   hardkill "$secs" "$G/bin/dzgorge" play "${COMMON[@]}" -record-features entity -record-every 4 -split train \
-    -a "$pol" -b "$pol" -pairs "$n" -first-pair "$first" -workers 7 -seed "$seed" \
+    -a "$pol" -b "$pol" -pairs "$n" -first-pair "$first" -workers "${WORKERS:-7}" -seed "$seed" \
     -out "$out/chunk.jsonl" -corpus "$out/chunk.gz" >> "$out/play.log" 2>&1
   touch "$out/chunk.jsonl" "$out/chunk.gz"
   "$PY" gorge/recipe/trim.py "$out/chunk.jsonl" "$out/chunk.gz"
