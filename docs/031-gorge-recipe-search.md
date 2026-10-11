@@ -38,6 +38,10 @@ Every network is scored three ways, at fixed settings, so curves are comparable 
 | **Strength** | the full search at 100 simulations with the network, against the full search without one (the **zero point**), 500 deck pairs (1,000 paired games) on the eval decks, seed 3131 | ~20-30 minutes |
 | **Value quality** | held-out log-loss and AUC on 600 cheap games on the eval decks (never trained on) | seconds |
 | **The policy alone** | the network's top move, no search, against gorge's bot | ~5 minutes |
+| **Against a fixed baseline** (added Sunday 8 AM, Dan) | the full search at 100 simulations with the network against gorge's heuristic bot, which never changes: 500 deck pairs (1,000 games), every generation | ~20-30 minutes |
+| **The search ladder** (added Sunday 8 AM, Dan) | the best kind of network inside the full search at 25, 50, 100, 200, 400, 800... simulations against gorge's bot, beside the search without a network at the same simulations; up until doubling the simulations stops paying or a match costs more than a few hours | one level between generations |
+
+The zero point moves with the engine's search; the bot is the absolute yardstick, so every generation's number against it is comparable across experiments and days. The ladder shows how a recipe's network scales with search: whether its gain over the search without it grows, holds or vanishes as simulations rise, and where more search stops helping.
 
 Promising networks also play the previous best head to head. At 1,000 paired games about 3 points is within chance.
 Single matches mislead, so a recipe's verdict rests on its *curve*: several points along games or generations.

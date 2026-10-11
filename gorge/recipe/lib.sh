@@ -97,3 +97,15 @@ selfplay() {
 
 # score FILE.jsonl: side A's paired score and n
 score() { "$PY" gorge/recipe/score.py "$@"; }
+
+# vsbot NET.dzgw|"" OUT SIMS [PAIRS]: the full search at SIMS (with the network, or without one) against gorge's
+# heuristic bot, the fixed simple baseline; same deals (seed 3131) at every level
+vsbot() {
+  local net=$1 out=$2 sims=$3 pairs=${4:-500} pol
+  pol="az:sims=$sims:$FULL"
+  [ -n "$net" ] && pol="$pol:topk=6:gonet=$net"
+  mkdir -p "$(dirname "$out")"
+  [ -f "$out.jsonl" ] && [ "$(wc -l < "$out.jsonl")" -ge $(( 2 * pairs - 20 )) ] && return 0
+  hardkill "${MATCH_SECS:-21600}" "$G/bin/dzgorge" play "${COMMON[@]}" -split eval -seed 3131 -pairs "$pairs" \
+    -workers 7 -a "$pol" -b bot -out "$out.jsonl" > "$out.log" 2>&1
+}
