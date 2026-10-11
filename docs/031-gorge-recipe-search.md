@@ -1,7 +1,7 @@
 # Searching for a self-play recipe that scales: laptop experiments on gorge
 
-*Status (Sunday 11 October 2026, 6:00 AM PT): stage 0, E1 and E2 done (§6); E3's loops running. Everything runs on
-Dan's laptop (an 8-core M1 Pro); r1 is down. The code is on the
+*Status (Sunday 11 October 2026, 2:45 PM PT): stage 0, E1 and E2 done (§6); E3's loops running on r1, the search ladder on
+Dan's laptop (an 8-core M1 Pro). The code is on the
 [`gorge-train`](https://github.com/danieljbrooks/draft-zero/tree/gorge-train) branch (`gorge/recipe/`).*
 
 **The goal (Dan, 11 October): find a recipe that keeps getting better on millions of games,** not just the best bot
@@ -38,6 +38,10 @@ Every network is scored three ways, at fixed settings, so curves are comparable 
 | **Strength** | the full search at 100 simulations with the network, against the full search without one (the **zero point**), 500 deck pairs (1,000 paired games) on the eval decks, seed 3131 | ~20-30 minutes |
 | **Value quality** | held-out log-loss and AUC on 600 cheap games on the eval decks (never trained on) | seconds |
 | **The policy alone** | the network's top move, no search, against gorge's bot | ~5 minutes |
+| **Against a fixed baseline** (added Sunday 8 AM, Dan) | the full search at 100 simulations with the network against gorge's heuristic bot, which never changes: 500 deck pairs (1,000 games), every generation | ~20-30 minutes |
+| **The search ladder** (added Sunday 8 AM, Dan) | the best kind of network inside the full search at 100, 500 and 3,000 simulations against gorge's bot, beside the search without a network at the same simulations: 200 games a level (100 deck pairs; one standard error about 3 points), enough to see whether strength still rises | one level between generations |
+
+The zero point moves with the engine's search; the bot is the absolute yardstick, so every generation's number against it is comparable across experiments and days. The ladder shows how a recipe's network scales with search: whether its gain over the search without it grows, holds or vanishes as simulations rise, and where more search stops helping.
 
 Promising networks also play the previous best head to head. At 1,000 paired games about 3 points is within chance.
 Single matches mislead, so a recipe's verdict rests on its *curve*: several points along games or generations.
@@ -216,3 +220,66 @@ share their deals.*
   (about 0.006), unlike docs/027's plateau.
 
 *Next: E3, the loops, with visit counts and the result as targets, starting from the 55.2% network.*
+
+### Running into hangs (Sunday 6 AM-1 PM)
+
+Three faults cost most of the morning; each is fixed in `gorge/recipe/` and gorge patch 0008.
+
+- **A hung game held every later one.** A game with the network in the search sat on one decision for over an hour.
+  `dzgorge` writes games in order, so every game finished after it waited in memory: 4,960 of generation 1's games, and
+  later the rest of two matches. The decision had 388 options, and the network's top-6 ranking encoded all 388 at every
+  simulation that reached it. **Patch 0008** (`-topk-max-options 64`) skips the ranking at a decision with more than 64
+  options (the bot's answer first, then enumeration order, a uniform prior, as with no network). Recorded decisions
+  almost never have more than 40 options, so normal play is unchanged; the game that had hung for over 40 minutes plays
+  in 20 seconds.
+- **The time limit never fired.** Every `dzgorge` job ran under an alarm signal, which Go programs catch and ignore. The
+  limit now sends TERM, then KILL, and every match and self-play run goes in chunks of deck pairs with a limit each:
+  a hung game costs one chunk's time and one skipped pair, not the run.
+- **A shell quirk trained one generation on nothing.** macOS's bash 3.2 returns an empty list for "the last 20" of a
+  shorter list; both loops' generation 1 skipped training until the slice was rewritten.
+
+Generation 1's self-play skipped one game (3,040, the hung one); loop A's first strength match on the laptop lost 63
+pairs to it and was rerun in full on r1.
+
+### E3: the loops (from Sunday 1 PM, on r1)
+
+r1 came back on Sunday afternoon: 30 cores, 80 GiB, two GPUs. The loops moved there (30 workers; a generation of 8,000
+games with the network in the search takes about 15 minutes, its training a few, its two matches about 15); the laptop
+runs the search ladder.
+
+*Hypothesis: a loop's networks keep improving on their own games; warm-starting (B) gets there for less training than
+starting over (A).*
+
+- **Both loops:** start from E2's network (visit counts and the result; 55.2% against the zero point), 8,000 games a
+  generation with the previous network inside the search (25 simulations, the prior choosing 6 candidates), trained
+  on stage 0's 80,000 games plus every generation's so far.
+- **A** trains a fresh width-128 network each generation (learning rate 3e-4, early stopping); **B** continues the
+  previous one for one pass at 1e-4.
+- **Each generation plays two matches:** 400 deck pairs (800 games) against the zero point, and 500 pairs (1,000 games)
+  against gorge's bot, both at 100 simulations, on the same eval deals every time.
+
+| Generation | Games so far (with a network) | A: against the zero point | A: against the bot | B: against the zero point | B: against the bot |
+|---|---|---|---|---|---|
+| 0 | 0 | 55.2% | | 55.2% | |
+| 1 | 8,000 | 55.9% | 75.5% | 55.9% | 74.5% |
+| 2 | 16,000 / 16,000 | 57.2% | 76.4% | 56.4% | 73.4% |
+
+*One standard error is about 1.3 points against the zero point and 1.2 against the bot. Generation 1's games are shared
+by both loops (the same start network played them).*
+
+*So far: within chance of each other and of the start; loop A's generation 2 is the best point yet. Each generation's
+8,000 new games are a small share of the 96,000 the networks train on, so a step per generation should be small.*
+
+### The search ladder (from Sunday 1 PM, on the laptop)
+
+The start network inside the full search, and the full search without a network, against gorge's bot at 100, 500 and
+3,000 simulations (Dan: steps of about x5, 200 games a level, one standard error about 2.6 points).
+
+| Simulations | With the start network | Without a network | The network's edge |
+|---|---|---|---|
+| 100 | 75.5% | 72.5% | +3.0 |
+| 500 | 81.5% | 75.0% | +6.5 |
+| 3,000 | *(playing)* | | |
+
+*The network's edge grows with search at least to 500 simulations: its value matters more the more positions the
+search evaluates. The search without a network gains little from 100 to 500 (72.5% to 75.0%).*
