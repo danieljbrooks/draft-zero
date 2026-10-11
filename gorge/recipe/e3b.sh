@@ -5,7 +5,7 @@ set -uo pipefail
 cd "$(dirname "$0")/../.."
 R=data/gorge/runs/r31
 export START=$R/e2/visits-result WIDTH=128 GAMES=${GAMES:-8000} GENS=1
-levels=(${LEVELS:-100 500 3000 15000})
+levels=(${LEVELS:-100 500 3000})
 li=0
 for ((k = ${FROM:-1}; k <= ${MAXGEN:-8}; k++)); do
   [ -f $R/STOP ] && { echo "STOP file"; break; }
@@ -16,7 +16,7 @@ for ((k = ${FROM:-1}; k <= ${MAXGEN:-8}; k++)); do
   [ -f $R/STOP ] && { echo "STOP file"; break; }
   if [ $li -lt ${#levels[@]} ]; then
     lad=${levels[$li]}; li=$(( li + 1 ))
-    NET=${LADDER_NET:-$R/e2/visits-result} NAME=${LADDER_NAME:-start} SIMS=$lad bash gorge/recipe/ladder.sh
+    NET=${LADDER_NET:-$R/e2/visits-result} NAME=${LADDER_NAME:-start} SIMS=$lad PAIRS=${LADDER_PAIRS:-100} bash gorge/recipe/ladder.sh
   fi
 done
 echo "E3_DONE $(date)"
