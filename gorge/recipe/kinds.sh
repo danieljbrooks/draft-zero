@@ -6,7 +6,7 @@ set -uo pipefail
 source "$(dirname "$0")/lib.sh"
 NET=${NET:?}; SIMS=${SIMS:-100}; PAIRS=${PAIRS:-500}; OUT=${OUT:?}
 mkdir -p $OUT
-base="az:sims=$SIMS:autopay:oppnodes:oppfull"
+base="az:sims=$SIMS:autopay:oppnodes:oppfull${SEARCH_EXTRA:-}"   # SEARCH_EXTRA e.g. ":cpuct=0.25"
 for kinds in all priority attackers blockers target modes,optional,choose,multitarget; do
   tag=${kinds%%,*}; [ "$kinds" = modes,optional,choose,multitarget ] && tag=rest
   for arm in net nonet; do

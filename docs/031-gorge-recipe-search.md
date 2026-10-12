@@ -435,3 +435,38 @@ identically with and without it.
   a weak player plays every card about the same.
 - **A ladder of fixed opponents** (gorge's bot, the plain search at 100/500/3,000 simulations, frozen generations) with
   ratings fitted across all matches, so new bots are placed without saturating against any one opponent.
+
+**First results (Sunday 10 PM-Monday 1:20 AM, laptop).** Five agents against gorge's bot, 200 games each; the oracle is
+loop B's generation 7 at 2,000 simulations (no top-6 cut) on a quarter of each agent's searched decisions (1,190-1,340
+audited decisions per agent):
+
+| Agent | Won against the bot | Agrees with the oracle | Mean loss per decision | Decisions losing over 0.05 |
+|---|---|---|---|---|
+| No network, 100 simulations | 72.5% | 67.2% | 0.0097 | 6.7% |
+| Network, 25 simulations | 72.0% | 71.8% | 0.0089 | 5.8% |
+| Network, 100 simulations | 78.0% | 78.0% | 0.0045 | 2.2% |
+| Network, 100 simulations, `cpuct` 0.5 | 75.0% | 79.4% | 0.0041 | 2.4% |
+| Network, 500 simulations | 81.5% | 84.9% | **0.0030** | **1.0%** |
+
+Mean loss per decision, by decision kind (the share of audited decisions in brackets, for the network at 100):
+
+| Kind | No network, 100 | Network, 25 | Network, 100 | Network, 500 |
+|---|---|---|---|---|
+| Casting and activating (priority; 52%) | 0.0106 | 0.0108 | 0.0053 | 0.0032 |
+| Attacks (24%) | 0.0073 | 0.0071 | 0.0043 | 0.0011 |
+| Targets (10%) | 0.0080 | 0.0059 | 0.0023 | 0.0058 |
+| Blocks (8%) | 0.0076 | 0.0070 | 0.0021 | 0.0043 |
+| Modes (3%) | 0.0199 | 0.0038 | 0.0041 | 0.0008 |
+| Other choices (2%) | 0.0125 | 0.0079 | 0.0069 | 0.0006 |
+
+- **Search buys most of the accuracy:** loss per decision halves from 25 to 100 simulations and falls by another third
+  at 500. The ordering matches the agents' results against the bot.
+- **Casting decisions carry most of what is left** at every depth: about half the decisions and 55-65% of the total
+  loss. They are where more search, or a better network, has the most to gain.
+- **Targeting and blocking mistakes mostly go away by 100 simulations** (0.002 per decision; their 500-simulation
+  numbers rest on 85-130 decisions and are noisier).
+- **The network's value matters most for modal spells** (0.020 without it, 0.004 with it at 25 simulations already):
+  a heuristic can't weigh one mode against another.
+- **These losses are upper bounds:** the oracle's own estimates are noisy and a loss only counts when positive. A
+  self-audit (the oracle's configuration audited by itself, 60 games) measures that floor; the numbers above should be
+  read against it.
