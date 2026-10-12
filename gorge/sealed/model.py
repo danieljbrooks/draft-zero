@@ -57,6 +57,9 @@ class DeckNet(nn.Module):
                                     nn.Linear(hidden, 1))
         self.ctx = nn.Sequential(nn.Linear(d, hidden), nn.ReLU(), nn.Linear(hidden, 1))
         self.beta = nn.Parameter(torch.zeros(()))
+        # the draw term's scale: a drawn card's effect on the game relative to its per-copy deck value (about
+        # 40 / cards seen, ~2.3, if a card matters only when drawn); used only when training with draws
+        self.lam = nn.Parameter(torch.tensor(2.0))
 
     def roles(self):
         land = torch.sigmoid(self.land0 + self.d_land)
@@ -104,10 +107,12 @@ class DeckNet(nn.Module):
                 + 0.1 * self.d_mv.pow(2).mean() + 0.1 * self.d_crea.pow(2).mean() + 0.1 * self.d_src.pow(2).mean())
 
 
-def games_tensors(games, decks):
+def games_tensors(games, decks, draws=False):
     """games: dicts with decks [a, b], winner (seat), starter; decks: name -> count vector.
-    -> (A, B, play, y) tensors; draws, stalls and skipped games are dropped."""
-    A, B, P, Y = [], [], [], []
+    -> (A, B, P, Y) tensors; draws, stalls and skipped games are dropped. With draws=True, also (Ha, Hb): each seat's
+    cards in hand over the game (its kept opening hand and every card it drew), less what an average draw of that
+    many cards from its deck would hold, as count vectors (the game-in-hand signal, centred)."""
+    A, B, P, Y, HA, HB = [], [], [], [], [], []
     for g in games:
         w = g.get("winner", -1)
         if w not in (0, 1):
@@ -118,26 +123,42 @@ def games_tensors(games, decks):
         A.append(decks[a]); B.append(decks[b])
         P.append(1.0 if g.get("starter", 0) == 0 else -1.0)
         Y.append(1.0 if w == 0 else 0.0)
-    return (torch.tensor(np.array(A)), torch.tensor(np.array(B)), torch.tensor(P), torch.tensor(Y))
+        if draws:
+            for seat, d, out in ((0, decks[a], HA), (1, decks[b], HB)):
+                h = np.zeros(len(C), np.float32)
+                for c in g.get("in_hand", [[], []])[seat]:
+                    i = C.index.get(c)
+                    if i is not None:
+                        h[i] += 1
+                out.append(h - d * (h.sum() / max(d.sum(), 1)))
+    t = (torch.tensor(np.array(A)), torch.tensor(np.array(B)), torch.tensor(P), torch.tensor(Y))
+    if draws:
+        t += (torch.tensor(np.array(HA)), torch.tensor(np.array(HB)))
+    return t
 
 
-def loss_fn(m, A, B, P, Y, reg=1e-3):
+def loss_fn(m, A, B, P, Y, Ha=None, Hb=None, reg=1e-3):
     logit = m(A) - m(B) + m.beta * P
+    if Ha is not None:   # the draw term: cards drawn above or below the deck's average, valued by card quality
+        logit = logit + m.lam * ((Ha - Hb) @ m.quality())
     return F.binary_cross_entropy_with_logits(logit, Y), reg * m.reg()
 
 
 def train(games, decks, val_games=None, seed=0, epochs=40, lr=3e-3, wd=1e-4, batch=1024, reg=1e-3, bootstrap=False,
-          init=None, patience=4, log=None):
-    """Fit one DeckNet. With val_games, early-stop on their log-loss; bootstrap resamples the games (ensembles)."""
+          init=None, patience=4, log=None, draws=False):
+    """Fit one DeckNet. With val_games, early-stop on their log-loss of the deck-only prediction (no draw term, so
+    runs with and without draws compare); bootstrap resamples the games (ensembles). draws=True adds the
+    games-in-hand term to training."""
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
-    A, B, P, Y = games_tensors(games, decks)
+    T = games_tensors(games, decks, draws)
     if bootstrap:
-        idx = torch.tensor(rng.integers(0, len(Y), len(Y)))
-        A, B, P, Y = A[idx], B[idx], P[idx], Y[idx]
+        idx = torch.tensor(rng.integers(0, len(T[3]), len(T[3])))
+        T = tuple(x[idx] for x in T)
+    Y = T[3]
     m = DeckNet()
     if init is not None:
-        m.load_state_dict(init.state_dict())
+        m.load_state_dict(init.state_dict(), strict=False)
     opt = torch.optim.AdamW(m.parameters(), lr=lr, weight_decay=wd)
     V = games_tensors(val_games, decks) if val_games else None
     best, best_state, bad = math.inf, None, 0
@@ -147,13 +168,13 @@ def train(games, decks, val_games=None, seed=0, epochs=40, lr=3e-3, wd=1e-4, bat
         tot = 0.0
         for i in range(0, len(Y), batch):
             j = perm[i:i + batch]
-            l, r = loss_fn(m, A[j], B[j], P[j], Y[j], reg)
+            l, r = loss_fn(m, *(x[j] for x in T), reg=reg)
             opt.zero_grad(); (l + r).backward(); opt.step()
             tot += l.item() * len(j)
         if V is not None:
             m.eval()
             with torch.no_grad():
-                vl = loss_fn(m, *V, reg)[0].item()
+                vl = loss_fn(m, *V, reg=reg)[0].item()
             if log:
                 log(f"  epoch {ep}: train {tot / len(Y):.4f} val {vl:.4f}")
             if vl < best - 1e-4:
@@ -170,8 +191,9 @@ def train(games, decks, val_games=None, seed=0, epochs=40, lr=3e-3, wd=1e-4, bat
 
 
 class Ensemble:
-    def __init__(self, members):
+    def __init__(self, members, meta=None):
         self.members = members
+        self.meta = meta or {}   # e.g. "lands": [lo, hi], the land counts the training games support
 
     @torch.no_grad()
     def scores(self, n):
@@ -180,11 +202,34 @@ class Ensemble:
         return torch.stack([m(n) for m in self.members]).numpy()
 
     def save(self, path):
-        torch.save([m.state_dict() for m in self.members], path)
+        torch.save({"members": [m.state_dict() for m in self.members], "meta": self.meta}, path)
 
     @classmethod
     def load(cls, path):
+        raw = torch.load(path)
+        sds, meta = (raw["members"], raw.get("meta")) if isinstance(raw, dict) else (raw, None)
         ms = []
-        for sd in torch.load(path):
-            m = DeckNet(); m.load_state_dict(sd); m.eval(); ms.append(m)
-        return cls(ms)
+        for sd in sds:
+            m = DeckNet(); m.load_state_dict(sd, strict=False); m.eval(); ms.append(m)
+        return cls(ms, meta)
+
+
+def land_support(games, decks, share=0.02):
+    """The contiguous range of land counts around the most played one, each count making up at least `share` of the
+    deck-games in `games`: where the network has seen enough results to be trusted."""
+    cnt = {}
+    for g in games:
+        for d in g.get("decks", []):
+            if d in decks:
+                L = int(round(float(decks[d][C.is_land].sum())))
+                cnt[L] = cnt.get(L, 0) + 1
+    if not cnt:
+        return None
+    tot = sum(cnt.values())
+    mode = max(cnt, key=cnt.get)
+    lo = hi = mode
+    while cnt.get(lo - 1, 0) >= share * tot:
+        lo -= 1
+    while cnt.get(hi + 1, 0) >= share * tot:
+        hi += 1
+    return [lo, hi]

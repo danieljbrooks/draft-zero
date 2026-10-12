@@ -43,20 +43,25 @@ def _build_worker(args):
     ens = M.Ensemble.load(ens_path)
     q = np.mean([m.quality().detach().numpy() for m in ens.members], 0)
     mean = Bd.Objective(ens, "mean")
+    lands = ens.meta.get("lands")
     out = {}
     for name, pool, kinds in jobs:
         best = None
         for kind in kinds:
             if kind == "b":
-                best = d = Bd.build(pool, mean, q)
+                best = d = Bd.build(pool, mean, q, lands=lands)
             elif kind == "c":     # cautious: the mean less one standard deviation across members
-                d = Bd.build(pool, Bd.Objective(ens, "cautious", k=1.0), q)
+                d = Bd.build(pool, Bd.Objective(ens, "cautious", k=1.0), q, lands=lands)
+            elif kind == "l":     # the best deck with 1-3 lands more or fewer: explore the land count's edges
+                b0 = best if best is not None else Bd.build(pool, mean, q, lands=lands)
+                d = D.shift_lands(b0, pool, int(rng.choice([-3, -2, -1, 1, 2, 3])), q)
             elif kind == "t" or (kind == "r" and rng.random() >= random_share):
                 k = int(rng.integers(len(ens.members)))
                 qk = ens.members[k].quality().detach().numpy()
-                d = Bd.build(pool, Bd.Objective(ens, member=k), qk, n_refine=2)
+                d = Bd.build(pool, Bd.Objective(ens, member=k), qk, n_refine=2, lands=lands)
             elif kind == "p":
-                d = D.perturb(best if best is not None else Bd.build(pool, mean, q), pool, rng, int(rng.integers(1, 4)))
+                d = D.perturb(best if best is not None else Bd.build(pool, mean, q, lands=lands), pool, rng,
+                              int(rng.integers(1, 4)))
             else:
                 d = D.random_build(pool, rng, wide=True)
             out[f"{name}.{kind}"] = d
@@ -101,6 +106,11 @@ def main():
     ap.add_argument("--warm", action="store_true", help="train each generation's members from the previous ensemble "
                     "(a lower learning rate) instead of from scratch")
     ap.add_argument("--warm-lr", type=float, default=1e-3)
+    ap.add_argument("--draws", action="store_true", help="train with the games-in-hand draw term (model.loss_fn)")
+    ap.add_argument("--kinds", default="btpr", help="deck variants per pool: b best, t Thompson, p perturbed, "
+                    "r random (or t), l land-shifted, c cautious")
+    ap.add_argument("--support", type=float, default=0.02, help="land counts with at least this share of the "
+                    "window's deck-games are the builder's range (model.land_support); 0 = no range")
     ap.add_argument("--val-pools", type=int, default=200)
     ap.add_argument("--eval-every", type=int, default=1)
     ap.add_argument("--eval-pools", type=int, default=500)
@@ -129,7 +139,7 @@ def main():
                 r = np.random.default_rng(a.seed * 1000 + gen)
                 decks = {f"g{gen}.{k}.r{v}": D.random_build(train[k]["pool_v"], r, wide=True) for k in pick for v in range(4)}
             else:
-                items = [(f"g{gen}.{k}", train[k]["pool_v"], "btpr") for k in pick]
+                items = [(f"g{gen}.{k}", train[k]["pool_v"], a.kinds) for k in pick]
                 decks = build_many(ens_path, items, a.procs, a.seed * 1000 + gen, a.random_share)
             pool_of = {n: n.split(".")[1] for n in decks}
             S.write_gen(gd, decks, pool_of, a.games, a.seed * 1000 + gen)
@@ -144,9 +154,15 @@ def main():
         gens.append(gd)
         t2 = time.time()
         if a.warm and ens_path:
-            ens, rep = T.fit(gens[-a.window:], a.members, log=log, init=M.Ensemble.load(ens_path), lr=a.warm_lr)
+            ens, rep = T.fit(gens[-a.window:], a.members, log=log, init=M.Ensemble.load(ens_path), lr=a.warm_lr,
+                             draws=a.draws)
         else:
-            ens, rep = T.fit(gens[-a.window:], a.members, log=log)
+            ens, rep = T.fit(gens[-a.window:], a.members, log=log, draws=a.draws)
+        if a.support:
+            ens.meta["lands"] = M.land_support(S.load_games([os.path.join(g, "games.jsonl") for g in gens[-a.window:]]),
+                                               S.load_decks([os.path.join(g, "decks.jsonl") for g in gens[-a.window:]]),
+                                               a.support)
+            log(f"gen {gen}: builder's land range {ens.meta['lands']}")
         ens.save(os.path.join(gd, "ens.pt"))
         ens_path = os.path.join(gd, "ens.pt")
         log(f"gen {gen}: trained in {time.time() - t2:.0f}s")

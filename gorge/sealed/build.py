@@ -52,8 +52,9 @@ def quick_deck(pool, cols, quality, n_lands=17):
     return deck
 
 
-def neighbours(deck, pool):
-    """All 1-for-1 swaps of a 40-card deck within the pool (basics unlimited)."""
+def neighbours(deck, pool, lands=None):
+    """All 1-for-1 swaps of a 40-card deck within the pool (basics unlimited); with lands=[lo, hi], only those
+    whose land count stays in that range."""
     outs = np.flatnonzero(deck > 0)
     room = pool - deck
     room[BASIC_IDX] = 99
@@ -65,13 +66,18 @@ def neighbours(deck, pool):
     nb = np.repeat(deck[None, :], len(o), 0)
     nb[np.arange(len(o)), o] -= 1
     nb[np.arange(len(o)), i] += 1
+    if lands is not None:
+        L = nb[:, C.is_land].sum(1)
+        nb = nb[(L >= lands[0]) & (L <= lands[1])]
     return nb
 
 
-def refine(deck, pool, obj, eps=1e-4, max_steps=60):
+def refine(deck, pool, obj, eps=1e-4, max_steps=60, lands=None):
     s = obj(deck[None])[0]
     for step in range(max_steps):
-        nb = neighbours(deck, pool)
+        nb = neighbours(deck, pool, lands)
+        if not len(nb):
+            break
         v = obj(nb)
         j = int(np.argmax(v))
         if v[j] <= s + eps:
@@ -80,20 +86,22 @@ def refine(deck, pool, obj, eps=1e-4, max_steps=60):
     return deck, float(s)
 
 
-def build(pool, obj, quality, n_refine=4, return_all=False):
-    """The best deck for `pool` (a count vector over non-basic cards) under objective `obj`."""
+def build(pool, obj, quality, n_refine=4, return_all=False, lands=None):
+    """The best deck for `pool` (a count vector over non-basic cards) under objective `obj`. lands=[lo, hi] keeps
+    the land count inside the range the training games support (Ensemble.meta["lands"])."""
     pool = pool.copy()
     pool[BASIC_IDX] = 0
+    n0 = 17 if lands is None else int(np.clip(17, lands[0], lands[1]))
     starts = []
     for cols in CONFIGS:
-        d = quick_deck(pool, cols, quality)
+        d = quick_deck(pool, cols, quality, n_lands=n0)
         if d is not None:
             starts.append(d)
     if not starts:   # a tiny pool: everything castable
         starts = [quick_deck(pool, np.ones(5, bool), quality, n_lands=max(17, 40 - int((pool * C.spell).sum())))]
     sc = obj(np.array(starts))
     order = np.argsort(-sc)[:n_refine]
-    cands = [refine(starts[i], pool, obj) for i in order]
+    cands = [refine(starts[i], pool, obj, lands=lands) for i in order]
     cands.sort(key=lambda t: -t[1])
     if return_all:
         return cands

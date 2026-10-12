@@ -54,22 +54,48 @@ def curves(runs, fig=None):
         f.tight_layout(); f.savefig(fig, dpi=150)
 
 
+def marginal(ens, C, n_decks=200):
+    """Each non-land card's marginal value: the mean change in the ensemble's deck score when it replaces one random
+    non-land card of a built val deck whose colours can cast it (decks from the ensemble's own builder)."""
+    from . import build as Bd, decks as D
+    rng = np.random.default_rng(0)
+    pools = D.load_pools("sealed", "val")[:n_decks]
+    with __import__("torch").no_grad():
+        qq = np.mean([m.quality().numpy() for m in ens.members], 0)
+    obj = Bd.Objective(ens, "mean")
+    decks = [Bd.build(p["pool_v"], obj, qq, n_refine=2) for p in pools]
+    cols = [((d[:, None] * C.pips).sum(0) > 0) for d in decks]
+    out = np.full(len(C), np.nan)
+    base = obj(np.array(decks))
+    for c in np.flatnonzero(C.spell):
+        rows, idx = [], []
+        for k, d in enumerate(decks):
+            if C.colors[c].any() and not (C.colors[c] <= cols[k]).all():
+                continue
+            nl = np.flatnonzero((d > 0) & C.spell)
+            o = rng.choice(nl)
+            e = d.copy(); e[o] -= 1; e[c] += 1
+            rows.append(e); idx.append(k)
+        if rows:
+            out[c] = float(np.mean(obj(np.array(rows)) - base[idx]))
+    return out
+
+
 def cards(ens_path, top=25):
     import torch
     from . import model as M
     C = cardsmod.load()
     ens = M.Ensemble.load(ens_path)
-    with torch.no_grad():
-        q = np.mean([m.quality().numpy() for m in ens.members], 0)
+    q = marginal(ens, C)
     gih = json.load(open(os.path.join(REPO, "assets/reference/FDN_card_stats.json")))["cards"]
     g = np.array([gih.get(n, {}).get("gih_wr", np.nan) for n in C.names])
-    ok = C.spell & ~np.isnan(g)
+    ok = C.spell & ~np.isnan(g) & ~np.isnan(q)
     from scipy.stats import spearmanr
     rho = spearmanr(q[ok], g[ok]).correlation
     idx = np.flatnonzero(ok)
     rq = {i: r + 1 for r, i in enumerate(idx[np.argsort(-q[idx])])}
     rg = {i: r + 1 for r, i in enumerate(idx[np.argsort(-g[idx])])}
-    print(f"Spearman correlation of self-play card quality with 17lands GIH win rate, {ok.sum()} spells: {rho:.3f}\n")
+    print(f"Spearman correlation of self-play marginal card value with 17lands GIH win rate, {ok.sum()} spells: {rho:.3f}\n")
     print("| Card | Rarity | 17lands GIH WR | Rank by 17lands | Rank by self-play |")
     print("|---|---|---|---|---|")
     for i in idx[np.argsort(-g[idx])][:top]:

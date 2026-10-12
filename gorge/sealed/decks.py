@@ -167,6 +167,28 @@ def load_pools(kind="sealed", split=None):
     return out
 
 
+def shift_lands(deck: np.ndarray, pool: np.ndarray, k: int, quality: np.ndarray) -> np.ndarray:
+    """The deck with k more lands (k < 0: fewer): the lowest-quality spells swapped for basics split by pips, or
+    basics swapped for the best unused castable spells."""
+    d = deck.copy()
+    cols = (d[:, None] * C.pips).sum(0) > 0
+    for _ in range(abs(k)):
+        if k > 0:
+            sp = [i for i in np.argsort(quality) if d[i] > 0 and C.spell[i]]
+            if not sp:
+                break
+            d[sp[0]] -= 1
+            d += basics_split(d, 1, cols if cols.any() else None)
+        else:
+            b = [i for i in BASIC_IDX if d[i] > 0]
+            add = [i for i in np.argsort(-quality) if C.spell[i] and pool[i] - d[i] > 0 and castable(cols)[i]]
+            if not b or not add:
+                break
+            d[max(b, key=lambda i: d[i])] -= 1
+            d[add[0]] += 1
+    return d
+
+
 def perturb(deck: np.ndarray, pool: np.ndarray, rng: np.random.Generator, k: int) -> np.ndarray:
     """k random 1-for-1 swaps within the pool (basics unlimited): exploration around a built deck."""
     d = deck.copy()

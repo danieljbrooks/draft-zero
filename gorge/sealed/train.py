@@ -42,7 +42,7 @@ def evaluate(ens, games, decks):
     return {"games": int(len(y)), "logloss": ll, "base_logloss": base, "acc": float(np.mean((p > 0.5) == (y > 0.5)))}
 
 
-def fit(gen_dirs, members=5, epochs=40, init=None, log=print, weights=None, **kw):
+def fit(gen_dirs, members=5, epochs=40, init=None, log=print, weights=None, draws=False, **kw):
     decks = S.load_decks([os.path.join(g, "decks.jsonl") for g in gen_dirs])
     games = S.load_games([os.path.join(g, "games.jsonl") for g in gen_dirs])
     tr, va = split_games(games)
@@ -51,7 +51,7 @@ def fit(gen_dirs, members=5, epochs=40, init=None, log=print, weights=None, **kw
     for k in range(members):
         t0 = time.time()
         m = M.train(tr, decks, va, seed=k, epochs=epochs, bootstrap=members > 1,
-                    init=init.members[k % len(init.members)] if init else None, **kw)
+                    init=init.members[k % len(init.members)] if init else None, draws=draws, **kw)
         log(f"member {k}: held-out loss {m.val_loss:.4f} ({time.time() - t0:.0f}s)")
         ms.append(m)
     ens = M.Ensemble(ms)
