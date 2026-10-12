@@ -122,6 +122,8 @@ when the heuristic bot plays). Its decks share 18.6 of 40 cards with the humans'
 deals, the 17lands heuristic (which uses human statistics) wins 56.6%, and a builder trained to imitate the human
 decks wins 54.3%: the deck that agrees most with the humans is not the one that beats them.
 
+![Win rate against the human decks at 100 simulations, per builder](img/032-builders-light.png)
+
 | Builder | Trained on | Cards shared with the human deck (of 40) | Main colours match | Won against the human decks, search at 100 simulations |
 |---|---|---|---|---|
 | Random deck-shaped build | nothing | 14.3 | 11% | 35.8% of 400 |
@@ -188,6 +190,8 @@ generation's decks against the human decks, on the same deals for every builder.
 | 10 | 18.8 | 27% | 19.2 | 68.1% | |
 | 11 | 18.4 | 27% | 18.7 | 68.7% | |
 | 12 | 19.1 | 26% | 18.5 | 72.5% | |
+
+![Phase A: win rate against the human decks per generation, played by the heuristic bot and by the search](img/032-phaseA-light.png)
 
 *Agreement on 200 val pools; win rates on 500 val pools (1,000 games; one standard error about 1.5 points). The
 heuristic-bot column of generations 0-3 played under the Omniscience bug (§5.5).*
