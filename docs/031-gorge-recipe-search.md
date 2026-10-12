@@ -315,3 +315,123 @@ The start network inside the full search, and the full search without a network,
   times the cost (146 minutes for 200 games on the laptop, against 16).
 - **Against this bot, ~82% may be near the ceiling** that luck allows (draws of lands and spells decide some games
   whatever the play); a stronger fixed opponent would separate the top levels better.
+
+### Loop B alone, and E5: targets on the loop's own games (Sunday 6-9 PM, r1)
+
+From generation 5, loop B (warm start, every game) runs alone on 20 of r1's cores.
+
+| Loop B generation | 5 | 6 | 7 |
+|---|---|---|---|
+| Against the zero point (800 games) | 57.0% | 57.6% | 57.4% |
+| Against the bot (1,000 games) | 76.2% | 76.0% | 76.1% |
+
+*Against the bot loop B has gone from 73-75% (generations 1-4) to 76% three times running: a point or two, at the edge
+of what 1,000 games can show.*
+
+**E5** (beside it, 10 cores and a GPU) tried targets on B's generations 1-4, the games played with a network inside the
+search, whose root values come from the network-guided search (unlike E2's games, where they were the heuristic's).
+Each variant continues B's generation-4 network for 2 passes at a learning rate of 1e-4:
+
+| Variant | Against the bot at 100 simulations (1,000 games) |
+|---|---|
+| Control: visit counts, the result | 76.0% |
+| Sharper visit targets (temperature 0.5) | 74.8% |
+| Completed-Q (0.03) | 75.1% |
+| Value: 25% the search's root value | 75.7% |
+| Value: 50% the search's root value | 75.2% |
+
+*No variant beats the control; all are within chance of it.*
+
+### Why the loops stall: diagnostics (Sunday 7-9 PM, laptop)
+
+**Which half of the network plays?** Loop B's generation 4 inside the full search at 100 simulations, against the bot
+(1,000 games each):
+
+| Search uses the network's | Won |
+|---|---|
+| Prior and value | 74.1% |
+| Value only (a uniform prior) | 74.2% |
+| Prior only (the heuristic's leaf values) | 72.9% |
+| Nothing (the ladder, 200 games) | 72.5% |
+
+**Would deeper search give sharper policy targets?** 300 games of self-play with B's generation 4 at 25, 100 and 400
+simulations:
+
+| Self-play simulations | Visit-target entropy | A uniform guess | Network's policy cross-entropy |
+|---|---|---|---|
+| 25 | 0.972 | 1.039 | 1.016 |
+| 100 | 0.952 | 1.032 | 1.002 |
+| 400 | 0.915 | 1.037 | 0.997 |
+
+At 400 simulations, the median decision's candidates (3 of them) differ by 0.04 in their estimated chance of winning
+(0.09 at the 75th percentile, 0.17 at the 90th); the most visited gets 56% of the visits, and is the best-valued one 69%
+of the time.
+
+- **All of the network's gain in play is its value.** Its prior adds nothing: a uniform prior plays as well.
+- **The policy has nothing to learn from visit counts at any affordable depth.** Most of a decision's candidates are
+  within a few points of each other, so the search's exploration (`cpuct` 1.5) keeps visits spread even at 400
+  simulations. Sharper targets built from those estimates (E2, E5) only amplify their noise.
+- **The value improves on held-out games (0.449 to 0.436) but barely in play.** What the search needs from the value
+  is to rank sibling positions a few points apart; the log-loss against the game's result mostly measures the luck it
+  cannot predict.
+
+*Reading: the AlphaZero loop, as set up here, has no policy-improvement step to compound. Gains come only from the value,
+and they are slow. A recipe for millions of games needs one of: a value that separates close siblings (targets from
+deeper search at the positions that matter, or the search's own root values once they are better than the result);
+a search whose exploration lets the values decide (`cpuct`, sequential halving as in Gumbel AlphaZero); or a policy
+target that does not come from visit counts.*
+
+### Is loop B improving? Head to head (Sunday 9 PM, r1)
+
+Matches against the bot compress small differences (every network sits at 74-77%), so loop B's generation 7 played the
+start network directly: the full search at 100 simulations on both sides, 500 deck pairs.
+
+- **Loop B's generation 7 beat the start network 54.3% ± 1.0 of 1,000 paired games**, about four standard errors: the
+  slow value gains of §E3 are real in play. Against the bot the same two networks scored 76.1% and 75.5%.
+- From here every check of a loop's progress includes a head-to-head against the start network.
+
+### Exploration at test time: lower `cpuct` plays better (Sunday 8-10 PM, laptop)
+
+The diagnostics found visits spread by exploration rather than by value. Loop B's generation 4 inside the full search at
+100 simulations against the bot, with the search's exploration constant varied (1,000 games each, the same deals):
+
+| `cpuct` | 3.0 | 1.5 (gorge's default, every match so far) | 1.0 | 0.5 |
+|---|---|---|---|---|
+| Won | 73.7% | 74.1% | 76.0% | **77.6%** |
+
+- **Lower exploration wins more, and the trend hasn't bottomed out:** 3.5 points from 1.5 to 0.5, three standard
+  errors, for no extra compute. That is more than four generations of loop B gained against the bot.
+- **It may also fix the policy's targets:** with less exploration, visits follow the values, so a loop that self-plays
+  at a low `cpuct` gets sharper visit counts to learn from.
+
+*Next: 0.25 and 0.1 at 100 simulations, and 0.5 against 1.5 at 500 (r1); **loop E**, loop B's recipe with `cpuct` 0.5 in
+self-play, branched from loop B's latest generation (r1).*
+
+### How good is the bot? An audit against a deeper search (from Sunday 10 PM, laptop)
+
+**The proposal.** Win rates against a fixed bot saturate (strength levels off near 82% against gorge's bot) and say
+little about how far the bot is from strong play. A chess-style measure asks instead how much each decision gives up:
+- **The oracle:** at a sampled quarter of the bot's decisions, the same network searches the same position with 2,000
+  simulations and no top-6 cut.
+- **The measure:** the oracle's estimate of its own best answer minus its estimate of the bot's answer, in win chance
+  (like chess's average centipawn loss).
+- **Reported per decision kind** (casting, attacks, blocks, targets, choices) and summed per game: a game's expected
+  win chance thrown away.
+
+`dzgorge play -audit-oracle SPEC` runs the oracle beside the bot's seat without changing the game: 8 test games played
+identically with and without it.
+
+**Reading it, and its limits:**
+- The oracle shares the bot's network, so it measures what more search would change, not what perfect play would. A
+  stronger oracle (a better network, more simulations) tightens the bound; the measure only ever under-counts mistakes.
+- Decision kinds where loss falls with the bot's own simulations are where test-time compute pays; kinds where it
+  doesn't are where the network (or the search's design) must improve.
+
+**Other measures toward "could it beat top humans",** not yet run:
+- **Agreement with strong humans' choices** on 17lands FDN replays (the imitation work's held-out games), once gorge
+  can replay a human game's positions: the top-1 agreement of a top-player model is a known ceiling to compare with.
+- **Card-quality calibration:** in self-play, a strong player's results per card should rank cards as 17lands' top
+  players' results do (GIH win rate). The correlation has a noise ceiling of about 0.49 at the game counts of exp #1;
+  a weak player plays every card about the same.
+- **A ladder of fixed opponents** (gorge's bot, the plain search at 100/500/3,000 simulations, frozen generations) with
+  ratings fitted across all matches, so new bots are placed without saturating against any one opponent.
