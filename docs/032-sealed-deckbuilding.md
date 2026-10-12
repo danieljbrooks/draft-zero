@@ -321,7 +321,9 @@ cards are nearly free and the search extrapolated to eight of them. The network 
 to how castable its deck makes it: a smooth, learned function of the deck's sources of each colour the spell needs
 (after training: one pip with no sources counts 8%, with three sources 50%, with eight 97%). It changes nothing a
 human would have hand-set, generalises to any set, and is what makes a three- or five-colour deck's mana base
-matter to the builder. Phase B uses it from generation 5.
+matter to the builder. Retrained on the exact games that produced the broken network, without castability the
+collapse repeats (58 of 60 val decks with spells the deck cannot cast, 8.5 such cards a deck); with it, 2 of 60 (0.2
+a deck), and the held-out loss is slightly better (0.6687 against 0.6693). Phase B uses it from generation 5.
 
 ### 5.9 Draft: the builder on pools it never trained on
 
