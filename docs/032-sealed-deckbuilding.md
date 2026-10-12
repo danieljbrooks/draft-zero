@@ -1,8 +1,8 @@
 # Building sealed decks from self-play: FDN on gorge
 
-*Status (Monday 12 October 2026, 2:45 AM PT): a builder trained only on its own games beats the human decks 61% at
-100 simulations, ahead of the 17lands heuristic (57%) (§5.1); two test-time ideas failed (§5.5); search-level self-play
-(phase B) and a colour-diverse league (E5) are running. The code is on the
+*Status (Monday 12 October 2026, 4:50 AM PT): a builder trained only on its own games beats the human decks 65% at
+100 simulations, ahead of the 17lands heuristic (57%) (§5.1); games played by the search, not cheap bot games, got it
+there (§5.4, §5.8). Phase B and the evaluations are still running. The code is on the
 [`sealed-deckbuilding`](https://github.com/danieljbrooks/draft-zero/tree/sealed-deckbuilding) branch (`gorge/sealed/`).*
 
 **The goal:** a model that builds a 40-card sealed deck from a pool of six FDN packs, trained **only from games it
@@ -114,15 +114,20 @@ simulations.
 
 ## 5. Results
 
-### 5.1 Headline so far (Monday 12 October, 2:45 AM PT)
+### 5.1 Headline so far (Monday 12 October, 4:50 AM PT)
 
-**A builder that learned only from games played by gorge's heuristic bot, two generations in, wins 60.9% of 1,000
-games against the human decks from the same val pools when the full search plays them at 100 simulations** (71.1%
-when the heuristic bot plays). Its decks share 18.6 of 40 cards with the humans'. In the same test, on the same
-deals, the 17lands heuristic (which uses human statistics) wins 56.6%, and a builder trained to imitate the human
-decks wins 54.3%: the deck that agrees most with the humans is not the one that beats them. At 300 simulations (Dan's
-suggested depth) the same decks still win 59.4% of 1,000. On draft pools, which it never trained on, the builder wins
-54.4% against the human draft decks, where the 17lands heuristic wins 50.3%.
+**A builder that learned only from its own games wins 65.4% of 1,000 games against the human decks from the same
+val pools when the full search plays them at 100 simulations.** It is phase B's generation 3: two generations of
+cheap games played by gorge's heuristic bot, then four of games played by the search. Its decks share 18.7 of 40
+cards with the humans'. In the same test, on the same deals:
+
+- the 17lands heuristic, which uses human statistics, wins 56.6%;
+- a builder trained to imitate the human decks wins 54.3%: the deck that agrees most with the humans is not the one
+  that beats them;
+- phase A's generation 2, the best builder from cheap games alone, wins 60.9%, and still 59.4% at 300 simulations
+  (Dan's suggested depth), so the self-play builder's edge holds with deeper search;
+- on draft pools, which it never trained on, phase A's generation 2 wins 54.4% against the human draft decks, where
+  the 17lands heuristic wins 50.3%.
 
 ![Win rate against the human decks at 100 simulations, per builder](img/032-builders-light.png)
 
@@ -132,7 +137,8 @@ suggested depth) the same decks still win 59.4% of 1,000. On draft pools, which 
 | 17lands heuristic | human games (17lands statistics) | 20.2 | 29% | 56.6% of 1,000 |
 | Imitation of human decks (same network and builder) | human decks | **23.8** | **36%** | 54.3% of 1,000 |
 | Self-play, phase A, generation 1 | its own games only (gorge's heuristic bot) | 18.2 | 18% | 52.3% of 1,000 |
-| **Self-play, phase A, generation 2** | **its own games only** (gorge's heuristic bot) | 18.6 | 21% | **60.9% of 1,000** |
+| Self-play, phase A, generation 2 | its own games only (gorge's heuristic bot) | 18.6 | 21% | 60.9% of 1,000 |
+| **Self-play, phase B, generation 3** | **its own games only** (then the search at 25 simulations) | 18.7 | 25% | **65.4% of 1,000** |
 
 *Agreement on 1,000 val pools (the self-play rows: 500). Win rates: 500 val pools, 4 games a pool pair; the random
 build's is the search-depth test's (§5.3). One standard error is about 1.5 points at 1,000 games, 2.5 at 400.*
@@ -300,7 +306,8 @@ like the others: 1,000 games against the human decks at 100 simulations.
 | 0 | 17.9 | 63.1% | 59.7% |
 | 1 | 18.7 | 58.3% | 56.0% |
 | **2** | 18.0 | 61.7% | **61.6%** |
-| 3 | 17.9 | 65.4% | *running* |
+| **3** | 17.9 | 65.4% | **65.4%** |
+| 4 | 17.5 | 67.7% | *running* |
 
 *Generation 1 is the first with the support region, land exploration and the draw term (§5.7).*
 

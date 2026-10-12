@@ -54,7 +54,7 @@ def builders(rows, out):
         ax.plot(w, y, "o", ms=8, color=c, mec=SURF, mew=2)
         ax.text(w + se + 0.4, y, f"{w:.1f}%", va="center", fontsize=9, color=INK)
     ax.axvline(50, color=INK2, lw=1, ls="--")
-    ax.text(49.7, -0.45, "50%: as good as\nthe human decks", fontsize=8, color=INK2, ha="right", va="bottom")
+    ax.text(50.3, len(pts) - 1, "50%: as good as\nthe human decks", fontsize=8, color=INK2, ha="left", va="center")
     ax.set_yticks(range(len(pts)))
     ax.set_yticklabels([p[0] for p in reversed(pts)], fontsize=9, color=INK)
     ax.set_xlabel("Won against the human decks from the same pools (%), search at 100 simulations", fontsize=9,
