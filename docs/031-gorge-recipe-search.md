@@ -583,3 +583,17 @@ head (`cpuct` 0.25, 100 simulations, 1,000 games):
 *Even at 200,000 games, width buys at most a point or two (384: 1.5 standard errors). Retraining from scratch on all
 games equals the warm-started loop. Neither capacity nor the training schedule is what holds the loop at its plateau;
 the labels are (E7).*
+
+**Spending simulations where search pays (patch 0009, `ksims=`).** The ablation found casting decisions worth most of
+the search's gain, so: more simulations for casts, fewer for everything else. Loop B's generation 13, `cpuct` 0.25,
+against the bot (1,000 games each):
+
+| Simulations | Won | Search time per searched decision |
+|---|---|---|
+| 100 for every kind | **80.4%** | 283 ms |
+| Casts 160, others 40 (about the same average) | 79.2% | 322 ms |
+| Casts 200, others 25 | 76.4% | 422 ms |
+| Casts 100, others 25 | 76.2% | 176 ms |
+
+*Uniform wins. Casts are where search earns the most, but the other decisions can't be starved: at 25 simulations they
+lose more than extra casting search buys back. The budget is best spent evenly, at least between 25 and 200.*
