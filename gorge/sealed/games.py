@@ -46,7 +46,7 @@ def _run(deckfile, pairs, pol, workers, secs, out_lines):
         pf = f.name
     outp = pf + ".jsonl"
     cmd = [os.path.join(GORGE, "bin/dzgorge"), "play", "-cards", os.path.join(GORGE, ".cards"), "-deckfile", deckfile,
-           "-pairs-file", pf, "-single", "-a", pol, "-b", pol, "-workers", str(workers), "-mulligans", "2",
+           "-pairs-file", pf, "-pairs", "0", "-single", "-a", pol, "-b", pol, "-workers", str(workers), "-mulligans", "2",
            "-mull-heuristic", "-topk-max-options", "64", "-progress", "0", "-out", outp]
     try:
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=secs)
