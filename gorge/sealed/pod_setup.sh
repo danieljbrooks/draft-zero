@@ -18,5 +18,6 @@ command -v rsync >/dev/null || (apt-get update -qq && apt-get install -y -qq rsy
 cd /root/dz-sealed && git pull -q --ff-only
 mkdir -p /root/ext /root/dz-sealed/data/sealed
 GORGE_DIR=/root/ext/gorge-sealed GOFLAGS="-p=$(nproc) -trimpath" bash gorge/build.sh
+python3 -c "import numpy" 2>/dev/null || pip install -q --break-system-packages numpy scipy
 python3 -c "import numpy, torch; print('numpy', numpy.__version__, 'torch', torch.__version__)"
 echo POD_SETUP_DONE
