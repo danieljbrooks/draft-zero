@@ -369,7 +369,8 @@ like the others: 1,000 games against the human decks at 100 simulations.
 | **4** | 17.5 | 67.7% | **66.1%** |
 | 5 (castability from here) | 17.0 | 65.4% | 63.0% |
 | 6 | 17.5 | 66.8% | 65.9% |
-| **Phase C** (self-play at 100 simulations), generation 0 | 17.5 | | 64.8% (agreement 19.9 of 40, the highest) |
+| **Phase C** (self-play at 100 simulations), generation 0 | 17.5 | | 64.8% (agreement 19.9 of 40) |
+| Phase C, generation 1 | 17.4 | | *running* (agreement 20.5 of 40, the highest) |
 
 *Generation 1 is the first with the support region, land exploration and the draw term (§5.7).*
 
@@ -454,6 +455,27 @@ choices; realistic games may need ~3,000 simulations. This measures the pilot al
 - **For reference,** in 17lands' own sealed games the four white pairs have the best win rates (white-black 58.7%,
   white-red 58.6%, white-green 57.8%, white-blue 57.2%), so the builder's preference for white matches the humans';
   its concentration on white-green does not.
+
+### 5.11 More search in the training games, more human-like decks
+
+The ladder (§5.10) measures the pilot; this measures the builders it trains. Each builder's decks on 500 val pools,
+against the human decks from the same pools:
+
+| Training games played by | Cards shared (of 40) | Per-card play rate vs the humans' (rank correlation) | Colour distance to the humans' | White-green | Creatures | Non-creature spells | Non-basic lands |
+|---|---|---|---|---|---|---|---|
+| gorge's heuristic bot (phase A, generation 2) | 18.6 | 0.47 | 0.54 | 57% | 19.0 | 3.7 | 0.01 |
+| search, 25 simulations (phase B, generation 4) | 18.9 | 0.55 | 0.44 | 54% | 17.2 | 5.4 | 0.00 |
+| search, 100 simulations (phase C, generation 0) | 19.9 | 0.57 | 0.45 | 49% | 16.9 | 5.6 | 0.06 |
+| search, 100 simulations (phase C, generation 1) | **20.5** | 0.57 | **0.41** | **42%** | 16.8 | 5.8 | 0.14 |
+| *the humans* | | | | *17%* | *15.4* | *7.8* | *1.33* |
+
+*Colour distance: total variation distance between the builder's and the humans' distributions over main-colour
+combinations.*
+
+Every measure moves toward the humans as the training games get more search: fewer creatures, more removal and
+tricks, less white-green, the first non-basic lands, more cards in common. This is Dan's point in numbers: cheap
+games teach the mechanics, and games with more search teach the choices. The decks are still far from human ones,
+and the pilot's own realism stalls after 100 simulations (§5.10), so a stronger pilot is the next lever.
 
 ## 6. Prior work
 
