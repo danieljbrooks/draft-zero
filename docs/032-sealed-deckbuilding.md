@@ -154,6 +154,20 @@ docs/031's search ladder found the same: against gorge's heuristic bot, strength
 *Agreement on 1,000 val pools (the self-play rows: 500). Win rates: 500 val pools, 4 games a pool pair; the random
 build's is the search-depth test's (§5.3). One standard error is about 1.5 points at 1,000 games, 2.5 at 400.*
 
+### 5.1b The test pools: the final numbers
+
+The builders chosen on val pools, scored once on the 1,000 untouched sealed test pools (2,000 games each, the search at
+100 simulations playing both decks):
+
+| Builder | Trained on | Cards shared with the human deck (of 40) | Main colours match | Won against the human decks |
+|---|---|---|---|---|
+| **Self-play (phase B, generation 4)** | its own games only | 19.2 | 25% | **63.8% ± 1.0** |
+| 17lands heuristic | human statistics | 20.5 | 29% | 55.2% ± 1.0 |
+| Imitation of the human decks | human decks | 23.6 | 36% | 53.0% ± 1.1 |
+
+*The self-play builder won 66.1% on val; it was chosen as the best of several there, so a small drop on fresh pools is
+expected. Draft test pools: running.*
+
 ### 5.2 Card agreement is hard in sealed
 
 Even the imitation builder, trained on 6,240 human sealed decks, shares only 23.7 of 40 cards with the human deck and
