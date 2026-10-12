@@ -1,6 +1,6 @@
 # Searching for a self-play recipe that scales: laptop experiments on gorge
 
-*Status (Sunday 11 October 2026, 6:00 PM PT): stage 0, E1 and E2 done (§6); E3's loops running on r1, the search ladder on
+*Status (Monday 12 October 2026, 2:30 AM PT): stage 0, E1 and E2 done (§6); E3's loops running on r1, the search ladder on
 Dan's laptop (an 8-core M1 Pro). The code is on the
 [`gorge-train`](https://github.com/danieljbrooks/draft-zero/tree/gorge-train) branch (`gorge/recipe/`).*
 
@@ -320,10 +320,10 @@ The start network inside the full search, and the full search without a network,
 
 From generation 5, loop B (warm start, every game) runs alone on 20 of r1's cores.
 
-| Loop B generation | 5 | 6 | 7 |
-|---|---|---|---|
-| Against the zero point (800 games) | 57.0% | 57.6% | 57.4% |
-| Against the bot (1,000 games) | 76.2% | 76.0% | 76.1% |
+| Loop B generation | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|
+| Against the zero point (800 games) | 57.0% | 56.9% | 57.6% | 57.4% | 56.8% | 58.0% | 58.4% | 58.4% |
+| Against the bot (1,000 games) | 76.2% | 76.6% | 76.0% | 76.1% | 76.9% | 77.4% | 77.4% | 77.6% |
 
 *Against the bot loop B has gone from 73-75% (generations 1-4) to 76% three times running: a point or two, at the edge
 of what 1,000 games can show.*
@@ -387,7 +387,7 @@ Matches against the bot compress small differences (every network sits at 74-77%
 start network directly: the full search at 100 simulations on both sides, 500 deck pairs.
 
 - **Loop B's generation 7 beat the start network 54.3% ± 1.0 of 1,000 paired games**, about four standard errors: the
-  slow value gains of §E3 are real in play. Against the bot the same two networks scored 76.1% and 75.5%.
+  slow value gains of §E3 are real in play. Against the bot the same two networks scored 76.0% and 75.5%.
 - From here every check of a loop's progress includes a head-to-head against the start network.
 
 ### Exploration at test time: lower `cpuct` plays better (Sunday 8-10 PM, laptop)
@@ -435,3 +435,45 @@ identically with and without it.
   a weak player plays every card about the same.
 - **A ladder of fixed opponents** (gorge's bot, the plain search at 100/500/3,000 simulations, frozen generations) with
   ratings fitted across all matches, so new bots are placed without saturating against any one opponent.
+
+**First results (Sunday 10 PM-Monday 1:20 AM, laptop).** Five agents against gorge's bot, 200 games each; the oracle is
+loop B's generation 7 at 2,000 simulations (no top-6 cut) on a quarter of each agent's searched decisions (1,190-1,340
+audited decisions per agent):
+
+| Agent | Won against the bot | Agrees with the oracle | Mean loss per decision | Decisions losing over 0.05 |
+|---|---|---|---|---|
+| No network, 100 simulations | 72.5% | 67.2% | 0.0097 | 6.7% |
+| Network, 25 simulations | 72.0% | 71.8% | 0.0089 | 5.8% |
+| Network, 100 simulations | 78.0% | 78.0% | 0.0045 | 2.2% |
+| Network, 100 simulations, `cpuct` 0.5 | 75.0% | 79.4% | 0.0041 | 2.4% |
+| Network, 500 simulations | 81.5% | 84.9% | **0.0030** | **1.0%** |
+
+Mean loss per decision, by decision kind (the share of audited decisions in brackets, for the network at 100):
+
+| Kind | No network, 100 | Network, 25 | Network, 100 | Network, 500 |
+|---|---|---|---|---|
+| Casting and activating (priority; 52%) | 0.0106 | 0.0108 | 0.0053 | 0.0032 |
+| Attacks (24%) | 0.0073 | 0.0071 | 0.0043 | 0.0011 |
+| Targets (10%) | 0.0080 | 0.0059 | 0.0023 | 0.0058 |
+| Blocks (8%) | 0.0076 | 0.0070 | 0.0021 | 0.0043 |
+| Modes (3%) | 0.0199 | 0.0038 | 0.0041 | 0.0008 |
+| Other choices (2%) | 0.0125 | 0.0079 | 0.0069 | 0.0006 |
+
+- **Search buys most of the accuracy:** loss per decision halves from 25 to 100 simulations and falls by another third
+  at 500. The ordering matches the agents' results against the bot.
+- **Casting decisions carry most of what is left** at every depth: about half the decisions and 55-65% of the total
+  loss. They are where more search, or a better network, has the most to gain.
+- **Targeting and blocking mistakes mostly go away by 100 simulations** (0.002 per decision; their 500-simulation
+  numbers rest on 85-130 decisions and are noisier).
+- **The network's value matters most for modal spells** (0.020 without it, 0.004 with it at 25 simulations already):
+  a heuristic can't weigh one mode against another.
+- **The noise floor is small.** The oracle's own configuration audited by itself (60 games, 383 decisions) loses
+  **0.0006** per decision and agrees with itself 91.6% of the time: the oracle's estimates are noisy, and a loss only
+  counts when positive, so no agent can score below that. The agents' losses are 5-16 times the floor.
+- **Per game,** with about 26 searched decisions a game and the floor subtracted, the bot gives up roughly 0.24 of a
+  win without a network (100 simulations), 0.10 with it at 100 simulations and 0.06 at 500: against what its own
+  network sees with 2,000 simulations. A stronger oracle would find more.
+
+*Reading: of the measures toward "how good is it", this one does not saturate, splits by decision kind, and is cheap
+enough to run on every new network (a quarter of the decisions of 200 games: 40-60 minutes on 4 laptop cores). Its
+blind spot is the oracle's network: mistakes it shares with the bot are invisible.*
