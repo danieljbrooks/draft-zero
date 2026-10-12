@@ -331,6 +331,9 @@ func runPlay(args []string) int {
 					next++
 					w.Write(f.line)
 					w.WriteByte('\n')
+					// Flush each game: a run killed for a hung game keeps every game finished before it, so the
+					// caller can find the hung one (the first missing) instead of losing a buffer's worth.
+					w.Flush()
 					if f.member != nil {
 						if _, err := corpusF.Write(f.member); err != nil {
 							panic(err)
