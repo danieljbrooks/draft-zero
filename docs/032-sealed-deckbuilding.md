@@ -311,15 +311,16 @@ like the others: 1,000 games against the human decks at 100 simulations.
 
 *Generation 1 is the first with the support region, land exploration and the draw term (§5.7).*
 
-**Extra lands cost more against the humans than against the builder's own decks.** Across builders, more lands meant
-lower win rates against the human decks (phase A generation 2: 17.3 lands, 60.9%; phase B generation 1: 18.7 lands,
-56.0%). Within phase B generation 1's games against the humans, its 18-land decks won 61%, its 19-land decks 53% and
-its 20-land decks 48%. Its own self-play games say something different: comparing each pool's best deck with the
-same deck shifted by a few lands (the land-exploration decks), one land fewer cost 5.4 points (standard error 2.7)
-but one or two lands more cost only about 1 point. Against the builder's own field, slow creature decks with an
-average mana value of 3.4-3.6, flooding is cheap; the human decks (3.1) punish it. This is the classic limit of
-self-play: the builder optimises against its own population. A test that forces generation 1's decks to 17 lands is
-running, to measure what the drift costs.
+**Do the builder's extra lands cost it games? No (a hypothesis tested and rejected).** Across builders, more lands
+went with lower win rates against the human decks (phase A generation 2: 17.3 lands, 60.9%; phase B generation 1:
+18.7 lands, 56.0%), and within phase B generation 1's games its 18-land decks won 61%, its 19-land decks 53% and its
+20-land decks 48%. Its own self-play games also showed one land fewer costing 5.4 points (standard error 2.7) but one
+or two more costing only about 1, which suggested that its slow, creature-heavy field made flooding cheap where the
+humans' decks would punish it. The direct test says otherwise: the same 500 decks with their land count set to 17
+(the weakest spells swapped in or out) won 2.0 points *less* against the human decks on the same deals (standard error
+1.6), and no group gained (decks built with 18, 19 or 20 lands: -2.6, -0.8, -4.1 points). The gradient was the pools:
+the builder plays more lands in pools that are weaker to begin with. The lesson for the method: correlations within
+an evaluation mislead; a paired intervention on the same deals is cheap and decisive.
 
 **Castability, a rule of the game in the network.** A colour-diverse league experiment (E5, below) produced a network
 that built decks with red spells and no Mountains. The exploration decks explain it: 70% of the perturbed decks carry
