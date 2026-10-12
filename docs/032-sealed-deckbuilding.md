@@ -307,7 +307,7 @@ like the others: 1,000 games against the human decks at 100 simulations.
 | 1 | 18.7 | 58.3% | 56.0% |
 | **2** | 18.0 | 61.7% | **61.6%** |
 | **3** | 17.9 | 65.4% | **65.4%** |
-| 4 | 17.5 | 67.7% | *running* |
+| **4** | 17.5 | 67.7% | **66.1%** |
 
 *Generation 1 is the first with the support region, land exploration and the draw term (§5.7).*
 
