@@ -78,5 +78,32 @@ def loops(out: str, path: str) -> None:
     print(out)
 
 
+def elo(out: str, path: str) -> None:
+    """Test-time compute: Elo (gorge's bot = 0) against simulations, one line per network and setting."""
+    rows = {r["player"]: r for r in json.loads(Path(path).read_text())}
+    series = [("No network", "az:sims={n}", GREY), ("Start network", "az:sims={n}:net=start", SERIES[0]),
+              ("Loop B, generation 7", "az:sims={n}:net=B7", SERIES[1]),
+              ("Loop B, generation 13, cpuct 0.25", "az:sims={n}:cpuct=0.25:net=B13", SERIES[2])]
+    fig, ax = plt.subplots(figsize=(7.6, 4.4), dpi=160)
+    fig.patch.set_facecolor(SURF)
+    _style(ax)
+    for label, fmt, col in series:
+        pts = [(n, rows[fmt.format(n=n)]) for n in (25, 100, 500, 3000) if fmt.format(n=n) in rows]
+        if not pts:
+            continue
+        ax.errorbar([n for n, _ in pts], [r["elo"] for _, r in pts], yerr=[r["se"] for _, r in pts], color=col, lw=2,
+                    marker="o", ms=6, mec=SURF, mew=1.2, capsize=3, label=label)
+    ax.set_xscale("log")
+    ax.set_xticks([25, 100, 500, 3000])
+    ax.set_xticklabels(["25", "100", "500", "3,000"])
+    ax.set_xlabel("simulations per decision")
+    ax.set_ylabel("rating (Elo points; gorge's bot = 0)")
+    ax.set_title("Strength against search: every match on the eval deals, one Bradley-Terry fit", fontsize=10, loc="left")
+    ax.legend(frameon=False, fontsize=8.5, labelcolor=INK, loc="lower right")
+    fig.tight_layout()
+    fig.savefig(out, facecolor=SURF)
+    print(out)
+
+
 if __name__ == "__main__":
-    {"e1": e1, "loops": loops}[sys.argv[1]](*sys.argv[2:])
+    {"e1": e1, "loops": loops, "elo": elo}[sys.argv[1]](*sys.argv[2:])
