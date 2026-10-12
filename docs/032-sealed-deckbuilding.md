@@ -260,9 +260,12 @@ The best builder (phase B, generation 4) against the humans, on the same 500 val
   including Stab, Stroke of Midnight, Claws Out and Rise of the Dark Realms.
 - **Two clear mistakes by a human player's standard** (Dan): no Giada and no Scoured Barrens. In the builder's own
   games, decks that drew Giada won 37.9% of 494 games, about 5 points below those decks' average, and Evolving Wilds
-  32.5% of 1,301, so the network learned both as weak for this pilot. A paired test of each card in 100 of the
-  builder's decks, with and without it against the same human decks on the same deals, is running to separate "weak
-  for this pilot" from "the builder never learned better".
+  32.5% of 1,301, so the network learned both as weak for this pilot. A paired test separates "weak for this pilot"
+  from "the builder never learned better": in 100 of the builder's decks, Giada replacing the weakest 2-3-drop
+  creature, both versions against the same human decks on the same deals (800 games at 100 simulations). **With
+  Giada the decks won 65.5%, without 66.3%: -0.8 points (standard error 2.4).** For this pilot Giada is worth about
+  what a plain 2-drop is, so leaving her out costs nothing here; a stronger pilot is what would make her good.
+  (Scoured Barrens and Evolving Wilds: running.)
 
 - **Phase A's generation 2 never played** planeswalkers (Ajani, Caller of the Pride: 0% of the pools that have it, against the humans'
   100%; Chandra, Flameshaper and Kaito likewise), equipment (Leyline Axe: 0% against 78%), Evolving Wilds (0% against
