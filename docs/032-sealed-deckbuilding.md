@@ -1,7 +1,7 @@
 # Building sealed decks from self-play: FDN on gorge
 
-*Status (Sunday 11 October 2026, 10:40 PM PT): the data, the game harness and the first self-play loop are running;
-results so far are in §5. The code is on the
+*Status (Monday 12 October 2026, 12:00 AM PT): a builder trained only on its own games beats the human decks 61% at
+100 simulations after two cheap generations (§5.1); search-level self-play (phase B) is running. The code is on the
 [`sealed-deckbuilding`](https://github.com/danieljbrooks/draft-zero/tree/sealed-deckbuilding) branch (`gorge/sealed/`).*
 
 **The goal:** a model that builds a 40-card sealed deck from a pool of six FDN packs, trained **only from games it
@@ -113,16 +113,39 @@ simulations.
 
 ## 5. Results
 
-### 5.1 Baselines
+### 5.1 Headline so far (Monday 12 October, 12:00 AM PT)
 
-| Builder | Trained on | Cards shared with the human deck | Non-land cards shared | Main colours match |
+**A builder that learned only from games played by gorge's heuristic bot, two generations in, wins 61.3% of 1,000
+games against the human decks from the same val pools when the full search plays them at 100 simulations** (71.1%
+when the heuristic bot plays). Its decks share 18.6 of 40 cards with the humans'. The 17lands heuristic, which uses
+human statistics, wins about 54% in the same test.
+
+| Builder | Trained on | Cards shared with the human deck (of 40) | Main colours match | Won against the human decks, search at 100 simulations |
 |---|---|---|---|---|
-| Random deck-shaped build | nothing | 14.0 / 40 | | |
-| 17lands heuristic: best two colours by games-in-hand win rate, top 23 spells, 17 lands | human games (17lands statistics) | 20.3 / 40 | 11.3 / 23 | 28% |
+| Random deck-shaped build | nothing | 14.3 | 11% | 35.8% of 400 |
+| 17lands heuristic | human games (17lands statistics) | 20.3 | 28% | 54.2% of 400 |
+| Imitation of human decks (same network and builder) | human decks | **23.7** | **34%** | *running* |
+| **Self-play, phase A, generation 2** | **its own games only** (gorge's heuristic bot) | 18.6 | 21% | **61.3% of 1,000** |
 
-*300 val pools for the random build, 1,000 for the heuristic.*
+*Agreement on 1,000 val pools (the self-play row: 500); the random and heuristic win rates are the search-depth
+test's (§5.3), whose human decks played them; one standard error is about 1.6 points at 1,000 games, 2.5 at 400.*
 
-### 5.2 Does the play bot's search depth change which deck wins?
+### 5.2 Card agreement is hard in sealed
+
+Even the imitation builder, trained on 6,240 human sealed decks, shares only 23.7 of 40 cards with the human deck and
+picks the same main colours a third of the time. A sealed pool usually supports several reasonable colour pairs,
+and once the colours differ most of the 40 cards do. Draft pools (about 41 cards, already mostly two colours) are far
+easier:
+
+| Builder | Sealed: cards shared (of 40) | Draft: cards shared (of 40) |
+|---|---|---|
+| Random deck-shaped build | 14.3 | 28.3 |
+| 17lands heuristic | 20.3 | 33.3 |
+| Imitation of human decks | 23.7 | 34.6 |
+
+*1,000 val pools each.*
+
+### 5.3 Does the play bot's search depth change which deck wins?
 
 Human reference decks against two kinds of decks from other val pools (4 games per pool pair):
 
@@ -130,13 +153,35 @@ Human reference decks against two kinds of decks from other val pools (4 games p
 |---|---|---|---|
 | gorge's heuristic bot | 65.4% | 46.5% | 2,000 |
 | search, 25 simulations | 67.6% | 47.4% | 800 |
-| search, 100 simulations | *running* | | 400 |
-| search, 300 simulations | *running* | | 400 |
+| search, 100 simulations | 64.2% | 45.8% | 400 |
+| search, 300 simulations | 66.2% | 45.8% | 400 / 240 |
 
-- Deck quality shows clearly at every level: human decks beat random deck-shaped builds two games in three.
-- **The 17lands heuristic beats the human decks** (53% for the heuristic), at both levels so far. The humans'
-  decks are a modest bar in gorge: many 17lands players are average, and the bot may value raw card quality more
-  than a human opponent would punish it.
+- **For coarse deck quality, depth hardly matters:** human decks beat random builds about two games in three, and
+  lose to the 17lands heuristic about 46-54, at every level from no search to 300 simulations.
+- **The 17lands heuristic beats the human decks** at every level. The humans' decks are a modest bar in gorge: many
+  17lands players are average, and the bot may reward raw card quality more than human opponents do.
+- Since the cheap heuristic bot ranks these decks like the search does, at 1/60th of the cost of 25 simulations,
+  the loop starts there (phase A) and moves to search-level games (phase B) once the cheap games stop teaching.
+  Whether the finer choices (the 22nd and 23rd card, a splash) also agree across depths is what phase B tests.
+
+### 5.4 Phase A: self-play with gorge's heuristic bot (laptop)
+
+| Generation | Cards shared (of 40) | Non-land cards shared | Main colours match | Lands | Held-out log-loss (only who played first: 0.693) | Won against the human decks (heuristic bot) |
+|---|---|---|---|---|---|---|
+| 0 (trained on random decks) | 17.2 | 10.0 | 13% | 14.3 | 0.647 | 48.1% of 1,000 |
+| 1 | 18.9 | 10.1 | 22% | 17.0 | 0.631 | 67.5% of 1,000 |
+| 2 | 18.7 | 10.0 | 26% | 17.4 | 0.636 | 71.1% of 1,000 |
+
+*800 train pools and 40,000 games a generation, about 8 minutes on 4 laptop cores; agreement on 200 val pools, the
+win rate on 500 (1,000 games).*
+
+- **One generation fixes the land count:** generation 0, trained only on random decks, built 14-land decks (it had
+  rarely seen a deck fail for too few lands); after playing its own decks it builds 17.
+- **Its decks differ from the humans' in a consistent way** (60 val pools, generation 1): 19.9 creatures against the
+  humans' 15.4, average mana value 3.6 against 3.1, almost no non-basic lands (0.1 against 1.4). In the first val
+  pool it built a red-white creature deck where the human built black-white with five removal spells. Whether that
+  is a real edge or a habit of the heuristic bot (which may play removal and tricks poorly) is what the search-level
+  games test.
 
 ## 6. Prior work
 
