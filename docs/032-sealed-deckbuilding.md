@@ -308,6 +308,7 @@ like the others: 1,000 games against the human decks at 100 simulations.
 | **2** | 18.0 | 61.7% | **61.6%** |
 | **3** | 17.9 | 65.4% | **65.4%** |
 | **4** | 17.5 | 67.7% | **66.1%** |
+| 5 (castability from here) | 17.0 | 65.4% | 63.0% |
 
 *Generation 1 is the first with the support region, land exploration and the draw term (§5.7).*
 
@@ -332,6 +333,25 @@ human would have hand-set, generalises to any set, and is what makes a three- or
 matter to the builder. Retrained on the exact games that produced the broken network, without castability the
 collapse repeats (58 of 60 val decks with spells the deck cannot cast, 8.5 such cards a deck); with it, 2 of 60 (0.2
 a deck), and the held-out loss is slightly better (0.6687 against 0.6693). Phase B uses it from generation 5.
+
+### 5.8b A colour-diverse league of opponents (experiment E5): no effect; bot games keep misleading
+
+The builder's own decks are white-green 57% of the time, so it trains mostly against white-green creature decks; the
+humans' decks spread over all ten colour pairs. E5 added a fifth deck per pool, the best deck the builder can make in
+a randomly chosen colour pair, so its training field covers every pair (no human data needed). Two runs, identical
+except for those decks, each three bot-level generations from phase A's generation 2, judged at 100 simulations:
+
+| Run | Won against the human decks, 100 simulations |
+|---|---|
+| With the colour league | 48.7% of 1,000 |
+| Without (control) | 50.2% of 1,000 |
+| Their starting point, phase A generation 2 | 60.9% of 1,000 |
+
+The league made no difference, but both runs lost ten points: three more generations of games played by gorge's
+heuristic bot took the builder from 61% to a coin flip against the humans. (The league run also collapsed for one
+generation into decks with spells they could not cast, the episode that led to castability, §5.8.) This is the
+strongest evidence for Dan's point that the play bot's search depth is critical: the weak bot is a good teacher for
+two generations and a harmful one after.
 
 ### 5.9 Draft: the builder on pools it never trained on
 
