@@ -325,8 +325,12 @@ From generation 5, loop B (warm start, every game) runs alone on 20 of r1's core
 | Against the zero point (800 games) | 57.0% | 56.9% | 57.6% | 57.4% | 56.8% | 58.0% | 58.4% | 58.4% |
 | Against the bot (1,000 games) | 76.2% | 76.6% | 76.0% | 76.1% | 76.9% | 77.4% | 77.4% | 77.6% |
 
-*Against the bot loop B has gone from 73-75% (generations 1-4) to 76% three times running: a point or two, at the edge
-of what 1,000 games can show.*
+*Against the bot loop B has gone from 73-75.6% (generations 1-4) to 76-77.6% (generations 5-12), rising slowly; against
+the zero point from 55.9-57.4% to 58.4%. Each step is within chance; the trend over eight generations is not.*
+
+**Loop E** (from Monday 12:40 AM, 7 of r1's cores): loop B's recipe with the search's exploration lowered to `cpuct` 0.5
+in self-play (matches still at gorge's default 1.5, for comparison), branched from loop B's generation 10. Its first
+generation (11) won **59.6%** against the zero point, the best of any network, and 76.3% against the bot.
 
 **E5** (beside it, 10 cores and a GPU) tried targets on B's generations 1-4, the games played with a network inside the
 search, whose root values come from the network-guided search (unlike E2's games, where they were the heuristic's).
