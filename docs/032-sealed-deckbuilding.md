@@ -174,7 +174,7 @@ On the 1,000 Premier Draft test pools (the builders never trained on draft pools
 |---|---|---|
 | **Self-play (phase B, generation 4)** | 31.6 | **57.5% ± 1.0** of 2,000 |
 | 17lands heuristic | 33.2 | 50.9% ± 1.1 of 2,000 |
-| Imitation of the human decks | | *running* |
+| Imitation of the human decks | 34.5 | 52.7% ± 1.1 of 1,999 |
 
 ### 5.2 Card agreement is hard in sealed
 
@@ -480,6 +480,22 @@ against the human decks from the same pools:
 
 *Colour distance: total variation distance between the builder's and the humans' distributions over main-colour
 combinations.*
+
+Main colours by training depth (500 val pools):
+
+| Main colours | Heuristic bot | 25 simulations | 100 simulations (C, gen 0) | 100 simulations (C, gen 1) | Humans |
+|---|---|---|---|---|---|
+| White-green | 57% | 54% | 49% | **42%** | 17% |
+| White-black | 9% | 22% | 26% | **30%** | 18% |
+| Black-green | 1% | 2% | 6% | **10%** | 12% |
+| White-blue and white-red | 10% | 15% | 8% | 9% | 14% |
+| Blue-green, red-green, blue-black, black-red, blue-red | 7% | 4% | 5% | 4% | **35%** |
+| Three or more colours | 12% | 3% | 6% | 4% | 3% |
+| Any white | 90% | 93% | 88% | 85% | 50% |
+
+Black is what deeper search unlocks: white-black and black-green reach or pass the humans' rates, plausibly because
+black's removal needs good targeting. Blue and red, whose cards lean on tricks, card draw, counterspells and timing,
+stay almost absent.
 
 Every measure moves toward the humans as the training games get more search: fewer creatures, more removal and
 tricks, less white-green, the first non-basic lands, more cards in common. This is Dan's point in numbers: cheap
