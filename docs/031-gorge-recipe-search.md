@@ -1,6 +1,6 @@
 # Searching for a self-play recipe that scales: laptop experiments on gorge
 
-*Status (Sunday 11 October 2026, 2:45 PM PT): stage 0, E1 and E2 done (§6); E3's loops running on r1, the search ladder on
+*Status (Sunday 11 October 2026, 6:00 PM PT): stage 0, E1 and E2 done (§6); E3's loops running on r1, the search ladder on
 Dan's laptop (an 8-core M1 Pro). The code is on the
 [`gorge-train`](https://github.com/danieljbrooks/draft-zero/tree/gorge-train) branch (`gorge/recipe/`).*
 
@@ -262,13 +262,41 @@ starting over (A).*
 |---|---|---|---|---|---|
 | 0 | 0 | 55.2% | | 55.2% | |
 | 1 | 8,000 | 55.9% | 75.5% | 55.9% | 74.5% |
-| 2 | 16,000 / 16,000 | 57.2% | 76.4% | 56.4% | 73.4% |
+| 2 | 16,000 | 57.2% | 76.4% | 56.4% | 73.4% |
+| 3 | 24,000 | 55.1% | 76.0% | 57.1% | 75.6% |
+| 4 | 32,000 | 56.5% | 74.6% | 57.4% | 74.1% |
 
 *One standard error is about 1.3 points against the zero point and 1.2 against the bot. Generation 1's games are shared
 by both loops (the same start network played them).*
 
-*So far: within chance of each other and of the start; loop A's generation 2 is the best point yet. Each generation's
-8,000 new games are a small share of the 96,000 the networks train on, so a step per generation should be small.*
+- **Loop D** (from Sunday 4:20 PM) tests whether the stage-0 games dilute the loops: it branches from loop A at
+  generation 3 and trains from scratch on its last 4 generations only (32,000 games, no stage-0 games). Its generation 4
+  won 54.9% against the zero point and 74.5% against the bot.
+
+*Four generations in, no loop has moved beyond chance: every network is at 55-57% against the zero point and 73-76%
+against the bot.*
+
+**Is anything learning?** Every generation's network scored on the held-out games of the newest generation (12,666
+decisions from loop B's and D's generation 4, games no network trained on):
+
+| Network | Value log-loss | Value AUC | Policy cross-entropy (uniform 1.045) | Agrees with the search's top move |
+|---|---|---|---|---|
+| Start | 0.449 | 0.870 | 1.027 | 53.7% |
+| A, generations 1 / 2 / 3 / 4 | 0.441 / 0.441 / 0.441 / 0.440 | 0.873 / 0.872 / 0.873 / 0.874 | 1.025 / 1.024 / 1.024 / 1.024 | 54.5-55.2% |
+| B, generations 1 / 2 / 3 / 4 | 0.440 / 0.438 / 0.437 / **0.436** | 0.873 / 0.875 / 0.876 / **0.876** | 1.025 / 1.025 / 1.024 / 1.024 | 54.6-55.2% |
+| D, generation 4 | 0.445 | 0.871 | 1.023 | 54.7% |
+
+- **The value learns, slowly and steadily in loop B** (warm start): log-loss 0.449 to 0.436 over four generations. Loop
+  A's, trained from scratch on the same games, stops at 0.440; loop D's, on fewer games, is worse (0.445).
+- **The policy has almost nothing to learn.** The visit counts of a 25-simulation search over at most 6 candidates are
+  nearly uniform (entropy 0.98 against 1.045), so the networks' policies stay nearly uniform too. Every gain in these
+  loops has to come through the value.
+- **Warm starting costs nothing so far,** which matters for millions of games: retraining from scratch on every game
+  stops being possible long before then.
+
+*Next (E5, from Sunday 6 PM): loop B continues alone; beside it, target variants on B's own games (sharper visit
+targets, completed-Q now that the games carry the network's prior, and the value blended with the network-guided
+search's root value).*
 
 ### The search ladder (from Sunday 1 PM, on the laptop)
 
@@ -279,7 +307,11 @@ The start network inside the full search, and the full search without a network,
 |---|---|---|---|
 | 100 | 75.5% | 72.5% | +3.0 |
 | 500 | 81.5% | 75.0% | +6.5 |
-| 3,000 | *(playing)* | | |
+| 3,000 | 82.5% | 77.5% | +5.0 |
 
-*The network's edge grows with search at least to 500 simulations: its value matters more the more positions the
-search evaluates. The search without a network gains little from 100 to 500 (72.5% to 75.0%).*
+- **The network's edge holds as search grows:** +3 points at 100 simulations, +5 to +6.5 at 500 and 3,000.
+- **With the network, strength levels off near 82%** between 500 and 3,000 simulations (81.5%, 82.5%); without it the
+  search keeps climbing slowly (72.5%, 75.0%, 77.5%). Six times the search buys one point with the network, at six
+  times the cost (146 minutes for 200 games on the laptop, against 16).
+- **Against this bot, ~82% may be near the ceiling** that luck allows (draws of lands and spells decide some games
+  whatever the play); a stronger fixed opponent would separate the top levels better.
