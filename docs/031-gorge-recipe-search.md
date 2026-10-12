@@ -546,3 +546,40 @@ games, 60-odd configurations; `gorge/recipe/ratings.py`) puts every bot on one s
   rising at 3,000 but 55 points lower.
 - **The ladder is the measure to track from here.** New bots are placed by a few hundred games against configurations
   already on it, instead of against the saturating bot.
+
+### More test-time settings, the policy alone, and capacity at scale (Monday 7 AM-noon)
+
+**Sampled worlds.** The search samples the opponent's hidden cards; gorge deals a fresh world for every simulation by
+default, or cycles `worlds=K` fixed ones. Loop B's generation 13 at `cpuct` 0.25 and 100 simulations, against the bot
+(1,000 games each):
+
+| Worlds | 4 | 16 | 64 | A fresh deal per simulation (default) |
+|---|---|---|---|---|
+| Won | 76.3% | 77.4% | 76.8% | **80.4%** |
+
+*Fixed worlds lose 3-4 points: covering more of the possible hidden hands beats lower noise per world. The default
+stays.*
+
+**The policy alone** (the network's top move, no search) against the bot, 1,000 games each:
+
+| Network | Start | Loop B, generation 7 | Loop B, generation 13 |
+|---|---|---|---|
+| Won | 50.5% | 56.3% | 57.1% |
+
+- **The policy does learn in the loop,** from nearly uniform targets: from even with gorge's bot to 7 points ahead of
+  it. Inside the search it still adds nothing (the diagnostics), because the search re-weighs its few candidates
+  anyway.
+- Two of the start network's pairs hung in this match: the option cap of patch 0008 applies to the search's top-k
+  ranking, not to the policy-only seat. The chunked match skipped them (996 games).
+
+**E6: capacity at scale.** MLPs of widths 128, 256 and 384 (0.8M to 6.3M parameters) trained from scratch on every game
+of loop B's lineage (stage 0's 80,000 plus generations 1-15: 200,000 games), each against loop B's generation 15 head to
+head (`cpuct` 0.25, 100 simulations, 1,000 games):
+
+| Width | 128 | 256 | 384 |
+|---|---|---|---|
+| Against loop B's generation 15 | 50.1% | 50.5% | 51.5% |
+
+*Even at 200,000 games, width buys at most a point or two (384: 1.5 standard errors). Retraining from scratch on all
+games equals the warm-started loop. Neither capacity nor the training schedule is what holds the loop at its plateau;
+the labels are (E7).*
