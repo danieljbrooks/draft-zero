@@ -374,7 +374,7 @@ like the others: 1,000 games against the human decks at 100 simulations.
 | 1 | 18.7 | 58.3% | 56.0% |
 | 2 | 18.0 | 61.7% | 61.6% (300 simulations: 61.9%) |
 | **3** | 17.9 | 65.4% | **65.4%** |
-| **4** | 17.5 | 67.7% | **66.1%** |
+| **4** | 17.5 | 67.7% | **66.1%** (300 simulations: 65.6%) |
 | 5 (castability from here) | 17.0 | 65.4% | 63.0% |
 | 6 | 17.5 | 66.8% | 65.9% |
 | **Phase C** (self-play at 100 simulations), generation 0 | 17.5 | | 64.8% (agreement 19.9 of 40) |
