@@ -228,15 +228,41 @@ heuristic-bot column of generations 0-3 played under the Omniscience bug (§5.5)
 
 ### 5.5 What the self-play builder builds: decks for its pilot
 
-Phase A's generation 2 against the humans, on the same 500 val pools:
+The best builder (phase B, generation 4) against the humans, on the same 500 val pools:
 
-| | Self-play builder | Humans |
+| Main colours | Builder | Humans | Builder's decks won against the human decks |
+|---|---|---|---|
+| White-green | **54%** | 17% | 69.9% (269 pools) |
+| White-black | 22% | 18% | 61.5% (109) |
+| White-blue | 8% | 6% | 55.3% (38) |
+| White-red | 7% | 8% | 67.6% (34) |
+| Blue-green | 2% | 9% | 50.0% (12) |
+| Black-red | 2% | 6% | 72.7% (11) |
+| Black-green | 2% | 12% | 55.6% (9) |
+| Red-green, blue-black, blue-red | under 1% each | 9%, 7%, 4% | |
+| Three colours | 3% | 1% | |
+
+| | Builder | Humans |
 |---|---|---|
-| White-green as the main colours | **57%** of pools | 17% |
-| Creatures | 19.0 | 15.4 |
-| Non-creature spells | 3.7 | 7.8 |
-| Average mana value of the spells | 3.41 | 3.06 |
-| Lands (non-basic) | 17.3 (0.01) | 16.9 (1.33) |
+| Creatures | 17.2 | 15.4 |
+| Non-creature spells | 5.4 | 7.8 |
+| Average mana value of the spells | 3.39 | 3.06 |
+| Lands (non-basic) | 17.5 (0.0) | 16.9 (1.3) |
+| Splashes a third colour | 58 decks | 191 decks |
+| Same main colours as the human's deck | 125 of 500 | |
+
+**An example (val pool 0).** Both built white-black and share 30 of 40 cards; the builder won 2 of its 4 games.
+
+- **Builder (17 lands, 8 Plains and 9 Swamp):** 16 creatures, including 2 Crypt Feaster, Campus Guide and Meteor Golem
+  where the human has Giada, Font of Hope, Diregraf Ghoul and Dauntless Veteran; 7 spells, including a second Eaten
+  Alive.
+- **Human (16 lands, with 2 Evolving Wilds, Scoured Barrens and Soulstone Sanctuary):** 15 creatures; 10 spells,
+  including Stab, Stroke of Midnight, Claws Out and Rise of the Dark Realms.
+- **Two clear mistakes by a human player's standard** (Dan): no Giada and no Scoured Barrens. In the builder's own
+  games, decks that drew Giada won 37.9% of 494 games, about 5 points below those decks' average, and Evolving Wilds
+  32.5% of 1,301, so the network learned both as weak for this pilot. A paired test of each card in 100 of the
+  builder's decks, with and without it against the same human decks on the same deals, is running to separate "weak
+  for this pilot" from "the builder never learned better".
 
 - **It never plays** planeswalkers (Ajani, Caller of the Pride: 0% of the pools that have it, against the humans'
   100%; Chandra, Flameshaper and Kaito likewise), equipment (Leyline Axe: 0% against 78%), Evolving Wilds (0% against
