@@ -57,7 +57,7 @@ def builders(rows, out):
     ax.text(50.3, len(pts) - 1, "50%: as good as\nthe human decks", fontsize=8, color=INK2, ha="left", va="center")
     ax.set_yticks(range(len(pts)))
     ax.set_yticklabels([p[0] for p in reversed(pts)], fontsize=9, color=INK)
-    ax.set_xlabel("Won against the human decks from the same pools (%), search at 100 simulations", fontsize=9,
+    ax.set_xlabel("Won against the human decks (%), 100 simulations", fontsize=9,
                   color=INK2)
     ax.set_xlim(min(45, min(100 * p[1]["winrate"] for p in pts) - 3), max(100 * p[1]["winrate"] for p in pts) + 5)
     ax.set_ylim(-0.6, len(pts) - 0.2)
