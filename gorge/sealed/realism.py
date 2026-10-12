@@ -91,12 +91,28 @@ def analyse(dirs, min_drawn=60, limit=None):
                     uw[m["user_wr"] >= 0.6].append(won)
         ok = C.spell & (n >= min_drawn) & ~np.isnan(ref)
         rho = spearmanr(w[ok] / n[ok], ref[ok]).correlation
+        # noise ceiling: split-half reliability of the card win rates (pairings split by index parity, both seats of
+        # a pairing in one half), Spearman-Brown corrected; a correlation with any reference is bounded by sqrt(rel)
+        hw = np.zeros((2, len(C))); hn = np.zeros((2, len(C)))
+        for g in games:
+            if g.get("winner", -1) not in (0, 1):
+                continue
+            h = (g.get("line", 0) // 2) % 2
+            for s in (0, 1):
+                for c in set(g.get("in_hand", [[], []])[s]):
+                    i = C.index.get(c)
+                    if i is not None:
+                        hn[h, i] += 1; hw[h, i] += g["winner"] == s
+        ok2 = ok & (hn.min(0) >= min_drawn / 2)
+        r_half = spearmanr(hw[0, ok2] / hn[0, ok2], hw[1, ok2] / hn[1, ok2]).correlation
+        rel = 2 * r_half / (1 + r_half) if r_half > -1 else float("nan")
+        ceiling = math.sqrt(max(rel, 0))
         keys = [k for k in cref if len(k) == 2 and cn[k] >= 100]
         crho = spearmanr([cw[k] / cn[k] for k in keys], [cref[k] for k in keys]).correlation
         strong, weak = np.mean(uw[True]), np.mean(uw[False])
         se = math.sqrt(strong * (1 - strong) / len(uw[True]) + weak * (1 - weak) / len(uw[False]))
         row = {"level": os.path.basename(d.rstrip("/")), "games": decided, "mean_turns": round(float(np.mean(turns)), 1),
-               "card_rho": round(float(rho), 3), "cards": int(ok.sum()), "colour_rho": round(float(crho), 3),
+               "card_rho": round(float(rho), 3), "cards": int(ok.sum()), "card_ceiling": round(float(ceiling), 3), "colour_rho": round(float(crho), 3),
                "colour_pairs": len(keys), "strong_minus_weak": round(float(strong - weak), 4),
                "strong_minus_weak_se": round(se, 4),
                "colour_wr": {k: round(cw[k] / cn[k], 3) for k in keys}}
