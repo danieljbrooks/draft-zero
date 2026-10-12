@@ -512,3 +512,37 @@ scores 50%):
 *Reading: the place to spend test-time compute, and the network's capacity, is casting decisions. A recipe could
 search casts more deeply than other kinds (per-kind simulation budgets), or train the value on positions just after
 casts.*
+
+### The best bot so far, and a rating ladder (Monday 5-8 AM)
+
+**The best bot.** Loop B's generation 13 at `cpuct` 0.25, against the bot: **80.4%** of 1,000 games at 100 simulations
+(the start network at gorge's default: 75.5% of 200; no network: 72.5%), and 82.3% of 300 at 500 simulations, the same
+plateau as before. Loop E's generation 13 (its self-play at `cpuct` 0.5) against loop B's generation 13, both at
+`cpuct` 0.25: **49.9% ± 1.0** of 1,000. Low exploration helps at test time; in self-play it changed nothing.
+
+**A rating ladder.** Every match so far ran on the same eval deals, so one Bradley-Terry fit over all of them (78,800
+games, 60-odd configurations; `gorge/recipe/ratings.py`) puts every bot on one scale without saturating against the bot:
+
+![](img/031-elo-light.png)
+
+| Bot | Rating (Elo points; gorge's bot = 0) | Games |
+|---|---|---|
+| Start network, 3,000 simulations | 269 ± 32 | 200 |
+| Loop B generation 13, `cpuct` 0.25, 500 simulations | 267 ± 26 | 300 |
+| Loop B generation 13, `cpuct` 0.25, 100 simulations | **245 ± 14** | 2,000 |
+| No network, 3,000 simulations | 215 ± 29 | 200 |
+| Loop B generation 13, 100 simulations | 213 ± 9 | 1,800 |
+| Loop B generation 7, 100 simulations | 206 ± 8 | 3,000 |
+| Start network, 100 simulations | 179 ± 13 | 1,200 |
+| No network, 100 simulations (the zero point) | 152 ± 3 | 22,419 |
+| Loop B generation 7, 25 simulations | 164 ± 27 | 200 |
+
+*Standard errors treat games as independent; paired games are correlated, so they are somewhat too small.*
+
+- **At 100 simulations,** a day of loop B (start to generation 13) is worth about **+34** points and lowering `cpuct`
+  to 0.25 another **+32**: together, the network-guided search went from 27 to 93 points above the plain search.
+- **More search is worth more than either, until it saturates:** 100 to 500 simulations adds 50-75 points; 500 to
+  3,000 adds 15-25. With the network the curve flattens near 270 (82% against the bot); without it, it is still
+  rising at 3,000 but 55 points lower.
+- **The ladder is the measure to track from here.** New bots are placed by a few hundred games against configurations
+  already on it, instead of against the saturating bot.
