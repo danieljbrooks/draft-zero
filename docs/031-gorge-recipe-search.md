@@ -481,3 +481,34 @@ Mean loss per decision, by decision kind (the share of audited decisions in brac
 *Reading: of the measures toward "how good is it", this one does not saturate, splits by decision kind, and is cheap
 enough to run on every new network (a quarter of the decisions of 200 games: 40-60 minutes on 4 laptop cores). Its
 blind spot is the oracle's network: mistakes it shares with the bot are invisible.*
+
+### Which decisions does search pay for? (Monday 2:30-4:30 AM, laptop)
+
+The full search at 100 simulations and `cpuct` 0.25 searching **one kind of decision only**, gorge's bot answering the
+rest, with loop B's generation 7 or without a network, against the bot (1,000 games each; the bot against itself
+scores 50%):
+
+| Searched | With the network | Without | The network's edge |
+|---|---|---|---|
+| Everything | **78.9%** | 72.3% | +6.6 |
+| Casting and activating (priority) only | 66.9% | 61.5% | +5.4 |
+| Attacks only | 59.2% | 58.3% | +0.9 |
+| Modes, optional triggers and other choices only | 57.3% | 56.6% | +0.7 |
+| Targets only | 55.3% | 53.8% | +1.5 |
+| Blocks only | 54.9% | 55.8% | -0.9 |
+
+*One standard error is about 1 point per cell.*
+
+- **Search pays most for casting:** searching casts alone is worth 17 of the full search's 29 points over the bot,
+  and nearly all of the network's edge (+5.4 of +6.6). Attacks come next (9 points), then the small choices.
+- **The gains overlap:** the five kinds searched alone add up to 44 points over the bot; searched together they give 29.
+  Better casts make some attacks and blocks matter less.
+- **Lower exploration needs the network.** Without one, `cpuct` 0.25 plays as the default does (72.3% against 72.5%);
+  with it, the network's edge doubles (from +3.0 at `cpuct` 1.5 to +6.6). Low exploration only helps when the leaf
+  values are good enough to follow.
+- **Agrees with the audit:** casting decisions carry most of the loss per game there, and the network's value matters
+  most where heuristics can't compare options.
+
+*Reading: the place to spend test-time compute, and the network's capacity, is casting decisions. A recipe could
+search casts more deeply than other kinds (per-kind simulation budgets), or train the value on positions just after
+casts.*
