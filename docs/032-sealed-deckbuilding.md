@@ -1,8 +1,8 @@
 # Building sealed decks from self-play: FDN on gorge
 
-*Status (Monday 12 October 2026, 1:10 AM PT): a builder trained only on its own games beats the human decks 61% at
-100 simulations after two cheap generations, ahead of the 17lands heuristic (57%) (§5.1); search-level self-play
-(phase B) is running. The code is on the
+*Status (Monday 12 October 2026, 2:45 AM PT): a builder trained only on its own games beats the human decks 61% at
+100 simulations, ahead of the 17lands heuristic (57%) (§5.1); two test-time ideas failed (§5.5); search-level self-play
+(phase B) and a colour-diverse league (E5) are running. The code is on the
 [`sealed-deckbuilding`](https://github.com/danieljbrooks/draft-zero/tree/sealed-deckbuilding) branch (`gorge/sealed/`).*
 
 **The goal:** a model that builds a 40-card sealed deck from a pool of six FDN packs, trained **only from games it
@@ -114,13 +114,15 @@ simulations.
 
 ## 5. Results
 
-### 5.1 Headline so far (Monday 12 October, 12:00 AM PT)
+### 5.1 Headline so far (Monday 12 October, 2:45 AM PT)
 
 **A builder that learned only from games played by gorge's heuristic bot, two generations in, wins 60.9% of 1,000
 games against the human decks from the same val pools when the full search plays them at 100 simulations** (71.1%
 when the heuristic bot plays). Its decks share 18.6 of 40 cards with the humans'. In the same test, on the same
 deals, the 17lands heuristic (which uses human statistics) wins 56.6%, and a builder trained to imitate the human
 decks wins 54.3%: the deck that agrees most with the humans is not the one that beats them.
+
+![Win rate against the human decks at 100 simulations, per builder](img/032-builders-light.png)
 
 | Builder | Trained on | Cards shared with the human deck (of 40) | Main colours match | Won against the human decks, search at 100 simulations |
 |---|---|---|---|---|
@@ -169,24 +171,100 @@ Human reference decks against two kinds of decks from other val pools (4 games p
 
 ### 5.4 Phase A: self-play with gorge's heuristic bot (laptop)
 
-| Generation | Cards shared (of 40) | Non-land cards shared | Main colours match | Lands | Held-out log-loss (only who played first: 0.693) | Won against the human decks (heuristic bot) |
-|---|---|---|---|---|---|---|
-| 0 (trained on random decks) | 17.2 | 10.0 | 13% | 14.3 | 0.647 | 48.1% of 1,000 |
-| 1 | 18.9 | 10.1 | 22% | 17.0 | 0.631 | 67.5% of 1,000 |
-| 2 | 18.7 | 10.0 | 26% | 17.4 | 0.636 | 71.1% of 1,000 |
+Each generation: 800 train pools, four or five decks each, 40,000 games played by gorge's heuristic bot (about 8
+minutes on 4 laptop cores). The last column is the measure that matters: the search at 100 simulations playing the
+generation's decks against the human decks, on the same deals for every builder.
 
-*800 train pools and 40,000 games a generation, about 8 minutes on 4 laptop cores; agreement on 200 val pools, the
-win rate on 500 (1,000 games).*
+| Generation | Cards shared (of 40) | Main colours match | Lands | Won against the human decks, heuristic bot | Won against the human decks, search at 100 simulations |
+|---|---|---|---|---|---|
+| 0 (trained on random decks) | 17.2 | 13% | 14.3 | 48.1% | |
+| 1 | 18.9 | 22% | 17.0 | 67.5% | 52.3% |
+| **2** | 18.7 | 26% | 17.4 | 71.1% | **60.9%** |
+| 3 | 19.1 | 26% | 18.1 | 73.5% | |
+| 4 | 18.8 | 27% | 18.2 | 68.3% | |
+| 5 | 19.0 | 30% | 18.1 | 67.1% | 57.6% |
+| 6 | 18.5 | 29% | 19.4 | 60.1% | |
+| 7 | 19.8 | 30% | 18.1 | 71.6% | |
+| 8 (support region, land exploration, draw term from here) | 19.4 | 30% | 18.7 | 71.9% | |
+| 9 | 18.9 | 27% | 18.7 | 71.2% | |
+| 10 | 18.8 | 27% | 19.2 | 68.1% | |
+| 11 | 18.4 | 27% | 18.7 | 68.7% | |
+| 12 | 19.1 | 26% | 18.5 | 72.5% | |
 
-- **One generation fixes the land count:** generation 0, trained only on random decks, built 14-land decks (it had
-  rarely seen a deck fail for too few lands); after playing its own decks it builds 17.
-- **Its decks differ from the humans' in a consistent way** (60 val pools, generation 1): 19.9 creatures against the
-  humans' 15.4, average mana value 3.6 against 3.1, almost no non-basic lands (0.1 against 1.4). In the first val
-  pool it built a red-white creature deck where the human built black-white with five removal spells. Whether that
-  is a real edge or a habit of the heuristic bot (which may play removal and tricks poorly) is what the search-level
-  games test.
+![Phase A: win rate against the human decks per generation, played by the heuristic bot and by the search](img/032-phaseA-light.png)
 
-### 5.6 Two failure modes of searching against a learned value, and the fixes
+*Agreement on 200 val pools; win rates on 500 val pools (1,000 games; one standard error about 1.5 points). The
+heuristic-bot column of generations 0-3 played under the Omniscience bug (§5.5).*
+
+- **Cheap games teach the basics fast:** one generation fixes the land count (14 to 17), and by generation 2 the
+  builder beats the human decks 60.9% when the search plays.
+- **Then they mislead.** Later generations keep winning about 70% under the heuristic bot but fall to 57.6% under
+  the search (generation 5): the builder drifts toward what the heuristic bot rewards (more lands, 18-19; more
+  creatures; a higher curve). This is the search-depth question Dan raised, answered: the weak bot is a good
+  teacher for two generations and a bad one after. Phase B continues from generation 2 with games played by the
+  search.
+- **What the bot-taught builder builds** (60 val pools, generation 1): 19.9 creatures against the humans' 15.4, an
+  average mana value of 3.6 against 3.1, almost no non-basic lands (0.1 against 1.4). In the first val pool it
+  built a red-white creature deck where the human built black-white with five removal spells.
+
+### 5.5 What the self-play builder builds: decks for its pilot
+
+Phase A's generation 2 against the humans, on the same 500 val pools:
+
+| | Self-play builder | Humans |
+|---|---|---|
+| White-green as the main colours | **57%** of pools | 17% |
+| Creatures | 19.0 | 15.4 |
+| Non-creature spells | 3.7 | 7.8 |
+| Average mana value of the spells | 3.41 | 3.06 |
+| Lands (non-basic) | 17.3 (0.01) | 16.9 (1.33) |
+
+- **It never plays** planeswalkers (Ajani, Caller of the Pride: 0% of the pools that have it, against the humans'
+  100%; Chandra, Flameshaper and Kaito likewise), equipment (Leyline Axe: 0% against 78%), Evolving Wilds (0% against
+  83%), Day of Judgment or Phyrexian Arena, and plays plain creatures instead (Savannah Lions, Juggernaut,
+  Armasaur Guide, Campus Guide: 90-100% against 10-30%).
+- **Per card, the rate at which it plays a card from the pool** has a rank correlation of 0.47 with the humans'. Its
+  colour pairs are far from theirs (total variation distance 0.54). Each card's games-in-hand win rate in its own
+  games has a rank correlation of 0.39 with 17lands' across 249 cards.
+- **The reading:** a builder trained on games learns what wins *for the player who plays its decks*. gorge's
+  heuristic bot, which played phase A's games, attacks with creatures well and gets little from planeswalkers,
+  equipment and card advantage; the builder followed. The decks still beat the humans' 61% when the search plays
+  them, so the search seems to share some of that taste; phase B, whose games the search plays, tests how much.
+- **Building cautiously doesn't help (experiment E2):** building for the ensemble's mean less one standard deviation,
+  to avoid decks the networks disagree on, won 54.4% of 1,000 games against the plain mean's 57.6% on the same
+  network (generation 5). Disagreement marks the unexplored decks, and some of those are the good ones.
+
+- **Picking among candidates by playing them doesn't help either (experiment E4).** The last step of the human
+  process is to build a few decks and keep the one that plays best. For each val pool, generation 2's top three
+  candidates (from different colour configurations) each played 80 games against a gauntlet of 40 self-play decks
+  (gorge's heuristic bot; 101,840 games), and a Bradley-Terry posterior with the network's score as its prior picked
+  one. The playoff overrode the network in 222 of 500 pools, almost always between near-ties (median score gap 0.05),
+  and its decks won 60.6% against the network's 60.9%: on the same deals, a paired difference of -0.3 points
+  (standard error 1.3). Eighty cheap games per candidate tell the builder nothing the network, trained on hundreds
+  of thousands of them, did not already know.
+
+### 5.6 The builder found a rules bug in gorge
+
+Phase A's networks ranked **Omniscience**, a 10-mana enchantment that 17lands' players rank near the bottom, as the
+best card in FDN. The games agreed: decks with it won 60% of their bot games, and 82% of the games where it was drawn.
+gorge let Omniscience's own "cast spells from your hand without paying their mana costs" work **while it was still
+in hand**, so it cast itself for free and then made every later spell free.
+
+- **The fix** (gorge patch 0009, `gorge/patches/`): a card's own static ability that names no zone works only on the
+  battlefield, as the rules say. With it, the same 600 deck pairings give Omniscience decks 42.7% of 613 games and
+  39.5% of the 256 where it was drawn: the dead card it should be.
+- **The same bug** let 44 other card/zone pairs in gorge's full card pool grant themselves a permission (Future
+  Sight playing itself from the top of the library, for example); none of them are in FDN. The fix and a census of
+  the affected cards went to gorge's author as an issue and a pull request.
+- **What it changes here:** every machine runs the fixed engine from Monday 12 October, 12:00 AM PT. Phase A's
+  generations 0-3 and the first 100-simulation results played under the bug. 24 of generation 2's 500 val decks
+  include Omniscience; on the fixed engine the same decks win 60.9% instead of 61.3%, so the bug barely touched
+  the headline.
+- **A lesson for the method:** a builder that optimises win rate exploits whatever the engine gets wrong, which makes
+  self-play deck building a useful engine audit. A card whose learned value is far from its human rating is worth
+  checking in the rules before trusting the model.
+
+### 5.7 Two failure modes of searching against a learned value, and the fixes
 
 **Extrapolation.** Phase A's generation 6 built 43 decks with 23-24 lands and 7 with 7-8 lands on 200 val pools,
 although its own training games had 21-land decks winning 31% and 15-16-land decks 31-37%. All five ensemble members
@@ -208,27 +286,6 @@ natural experiment free of the builder's own choices. On 152,000 of phase A's ga
 held-out loss unchanged (0.6510 against 0.6506) and makes the card values steadier: separately trained networks
 rank the cards alike with a rank correlation of 0.914, up from 0.854. Both fixes run from phase A's generation 8
 and phase B's generation 1.
-
-### 5.5 The builder found a rules bug in gorge
-
-Phase A's networks ranked **Omniscience**, a 10-mana enchantment that 17lands' players rank near the bottom, as the
-best card in FDN. The games agreed: decks with it won 60% of their bot games, and 82% of the games where it was drawn.
-gorge let Omniscience's own "cast spells from your hand without paying their mana costs" work **while it was still
-in hand**, so it cast itself for free and then made every later spell free.
-
-- **The fix** (gorge patch 0009, `gorge/patches/`): a card's own static ability that names no zone works only on the
-  battlefield, as the rules say. With it, the same 600 deck pairings give Omniscience decks 42.7% of 613 games and
-  39.5% of the 256 where it was drawn: the dead card it should be.
-- **The same bug** let 44 other card/zone pairs in gorge's full card pool grant themselves a permission (Future
-  Sight playing itself from the top of the library, for example); none of them are in FDN. The fix and a census of
-  the affected cards went to gorge's author as an issue and a pull request.
-- **What it changes here:** every machine runs the fixed engine from Monday 12 October, 12:00 AM PT. Phase A's
-  generations 0-3 and the first 100-simulation results played under the bug. 24 of generation 2's 500 val decks
-  include Omniscience; on the fixed engine the same decks win 60.9% instead of 61.3%, so the bug barely touched
-  the headline.
-- **A lesson for the method:** a builder that optimises win rate exploits whatever the engine gets wrong, which makes
-  self-play deck building a useful engine audit. A card whose learned value is far from its human rating is worth
-  checking in the rules before trusting the model.
 
 ## 6. Prior work
 
