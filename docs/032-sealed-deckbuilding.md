@@ -264,12 +264,13 @@ The best builder (phase B, generation 4) against the humans, on the same 500 val
   builder's decks, with and without it against the same human decks on the same deals, is running to separate "weak
   for this pilot" from "the builder never learned better".
 
-- **It never plays** planeswalkers (Ajani, Caller of the Pride: 0% of the pools that have it, against the humans'
+- **Phase A's generation 2 never played** planeswalkers (Ajani, Caller of the Pride: 0% of the pools that have it, against the humans'
   100%; Chandra, Flameshaper and Kaito likewise), equipment (Leyline Axe: 0% against 78%), Evolving Wilds (0% against
   83%), Day of Judgment or Phyrexian Arena, and plays plain creatures instead (Savannah Lions, Juggernaut,
   Armasaur Guide, Campus Guide: 90-100% against 10-30%).
-- **Per card, the rate at which it plays a card from the pool** has a rank correlation of 0.47 with the humans'. Its
-  colour pairs are far from theirs (total variation distance 0.54). Each card's games-in-hand win rate in its own
+- **Per card, the rate at which it plays a card from the pool** has a rank correlation of 0.47 with the humans' for
+  phase A's generation 2 and 0.55 for phase B's generation 4; their colour pairs are far from the humans' (total
+  variation distance 0.54 and 0.44). Phase B's builder still never plays Evolving Wilds, Chandra or Phyrexian Arena. Each card's games-in-hand win rate in its own
   games has a rank correlation of 0.39 with 17lands' across 249 cards.
 - **The reading:** a builder trained on games learns what wins *for the player who plays its decks*. gorge's
   heuristic bot, which played phase A's games, attacks with creatures well and gets little from planeswalkers,
