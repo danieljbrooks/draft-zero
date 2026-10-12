@@ -234,6 +234,15 @@ Phase A's generation 2 against the humans, on the same 500 val pools:
   to avoid decks the networks disagree on, won 54.4% of 1,000 games against the plain mean's 57.6% on the same
   network (generation 5). Disagreement marks the unexplored decks, and some of those are the good ones.
 
+- **Picking among candidates by playing them doesn't help either (experiment E4).** The last step of the human
+  process is to build a few decks and keep the one that plays best. For each val pool, generation 2's top three
+  candidates (from different colour configurations) each played 80 games against a gauntlet of 40 self-play decks
+  (gorge's heuristic bot; 101,840 games), and a Bradley-Terry posterior with the network's score as its prior picked
+  one. The playoff overrode the network in 222 of 500 pools, almost always between near-ties (median score gap 0.05),
+  and its decks won 60.6% against the network's 60.9%: on the same deals, a paired difference of -0.3 points
+  (standard error 1.3). Eighty cheap games per candidate tell the builder nothing the network, trained on hundreds
+  of thousands of them, did not already know.
+
 ### 5.6 The builder found a rules bug in gorge
 
 Phase A's networks ranked **Omniscience**, a 10-mana enchantment that 17lands' players rank near the bottom, as the
