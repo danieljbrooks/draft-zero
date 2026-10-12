@@ -123,12 +123,13 @@ human statistics, wins about 54% in the same test.
 | Builder | Trained on | Cards shared with the human deck (of 40) | Main colours match | Won against the human decks, search at 100 simulations |
 |---|---|---|---|---|
 | Random deck-shaped build | nothing | 14.3 | 11% | 35.8% of 400 |
-| 17lands heuristic | human games (17lands statistics) | 20.3 | 28% | 54.2% of 400 |
+| 17lands heuristic | human games (17lands statistics) | 20.2 | 29% | 56.6% of 1,000 |
 | Imitation of human decks (same network and builder) | human decks | **23.7** | **34%** | *running* |
-| **Self-play, phase A, generation 2** | **its own games only** (gorge's heuristic bot) | 18.6 | 21% | **61.3% of 1,000** |
+| Self-play, phase A, generation 1 | its own games only (gorge's heuristic bot) | 18.2 | 18% | 52.3% of 1,000 |
+| **Self-play, phase A, generation 2** | **its own games only** (gorge's heuristic bot) | 18.6 | 21% | **61.3% of 1,000** (rules bug, §5.5; re-measuring) |
 
-*Agreement on 1,000 val pools (the self-play row: 500); the random and heuristic win rates are the search-depth
-test's (§5.3), whose human decks played them; one standard error is about 1.6 points at 1,000 games, 2.5 at 400.*
+*Agreement on 1,000 val pools (the self-play rows: 500). Win rates: 500 val pools, 4 games a pool pair; the random
+build's is the search-depth test's (§5.3). One standard error is about 1.5 points at 1,000 games, 2.5 at 400.*
 
 ### 5.2 Card agreement is hard in sealed
 
@@ -182,6 +183,29 @@ win rate on 500 (1,000 games).*
   pool it built a red-white creature deck where the human built black-white with five removal spells. Whether that
   is a real edge or a habit of the heuristic bot (which may play removal and tricks poorly) is what the search-level
   games test.
+
+### 5.6 Two failure modes of searching against a learned value, and the fixes
+
+**Extrapolation.** Phase A's generation 6 built 43 decks with 23-24 lands and 7 with 7-8 lands on 200 val pools,
+although its own training games had 21-land decks winning 31% and 15-16-land decks 31-37%. All five ensemble members
+agreed that 24 lands beat 16 by about 2 logits on one pool: the network learned "a basic land beats a weak spell"
+from games with 17-19 lands, and the deck search found the land counts where that extrapolation was most wrong. Its
+win rate against the human decks (heuristic bot) fell from 73.5% to 60.1%; generation 7 recovered to 71.6% by chance.
+
+- **Fix 1, a support region:** the builder considers only land counts that make up at least 2% of the training
+  window's games (17-20 at generation 6). Nothing is hand-set: the region is read from the data and widens as the
+  data does. This is the pessimism of offline model-based optimisation, applied to the one deck feature where it
+  failed.
+- **Fix 2, targeted exploration:** a fifth deck per pool, the best deck with 1-3 lands more or fewer, so the network
+  sees real results at the edges of the region.
+
+**Noise in card values.** A game result credits all 40 cards, but only the ~17 a player drew can have mattered.
+17lands' games-in-hand win rate uses this, and so now does the network: the result also depends on how much better
+or worse the drawn cards were than the deck's average (a draw term). Which cards are drawn is random, so this is a
+natural experiment free of the builder's own choices. On 152,000 of phase A's games it leaves the deck-level
+held-out loss unchanged (0.6510 against 0.6506) and makes the card values steadier: separately trained networks
+rank the cards alike with a rank correlation of 0.914, up from 0.854. Both fixes run from phase A's generation 8
+and phase B's generation 1.
 
 ### 5.5 The builder found a rules bug in gorge
 
