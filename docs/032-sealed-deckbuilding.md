@@ -442,16 +442,17 @@ Dan's hypothesis (12 October): with little search, play is low quality and the b
 choices; realistic games may need ~3,000 simulations. This measures the pilot alone, no deck building: the same
 2,000 games between real human decks (from sealed train pools, one fixed list of pairings and deals) at each depth.
 
-| Played by | Card games-in-hand win rates vs 17lands (rank correlation; noise ceiling) | Colour-pair win rates vs 17lands (10 pairs) | Decks by stronger players minus weaker players |
-|---|---|---|---|
-| gorge's heuristic bot | 0.23 (0.71) | 0.04 | +0.6 points (SE 1.7) |
-| search, 25 simulations | 0.34 (0.62) | 0.71 | +2.6 (1.7) |
-| search, 100 simulations | 0.37 (0.72) | 0.61 | +1.4 (1.7) |
-| search, 300 simulations | 0.37 (0.75) | 0.73 | **+3.6 (1.7)** |
-| search, 1,000 simulations | *running* | | |
-| search, 3,000 simulations | *running (fewer games)* | | |
+| Played by | Card games-in-hand win rates vs 17lands (rank correlation; noise ceiling) | Colour-pair win rates vs 17lands (10 pairs) | Decks by stronger players minus weaker players | The deck with the better record on 17lands won |
+|---|---|---|---|---|
+| gorge's heuristic bot | 0.23 (0.71) | 0.04 | +0.6 points (SE 1.7) | 50.2% (SE 2.5) |
+| search, 25 simulations | 0.34 (0.62) | 0.71 | +2.6 (1.7) | 51.2% (2.4) |
+| search, 100 simulations | 0.37 (0.72) | 0.61 | +1.4 (1.7) | 53.8% (2.4) |
+| search, 300 simulations | 0.37 (0.75) | 0.73 | **+3.6 (1.7)** | 53.8% (2.4) |
+| search, 1,000 simulations (500 games so far) | too few games | | | 55.0% (5.0) |
+| search, 3,000 simulations | *running (about 17 games an hour per 15-core pod)* | | | |
 
-*Card rows: about 205 spells drawn at least 60 times. The noise ceiling is the most a perfect match could show with
+*Last column: games between two human decks that each played at least 5 games on 17lands with records at least 10
+points apart (418 of the 2,000 games). Card rows: about 205 spells drawn at least 60 times. The noise ceiling is the most a perfect match could show with
 2,000 games (split-half reliability). Stronger players: 17lands' player win-rate bucket of 0.60 or more.*
 
 - **Card values move toward the humans' with the first bit of search, then stall:** most of the gain comes between
