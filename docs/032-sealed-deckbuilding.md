@@ -1,7 +1,8 @@
 # Building sealed decks from self-play: FDN on gorge
 
-*Status (Monday 12 October 2026, 12:00 AM PT): a builder trained only on its own games beats the human decks 61% at
-100 simulations after two cheap generations (§5.1); search-level self-play (phase B) is running. The code is on the
+*Status (Monday 12 October 2026, 1:10 AM PT): a builder trained only on its own games beats the human decks 61% at
+100 simulations after two cheap generations, ahead of the 17lands heuristic (57%) (§5.1); search-level self-play
+(phase B) is running. The code is on the
 [`sealed-deckbuilding`](https://github.com/danieljbrooks/draft-zero/tree/sealed-deckbuilding) branch (`gorge/sealed/`).*
 
 **The goal:** a model that builds a 40-card sealed deck from a pool of six FDN packs, trained **only from games it
@@ -115,18 +116,19 @@ simulations.
 
 ### 5.1 Headline so far (Monday 12 October, 12:00 AM PT)
 
-**A builder that learned only from games played by gorge's heuristic bot, two generations in, wins 61.3% of 1,000
+**A builder that learned only from games played by gorge's heuristic bot, two generations in, wins 60.9% of 1,000
 games against the human decks from the same val pools when the full search plays them at 100 simulations** (71.1%
-when the heuristic bot plays). Its decks share 18.6 of 40 cards with the humans'. The 17lands heuristic, which uses
-human statistics, wins about 54% in the same test.
+when the heuristic bot plays). Its decks share 18.6 of 40 cards with the humans'. In the same test, on the same
+deals, the 17lands heuristic (which uses human statistics) wins 56.6%, and a builder trained to imitate the human
+decks wins 54.3%: the deck that agrees most with the humans is not the one that beats them.
 
 | Builder | Trained on | Cards shared with the human deck (of 40) | Main colours match | Won against the human decks, search at 100 simulations |
 |---|---|---|---|---|
 | Random deck-shaped build | nothing | 14.3 | 11% | 35.8% of 400 |
 | 17lands heuristic | human games (17lands statistics) | 20.2 | 29% | 56.6% of 1,000 |
-| Imitation of human decks (same network and builder) | human decks | **23.7** | **34%** | *running* |
+| Imitation of human decks (same network and builder) | human decks | **23.8** | **36%** | 54.3% of 1,000 |
 | Self-play, phase A, generation 1 | its own games only (gorge's heuristic bot) | 18.2 | 18% | 52.3% of 1,000 |
-| **Self-play, phase A, generation 2** | **its own games only** (gorge's heuristic bot) | 18.6 | 21% | **61.3% of 1,000** (rules bug, §5.5; re-measuring) |
+| **Self-play, phase A, generation 2** | **its own games only** (gorge's heuristic bot) | 18.6 | 21% | **60.9% of 1,000** |
 
 *Agreement on 1,000 val pools (the self-play rows: 500). Win rates: 500 val pools, 4 games a pool pair; the random
 build's is the search-depth test's (§5.3). One standard error is about 1.5 points at 1,000 games, 2.5 at 400.*
@@ -222,7 +224,8 @@ in hand**, so it cast itself for free and then made every later spell free.
   the affected cards went to gorge's author as an issue and a pull request.
 - **What it changes here:** every machine runs the fixed engine from Monday 12 October, 12:00 AM PT. Phase A's
   generations 0-3 and the first 100-simulation results played under the bug. 24 of generation 2's 500 val decks
-  include Omniscience, so its 61.3% is re-measured on the fixed engine (§5.1).
+  include Omniscience; on the fixed engine the same decks win 60.9% instead of 61.3%, so the bug barely touched
+  the headline.
 - **A lesson for the method:** a builder that optimises win rate exploits whatever the engine gets wrong, which makes
   self-play deck building a useful engine audit. A card whose learned value is far from its human rating is worth
   checking in the rules before trusting the model.
