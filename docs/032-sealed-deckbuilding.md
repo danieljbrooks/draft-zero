@@ -255,6 +255,29 @@ in hand**, so it cast itself for free and then made every later spell free.
   self-play deck building a useful engine audit. A card whose learned value is far from its human rating is worth
   checking in the rules before trusting the model.
 
+### 5.7 Two failure modes of searching against a learned value, and the fixes
+
+**Extrapolation.** Phase A's generation 6 built 43 decks with 23-24 lands and 7 with 7-8 lands on 200 val pools,
+although its own training games had 21-land decks winning 31% and 15-16-land decks 31-37%. All five ensemble members
+agreed that 24 lands beat 16 by about 2 logits on one pool: the network learned "a basic land beats a weak spell"
+from games with 17-19 lands, and the deck search found the land counts where that extrapolation was most wrong. Its
+win rate against the human decks (heuristic bot) fell from 73.5% to 60.1%; generation 7 recovered to 71.6% by chance.
+
+- **Fix 1, a support region:** the builder considers only land counts that make up at least 2% of the training
+  window's games (17-20 at generation 6). Nothing is hand-set: the region is read from the data and widens as the
+  data does. This is the pessimism of offline model-based optimisation, applied to the one deck feature where it
+  failed.
+- **Fix 2, targeted exploration:** a fifth deck per pool, the best deck with 1-3 lands more or fewer, so the network
+  sees real results at the edges of the region.
+
+**Noise in card values.** A game result credits all 40 cards, but only the ~17 a player drew can have mattered.
+17lands' games-in-hand win rate uses this, and so now does the network: the result also depends on how much better
+or worse the drawn cards were than the deck's average (a draw term). Which cards are drawn is random, so this is a
+natural experiment free of the builder's own choices. On 152,000 of phase A's games it leaves the deck-level
+held-out loss unchanged (0.6510 against 0.6506) and makes the card values steadier: separately trained networks
+rank the cards alike with a rank correlation of 0.914, up from 0.854. Both fixes run from phase A's generation 8
+and phase B's generation 1.
+
 ## 6. Prior work
 
 No published builder reports either of our measures (agreement with human decks from the same pool, or win rate
