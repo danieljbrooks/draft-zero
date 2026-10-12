@@ -49,6 +49,8 @@ def _build_worker(args):
         for kind in kinds:
             if kind == "b":
                 best = d = Bd.build(pool, mean, q)
+            elif kind == "c":     # cautious: the mean less one standard deviation across members
+                d = Bd.build(pool, Bd.Objective(ens, "cautious", k=1.0), q)
             elif kind == "t" or (kind == "r" and rng.random() >= random_share):
                 k = int(rng.integers(len(ens.members)))
                 qk = ens.members[k].quality().detach().numpy()
@@ -133,7 +135,7 @@ def main():
         t1 = time.time()
         with open(os.path.join(gd, "play.log"), "a") as pl:
             G.play(os.path.join(gd, "decks.jsonl"), os.path.join(gd, "pairs.tsv"), os.path.join(gd, "games.jsonl"),
-                   sims=a.sims, workers=a.workers, chunk=max(a.workers * 40, 500) if a.sims == 0 else None, log=pl)
+                   sims=a.sims, workers=a.workers, chunk=max(a.workers * 200, 3000) if a.sims == 0 else None, log=pl)
         log(f"gen {gen}: games in {time.time() - t1:.0f}s")
         gens.append(gd)
         t2 = time.time()
@@ -156,7 +158,7 @@ def main():
             E.write_match(md, [built[f"v{k}.b"] for k in range(len(ep))], ep)
             with open(os.path.join(md, "play.log"), "a") as pl:
                 G.play(os.path.join(md, "decks.jsonl"), os.path.join(md, "pairs.tsv"), os.path.join(md, "games.jsonl"),
-                       sims=a.sims, workers=a.workers, chunk=max(a.workers * 40, 500) if a.sims == 0 else None, log=pl)
+                       sims=a.sims, workers=a.workers, chunk=max(a.workers * 200, 3000) if a.sims == 0 else None, log=pl)
             met["vs_human"] = E.winrate(os.path.join(md, "games.jsonl"))
         json.dump(met, open(met_path, "w"), indent=1)
         ag = met["agreement"]

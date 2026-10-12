@@ -49,6 +49,21 @@ Both primary measures run on the same held-out pools, so a builder can't trade o
 
 ## 4. The method
 
+```
+                 ┌──────────────────────────── the self-play loop (one generation) ───────────────────────────┐
+                 │                                                                                             │
+  train pools ──►│  BUILD: for each pool, decks from the current         PLAY: decks from different pools      │
+  (contents      │  value network (best, explore, perturbed, random) ──► play paired games in gorge            │
+   only)         │        ▲                                              (the play bot at N simulations)       │
+                 │        │                                                          │                         │
+                 │  TRAIN: the deck value network on the last 4 generations' results ◄┘                         │
+                 └─────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  BUILD, for one pool:  pick colours (score a quick deck for every colour combination)
+                        → refine the best 4 by one-card swaps until no swap helps
+                        → keep the candidate the network likes best
+```
+
 **A deck value network** (`gorge/sealed/model.py`) gives every deck a strength s. A game between decks a and b is a
 comparison: P(a wins) = sigmoid(s(a) − s(b) + an on-the-play term), fit to game results (Bradley-Terry). s has three
 parts:
