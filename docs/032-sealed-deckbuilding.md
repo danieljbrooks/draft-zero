@@ -355,6 +355,7 @@ like the others: 1,000 games against the human decks at 100 simulations.
 | **4** | 17.5 | 67.7% | **66.1%** |
 | 5 (castability from here) | 17.0 | 65.4% | 63.0% |
 | 6 | 17.5 | 66.8% | 65.9% |
+| **Phase C** (self-play at 100 simulations), generation 0 | 17.5 | | 64.8% (agreement 19.9 of 40, the highest) |
 
 *Generation 1 is the first with the support region, land exploration and the draw term (§5.7).*
 
