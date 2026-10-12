@@ -11,7 +11,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 GORGE_DIR="${GORGE_DIR:-$(cd "$HERE/../.." && pwd)/ext/gorge}"
 GORGE_REF="$(cat "$HERE/GORGE_REF")"
 
-if [ ! -d "$GORGE_DIR/.git" ]; then
+if [ ! -e "$GORGE_DIR/.git" ]; then
   git clone https://github.com/adams-shaun/gorge "$GORGE_DIR"
 fi
 cd "$GORGE_DIR"

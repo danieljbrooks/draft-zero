@@ -44,3 +44,5 @@ data/gorge/
 # Private notes: access details for machines other people lend us. This repo is public, so
 # hostnames, usernames and login steps stay out of git.
 docs/private/
+# sealed deckbuilding (gorge/sealed): pools from 17lands, games, models
+data/sealed/

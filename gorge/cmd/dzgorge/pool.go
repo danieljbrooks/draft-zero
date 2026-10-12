@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -51,13 +53,24 @@ type deckCache struct {
 	// names maps a compiled card back to the 17lands name the deck file used, so
 	// game records name cards exactly as 17lands' reference does.
 	names map[*cards.Card]string
+	// files holds -deckfile's decks by name; get reads them before -decks' directory.
+	files map[string][]byte
 }
 
 func (c *deckCache) get(name string) ([]*cards.Card, error) {
 	if d, ok := c.m[name]; ok {
 		return d, nil
 	}
-	f, d, err := deck.Load(c.reg, filepath.Join(c.dir, name+".json"))
+	var f deck.File
+	var d []*cards.Card
+	var err error
+	if raw, ok := c.files[name]; ok {
+		if f, err = deck.Parse(raw); err == nil {
+			d, err = f.Resolve(c.reg)
+		}
+	} else {
+		f, d, err = deck.Load(c.reg, filepath.Join(c.dir, name+".json"))
+	}
 	if err != nil {
 		return nil, fmt.Errorf("deck %s: %w", name, err)
 	}
@@ -174,4 +187,52 @@ func runCoverage(args []string) int {
 		}
 	}
 	return 0
+}
+
+// readDeckFile reads -deckfile: one gorge deck object a line, keyed by its "name".
+func readDeckFile(path string) (map[string][]byte, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]byte{}
+	for i, l := range bytes.Split(raw, []byte("\n")) {
+		l = bytes.TrimSpace(l)
+		if len(l) == 0 {
+			continue
+		}
+		var h struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(l, &h); err != nil || h.Name == "" {
+			return nil, fmt.Errorf("%s line %d: a deck needs a name (%v)", path, i+1, err)
+		}
+		out[h.Name] = l
+	}
+	return out, nil
+}
+
+// readPairs reads -pairs-file: deckA, deckB and an optional seed per tab-separated line.
+func readPairs(path string) ([][3]string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var out [][3]string
+	for i, l := range strings.Split(string(raw), "\n") {
+		l = strings.TrimSpace(l)
+		if l == "" || strings.HasPrefix(l, "#") {
+			continue
+		}
+		v := strings.Split(l, "\t")
+		if len(v) < 2 {
+			return nil, fmt.Errorf("%s line %d: want deckA<TAB>deckB[<TAB>seed]", path, i+1)
+		}
+		p := [3]string{v[0], v[1], ""}
+		if len(v) > 2 {
+			p[2] = v[2]
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
