@@ -207,7 +207,34 @@ heuristic-bot column of generations 0-3 played under the Omniscience bug (§5.5)
   average mana value of 3.6 against 3.1, almost no non-basic lands (0.1 against 1.4). In the first val pool it
   built a red-white creature deck where the human built black-white with five removal spells.
 
-### 5.5 The builder found a rules bug in gorge
+### 5.5 What the self-play builder builds: decks for its pilot
+
+Phase A's generation 2 against the humans, on the same 500 val pools:
+
+| | Self-play builder | Humans |
+|---|---|---|
+| White-green as the main colours | **57%** of pools | 17% |
+| Creatures | 19.0 | 15.4 |
+| Non-creature spells | 3.7 | 7.8 |
+| Average mana value of the spells | 3.41 | 3.06 |
+| Lands (non-basic) | 17.3 (0.01) | 16.9 (1.33) |
+
+- **It never plays** planeswalkers (Ajani, Caller of the Pride: 0% of the pools that have it, against the humans'
+  100%; Chandra, Flameshaper and Kaito likewise), equipment (Leyline Axe: 0% against 78%), Evolving Wilds (0% against
+  83%), Day of Judgment or Phyrexian Arena, and plays plain creatures instead (Savannah Lions, Juggernaut,
+  Armasaur Guide, Campus Guide: 90-100% against 10-30%).
+- **Per card, the rate at which it plays a card from the pool** has a rank correlation of 0.47 with the humans'. Its
+  colour pairs are far from theirs (total variation distance 0.54). Each card's games-in-hand win rate in its own
+  games has a rank correlation of 0.39 with 17lands' across 249 cards.
+- **The reading:** a builder trained on games learns what wins *for the player who plays its decks*. gorge's
+  heuristic bot, which played phase A's games, attacks with creatures well and gets little from planeswalkers,
+  equipment and card advantage; the builder followed. The decks still beat the humans' 61% when the search plays
+  them, so the search seems to share some of that taste; phase B, whose games the search plays, tests how much.
+- **Building cautiously doesn't help (experiment E2):** building for the ensemble's mean less one standard deviation,
+  to avoid decks the networks disagree on, won 54.4% of 1,000 games against the plain mean's 57.6% on the same
+  network (generation 5). Disagreement marks the unexplored decks, and some of those are the good ones.
+
+### 5.6 The builder found a rules bug in gorge
 
 Phase A's networks ranked **Omniscience**, a 10-mana enchantment that 17lands' players rank near the bottom, as the
 best card in FDN. The games agreed: decks with it won 60% of their bot games, and 82% of the games where it was drawn.
