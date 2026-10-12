@@ -1,8 +1,8 @@
 # Building sealed decks from self-play: FDN on gorge
 
-*Status (Monday 12 October 2026, 1:10 AM PT): a builder trained only on its own games beats the human decks 61% at
-100 simulations after two cheap generations, ahead of the 17lands heuristic (57%) (§5.1); search-level self-play
-(phase B) is running. The code is on the
+*Status (Monday 12 October 2026, 2:45 AM PT): a builder trained only on its own games beats the human decks 61% at
+100 simulations, ahead of the 17lands heuristic (57%) (§5.1); two test-time ideas failed (§5.5); search-level self-play
+(phase B) and a colour-diverse league (E5) are running. The code is on the
 [`sealed-deckbuilding`](https://github.com/danieljbrooks/draft-zero/tree/sealed-deckbuilding) branch (`gorge/sealed/`).*
 
 **The goal:** a model that builds a 40-card sealed deck from a pool of six FDN packs, trained **only from games it
@@ -114,7 +114,7 @@ simulations.
 
 ## 5. Results
 
-### 5.1 Headline so far (Monday 12 October, 12:00 AM PT)
+### 5.1 Headline so far (Monday 12 October, 2:45 AM PT)
 
 **A builder that learned only from games played by gorge's heuristic bot, two generations in, wins 60.9% of 1,000
 games against the human decks from the same val pools when the full search plays them at 100 simulations** (71.1%
