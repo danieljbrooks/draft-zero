@@ -108,7 +108,7 @@ _chunk() {  # _chunk OUT FIRST N SEED POLICY SECS -> echoes complete games appen
 
 selfplay() {
   local out=$1 n=$2 seed=$3 net=${4:-} sims=${5:-25} pol s m e chunk=${CHUNK:-500}
-  pol="az:sims=$sims:explore:$FULL"
+  pol="az:sims=$sims:explore:$FULL${SP_EXTRA:-}"   # SP_EXTRA: more search keys for self-play, e.g. ":cpuct=0.5"
   [ -n "$net" ] && pol="$pol:topk=6:gonet=$net"
   mkdir -p "$out"
   [ -d "$out/pack" ] && { echo "skip $out (packed)"; return 0; }
