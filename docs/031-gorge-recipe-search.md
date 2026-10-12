@@ -1,6 +1,6 @@
 # Searching for a self-play recipe that scales: laptop experiments on gorge
 
-*Status (Sunday 11 October 2026, 6:00 PM PT): stage 0, E1 and E2 done (§6); E3's loops running on r1, the search ladder on
+*Status (Monday 12 October 2026, 2:30 AM PT): stage 0, E1 and E2 done (§6); E3's loops running on r1, the search ladder on
 Dan's laptop (an 8-core M1 Pro). The code is on the
 [`gorge-train`](https://github.com/danieljbrooks/draft-zero/tree/gorge-train) branch (`gorge/recipe/`).*
 
@@ -320,10 +320,10 @@ The start network inside the full search, and the full search without a network,
 
 From generation 5, loop B (warm start, every game) runs alone on 20 of r1's cores.
 
-| Loop B generation | 5 | 6 | 7 |
-|---|---|---|---|
-| Against the zero point (800 games) | 57.0% | 57.6% | 57.4% |
-| Against the bot (1,000 games) | 76.2% | 76.0% | 76.1% |
+| Loop B generation | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|
+| Against the zero point (800 games) | 57.0% | 56.9% | 57.6% | 57.4% | 56.8% | 58.0% | 58.4% | 58.4% |
+| Against the bot (1,000 games) | 76.2% | 76.6% | 76.0% | 76.1% | 76.9% | 77.4% | 77.4% | 77.6% |
 
 *Against the bot loop B has gone from 73-75% (generations 1-4) to 76% three times running: a point or two, at the edge
 of what 1,000 games can show.*
@@ -387,7 +387,7 @@ Matches against the bot compress small differences (every network sits at 74-77%
 start network directly: the full search at 100 simulations on both sides, 500 deck pairs.
 
 - **Loop B's generation 7 beat the start network 54.3% ± 1.0 of 1,000 paired games**, about four standard errors: the
-  slow value gains of §E3 are real in play. Against the bot the same two networks scored 76.1% and 75.5%.
+  slow value gains of §E3 are real in play. Against the bot the same two networks scored 76.0% and 75.5%.
 - From here every check of a loop's progress includes a head-to-head against the start network.
 
 ### Exploration at test time: lower `cpuct` plays better (Sunday 8-10 PM, laptop)
@@ -467,6 +467,13 @@ Mean loss per decision, by decision kind (the share of audited decisions in brac
   numbers rest on 85-130 decisions and are noisier).
 - **The network's value matters most for modal spells** (0.020 without it, 0.004 with it at 25 simulations already):
   a heuristic can't weigh one mode against another.
-- **These losses are upper bounds:** the oracle's own estimates are noisy and a loss only counts when positive. A
-  self-audit (the oracle's configuration audited by itself, 60 games) measures that floor; the numbers above should be
-  read against it.
+- **The noise floor is small.** The oracle's own configuration audited by itself (60 games, 383 decisions) loses
+  **0.0006** per decision and agrees with itself 91.6% of the time: the oracle's estimates are noisy, and a loss only
+  counts when positive, so no agent can score below that. The agents' losses are 5-16 times the floor.
+- **Per game,** with about 26 searched decisions a game and the floor subtracted, the bot gives up roughly 0.24 of a
+  win without a network (100 simulations), 0.10 with it at 100 simulations and 0.06 at 500: against what its own
+  network sees with 2,000 simulations. A stronger oracle would find more.
+
+*Reading: of the measures toward "how good is it", this one does not saturate, splits by decision kind, and is cheap
+enough to run on every new network (a quarter of the decisions of 200 games: 40-60 minutes on 4 laptop cores). Its
+blind spot is the oracle's network: mistakes it shares with the bot are invisible.*
