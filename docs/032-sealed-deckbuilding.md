@@ -183,6 +183,26 @@ win rate on 500 (1,000 games).*
   is a real edge or a habit of the heuristic bot (which may play removal and tricks poorly) is what the search-level
   games test.
 
+### 5.5 The builder found a rules bug in gorge
+
+Phase A's networks ranked **Omniscience**, a 10-mana enchantment that 17lands' players rank near the bottom, as the
+best card in FDN. The games agreed: decks with it won 60% of their bot games, and 82% of the games where it was drawn.
+gorge let Omniscience's own "cast spells from your hand without paying their mana costs" work **while it was still
+in hand**, so it cast itself for free and then made every later spell free.
+
+- **The fix** (gorge patch 0009, `gorge/patches/`): a card's own static ability that names no zone works only on the
+  battlefield, as the rules say. With it, the same 600 deck pairings give Omniscience decks 42.7% of 613 games and
+  39.5% of the 256 where it was drawn: the dead card it should be.
+- **The same bug** let 44 other card/zone pairs in gorge's full card pool grant themselves a permission (Future
+  Sight playing itself from the top of the library, for example); none of them are in FDN. The fix and a census of
+  the affected cards went to gorge's author as an issue and a pull request.
+- **What it changes here:** every machine runs the fixed engine from Monday 12 October, 12:00 AM PT. Phase A's
+  generations 0-3 and the first 100-simulation results played under the bug. 24 of generation 2's 500 val decks
+  include Omniscience, so its 61.3% is re-measured on the fixed engine (§5.1).
+- **A lesson for the method:** a builder that optimises win rate exploits whatever the engine gets wrong, which makes
+  self-play deck building a useful engine audit. A card whose learned value is far from its human rating is worth
+  checking in the rules before trusting the model.
+
 ## 6. Prior work
 
 No published builder reports either of our measures (agreement with human decks from the same pool, or win rate
