@@ -266,7 +266,10 @@ The best builder (phase B, generation 4) against the humans, on the same 500 val
   Giada the decks won 65.5%, without 66.3%: -0.8 points (standard error 2.4).** For this pilot Giada is worth about
   what a plain 2-drop is, so leaving her out costs nothing here; a stronger pilot is what would make her good.
   Scoured Barrens in place of a basic in 100 of its white-black decks: -1.8 points (standard error 2.3), so for this
-  pilot the tapped dual's fixing and life don't pay for entering tapped. (Evolving Wilds: running.)
+  pilot the tapped dual's fixing and life don't pay for entering tapped. Evolving Wilds in place of a basic: 0.0
+  points (standard error 2.3); its poor record in the builder's games (32.5% when drawn) came from the weak
+  exploration decks that included it, not the card. **None of the three helps this pilot, so the builder's choices
+  cost it nothing here; what makes them strong for people is play this pilot doesn't do.**
 
 - **Phase A's generation 2 never played** planeswalkers (Ajani, Caller of the Pride: 0% of the pools that have it, against the humans'
   100%; Chandra, Flameshaper and Kaito likewise), equipment (Leyline Axe: 0% against 78%), Evolving Wilds (0% against
