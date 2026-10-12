@@ -1,0 +1,23 @@
+--- a/internal/azmcts/seat.go
++++ b/internal/azmcts/seat.go
+@@ -17,6 +17,10 @@
+ 
+ // SeatConfig is the az seat's configuration.
+ type SeatConfig struct {
++	// SimsByKind, when set, overrides Search.Sims at a decision of a listed kind
++	// (decision.Kind): a per-kind simulation budget, e.g. more for casting
++	// (priority) and fewer for blocks. Kinds not listed use Search.Sims.
++	SimsByKind map[decision.Kind]int
+ 	// Search are the per-decision knobs; Seed, Noise and Sample are set per
+ 	// decision by the seat and ignored here.
+ 	Search Options
+@@ -204,6 +208,9 @@
+ 	}
+ 	obs := searchprobe.NewCollector(d.Player)
+ 	opts := s.cfg.Search
++	if n, ok := s.cfg.SimsByKind[d.Kind]; ok && n > 0 {
++		opts.Sims = n
++	}
+ 	opts.Seed = DecisionSeed(s.seed, d.Seq)
+ 	var src WorldSource
+ 	var redeal *RedealSource

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/adams-shaun/gorge/decision"
 	"strconv"
 	"strings"
 
@@ -91,6 +92,7 @@ type policySpec struct {
 	AutoPay   bool
 	Mull      botpolicy.MulliganRule // :mull / :keep7; zero is gorge's 1/3 coin
 	TopK      int
+	KSims     map[decision.Kind]int // ksims=priority.200,blockers.40: per-kind simulations (patch 0009)
 	OppNodes  bool
 	OppFull   bool         // :oppfull
 	Kinds     azmcts.Kinds // :kinds= / :morekinds; zero is azmcts.AllKinds
@@ -149,6 +151,17 @@ func parsePolicy(s string) (*policySpec, error) {
 			p.Mull = botpolicy.MulliganNever
 		case "topk":
 			p.TopK, err = strconv.Atoi(v)
+		case "ksims":
+			p.KSims = map[decision.Kind]int{}
+			for _, kv := range strings.Split(v, ",") {
+				k, n, ok := strings.Cut(kv, ".")
+				if !ok {
+					return nil, fmt.Errorf("policy %q: ksims entry %q: want kind.N", s, kv)
+				}
+				if p.KSims[decision.Kind(k)], err = strconv.Atoi(n); err != nil {
+					break
+				}
+			}
 		case "oppnodes":
 			p.OppNodes = true
 		case "oppfull":
@@ -231,6 +244,7 @@ func (p *policySpec) azConfig() azmcts.SeatConfig {
 	cfg.Search.AutoPayment = p.AutoPay
 	cfg.Mulligan = p.Mull
 	cfg.Search.PriorTopK = p.TopK
+	cfg.SimsByKind = p.KSims
 	cfg.Search.OpponentNodes = p.OppNodes
 	cfg.Search.OpponentMirror = p.OppFull
 	// Honest worlds only: the seat never searches the real engine's hidden zones. The
