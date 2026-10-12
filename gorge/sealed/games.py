@@ -9,8 +9,10 @@ again. Resumable: games already in OUT are not replayed.
   python -m sealed.games DECKS.jsonl PAIRS.tsv OUT.jsonl --sims 100 --workers 15
 """
 import argparse
+import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -146,24 +148,47 @@ def play_distributed(deckfile, pairs_path, out, sims, workers, remotes=(), log=s
     results, threads = {}, []
 
     def remote(k, r, lines):
-        tag = f"{os.path.basename(os.path.dirname(os.path.abspath(out)))}-{os.path.basename(out)}-{k}"
-        rd = f"/tmp/dzs-{tag}"
+        # Detached on the remote (tmux if r["tmux"], else nohup) and polled, so a dropped ssh doesn't lose the shard.
+        # A relaunch for the same output kills the previous session first and starts a fresh shard directory.
+        name = f"dzs{hashlib.md5(os.path.abspath(out).encode()).hexdigest()[:8]}k{k}"
+        rd = f"{r.get('tmp', '/tmp')}/{name}-{int(time.time())}"
         sub = os.path.join(os.path.dirname(os.path.abspath(out)), f".remote{k}.tsv")
         with open(sub, "w") as f:
             for i in lines:
                 f.write("\t".join(pairs[i]) + "\n")
+        secs = r.get("secs", 36000)
         try:
-            subprocess.run(["ssh", r["host"], f"mkdir -p {rd}"], check=True, timeout=120)
+            ssh = lambda c, t=120: subprocess.run(["ssh", "-o", "ConnectTimeout=30", r["host"], c], timeout=t,
+                                                  capture_output=True, text=True)
+            kill = (f"tmux kill-session -t {name} 2>/dev/null; " if r.get("tmux") else
+                    f"[ -f /tmp/{name}.pid ] && kill $(cat /tmp/{name}.pid) 2>/dev/null; ")
+            ssh(kill + f"mkdir -p {rd}")
             subprocess.run(["rsync", "-a", deckfile, f"{r['host']}:{rd}/decks.jsonl"], check=True, timeout=600)
             subprocess.run(["rsync", "-a", sub, f"{r['host']}:{rd}/pairs.tsv"], check=True, timeout=600)
-            cmd = (f"cd {r['root']}/gorge && GORGE_DIR={r['gorge']} PLAY_NET={r['net']} timeout {r.get('secs', 36000)} "
+            job = (f"cd {r['root']}/gorge && GORGE_DIR={r['gorge']} PLAY_NET={r['net']} timeout {secs} "
                    f"{r['python']} -m sealed.games {rd}/decks.jsonl {rd}/pairs.tsv {rd}/games.jsonl --sims {sims} "
-                   f"--workers {r['workers']} > {rd}/play.log 2>&1 < /dev/null")
-            subprocess.run(["ssh", r["host"], cmd], timeout=r.get("secs", 36000) + 600)
+                   f"--workers {r['workers']} > {rd}/play.log 2>&1; touch {rd}/done")
+            if r.get("tmux"):
+                ssh(f"tmux new-session -d -s {name} {shlex.quote(job)}")
+            else:
+                ssh(f"nohup bash -c {shlex.quote(job)} > /dev/null 2>&1 < /dev/null & echo $! > /tmp/{name}.pid")
+            t0, fails = time.time(), 0
+            while time.time() - t0 < secs + 600:
+                time.sleep(60)
+                try:
+                    st = ssh(f"test -f {rd}/done && echo DONE", 60).stdout
+                    fails = 0
+                    if "DONE" in st:
+                        break
+                except subprocess.TimeoutExpired:
+                    fails += 1
+                    if fails > 30:
+                        raise RuntimeError("unreachable for 30 polls")
             subprocess.run(["rsync", "-a", f"{r['host']}:{rd}/games.jsonl", sub + ".games"], check=True, timeout=600)
             got = [json.loads(l) for l in open(sub + ".games") if l.strip()]
             results[k] = [(lines[g["line"]], g) for g in got if g.get("line", -1) < len(lines)]
             print(f"remote {r['host']}: {len(got)} of {len(lines)} games", file=log, flush=True)
+            ssh(f"rm -rf {rd}")
         except Exception as e:  # noqa: BLE001 - any failure: the lines are replayed here
             print(f"remote {r['host']} failed: {e}", file=log, flush=True)
         finally:
