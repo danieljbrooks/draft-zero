@@ -59,8 +59,9 @@ def deck_colors(deck: np.ndarray) -> str:
     return main + ("+" + spl if spl else "")
 
 
-def random_build(pool: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+def random_build(pool: np.ndarray, rng: np.random.Generator, wide: bool = False) -> np.ndarray:
     """Generation 0's builder: a random but deck-shaped choice, no knowledge of card quality.
+    (`wide` widens the colours and land counts below.)
 
     - 1, 2 or 3 main colours (10% / 70% / 20%), chosen at random among the colours the pool has cards in;
     - with probability 0.3, a splash of 1-3 cards of one more colour;
@@ -68,10 +69,15 @@ def random_build(pool: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     - the spells uniform among the castable ones; basics split by pips.
     """
     have = np.array([(pool * C.colors[:, k] * C.spell).sum() for k in range(5)])
-    k = rng.choice([1, 2, 3], p=[0.1, 0.7, 0.2])
+    if wide:   # also the decks that shouldn't work: up to five colours, 12-21 lands
+        k = rng.choice([1, 2, 3, 4, 5], p=[0.1, 0.5, 0.2, 0.1, 0.1])
+        n_lands = int(rng.integers(12, 22))
+    else:
+        k = rng.choice([1, 2, 3], p=[0.1, 0.7, 0.2])
+        n_lands = int(rng.integers(14, 20))
+    k = min(k, int((have > 0).sum()))
     cols = np.zeros(5, bool)
     cols[rng.choice(5, size=k, replace=False, p=have / have.sum())] = True
-    n_lands = int(rng.integers(14, 20))
     deck = np.zeros(len(C), np.float32)
     while (pool * C.spell * castable(cols)).sum() < 40 - n_lands and not cols.all():   # too few spells: add a colour
         cols[rng.choice(np.flatnonzero(~cols))] = True
@@ -159,3 +165,16 @@ def load_pools(kind="sealed", split=None):
         p["ref_v"] = C.vec(ref["deck"])
         out.append(p)
     return out
+
+
+def perturb(deck: np.ndarray, pool: np.ndarray, rng: np.random.Generator, k: int) -> np.ndarray:
+    """k random 1-for-1 swaps within the pool (basics unlimited): exploration around a built deck."""
+    d = deck.copy()
+    for _ in range(k):
+        out = rng.choice(np.flatnonzero(d > 0))
+        room = pool - d
+        room[BASIC_IDX] = 99
+        room[out] = 0
+        d[out] -= 1
+        d[rng.choice(np.flatnonzero(room > 0))] += 1
+    return d
