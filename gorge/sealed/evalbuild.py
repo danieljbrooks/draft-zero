@@ -51,6 +51,8 @@ def main():
     ap.add_argument("--sims", type=int, default=None, help="play the win-rate match at this search level")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--procs", type=int, default=4)
+    ap.add_argument("--prepare", action="store_true", help="with --sims: write the match's decks and pairs only, for "
+                    "another machine to play (python -m sealed.games); rerun without it to score")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     pools = D.load_pools(a.kind, a.split)[: a.pools]
@@ -64,7 +66,11 @@ def main():
                 f.write(json.dumps(C.dict(d)) + "\n")
     res = {"builder": a.builder, "kind": a.kind, "split": a.split, "agreement": E.agreement(built, pools)}
     if a.sims is not None:
-        E.write_match(a.out, built, pools)
+        if not os.path.exists(os.path.join(a.out, "pairs.tsv")):
+            E.write_match(a.out, built, pools)
+        if a.prepare:
+            print(f"prepared {a.out}: decks.jsonl, pairs.tsv", file=sys.stderr)
+            return
         with open(os.path.join(a.out, "play.log"), "a") as pl:
             G.play(os.path.join(a.out, "decks.jsonl"), os.path.join(a.out, "pairs.tsv"),
                    os.path.join(a.out, "games.jsonl"), sims=a.sims, workers=a.workers, log=pl)
