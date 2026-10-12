@@ -597,3 +597,32 @@ against the bot (1,000 games each):
 
 *Uniform wins. Casts are where search earns the most, but the other decisions can't be starved: at 25 simulations they
 lose more than extra casting search buys back. The budget is best spent evenly, at least between 25 and 200.*
+
+**How many candidates?** The prior keeps `topk` candidates at each decision (6 so far). Loop B's generation 13 at
+`cpuct` 0.25 and 100 simulations, against the bot: 3 candidates 78.5%, 6 80.4%, 10 80.4% (1,000 games each). Six stays.
+
+### Card-quality calibration: does the bot value cards as strong humans do? (Monday 3 PM, laptop)
+
+A measure toward "could it beat top humans" that needs no new games. Each game record lists the cards each player held,
+so self-play gives every card a games-in-hand win rate (GIH) as 17lands computes it. A strong player should make the good
+cards win more, as 17lands' human players do: the rank correlation (Spearman) between self-play GIH and 17lands' FDN
+Premier Draft GIH rises with the quality of play (`gorge/analyze.py gih`; docs/026 §5 introduced it). 48,000 self-play
+games (96,000 player-games) per row, cards held in at least 100 games:
+
+| Self-play games from | Commons (90 cards) | All cards (about 272) | Colour pairs (10) |
+|---|---|---|---|
+| The full search without a network (stage 0's cheap games) | 0.214 | 0.390 | -0.02 |
+| Loop B, generations 1-6 | 0.293 | 0.477 | 0.10 |
+| Loop B, generations 13-18 | **0.366** | **0.503** | 0.19 |
+
+- **The correlation rises with training,** generation after generation, where matches against the bot have saturated:
+  commons from 0.21 to 0.37.
+- **It is far from its ceiling.** With this many player-games, 17lands' own data resampled reaches about 0.94 on
+  commons (the noise ceiling, computed for exp #1 at 50,000 player-games). The bot ranks cards much less like strong
+  humans than a perfect re-measurement of them would: about 0.37 of a possible 0.94.
+- **Caveats:** self-play measures cards under the bot's own play on both sides, and the decks are 17lands' top decks;
+  a card that only works with a line the bot can't find looks weak here. Both bias toward a low correlation, so it is a
+  lower bound on how human-like the bot's card use is.
+
+*Reading: a cheap, non-saturating measure to track every generation (it needs only the self-play games' records),
+and a large remaining gap to strong human play.*
