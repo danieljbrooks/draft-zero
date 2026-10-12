@@ -110,6 +110,8 @@ def main():
                     "(a lower learning rate) instead of from scratch")
     ap.add_argument("--warm-lr", type=float, default=1e-3)
     ap.add_argument("--draws", action="store_true", help="train with the games-in-hand draw term (model.loss_fn)")
+    ap.add_argument("--castable", action="store_true", help="weight each spell by how castable the deck's mana makes it "
+                    "(model.DeckNet.castability)")
     ap.add_argument("--kinds", default="btpr", help="deck variants per pool: b best, t Thompson, p perturbed, "
                     "r random (or t), l land-shifted, c cautious, k best in a random colour pair")
     ap.add_argument("--support", type=float, default=0.02, help="land counts with at least this share of the "
@@ -158,9 +160,9 @@ def main():
         t2 = time.time()
         if a.warm and ens_path:
             ens, rep = T.fit(gens[-a.window:], a.members, log=log, init=M.Ensemble.load(ens_path), lr=a.warm_lr,
-                             draws=a.draws)
+                             draws=a.draws, castable=a.castable)
         else:
-            ens, rep = T.fit(gens[-a.window:], a.members, log=log, draws=a.draws)
+            ens, rep = T.fit(gens[-a.window:], a.members, log=log, draws=a.draws, castable=a.castable)
         if a.support:
             ens.meta["lands"] = M.land_support(S.load_games([os.path.join(g, "games.jsonl") for g in gens[-a.window:]]),
                                                S.load_decks([os.path.join(g, "decks.jsonl") for g in gens[-a.window:]]),

@@ -60,6 +60,12 @@ class DeckNet(nn.Module):
         # the draw term's scale: a drawn card's effect on the game relative to its per-copy deck value (about
         # 40 / cards seen, ~2.3, if a card matters only when drawn); used only when training with draws
         self.lam = nn.Parameter(torch.tensor(2.0))
+        # castability (a rule of the game, its shape learned): a spell counts in proportion to
+        # prod over the colours it needs of sigmoid(a * (sources - b - c * pips)); on only when `castable` is set
+        self.castable = False
+        self.cast_a = nn.Parameter(torch.tensor(1.0))
+        self.cast_b = nn.Parameter(torch.tensor(2.0))
+        self.cast_c = nn.Parameter(torch.tensor(1.0))
 
     def roles(self):
         land = torch.sigmoid(self.land0 + self.d_land)
@@ -90,13 +96,27 @@ class DeckNet(nn.Module):
         return torch.cat([H / 10, L[:, None] / 17, K[:, None] / 15, S / 8, R / 10, ratio, short,
                           ncol / 2, (N - 40) / 2, (L[:, None] - 17) ** 2 / 4], -1)
 
+    def castability(self, n):
+        """(B x cards) share of each card's value the deck can use: 1 for lands and colourless cards, falling toward 0
+        for a spell whose colours the deck makes little mana of."""
+        _, _, _, src = self.roles()
+        S = n @ src                                                        # B x 5 coloured sources
+        need = (self.pips > 0).float()                                     # cards x 5
+        z = F.softplus(self.cast_a) * (S[:, None, :] - self.cast_b - self.cast_c * self.pips[None, :, :])
+        return torch.exp((F.logsigmoid(z) * need[None]).sum(-1))           # B x cards
+
     def forward(self, n, parts=False):
         """s(deck) for a batch of count vectors n (B x 286)."""
         q = self.quality()
         v = self.card_vecs()
-        s_q = n @ q
+        if self.castable:
+            w = n * self.castability(n)                                    # castable copies
+            s_q = (w * q).sum(-1)
+            s_c = self.ctx((w @ v) / n.sum(-1, keepdim=True).clamp(min=1)).squeeze(-1)
+        else:
+            s_q = n @ q
+            s_c = self.ctx((n @ v) / n.sum(-1, keepdim=True).clamp(min=1)).squeeze(-1)
         s_s = self.struct(self.features(n)).squeeze(-1)
-        s_c = self.ctx((n @ v) / n.sum(-1, keepdim=True).clamp(min=1)).squeeze(-1)
         if parts:
             return s_q, s_s, s_c
         return s_q + s_s + s_c
@@ -145,7 +165,7 @@ def loss_fn(m, A, B, P, Y, Ha=None, Hb=None, reg=1e-3):
 
 
 def train(games, decks, val_games=None, seed=0, epochs=40, lr=3e-3, wd=1e-4, batch=1024, reg=1e-3, bootstrap=False,
-          init=None, patience=4, log=None, draws=False):
+          init=None, patience=4, log=None, draws=False, castable=False):
     """Fit one DeckNet. With val_games, early-stop on their log-loss of the deck-only prediction (no draw term, so
     runs with and without draws compare); bootstrap resamples the games (ensembles). draws=True adds the
     games-in-hand term to training."""
@@ -159,6 +179,7 @@ def train(games, decks, val_games=None, seed=0, epochs=40, lr=3e-3, wd=1e-4, bat
     m = DeckNet()
     if init is not None:
         m.load_state_dict(init.state_dict(), strict=False)
+    m.castable = castable
     opt = torch.optim.AdamW(m.parameters(), lr=lr, weight_decay=wd)
     V = games_tensors(val_games, decks) if val_games else None
     best, best_state, bad = math.inf, None, 0
@@ -202,6 +223,7 @@ class Ensemble:
         return torch.stack([m(n) for m in self.members]).numpy()
 
     def save(self, path):
+        self.meta["castable"] = bool(getattr(self.members[0], "castable", False))
         torch.save({"members": [m.state_dict() for m in self.members], "meta": self.meta}, path)
 
     @classmethod
@@ -211,6 +233,7 @@ class Ensemble:
         ms = []
         for sd in sds:
             m = DeckNet(); m.load_state_dict(sd, strict=False); m.eval(); ms.append(m)
+            m.castable = bool((meta or {}).get("castable", False))
         return cls(ms, meta)
 
 
