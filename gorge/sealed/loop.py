@@ -52,6 +52,9 @@ def _build_worker(args):
                 best = d = Bd.build(pool, mean, q, lands=lands)
             elif kind == "c":     # cautious: the mean less one standard deviation across members
                 d = Bd.build(pool, Bd.Objective(ens, "cautious", k=1.0), q, lands=lands)
+            elif kind == "k":     # the best deck in one random colour pair: a colour-diverse league of opponents
+                pairs = [c for c in Bd.CONFIGS if c.sum() == 2]
+                d = Bd.build(pool, mean, q, n_refine=1, lands=lands, configs=[pairs[int(rng.integers(len(pairs)))]])
             elif kind == "l":     # the best deck with 1-3 lands more or fewer: explore the land count's edges
                 b0 = best if best is not None else Bd.build(pool, mean, q, lands=lands)
                 d = D.shift_lands(b0, pool, int(rng.choice([-3, -2, -1, 1, 2, 3])), q)
@@ -108,7 +111,7 @@ def main():
     ap.add_argument("--warm-lr", type=float, default=1e-3)
     ap.add_argument("--draws", action="store_true", help="train with the games-in-hand draw term (model.loss_fn)")
     ap.add_argument("--kinds", default="btpr", help="deck variants per pool: b best, t Thompson, p perturbed, "
-                    "r random (or t), l land-shifted, c cautious")
+                    "r random (or t), l land-shifted, c cautious, k best in a random colour pair")
     ap.add_argument("--support", type=float, default=0.02, help="land counts with at least this share of the "
                     "window's deck-games are the builder's range (model.land_support); 0 = no range")
     ap.add_argument("--val-pools", type=int, default=200)

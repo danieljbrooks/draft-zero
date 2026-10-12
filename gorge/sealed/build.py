@@ -86,14 +86,14 @@ def refine(deck, pool, obj, eps=1e-4, max_steps=60, lands=None):
     return deck, float(s)
 
 
-def build(pool, obj, quality, n_refine=4, return_all=False, lands=None):
+def build(pool, obj, quality, n_refine=4, return_all=False, lands=None, configs=None):
     """The best deck for `pool` (a count vector over non-basic cards) under objective `obj`. lands=[lo, hi] keeps
     the land count inside the range the training games support (Ensemble.meta["lands"])."""
     pool = pool.copy()
     pool[BASIC_IDX] = 0
     n0 = 17 if lands is None else int(np.clip(17, lands[0], lands[1]))
     starts = []
-    for cols in CONFIGS:
+    for cols in (CONFIGS if configs is None else configs):
         d = quick_deck(pool, cols, quality, n_lands=n0)
         if d is not None:
             starts.append(d)
