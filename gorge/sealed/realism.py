@@ -61,10 +61,21 @@ def colour_reference():
     return {k: w[k] / n[k] for k in n if n[k] >= 500}
 
 
+def human_records():
+    """h<k> -> (wins, games) of the human reference deck in 17lands' sealed games (train pools)."""
+    pools = D.load_pools("sealed", "train")
+    out = {}
+    for k, p in enumerate(pools):
+        ref = next(b for b in p["builds"] if b["build_index"] == p["ref"])
+        out[f"h{k}"] = (ref["wins"], ref["games"])
+    return out
+
+
 def analyse(dirs, min_drawn=60, limit=None):
     gih = json.load(open(os.path.join(D.cardsmod.REPO, "assets/reference/FDN_card_stats.json")))["cards"]
     ref = np.array([gih.get(x, {}).get("gih_wr", np.nan) for x in C.names])
     cref = colour_reference()
+    recs = human_records()
     out = []
     for d in dirs:
         meta = json.load(open(os.path.join(os.path.dirname(d.rstrip("/")), "meta.json")))
@@ -74,10 +85,15 @@ def analyse(dirs, min_drawn=60, limit=None):
         cw, cn = collections.Counter(), collections.Counter()
         uw = collections.defaultdict(list)
         turns, decided = [], 0
+        conc = []   # 1 if the deck with the better human record (>= 5 games each, differing by >= 10 points) won
         for g in games:
             if g.get("winner", -1) not in (0, 1):
                 continue
             decided += 1; turns.append(g.get("turns", 0))
+            (w0, n0), (w1, n1) = recs.get(g["decks"][0], (0, 0)), recs.get(g["decks"][1], (0, 0))
+            if n0 >= 5 and n1 >= 5 and abs(w0 / n0 - w1 / n1) >= 0.10:
+                better = 0 if w0 / n0 > w1 / n1 else 1
+                conc.append(1.0 if g["winner"] == better else 0.0)
             for s in (0, 1):
                 won = g["winner"] == s
                 dk = g["decks"][s]
@@ -115,6 +131,9 @@ def analyse(dirs, min_drawn=60, limit=None):
                "card_rho": round(float(rho), 3), "cards": int(ok.sum()), "card_ceiling": round(float(ceiling), 3), "colour_rho": round(float(crho), 3),
                "colour_pairs": len(keys), "strong_minus_weak": round(float(strong - weak), 4),
                "strong_minus_weak_se": round(se, 4),
+               "better_human_record_wins": round(float(np.mean(conc)), 4) if conc else None,
+               "better_human_record_se": round(float(np.std(conc) / math.sqrt(len(conc))), 4) if conc else None,
+               "better_human_record_games": len(conc),
                "colour_wr": {k: round(cw[k] / cn[k], 3) for k in keys}}
         out.append(row)
         print(json.dumps(row))
