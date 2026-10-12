@@ -166,7 +166,15 @@ The builders chosen on val pools, scored once on the 1,000 untouched sealed test
 | Imitation of the human decks | human decks | 23.6 | 36% | 53.0% ± 1.1 |
 
 *The self-play builder won 66.1% on val; it was chosen as the best of several there, so a small drop on fresh pools is
-expected. Draft test pools: running.*
+expected.*
+
+On the 1,000 Premier Draft test pools (the builders never trained on draft pools):
+
+| Builder | Cards shared (of 40) | Won against the human draft decks |
+|---|---|---|
+| **Self-play (phase B, generation 4)** | 31.6 | **57.5% ± 1.0** of 2,000 |
+| 17lands heuristic | 33.2 | 50.9% ± 1.1 of 2,000 |
+| Imitation of the human decks | | *running* |
 
 ### 5.2 Card agreement is hard in sealed
 
