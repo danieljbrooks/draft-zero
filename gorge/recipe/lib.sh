@@ -96,7 +96,7 @@ alone() {
 _chunk() {  # _chunk OUT FIRST N SEED POLICY SECS -> echoes complete games appended
   local out=$1 first=$2 n=$3 seed=$4 pol=$5 secs=$6
   rm -f "$out/chunk.jsonl" "$out/chunk.gz"
-  hardkill "$secs" "$G/bin/dzgorge" play "${COMMON[@]}" -record-features entity -record-every 4 -split train \
+  hardkill "$secs" "$G/bin/dzgorge" play "${COMMON[@]}" -record-features entity -record-every "${RECORD_EVERY:-4}" -split train \
     -a "$pol" -b "$pol" -pairs "$n" -first-pair "$first" -workers "${WORKERS:-7}" -seed "$seed" \
     -out "$out/chunk.jsonl" -corpus "$out/chunk.gz" >> "$out/play.log" 2>&1
   touch "$out/chunk.jsonl" "$out/chunk.gz"
