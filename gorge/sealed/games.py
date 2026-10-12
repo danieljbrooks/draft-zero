@@ -16,6 +16,8 @@ import sys
 import tempfile
 import time
 
+import numpy as np
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 GORGE = os.environ.get("GORGE_DIR", os.path.join(os.path.dirname(REPO), "ext", "gorge-sealed"))
@@ -123,3 +125,70 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def play_distributed(deckfile, pairs_path, out, sims, workers, remotes=(), log=sys.stderr, **kw):
+    """play(), with a share of the pairs sent to remote machines.
+
+    remotes: dicts {host, workers, root (the remote repo checkout), python, gorge, speed (games per worker relative to
+    here, default 1)}. Each remote gets its share of the pairs not yet played, plays them with this same module over
+    ssh, and its games are copied back and appended to out. Whatever a remote doesn't return (it died, its ssh
+    dropped) is played here afterwards, so the result is complete either way."""
+    import threading
+    pairs = read_pairs(pairs_path)
+    done = set()
+    if os.path.exists(out):
+        done = {json.loads(l)["line"] for l in open(out) if l.strip()}
+    todo = [i for i in range(len(pairs)) if i not in done]
+    weights = [workers] + [r["workers"] * r.get("speed", 1.0) for r in remotes]
+    cuts = np.cumsum([0] + weights) / sum(weights) * len(todo)
+    shares = [todo[int(cuts[k]):int(cuts[k + 1])] for k in range(len(weights))]
+    results, threads = {}, []
+
+    def remote(k, r, lines):
+        tag = f"{os.path.basename(os.path.dirname(os.path.abspath(out)))}-{os.path.basename(out)}-{k}"
+        rd = f"/tmp/dzs-{tag}"
+        sub = os.path.join(os.path.dirname(os.path.abspath(out)), f".remote{k}.tsv")
+        with open(sub, "w") as f:
+            for i in lines:
+                f.write("\t".join(pairs[i]) + "\n")
+        try:
+            subprocess.run(["ssh", r["host"], f"mkdir -p {rd}"], check=True, timeout=120)
+            subprocess.run(["rsync", "-a", deckfile, f"{r['host']}:{rd}/decks.jsonl"], check=True, timeout=600)
+            subprocess.run(["rsync", "-a", sub, f"{r['host']}:{rd}/pairs.tsv"], check=True, timeout=600)
+            cmd = (f"cd {r['root']}/gorge && GORGE_DIR={r['gorge']} PLAY_NET={r['net']} timeout {r.get('secs', 36000)} "
+                   f"{r['python']} -m sealed.games {rd}/decks.jsonl {rd}/pairs.tsv {rd}/games.jsonl --sims {sims} "
+                   f"--workers {r['workers']} > {rd}/play.log 2>&1 < /dev/null")
+            subprocess.run(["ssh", r["host"], cmd], timeout=r.get("secs", 36000) + 600)
+            subprocess.run(["rsync", "-a", f"{r['host']}:{rd}/games.jsonl", sub + ".games"], check=True, timeout=600)
+            got = [json.loads(l) for l in open(sub + ".games") if l.strip()]
+            results[k] = [(lines[g["line"]], g) for g in got if g.get("line", -1) < len(lines)]
+            print(f"remote {r['host']}: {len(got)} of {len(lines)} games", file=log, flush=True)
+        except Exception as e:  # noqa: BLE001 - any failure: the lines are replayed here
+            print(f"remote {r['host']} failed: {e}", file=log, flush=True)
+        finally:
+            for p in (sub, sub + ".games"):
+                if os.path.exists(p):
+                    os.remove(p)
+
+    for k, r in enumerate(remotes, 1):
+        t = threading.Thread(target=remote, args=(k, r, shares[k]), daemon=True)
+        t.start(); threads.append(t)
+    local = os.path.join(os.path.dirname(os.path.abspath(out)), ".local.tsv")
+    with open(local, "w") as f:
+        for i in shares[0]:
+            f.write("\t".join(pairs[i]) + "\n")
+    lo = out + ".local"
+    play(deckfile, local, lo, sims=sims, workers=workers, log=log, **kw)
+    for t in threads:
+        t.join()
+    with open(out, "a") as f:
+        for g in (json.loads(l) for l in open(lo) if l.strip()):
+            g["line"] = shares[0][g["line"]]
+            f.write(json.dumps(g) + "\n")
+        for k, rows in results.items():
+            for line, g in rows:
+                g["line"] = line
+                f.write(json.dumps(g) + "\n")
+    os.remove(lo); os.remove(local)
+    return play(deckfile, pairs_path, out, sims=sims, workers=workers, log=log, **kw)   # fill whatever is missing

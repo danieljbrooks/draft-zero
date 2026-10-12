@@ -105,6 +105,8 @@ def main():
     ap.add_argument("--eval-every", type=int, default=1)
     ap.add_argument("--eval-pools", type=int, default=500)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--remotes", default=None, help="JSON list of remote game machines (games.play_distributed); "
+                    "re-read every generation, so machines can join or leave")
     a = ap.parse_args()
     torch.set_num_threads(a.procs)
     os.makedirs(a.out, exist_ok=True)
@@ -133,9 +135,11 @@ def main():
             S.write_gen(gd, decks, pool_of, a.games, a.seed * 1000 + gen)
         log(f"gen {gen}: {a.pools} pools built in {time.time() - t0:.0f}s; playing {a.games} games at sims={a.sims}")
         t1 = time.time()
+        remotes = json.load(open(a.remotes)) if a.remotes and os.path.exists(a.remotes) else []
         with open(os.path.join(gd, "play.log"), "a") as pl:
-            G.play(os.path.join(gd, "decks.jsonl"), os.path.join(gd, "pairs.tsv"), os.path.join(gd, "games.jsonl"),
-                   sims=a.sims, workers=a.workers, chunk=max(a.workers * 200, 3000) if a.sims == 0 else None, log=pl)
+            G.play_distributed(os.path.join(gd, "decks.jsonl"), os.path.join(gd, "pairs.tsv"),
+                               os.path.join(gd, "games.jsonl"), sims=a.sims, workers=a.workers, remotes=remotes, log=pl,
+                               chunk=max(a.workers * 200, 3000) if a.sims == 0 else None)
         log(f"gen {gen}: games in {time.time() - t1:.0f}s")
         gens.append(gd)
         t2 = time.time()
