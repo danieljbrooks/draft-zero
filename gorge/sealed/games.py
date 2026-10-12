@@ -146,6 +146,7 @@ def play_distributed(deckfile, pairs_path, out, sims, workers, remotes=(), log=s
     cuts = np.cumsum([0] + weights) / sum(weights) * len(todo)
     shares = [todo[int(cuts[k]):int(cuts[k + 1])] for k in range(len(weights))]
     results, threads = {}, []
+    stop = threading.Event()   # set when every remote pair has been played here: remotes stop and return nothing
 
     def remote(k, r, lines):
         # Detached on the remote (tmux if r["tmux"], else nohup) and polled, so a dropped ssh doesn't lose the shard.
@@ -174,7 +175,10 @@ def play_distributed(deckfile, pairs_path, out, sims, workers, remotes=(), log=s
                 ssh(f"nohup bash -c {shlex.quote(job)} > /dev/null 2>&1 < /dev/null & echo $! > /tmp/{name}.pid")
             t0, fails = time.time(), 0
             while time.time() - t0 < secs + 600:
-                time.sleep(60)
+                if stop.wait(60):
+                    ssh(kill)
+                    print(f"remote {r['host']}: stopped (its pairs were played here)", file=log, flush=True)
+                    return
                 try:
                     st = ssh(f"test -f {rd}/done && echo DONE", 60).stdout
                     fails = 0
@@ -205,15 +209,42 @@ def play_distributed(deckfile, pairs_path, out, sims, workers, remotes=(), log=s
             f.write("\t".join(pairs[i]) + "\n")
     lo = out + ".local"
     play(deckfile, local, lo, sims=sims, workers=workers, log=log, **kw)
+    # Work stealing: while a remote is still busy, play its pairs here too, from the far end of its share, a batch
+    # at a time; whichever copy of a pair finishes first is kept.
+    stolen, steal_rows = set(), []
+    tail = [i for k in range(1, len(weights)) for i in reversed(shares[k])]
+    batch = max(workers * 8, 64) if sims > 0 else max(workers * 200, 3000)
+    while any(t.is_alive() for t in threads) and len(stolen) < len(tail):
+        take = [i for i in tail if i not in stolen][:batch]
+        sp = out + ".steal.tsv"
+        with open(sp, "w") as f:
+            for i in take:
+                f.write("\t".join(pairs[i]) + "\n")
+        so = out + ".steal.jsonl"
+        if os.path.exists(so):
+            os.remove(so)
+        play(deckfile, sp, so, sims=sims, workers=workers, log=log, **kw)
+        for g in (json.loads(l) for l in open(so) if l.strip()):
+            g["line"] = take[g["line"]]
+            steal_rows.append(g)
+        stolen.update(take)
+        os.remove(sp); os.remove(so)
+    if steal_rows:
+        print(f"stole {len(steal_rows)} games from the remotes' shares", file=log, flush=True)
+    if tail and len(stolen) >= len(tail):
+        stop.set()
     for t in threads:
         t.join()
+    have = set(done)
     with open(out, "a") as f:
-        for g in (json.loads(l) for l in open(lo) if l.strip()):
-            g["line"] = shares[0][g["line"]]
+        rows = [(shares[0][g["line"]], g) for g in (json.loads(l) for l in open(lo) if l.strip())]
+        rows += [r for k in sorted(results) for r in results[k]]
+        rows += [(g["line"], g) for g in steal_rows]
+        for line, g in rows:
+            if line in have:
+                continue
+            have.add(line)
+            g["line"] = line
             f.write(json.dumps(g) + "\n")
-        for k, rows in results.items():
-            for line, g in rows:
-                g["line"] = line
-                f.write(json.dumps(g) + "\n")
     os.remove(lo); os.remove(local)
     return play(deckfile, pairs_path, out, sims=sims, workers=workers, log=log, **kw)   # fill whatever is missing
