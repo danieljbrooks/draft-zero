@@ -109,7 +109,24 @@ func runPlay(args []string) int {
 	fs.IntVar(&gonetCardCache, "gonet-card-cache", gonetCardCache, "cached gonet= card vectors (0 = none)")
 	fs.IntVar(&azmcts.PriorRankMaxOptions, "topk-max-options", 0, "under topk=, skip the network's ranking at a "+
 		"decision with more options than this (bot answer first, enumeration order, uniform prior); 0 = always rank")
+	fs.StringVar(&auditOracle, "audit-oracle", "", "audit side A's az seat: this az spec searches a share of its decisions "+
+		"first (audit.go); needs -audit-out")
+	fs.Float64Var(&auditRate, "audit-rate", 0.1, "share of side A's searched decisions the oracle audits")
+	fs.StringVar(&auditPath, "audit-out", "", "audit JSONL (one line per audited decision)")
 	fs.Parse(args)
+	if auditOracle != "" {
+		sp, err := parsePolicy(auditOracle)
+		if err != nil || sp.Kind != "az" || auditPath == "" {
+			fmt.Fprintf(os.Stderr, "play: -audit-oracle %q needs an az spec and -audit-out (%v)\n", auditOracle, err)
+			return 2
+		}
+		if auditW, err = newAuditWriter(auditPath); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		defer auditW.close()
+		auditSpec = sp
+	}
 	if f, err := policynet.ParseFeatureSet(*recFeat); err != nil || f.Diagnostic() {
 		fmt.Fprintf(os.Stderr, "play: -record-features %q: want mz or entity\n", *recFeat)
 		return 2
@@ -432,6 +449,14 @@ func playOne(jb job, specs []*policySpec, dc *deckCache, reg *cards.Registry, ma
 		if err != nil {
 			rec.Result, rec.Err = "error", err.Error()
 			return rec, nil
+		}
+		if az, ok := st.(*azmcts.Seat); ok && auditSpec != nil && jb.sides[s] == 0 && sp.Kind == "az" {
+			ost, err := auditSpec.seat(jb.seed ^ uint64(s+1) ^ 0x0a0d17)
+			if err != nil {
+				rec.Result, rec.Err = "error", err.Error()
+				return rec, nil
+			}
+			st = newAuditSeat(az, ost.(*azmcts.Seat), jb.seed^uint64(s+1), jb.pair, jb.leg, s)
 		}
 		seats[s] = st
 		if sp.searches() {
