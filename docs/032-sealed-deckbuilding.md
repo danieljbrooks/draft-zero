@@ -448,13 +448,31 @@ choices; realistic games may need ~3,000 simulations. This measures the pilot al
 | search, 25 simulations | 0.34 (0.62) | 0.71 | +2.6 (1.7) | 51.2% (2.4) |
 | search, 100 simulations | 0.37 (0.72) | 0.61 | +1.4 (1.7) | 53.8% (2.4) |
 | search, 300 simulations | 0.37 (0.75) | 0.73 | **+3.6 (1.7)** | 53.8% (2.4) |
-| search, 1,000 simulations (500 games so far) | too few games | | | 55.0% (5.0) |
-| search, 3,000 simulations | *running (about 17 games an hour per 15-core pod)* | | | |
+| search, 1,000 simulations | see below (722 games) | | | |
+| search, 3,000 simulations | not measured: 128 games (about 17 games an hour per 15-core pod) | | | |
 
 *Last column: games between two human decks that each played at least 5 games on 17lands with records at least 10
 points apart (418 of the 2,000 games). Card rows: about 205 spells drawn at least 60 times. The noise ceiling is the most a perfect match could show with
 2,000 games (split-half reliability). Stronger players: 17lands' player win-rate bucket of 0.60 or more.*
 
+**The deep levels, on the same games.** The 1,000-simulation level finished 722 of its games before the budget
+ran out; every level on exactly those 722 games:
+
+| Played by | Card win rates vs 17lands | The deck with the better 17lands record won (150 games) | Stronger minus weaker players' decks |
+|---|---|---|---|
+| gorge's heuristic bot | 0.16 | 49% | +0.8 points |
+| 25 simulations | 0.31 | 52% | +2.9 |
+| 100 simulations | 0.36 | 55% | +3.6 |
+| 300 simulations | 0.27 | 54% | +3.9 |
+| 1,000 simulations | 0.34 | 54% | +3.8 |
+
+*At 722 games the card correlations are noisy (their noise ceilings range from 0.12 to 0.59), and 150 games give the
+middle column a standard error of about 4 points.*
+
+- **Through 1,000 simulations, play gets no more human-like than at 100-300.** The measures rise from no search to
+  25 and 100 simulations and then hold. Whether ~3,000 simulations changes this (Dan's estimate for realistic games)
+  remains open: at about 17 games an hour per 15-core pod, a 1,000-game level would cost about 60 pod-hours (~$8-10
+  on community pods).
 - **Card values move toward the humans' with the first bit of search, then stall:** most of the gain comes between
   no search and 25 simulations, and 100 and 300 simulations agree (0.37), well below the ~0.7 ceiling.
 - **The pilot starts to reward better deck building at 300 simulations:** decks built by stronger 17lands players
