@@ -546,3 +546,83 @@ games, 60-odd configurations; `gorge/recipe/ratings.py`) puts every bot on one s
   rising at 3,000 but 55 points lower.
 - **The ladder is the measure to track from here.** New bots are placed by a few hundred games against configurations
   already on it, instead of against the saturating bot.
+
+### More test-time settings, the policy alone, and capacity at scale (Monday 7 AM-noon)
+
+**Sampled worlds.** The search samples the opponent's hidden cards; gorge deals a fresh world for every simulation by
+default, or cycles `worlds=K` fixed ones. Loop B's generation 13 at `cpuct` 0.25 and 100 simulations, against the bot
+(1,000 games each):
+
+| Worlds | 4 | 16 | 64 | A fresh deal per simulation (default) |
+|---|---|---|---|---|
+| Won | 76.3% | 77.4% | 76.8% | **80.4%** |
+
+*Fixed worlds lose 3-4 points: covering more of the possible hidden hands beats lower noise per world. The default
+stays.*
+
+**The policy alone** (the network's top move, no search) against the bot, 1,000 games each:
+
+| Network | Start | Loop B, generation 7 | Loop B, generation 13 |
+|---|---|---|---|
+| Won | 50.5% | 56.3% | 57.1% |
+
+- **The policy does learn in the loop,** from nearly uniform targets: from even with gorge's bot to 7 points ahead of
+  it. Inside the search it still adds nothing (the diagnostics), because the search re-weighs its few candidates
+  anyway.
+- Two of the start network's pairs hung in this match: the option cap of patch 0008 applies to the search's top-k
+  ranking, not to the policy-only seat. The chunked match skipped them (996 games).
+
+**E6: capacity at scale.** MLPs of widths 128, 256 and 384 (0.8M to 6.3M parameters) trained from scratch on every game
+of loop B's lineage (stage 0's 80,000 plus generations 1-15: 200,000 games), each against loop B's generation 15 head to
+head (`cpuct` 0.25, 100 simulations, 1,000 games):
+
+| Width | 128 | 256 | 384 |
+|---|---|---|---|
+| Against loop B's generation 15 | 50.1% | 50.5% | 51.5% |
+
+*Even at 200,000 games, width buys at most a point or two (384: 1.5 standard errors). Retraining from scratch on all
+games equals the warm-started loop. Neither capacity nor the training schedule is what holds the loop at its plateau;
+the labels are (E7).*
+
+**Spending simulations where search pays (patch 0009, `ksims=`).** The ablation found casting decisions worth most of
+the search's gain, so: more simulations for casts, fewer for everything else. Loop B's generation 13, `cpuct` 0.25,
+against the bot (1,000 games each):
+
+| Simulations | Won | Search time per searched decision |
+|---|---|---|
+| 100 for every kind | **80.4%** | 283 ms |
+| Casts 160, others 40 (about the same average) | 79.2% | 322 ms |
+| Casts 200, others 25 | 76.4% | 422 ms |
+| Casts 100, others 25 | 76.2% | 176 ms |
+
+*Uniform wins. Casts are where search earns the most, but the other decisions can't be starved: at 25 simulations they
+lose more than extra casting search buys back. The budget is best spent evenly, at least between 25 and 200.*
+
+**How many candidates?** The prior keeps `topk` candidates at each decision (6 so far). Loop B's generation 13 at
+`cpuct` 0.25 and 100 simulations, against the bot: 3 candidates 78.5%, 6 80.4%, 10 80.4% (1,000 games each). Six stays.
+
+### Card-quality calibration: does the bot value cards as strong humans do? (Monday 3 PM, laptop)
+
+A measure toward "could it beat top humans" that needs no new games. Each game record lists the cards each player held,
+so self-play gives every card a games-in-hand win rate (GIH) as 17lands computes it. A strong player should make the good
+cards win more, as 17lands' human players do: the rank correlation (Spearman) between self-play GIH and 17lands' FDN
+Premier Draft GIH rises with the quality of play (`gorge/analyze.py gih`; docs/026 §5 introduced it). 48,000 self-play
+games (96,000 player-games) per row, cards held in at least 100 games:
+
+| Self-play games from | Commons (90 cards) | All cards (about 272) | Colour pairs (10) |
+|---|---|---|---|
+| The full search without a network (stage 0's cheap games) | 0.214 | 0.390 | -0.02 |
+| Loop B, generations 1-6 | 0.293 | 0.477 | 0.10 |
+| Loop B, generations 13-18 | **0.366** | **0.503** | 0.19 |
+
+- **The correlation rises with training,** generation after generation, where matches against the bot have saturated:
+  commons from 0.21 to 0.37.
+- **It is far from its ceiling.** With this many player-games, 17lands' own data resampled reaches about 0.94 on
+  commons (the noise ceiling, computed for exp #1 at 50,000 player-games). The bot ranks cards much less like strong
+  humans than a perfect re-measurement of them would: about 0.37 of a possible 0.94.
+- **Caveats:** self-play measures cards under the bot's own play on both sides, and the decks are 17lands' top decks;
+  a card that only works with a line the bot can't find looks weak here. Both bias toward a low correlation, so it is a
+  lower bound on how human-like the bot's card use is.
+
+*Reading: a cheap, non-saturating measure to track every generation (it needs only the self-play games' records),
+and a large remaining gap to strong human play.*
