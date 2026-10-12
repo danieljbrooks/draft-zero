@@ -19,7 +19,7 @@ import time
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(os.path.dirname(HERE))
+REPO = os.environ.get("DZ_REPO") or os.path.dirname(os.path.dirname(HERE))
 GORGE = os.environ.get("GORGE_DIR", os.path.join(os.path.dirname(REPO), "ext", "gorge-sealed"))
 NET = os.environ.get("PLAY_NET", os.path.join(REPO, "data/sealed/nets/B7.dzgw"))
 FULL = "autopay:oppnodes:oppfull:morekinds"
@@ -78,8 +78,8 @@ def play(deckfile, pairs_path, out, sims=100, workers=7, chunk=None, pol=None, c
     todo = [i for i in range(len(pairs)) if i not in done]
     chunk = chunk or max(workers * 8, 64)
     # about 3x a game's usual time at these settings, per wave of `workers` games, plus 10 minutes
-    per_game = 1.5 + 0.12 * max(sims, 0)
-    secs = chunk_secs or int(3 * per_game * chunk / workers + 600)
+    per_game = 0.05 if sims <= 0 else 1.5 + 0.12 * sims
+    secs = chunk_secs or int(3 * per_game * chunk / workers + (120 if sims <= 0 else 600))
     t0, n = time.time(), 0
     with open(out, "a") as f:
         while todo:
@@ -92,7 +92,7 @@ def play(deckfile, pairs_path, out, sims=100, workers=7, chunk=None, pol=None, c
             n += len(got)
             if len(got) < len(batch):          # killed: replay the first missing game alone
                 miss = batch[len(got)]
-                g1 = _run(deckfile, [pairs[miss]], pol, 1, max(300, int(10 * per_game)), None)
+                g1 = _run(deckfile, [pairs[miss]], pol, 1, 60 if sims <= 0 else max(300, int(10 * per_game)), None)
                 if g1:
                     g1[0]["line"] = miss
                     f.write(json.dumps(g1[0]) + "\n"); n += 1

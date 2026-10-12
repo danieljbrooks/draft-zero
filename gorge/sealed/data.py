@@ -20,7 +20,7 @@ import sys
 
 import pandas as pd
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+REPO = os.environ.get("DZ_REPO") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BASICS = ("Plains", "Island", "Swamp", "Mountain", "Forest")
 DATA = os.path.expanduser("~/Desktop/Data")
 SOURCES = {

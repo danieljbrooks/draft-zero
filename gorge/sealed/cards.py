@@ -14,7 +14,8 @@ from functools import lru_cache
 
 import numpy as np
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# DZ_REPO: the checkout whose assets/ and data/ to use, when this package runs from a frozen copy elsewhere
+REPO = os.environ.get("DZ_REPO") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 COLORS = "WUBRG"
 BASICS = {"Plains": "W", "Island": "U", "Swamp": "B", "Mountain": "R", "Forest": "G"}
 KEYWORDS = ["Flying", "Trample", "Flash", "Haste", "Vigilance", "FirstStrike", "Lifelink", "Deathtouch",
