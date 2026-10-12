@@ -1,8 +1,9 @@
 # Building sealed decks from self-play: FDN on gorge
 
-*Status (Monday 12 October 2026, 4:50 AM PT): a builder trained only on its own games beats the human decks 65% at
-100 simulations, ahead of the 17lands heuristic (57%) (§5.1); games played by the search, not cheap bot games, got it
-there (§5.4, §5.8). Phase B and the evaluations are still running. The code is on the
+*Status (Monday 12 October 2026, 6:45 AM PT): trained only on its own games, the builder learns to build simple,
+white-based creature decks that its pilot (gorge's search with docs/031's network) can play well; played by that pilot
+on both sides, those decks beat the human decks from the same pools 66% of the time (§5.1). The choices mirror the
+pilot's weaknesses, so the next lever is gameplay, not deck building. The code is on the
 [`sealed-deckbuilding`](https://github.com/danieljbrooks/draft-zero/tree/sealed-deckbuilding) branch (`gorge/sealed/`).*
 
 **The goal:** a model that builds a 40-card sealed deck from a pool of six FDN packs, trained **only from games it
@@ -114,20 +115,30 @@ simulations.
 
 ## 5. Results
 
-### 5.1 Headline so far (Monday 12 October, 4:50 AM PT)
+### 5.1 Headline: the builder learns decks its pilot can play (Monday 12 October, 6:45 AM PT)
 
-**A builder that learned only from its own games wins 65.4% of 1,000 games against the human decks from the same
-val pools when the full search plays them at 100 simulations.** It is phase B's generation 3: two generations of
-cheap games played by gorge's heuristic bot, then four of games played by the search. Its decks share 18.7 of 40
-cards with the humans'. In the same test, on the same deals:
+**Trained only on its own games, the builder learns to build simple, white-based creature decks that the bot playing
+them can pilot well.** White is in 92% of its decks and white-green in 54% (the humans: 17%). It plays 17 creatures to
+the humans' 15 and 5 non-creature spells to their 8, and skips the cards that reward skilful play: planeswalkers,
+tricks, card advantage, fixing lands, and some strong cards outright (Giada, Font of Hope, 0% of the pools that have
+her; humans 61%). This is how a newer human player builds: decks that play themselves.
 
-- the 17lands heuristic, which uses human statistics, wins 56.6%;
-- a builder trained to imitate the human decks wins 54.3%: the deck that agrees most with the humans is not the one
-  that beats them;
-- phase A's generation 2, the best builder from cheap games alone, wins 60.9%, and still 59.4% at 300 simulations
-  (Dan's suggested depth), so the self-play builder's edge holds with deeper search;
-- on draft pools, which it never trained on, phase A's generation 2 wins 54.4% against the human draft decks, where
-  the 17lands heuristic wins 50.3%.
+**Played by its pilot, these decks win.** Both decks in every test game are played by the same bot: gorge's full
+search at 100 simulations with docs/031's loop B network. Against the decks the humans built from the same val pools,
+the best builder's decks (phase B, generation 4) win 66.1% of 1,000 games, where the 17lands heuristic's decks win
+56.6% and a builder that imitates the human decks wins 54.3%. The human decks' strengths need play this pilot doesn't
+have, so the win rate measures how well a deck suits the pilot more than how good it is.
+
+| Who played the games | Phase |
+|---|---|
+| gorge's heuristic bot, no search | phase A's training games |
+| the full search at 25 simulations with the network | phase B's training games |
+| the same search at 100 simulations | phase C's training games (from 6:30 AM), and every test game in this report (phase A's generation 2 also at 300: 59.4%) |
+
+**What it means for the project** (the goal is bots that play sealed well): the builder works, in that it finds what
+wins for whoever plays its decks, and it will follow the pilot as the pilot improves. The ceiling now is the pilot.
+docs/031's search ladder found the same: against gorge's heuristic bot, strength levels off near 82% between 500 and
+3,000 simulations.
 
 ![Win rate against the human decks at 100 simulations, per builder](img/032-builders-light.png)
 
