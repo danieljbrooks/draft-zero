@@ -102,8 +102,35 @@ parts:
    counts as a land.
 3. **Context:** a set network over the deck's cards, for synergies the first two miss.
 
-Card inputs are printed facts only (mana cost, types, power and toughness, keywords, rarity, the colours a land
-makes). Five networks trained on resampled games form an ensemble; their disagreement says where the model is unsure.
+**The architecture, in detail.** The network scores a whole deck; it never outputs one. About 26,000 parameters per
+network:
+
+```
+  deck: copies of each of FDN's 286 cards (a count vector)       card table (fixed): 76 printed facts per card
+          │                                                                    │
+          │            card vector (32) = MLP(76 → 32 → 32)(printed facts) + learned card embedding (32)
+          │                                                                    │
+          ├──► 1. quality:   Σ copies × castability(card, deck) × q(card)      q = linear(card vector) + per-card correction
+          ├──► 2. structure: MLP(33 → 64 → 64 → 1) over deck totals built from learnable card roles
+          └──► 3. context:   MLP(32 → 64 → 1) over the average (castable) card vector of the deck
+                                              │
+                                   s(deck) = 1 + 2 + 3, a single number
+```
+
+| Part | What goes in | Notes |
+|---|---|---|
+| Inputs | the deck as a count vector over 286 cards; a fixed table of 76 printed facts per card | facts: mana value, coloured pips, colour identity, colours a land makes, card types, power and toughness, rarity, 14 keywords, 29 mechanics tags. No pool, opponent or game state, and no human data |
+| Card identity | a 32-number embedding, a quality correction and role corrections per card, indexed by the card's position in the count vector | all start at zero with an L2 penalty: a card with few games stays close to what its printed facts predict, and its games pull it toward its own value |
+| Card roles | land-ness, effective mana value (a distribution over 0-7+), creature-ness, colours made | each starts at the printed card and drifts if the games say so |
+| Structure totals (33) | curve of the non-land cards (8 bins), land count, creature count, sources and pips per colour, their ratios, under-supported colours, number of colours, deck size | the network learns the format's land count, curve and mana requirements from these |
+| Castability | per spell, the product over the colours it needs of sigmoid(a × (sources − b − c × pips)) | three learned numbers, shared by all cards (§5.10) |
+| Output | s(deck), one number | used two ways: P(deck A beats deck B) = sigmoid(s(A) − s(B) + β × [A played first]) in training, and as the score the builder maximises |
+
+**Training uses game results only:**
+- **Loss:** binary cross-entropy of that Bradley-Terry probability against who won.
+- **Draw term:** the cards each player drew also enter the prediction, through those cards' q values (λ × the drawn cards' q, less what an average draw from the deck would hold).
+- **Ensemble:** five networks, each fitted with AdamW on a bootstrap resample of the last four generations' games, early-stopped on held-out games. Their disagreement says where the model is unsure.
+- **Warm start:** after phase A, each generation's networks start from the previous generation's.
 
 **The builder** (`gorge/sealed/build.py`) follows the human process:
 1. **Pick colours:** for each colour combination (5 mono, 10 pairs, 10 triples), a quick deck of its best cards by
