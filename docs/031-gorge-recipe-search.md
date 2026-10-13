@@ -665,3 +665,31 @@ decision of a game.*
 better games. Each generation, 1,200 games at 200 simulations and `cpuct` 0.25 with every decision recorded; a warm
 start on the last three generations' games with the root value as the value's label; a head-to-head against loop B's
 generation 17. Its generation 1 is E7's root-value network.
+
+### Label depth, loop F's first generations, and the ladder's new top (Monday night-Tuesday morning)
+
+**How deep must the labels be?** E7b repeats E7 on the laptop at the same compute with a shallower search: 2,400 games
+at 100 simulations instead of 1,200 at 200, from loop B's generation 17, two labels; each against generation 17 head to
+head (1,000 games). E7c (d1, Dan's desktop, from Tuesday 7 AM) adds 600 games at 400 simulations.
+
+| Self-play | The game's result | The root value |
+|---|---|---|
+| E7b: 2,400 games at 100 simulations | 51.4% | 53.5% |
+| E7: 1,200 games at 200 simulations | 52.3% | 53.7% |
+| E7c: 600 games at 400 simulations | *(playing)* | |
+
+- **The root value is the better label in both,** by 1.4-2.1 points.
+- **100 and 200 simulations do as well as each other at equal compute.** Recording every decision with a root-value
+  label is what matters, more than how deep the search behind it is, at least down to 100 simulations.
+
+**Loop F against loop B's generation 17** (1,000 games each):
+
+| Generation | 1 (E7's network) | 2 | 3 |
+|---|---|---|---|
+| Won | 53.7% | 54.1% | 54.8% |
+
+*A slow climb, each step within chance; a generation takes about 2.5 hours on 15 of r1's cores.*
+
+**The ladder's new top.** E7's root-value network at `cpuct` 0.25 and 100 simulations won **82.0%** of 1,000 games
+against the bot (loop B's generation 17 at the same settings: 79.2%; generation 13: 80.4%). At 100 simulations it
+plays where the start network needed 500-3,000.
