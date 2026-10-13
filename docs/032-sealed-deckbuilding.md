@@ -306,15 +306,34 @@ Each builder's decks on 500 val pools, against the human decks from the same poo
 | search, 100 simulations (phase C, generation 1) | **20.5** | 0.57 | **0.41** | 16.8 | 5.8 | 0.14 |
 | *the humans* | | | | *15.4* | *7.8* | *1.33* |
 
-| Main colours | Heuristic bot | 25 simulations | 100 simulations (C, gen 0) | 100 simulations (C, gen 1) | Humans |
-|---|---|---|---|---|---|
-| White-green | 57% | 54% | 49% | **42%** | 17% |
-| White-black | 9% | 22% | 26% | **30%** | 18% |
-| Black-green | 1% | 2% | 6% | **10%** | 12% |
-| White-blue and white-red | 10% | 15% | 8% | 9% | 14% |
-| Blue-green, red-green, blue-black, black-red, blue-red | 7% | 4% | 5% | 4% | **35%** |
-| Three or more colours | 12% | 3% | 6% | 4% | 3% |
-| Any white | 90% | 93% | 88% | 85% | 50% |
+**White-green falls at each step up in training search, and black takes its place.** One row per colour pair,
+ordered by the pair's win rate in 17lands' own sealed games; dots are the builders' shares of decks, light (gorge's
+heuristic bot) to dark (100 simulations), and diamonds the humans':
+
+![Main colours by training depth, one row per colour pair, with 17lands' human win rate](img/032-colours-light.png)
+
+wrote /tmp/_c.png
+| Main colours | 17lands human win rate | Heuristic bot | 25 simulations | 100 simulations (C, gen 0) | 100 simulations (C, gen 1) | Humans |
+|---|---|---|---|---|---|---|
+| White-black | 58.7% | 9% | 22% | 26% | 30% | 18% |
+| White-red | 58.6% | 3% | 7% | 4% | 6% | 8% |
+| White-green | 57.8% | 57% | 54% | 49% | 42% | 17% |
+| White-blue | 57.2% | 7% | 8% | 4% | 3% | 6% |
+| Red-green | 55.1% | 1% | 0% | 1% | 1% | 9% |
+| Black-red | 54.8% | 1% | 2% | 1% | 1% | 6% |
+| Blue-black | 54.4% | 2% | 0% | 0% | 0% | 7% |
+| Black-green | 54.1% | 1% | 2% | 6% | 10% | 12% |
+| Blue-green | 51.8% | 3% | 2% | 3% | 2% | 9% |
+| Blue-red | 48.7% | 0% | 0% | 0% | 0% | 4% |
+| Three or more colours |  | 12% | 3% | 6% | 4% | 3% |
+
+*Shares of each builder's decks on the 500 val pools by main colours; 17lands human win rate: all games of the human
+sealed builds with those main colours (Bo1 and Bo3).*
+
+**The colour choices are converging toward the humans' as the simulation budget grows:** the total variation
+distance between the builder's and the humans' colour distributions falls from 0.54 (heuristic bot) to 0.44 (25
+simulations) and 0.41 (100 simulations). The convergence isn't yet complete or even on every pair: white-black now
+overshoots the humans (30% against 18%), while blue and red have barely moved.
 
 *Colour distance: total variation distance between the builder's and the humans' distributions over main-colour
 combinations.*

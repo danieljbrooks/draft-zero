@@ -101,6 +101,59 @@ def phase_a(out):
     print("wrote", out, file=sys.stderr)
 
 
+def colours(out):
+    """Main colours by training depth, one row per colour pair (ordered by the pair's 17lands sealed win rate), with
+    the humans' share and win rate. Shares on the 500 val pools each builder was scored on."""
+    import collections
+    from . import decks as D
+    from . import realism as R
+    C = D.C
+    pools = D.load_pools("sealed", "val")[:500]
+
+    def mc(d):
+        k = "".join(sorted(D.deck_colors(d).split("+")[0], key="WUBRG".index))
+        return k if len(k) == 2 else ("3+" if len(k) >= 3 else "1")
+    runs = [("heuristic bot", "A-gen2-s100-fixed", "#86b6ef"), ("25 simulations", "B-gen4-s100", "#3987e5"),
+            ("100 simulations (gen 0)", "C-gen0-agree", "#1c5cab"), ("100 simulations (gen 1)", "C-gen1-agree", "#0d366b")]
+    share = {}
+    for lab, d, _ in runs:
+        built = [C.vec(json.loads(l)) for l in open(os.path.join(EVAL, d, "built.jsonl"))][:500]
+        share[lab] = collections.Counter(mc(x) for x in built)
+    share["humans"] = collections.Counter(mc(p["ref_v"]) for p in pools)
+    wr = R.colour_reference()
+    names = {"W": "white", "U": "blue", "B": "black", "R": "red", "G": "green"}
+    pairs = sorted([k for k in wr if len(k) == 2], key=lambda k: -wr[k])
+    rows = pairs + ["3+"]
+    fig, ax = plt.subplots(figsize=(8.2, 0.42 * len(rows) + 1.3), facecolor=SURF)
+    style(ax)
+    n = 500
+    for i, k in enumerate(rows):
+        y = len(rows) - 1 - i
+        xs = [100 * share[lab][k] / n for lab, _, _ in runs]
+        ax.plot([min(xs), max(xs)], [y, y], color=GRID, lw=3, solid_capstyle="round", zorder=1)
+        for (lab, _, col), x in zip(runs, xs):
+            ax.plot(x, y, "o", ms=8, color=col, mec=SURF, mew=1.5, zorder=3)
+        ax.plot(100 * share["humans"][k] / n, y, "D", ms=8, color=HUMAN, mec=SURF, mew=1.5, zorder=4)
+        lbl = "-".join(names[c] for c in k) if k != "3+" else "three or more colours"
+        ax.text(-1.5, y, lbl, ha="right", va="center", fontsize=9, color=INK)
+        if k in wr:
+            ax.text(61, y, f"{100 * wr[k]:.1f}%", ha="left", va="center", fontsize=9, color=INK2)
+    ax.text(61, len(rows) - 0.35, "17lands\nwin rate", ha="left", va="bottom", fontsize=8, color=INK2)
+    ax.set_yticks([])
+    ax.set_xlim(-0.5, 60)
+    ax.set_ylim(-0.7, len(rows) - 0.2)
+    ax.set_xlabel("Share of decks with these main colours (%), 500 val pools", fontsize=9, color=INK2)
+    from matplotlib.lines import Line2D
+    hs = [Line2D([], [], marker="o", ls="", color=c, label=f"builder: {lab}") for lab, _, c in runs]
+    hs.append(Line2D([], [], marker="D", ls="", color=HUMAN, label="humans"))
+    ax.legend(handles=hs, loc="lower left", bbox_to_anchor=(0, 1.0), ncol=3, frameon=False, fontsize=8,
+              labelcolor=INK2)
+    fig.subplots_adjust(left=0.22, right=0.86, top=0.82, bottom=0.12)
+    fig.savefig(out, dpi=160, facecolor=SURF)
+    print("wrote", out, file=sys.stderr)
+    return share, wr, rows
+
+
 if __name__ == "__main__":
     what = sys.argv[1]
     os.makedirs(IMG, exist_ok=True)
@@ -112,5 +165,7 @@ if __name__ == "__main__":
             ["17lands heuristic (GIH win rate)", "gih-s100", False],
             ["Imitation of the human decks", "imit-s100", False]]
         builders(rows, os.path.join(IMG, "032-builders-light.png"))
+    elif what == "colours":
+        colours(os.path.join(IMG, "032-colours-light.png"))
     elif what == "phaseA":
         phase_a(os.path.join(IMG, "032-phaseA-light.png"))
