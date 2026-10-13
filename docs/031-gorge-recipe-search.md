@@ -626,3 +626,42 @@ games (96,000 player-games) per row, cards held in at least 100 games:
 
 *Reading: a cheap, non-saturating measure to track every generation (it needs only the self-play games' records),
 and a large remaining gap to strong human play.*
+
+### E7: a deeper search's root value as the value's label (Monday 11 AM-7 PM, r1)
+
+*Hypothesis: loop B stalls because its labels are the game's result (mostly luck) and a 25-simulation root value
+(little better, E5). A deeper search's root value labels each position on its own, so it can teach from every
+decision of a game.*
+
+- **Games:** loop B's generation 17 played itself 1,200 times at 200 simulations and `cpuct` 0.25, recording every
+  decision (about 4 hours on 7 of r1's cores).
+- **Three warm starts** from generation 17 on those games only (2 passes, learning rate 1e-4), differing only in the
+  value's label, each against generation 17 head to head (`cpuct` 0.25, 100 simulations, 1,000 games):
+
+| Value label | The game's result | Half result, half the root value | The root value |
+|---|---|---|---|
+| Against loop B's generation 17 | 52.3% | 51.8% | **53.7%** |
+
+*One standard error is about 1 point.*
+
+- **1,200 deep games moved the network where 64,000 cheap ones did not:** every arm beats generation 17, after eight
+  generations of loop B (8,000 games each) without a step.
+- **The root value is the best label, by a little:** +3.7 points against +2.3 for the result; the three arms are
+  within two standard errors of each other.
+- **Part of the gain is the games themselves:** at 200 simulations both sides play better, and every decision is
+  recorded (64 positions a game against 16), so even the result label learns more per game.
+
+**Where did training improve play?** The start network (gorge's default `cpuct`) and loop B's generation 13 (`cpuct`
+0.25), both at 100 simulations, audited by generation 13 at 2,000 simulations (200 games each):
+
+| Mean loss per decision | All | Casting | Targets | Attacks | Blocks |
+|---|---|---|---|---|---|
+| Start network | 0.0064 | 0.0074 | 0.0077 | 0.0043 | 0.0052 |
+| Loop B generation 13, `cpuct` 0.25 | **0.0037** | 0.0038 | 0.0031 | 0.0039 | 0.0046 |
+
+*Training and low exploration halved the loss on casting and targeting decisions; attacks and blocks barely changed.*
+
+**Loop F** (from Monday 7:30 PM, all 15 of this session's r1 cores; loop B, flat for eight generations, stops): fewer,
+better games. Each generation, 1,200 games at 200 simulations and `cpuct` 0.25 with every decision recorded; a warm
+start on the last three generations' games with the root value as the value's label; a head-to-head against loop B's
+generation 17. Its generation 1 is E7's root-value network.
