@@ -1,6 +1,6 @@
 # Searching for a self-play recipe that scales: laptop experiments on gorge
 
-*Status (Monday 12 October 2026, 2:30 AM PT): stage 0, E1 and E2 done (§6); E3's loops running on r1, the search ladder on
+*Status (Tuesday 13 October 2026, 4:45 PM PT): stage 0, E1 and E2 done (§6); E3's loops running on r1, the search ladder on
 Dan's laptop (an 8-core M1 Pro). The code is on the
 [`gorge-train`](https://github.com/danieljbrooks/draft-zero/tree/gorge-train) branch (`gorge/recipe/`).*
 
@@ -676,11 +676,12 @@ head (1,000 games). E7c (d1, Dan's desktop, from Tuesday 12:05 AM) adds 600 game
 |---|---|---|
 | E7b: 2,400 games at 100 simulations | 51.4% | 53.5% |
 | E7: 1,200 games at 200 simulations | 52.3% | 53.7% |
-| E7c: 600 games at 400 simulations | *(playing)* | |
+| E7c: 600 games at 400 simulations | 51.6% | 52.3% |
 
 - **The root value is the better label in both,** by 1.4-2.1 points.
-- **100 and 200 simulations do as well as each other at equal compute.** Recording every decision with a root-value
-  label is what matters, more than how deep the search behind it is, at least down to 100 simulations.
+- **100 and 200 simulations do as well as each other at equal compute; 400 does worse.** E7c's 600 games (d1, Tuesday
+  12:05-9:20 AM) give half the positions of E7's 1,200, and the deeper labels don't make up for it. The sweet spot is
+  100-200 simulations with every decision recorded.
 
 **Loop F against loop B's generation 17** (1,000 games each):
 
@@ -726,3 +727,25 @@ after 53.7%, 54.1% and 54.8%. Generation 3 places at 80.8% against the bot (`cpu
 - **Inside a 100-simulation search it still adds almost nothing** (+0.8, within chance): the search re-weighs its few
   candidates anyway. A sharp policy should matter where search is scarce: fast play, a policy-only bot (Spellbench),
   low-simulation search (next: 25 simulations).
+
+**With little search, the learned policy pays.** At 25 simulations and `cpuct` 0.25, against the bot (1,000 games each):
+
+| | Won |
+|---|---|
+| Loop F generation 5, full network | **80.3%** |
+| Loop F generation 5, value only (a uniform prior) | 77.7% |
+| Loop B generation 13, full network | 75.9% |
+
+- **The prior is worth +2.6 points at 25 simulations,** where it was worth nothing at 100.
+- **Loop F's generation 5 at 25 simulations plays as loop B's generation 13 does at 100** (80.4%): the same strength
+  for a quarter of the search. A learned policy is test-time compute bought once, at training time.
+
+### r1 down again; loop F continues on the laptop and d1 (Tuesday 4:30 PM)
+
+r1 stopped answering (Cloudflare: "websocket: bad handshake") some time after Tuesday 7 AM. Loop F's generations after 5
+are on its disk; the networks that matter (loop B's 13 and 17, E7's, loop F's 3 and 5) and every match file up to
+Monday are on the laptop. When it returns, results get copied off every generation.
+
+**Loop F′** continues loop F's recipe from its generation 5, split across the laptop (4 workers) and d1 (6): each
+generation's 1,200 games are dealt by one seed, d1 playing the first 600 deck pairs and the laptop the rest; the laptop
+packs the union, trains, and plays the head-to-head against loop B's generation 17 (`gorge/recipe/loopf2.sh`).
