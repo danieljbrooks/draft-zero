@@ -306,13 +306,15 @@ Each builder's decks on 500 val pools, against the human decks from the same poo
 | search, 100 simulations (phase C, generation 1) | **20.5** | 0.57 | **0.41** | 16.8 | 5.8 | 0.14 |
 | *the humans* | | | | *15.4* | *7.8* | *1.33* |
 
+*Colour distance: total variation distance between the builder's and the humans' distributions over main-colour
+combinations.*
+
 **White-green falls at each step up in training search, and black takes its place.** One row per colour pair,
 ordered by the pair's win rate in 17lands' own sealed games; dots are the builders' shares of decks, light (gorge's
 heuristic bot) to dark (100 simulations), and diamonds the humans':
 
 ![Main colours by training depth, one row per colour pair, with 17lands' human win rate](img/032-colours-light.png)
 
-wrote /tmp/_c.png
 | Main colours | 17lands human win rate | Heuristic bot | 25 simulations | 100 simulations (C, gen 0) | 100 simulations (C, gen 1) | Humans |
 |---|---|---|---|---|---|---|
 | White-black | 58.7% | 9% | 22% | 26% | 30% | 18% |
@@ -334,9 +336,6 @@ sealed builds with those main colours (Bo1 and Bo3).*
 distance between the builder's and the humans' colour distributions falls from 0.54 (heuristic bot) to 0.44 (25
 simulations) and 0.41 (100 simulations). The convergence isn't yet complete or even on every pair: white-black now
 overshoots the humans (30% against 18%), while blue and red have barely moved.
-
-*Colour distance: total variation distance between the builder's and the humans' distributions over main-colour
-combinations.*
 
 - **Every measure moves toward the humans as the training games get more search:** fewer creatures, more removal and
   tricks, less white-green, the first non-basic lands, more cards in common. Cheap games teach the mechanics; games
