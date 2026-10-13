@@ -693,3 +693,36 @@ head (1,000 games). E7c (d1, Dan's desktop, from Tuesday 12:05 AM) adds 600 game
 **The ladder's new top.** E7's root-value network at `cpuct` 0.25 and 100 simulations won **82.0%** of 1,000 games
 against the bot (loop B's generation 17 at the same settings: 79.2%; generation 13: 80.4%). At 100 simulations it
 plays where the start network needed 500-3,000.
+
+### Loop F's policy learns (Tuesday 3-7 AM)
+
+Loop F against loop B's generation 17 has settled near 54-55%: generations 4 and 5 won 54.2% and 54.6% (1,000 games each),
+after 53.7%, 54.1% and 54.8%. Generation 3 places at 80.8% against the bot (`cpuct` 0.25, 100 simulations; E7's network
+82.0%). Its audit (same oracle and settings as the second audit) loses 0.0042 per decision against loop B generation 13's
+0.0037, within the audit's noise at 1,300 decisions.
+
+**But its policy has started to learn.** On the held-out positions of F's generations 4-5 (8,115 decisions):
+
+| Network | Policy cross-entropy (uniform 1.037) | Agrees with the search's top move |
+|---|---|---|
+| Loop B, generation 17 | 0.947 | 62.0% |
+| Loop F, generation 1 | 0.848 | 67.9% |
+| Loop F, generation 3 | 0.804 | 72.2% |
+| Loop F, generation 5 | **0.788** | **73.2%** |
+
+- **Searches at 200 simulations and `cpuct` 0.25 give sharp targets:** the visit counts' entropy is 0.62 against a uniform
+  1.04 (the cheap games' 0.97). Low exploration plus enough simulations is what loop B lacked for the policy.
+- **The policy keeps improving every generation,** the first part of any loop here that compounds.
+
+**Does it matter?** Loop F's generation 5 against the bot (1,000 games each):
+
+| | Won |
+|---|---|
+| The policy alone (no search) | **64.9%** (loop B generation 13: 57.1%; the start: 50.5%) |
+| Full search, 100 simulations, `cpuct` 0.25 | 82.1% |
+| Same, value only (a uniform prior) | 81.3% |
+
+- **Without search, the policy is now much stronger:** 15 points over the start's policy, 8 over loop B's best.
+- **Inside a 100-simulation search it still adds almost nothing** (+0.8, within chance): the search re-weighs its few
+  candidates anyway. A sharp policy should matter where search is scarce: fast play, a policy-only bot (Spellbench),
+  low-simulation search (next: 25 simulations).
