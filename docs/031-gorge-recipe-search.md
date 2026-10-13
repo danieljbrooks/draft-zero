@@ -1,7 +1,10 @@
 # Searching for a self-play recipe that scales: laptop experiments on gorge
 
-*Status (Tuesday 13 October 2026, 4:45 PM PT): stage 0, E1 and E2 done (§6); E3's loops running on r1, the search ladder on
-Dan's laptop (an 8-core M1 Pro). The code is on the
+*Status (Tuesday 13 October 2026, 4:45 PM PT): running, results appended in §6. So far: the AlphaZero loop on cheap games
+stalls (its policy targets are nearly uniform; gains come only through the value); lower exploration (`cpuct` 0.25) is
+worth ~30 Elo at test time; labels from 100-200-simulation searches with every decision recorded (E7, loop F) beat the
+plateau and make the policy learn. Measures added: a rating ladder, an audit against a deeper search, card-quality
+calibration. Machines: Dan's laptop and desktop (d1); r1 is down. Code: the
 [`gorge-train`](https://github.com/danieljbrooks/draft-zero/tree/gorge-train) branch (`gorge/recipe/`).*
 
 **The goal (Dan, 11 October): find a recipe that keeps getting better on millions of games,** not just the best bot
