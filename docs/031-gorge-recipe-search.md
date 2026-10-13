@@ -670,7 +670,7 @@ generation 17. Its generation 1 is E7's root-value network.
 
 **How deep must the labels be?** E7b repeats E7 on the laptop at the same compute with a shallower search: 2,400 games
 at 100 simulations instead of 1,200 at 200, from loop B's generation 17, two labels; each against generation 17 head to
-head (1,000 games). E7c (d1, Dan's desktop, from Tuesday 7 AM) adds 600 games at 400 simulations.
+head (1,000 games). E7c (d1, Dan's desktop, from Tuesday 12:05 AM) adds 600 games at 400 simulations.
 
 | Self-play | The game's result | The root value |
 |---|---|---|
