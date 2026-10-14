@@ -36,6 +36,7 @@ import time
 from pathlib import Path
 
 LOOP_COMMANDS = ("actor", "learner", "evaluator", "controller", "status", "stop", "plan")
+LOCAL_POLL_S = 10.0     # dz run on a folder: looking costs nothing, and an idle role backs off to 4x this
 SAMPLE_DATA = "--set data.decks=assets/sample/decks --set data.pool=assets/sample/pool.tsv"
 
 
@@ -184,8 +185,9 @@ def cmd_run(a) -> int:
         argv += ["--max-hours", str(a.max_hours)]
     if a.machine:
         argv += ["--machine", a.machine]
-    if a.poll is not None:
-        argv += ["--poll", str(a.poll)]
+    poll = a.poll if a.poll is not None else (None if _is_remote(store) else LOCAL_POLL_S)
+    if poll is not None:
+        argv += ["--poll", str(poll)]
     print(f"dz run: {cfg.run} ({config.config_hash(cfg)}), store {store}, {a.actors} actor(s), logs in {wd}/logs; "
           f"watch with `dz status {store}`, end with `dz stop {store}`", flush=True)
     rc = loop_cli.main(argv)
@@ -645,7 +647,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--max-hours", type=float, default=None, help="stop the run after this many hours")
     p.add_argument("--work-dir", default=None, help="local caches and role logs (default runs/<run>/work)")
     p.add_argument("--machine", default=None, help="prefix of this machine's role names (default local)")
-    p.add_argument("--poll", type=float, default=None, help="seconds between the roles' looks at the store")
+    p.add_argument("--poll", type=float, default=None, help="seconds between the roles' looks at the store "
+                                                              f"(default {LOCAL_POLL_S:g} on a folder, 60 on a bucket)")
     p.add_argument("--set", action="append", default=[], metavar="PATH=VALUE",
                    help="override a config field at launch (repeatable); the store's config.yml records it")
     p.add_argument("--no-check", action="store_true", help="skip the engine and deck-pool checks")

@@ -81,7 +81,7 @@ def test_run_maps_onto_local_mode(tmp_path, fake_dzgorge, monkeypatch, capsys):
     cfg = write_config(tmp_path, fake_dzgorge.root)
     assert main(["run", str(cfg), "--actors", "2", "--max-hours", "0.1", "--work-dir", str(tmp_path / "w")]) == 0
     assert calls[-1] == ["local", "--config", str(cfg), "--store", str(tmp_path / "store"), "--actors", "2",
-                         "--work-dir", str(tmp_path / "w"), "--max-hours", "0.1"]
+                         "--work-dir", str(tmp_path / "w"), "--max-hours", "0.1", "--poll", "10.0"]
     assert main(["run", str(cfg), "--store", str(tmp_path / "s2"), "--set", "actor.sims=8", "--work-dir",
                  str(tmp_path / "w2"), "--poll", "5"]) == 0
     argv = calls[-1]
