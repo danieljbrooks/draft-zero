@@ -237,6 +237,81 @@ def test_hosts_are_checked():
     assert Host.of({"name": "x", "root": "/r/"}).store == "/r/store"
 
 
+class FolderStore:
+    """The contract's Store API over a folder, standing in for a Hugging Face bucket upstream."""
+
+    def __init__(self, root: Path):
+        self.root, self.puts = Path(root), []
+
+    def read_bytes(self, path):
+        p = self.root / path
+        return p.read_bytes() if p.is_file() else None
+
+    def list(self, prefix):
+        base = self.root / prefix
+        return sorted(str(p.relative_to(self.root)) for p in base.rglob("*") if p.is_file()) if base.exists() else []
+
+    def get(self, path, dest):
+        if not (self.root / path).is_file():
+            return None
+        Path(dest).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self.root / path, dest)
+        return Path(dest)
+
+    def put_many(self, files, message=""):
+        self.puts.append(list(files))
+        for path, src in files.items():
+            _w(self.root / path, Path(src).read_text())
+
+
+def test_upstream_store_mirrors_down_and_uploads_what_came_in(world, tmp_path):
+    run, root = world                       # the world's run folder plays the upstream store here
+    up = FolderStore(run)
+    mirror = tmp_path / "relay-mirror"
+    r = Relay(mirror, [Host("pod1", str(root))], upstream=up, log=lambda m: None)
+    st = r.sync_once()["pod1"]
+    assert r.upstream_status["ok"] and r.upstream_status["down"]["got"][:2] == ["config.yml", "control.json"]
+    assert st["versions"] == ["player/v0003", "player/v0002"]
+    vp = root / "store" / "versions" / "player"
+    assert sorted(p.name for p in vp.iterdir()) == ["latest.json", "v0002", "v0003"]
+    assert (root / "store" / "control.json").read_bytes() == (run / "control.json").read_bytes()
+    # up: both complete shards, meta.json last in each batch; heartbeats and metrics
+    shard_puts = [p for p in up.puts if p[0].startswith("shards/")]
+    assert len(shard_puts) == 2 and all(p[-1].endswith("/meta.json") for p in shard_puts)
+    assert (run / "shards" / "pod1-a" / "000001" / "corpus.jsonl.gz").read_text() == "corpus pod1-a 1"
+    assert json.loads((run / "heartbeats" / "pod1-a.json").read_text())["seq"] == 2
+    assert (run / "metrics" / "actor" / "pod1-a" / "000001.jsonl").exists()
+    assert r.upstream_status["up"] == {"ok": True, "shards": 2, "files": 2}
+    # nothing new: nothing uploaded; a changed heartbeat goes up again
+    n = len(up.puts)
+    r.sync_once()
+    assert len(up.puts) == n
+    _w(root / "store" / "heartbeats" / "pod1-a.json", json.dumps({"seq": 9}))
+    r.sync_once()
+    assert up.puts[-1] == ["heartbeats/pod1-a.json"] and r.upstream_status["up"]["files"] == 1
+    status = json.loads((mirror / rl.STATUS).read_text())
+    assert status["upstream"]["ok"]
+
+
+def test_an_unreachable_upstream_does_not_stop_the_hosts(world, tmp_path):
+    run, root = world
+
+    class Down(FolderStore):
+        def read_bytes(self, path):
+            raise ConnectionError("hub unreachable")
+
+        def put_many(self, files, message=""):
+            raise ConnectionError("hub unreachable")
+    r = Relay(tmp_path / "m", [Host("pod1", str(root))], upstream=Down(run), log=lambda m: None)
+    res = r.sync_once()
+    assert res["pod1"]["ok"] and res["pod1"]["pulled"] == 2
+    assert not r.upstream_status["ok"] and "unreachable" in r.upstream_status["down"]["error"]
+    # the shards wait in the mirror: the next sync with the store back uploads them
+    r.upstream = FolderStore(run)
+    r.sync_once()
+    assert r.upstream_status["ok"] and r.upstream_status["up"]["shards"] == 2
+
+
 def test_cli_once(world, capsys):
     local, root = world
     assert rl.main(["--store", str(local), "--host", "pod1", str(root), "--once"]) == 0

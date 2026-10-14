@@ -28,6 +28,12 @@ an ssh ControlMaster); a host without one is a local path (tests, or a mounted d
 another. The SSH proxy RunPod offers (`<podHostId>@ssh.runpod.io`) is a PTY only: it cannot carry rsync, so a
 relay host needs a direct public IP and port.
 
+**Upstream.** When the run's store is not a local folder (`hf://buckets/...`: the relay is then the only process with
+the token), pass it as `upstream=` (CLI `--upstream SPEC`) and give the relay a folder of its own as the local
+store: each sync first mirrors config.yml, control.json and the latest + previous versions down from the upstream
+store into the folder, and after the pulls uploads every newly pulled complete shard (one put_many each, meta.json
+last) and the heartbeat and metrics files that changed. Only the Store API is used (read_bytes, list, get, put_many).
+
 Notes: give every actor machine a unique --machine name (shards/<actor>/ and heartbeats/<machine>.json are merged
 from all hosts into one store). rsync stages pulled files in `<store>/.relay-tmp/`. In sync mode an actor behind the
 relay sees only its own host's shards when it counts the version's games. `relay/status.json` in the store holds
@@ -151,7 +157,9 @@ class Relay:
 
     def __init__(self, local_store_root, hosts: Iterable["Host | Mapping"], *,
                  transport: Optional[Callable[[Host], Transport]] = None, keep_versions: int = 2,
-                 multiplex: bool = True, log: Callable[[str], None] = _log, status_path: Optional[str] = STATUS):
+                 multiplex: bool = True, log: Callable[[str], None] = _log, status_path: Optional[str] = STATUS,
+                 upstream=None, kinds: Iterable[str] = ("player",)):
+        self.upstream, self.kinds, self.upstream_status = upstream, tuple(kinds), {}
         self.hosts = [Host.of(h) for h in hosts]
         names = [h.name for h in self.hosts]
         if len(set(names)) != len(names):
@@ -170,7 +178,10 @@ class Relay:
 
     # ── one round ──
     def sync_once(self) -> dict[str, dict]:
-        """Push then pull, every host. Returns {host: {ok, pushed, versions, pulled, seconds[, error]}}."""
+        """Push then pull, every host (with an upstream: mirror it down first, upload what came in last). Returns
+        {host: {ok, pushed, versions, pulled, seconds[, error]}}; the upstream's result is in .upstream_status."""
+        if self.upstream is not None:
+            self.upstream_status = self._guard("upstream down", self.mirror_down)
         out = {}
         for h in self.hosts:
             t0 = time.monotonic()
@@ -183,8 +194,79 @@ class Relay:
             if st["ok"] and (st["pulled"] or st["versions"]):
                 self.log(f"{h.name}: pulled {st['pulled']} shards, versions {st['versions']}")
             out[h.name] = st
+        if self.upstream is not None:
+            self.upstream_status = {"down": self.upstream_status, "up": self._guard("upstream up", self.mirror_up)}
+            self.upstream_status["ok"] = self.upstream_status["down"]["ok"] and self.upstream_status["up"]["ok"]
         self._write_status(out)
         return out
+
+    def _guard(self, what: str, fn: Callable[[], dict]) -> dict:
+        try:
+            return {"ok": True, **fn()}
+        except Exception as e:      # the store being down must not stop the hosts' round
+            self.log(f"{what}: {type(e).__name__}: {e}")
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"[:600]}
+
+    # ── upstream: the run's real store when this folder is only the relay's mirror (hf://buckets/...) ──
+    def mirror_down(self) -> dict:
+        """config.yml, control.json and the versions hosts get (latest + previous of each kind) from the upstream
+        store into this folder: a version's files before its meta.json, latest.json after the version."""
+        up, got = self.upstream, []
+        for f in PUSH_FILES:
+            b = up.read_bytes(f)
+            if b is not None and _differs(self.root / f, b):
+                _atomic_write(self.root / f, b)
+                got.append(f)
+        for kind in self.kinds:
+            latest = up.read_bytes(f"versions/{kind}/latest.json")
+            if latest is None:
+                continue
+            top = int(json.loads(latest)["version"])
+            for v in range(top, max(top - self.keep_versions, -1), -1):
+                name = f"v{v:04d}"
+                if (self.root / "versions" / kind / name / "meta.json").exists():
+                    continue
+                files = sorted(up.list(f"versions/{kind}/{name}/"), key=lambda p: (p.endswith("/meta.json"), p))
+                for p in files:
+                    up.get(p, self.root / p)
+                got += [f"{kind}/{name}"] if files else []
+            if _differs(self.root / "versions" / kind / "latest.json", latest):
+                _atomic_write(self.root / "versions" / kind / "latest.json", latest)
+        return {"got": got}
+
+    def mirror_up(self) -> dict:
+        """Upload what the hosts sent: each complete shard not yet uploaded (one put_many, meta.json last), then the
+        heartbeats and metrics files that changed. A ledger (relay/uploaded.json) remembers what went up."""
+        up = self.upstream
+        ledger_path = self.root / "relay" / "uploaded.json"
+        try:
+            ledger = json.loads(ledger_path.read_text())
+        except (OSError, ValueError):
+            ledger = {"shards": [], "files": {}}
+        done = set(ledger["shards"])
+        shards = 0
+        for meta in sorted((self.root / "shards").glob("*/*/meta.json")):
+            sid = str(meta.parent.relative_to(self.root / "shards"))
+            if sid in done:
+                continue
+            files = sorted((p for p in meta.parent.iterdir() if p.is_file()), key=lambda p: (p.name == "meta.json", p.name))
+            up.put_many({f"shards/{sid}/{p.name}": p for p in files}, message=f"relay: shard {sid}")
+            done.add(sid)
+            shards += 1
+        changed = {}
+        for d in PULL_DIRS:
+            for p in sorted((self.root / d).rglob("*")) if (self.root / d).is_dir() else ():
+                if not p.is_file() or p.name.startswith("."):
+                    continue
+                rel, st = str(p.relative_to(self.root)), p.stat()
+                if ledger["files"].get(rel) != [st.st_mtime_ns, st.st_size]:
+                    changed[rel] = (p, [st.st_mtime_ns, st.st_size])
+        if changed:
+            up.put_many({rel: p for rel, (p, _) in changed.items()}, message="relay: heartbeats and metrics")
+            ledger["files"].update({rel: sig for rel, (_, sig) in changed.items()})
+        ledger["shards"] = sorted(done)
+        _atomic_write(ledger_path, json.dumps(ledger, sort_keys=True).encode())
+        return {"shards": shards, "files": len(changed)}
 
     def run(self, interval: float = 60, *, iterations: Optional[int] = None, stop_when_done: bool = True,
             sleep: Callable[[float], None] = time.sleep) -> dict:
@@ -276,14 +358,24 @@ class Relay:
     def _write_status(self, hosts: dict) -> None:
         if not self.status_path:
             return
-        p = self.root / self.status_path
-        p.parent.mkdir(parents=True, exist_ok=True)
         body = {"format": "dz-relay/1", "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "hosts": hosts}
-        fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=".tmp-")
-        with os.fdopen(fd, "w") as f:
-            json.dump(body, f, indent=1, sort_keys=True)
-        os.replace(tmp, p)
+                "hosts": hosts, **({"upstream": self.upstream_status} if self.upstream is not None else {})}
+        _atomic_write(self.root / self.status_path, json.dumps(body, indent=1, sort_keys=True).encode())
+
+
+def _differs(path: Path, data: bytes) -> bool:
+    try:
+        return path.read_bytes() != data
+    except OSError:
+        return True
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-")
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
 
 
 def main(argv=None) -> int:
@@ -293,6 +385,7 @@ def main(argv=None) -> int:
     ap.add_argument("--host", nargs="+", action="append", default=[], metavar=("NAME ROOT", "SSH"),
                     help='NAME ROOT ["user@host -p PORT"]: one actor host (repeat); no SSH: ROOT is a local path')
     ap.add_argument("--hosts", default=None, help="a JSON or YAML list of {name, root, ssh} instead of --host")
+    ap.add_argument("--upstream", default=None, help="the run's store when --store is only the relay's mirror")
     ap.add_argument("--interval", type=float, default=60)
     ap.add_argument("--once", action="store_true", help="one sync, then exit")
     a = ap.parse_args(argv)
@@ -310,10 +403,14 @@ def main(argv=None) -> int:
         hosts.append({"name": h[0], "root": h[1], "ssh": h[2] if len(h) == 3 else None})
     if not hosts:
         ap.error("no hosts: --host or --hosts")
-    relay = Relay(a.store, hosts)
+    upstream = None
+    if a.upstream:
+        from draftzero.loop.store import open_store
+        upstream = open_store(a.upstream)
+    relay = Relay(a.store, hosts, upstream=upstream)
     res = relay.sync_once() if a.once else relay.run(a.interval)
-    print(json.dumps(res, indent=1, sort_keys=True))
-    return 0 if all(r["ok"] for r in res.values()) else 1
+    print(json.dumps({**res, **({"@upstream": relay.upstream_status} if upstream else {})}, indent=1, sort_keys=True))
+    return 0 if all(r["ok"] for r in res.values()) and relay.upstream_status.get("ok", True) else 1
 
 
 if __name__ == "__main__":
