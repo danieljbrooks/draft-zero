@@ -4,6 +4,7 @@ import json
 import os
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -90,6 +91,30 @@ def test_actor_command_runs_detached_with_the_contract_arguments(tmp_path):
         str(tmp_path), "a b", "-m", "draftzero.loop.cli", "actor", "--config", f"{store}/config.yml",
         "--store", str(store), "--machine", "pod-1"]
     assert (tmp_path / "run dir" / "actor-pod-1.log").exists()
+
+
+@pytest.mark.parametrize("shell", ["bash", "sh"])
+def test_actor_command_returns_at_once_with_the_actors_pid(tmp_path, shell):
+    """Over SSH the caller's stdout is a pipe: only the actor may go in the background (with its own output), or
+    the shell holds the pipe until the actor exits and start_actor times out. The pid printed is the actor's."""
+    pidfile = tmp_path / "actor.pid"
+    fake = tmp_path / "fakepy"
+    fake.write_text(f"#!/bin/sh\necho $$ > {pidfile}.tmp && mv {pidfile}.tmp {pidfile}\nexec sleep 30\n")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    cmd = actor_command(workdir=str(tmp_path), python=str(fake), store=str(tmp_path / "store"), machine="pod-1",
+                        env={"DZ_X": "1"})
+    pid = None
+    try:
+        r = subprocess.run([shell, "-c", cmd], capture_output=True, text=True, timeout=10)
+        pid = int(r.stdout.strip())
+        for _ in range(200):
+            if pidfile.exists():
+                break
+            time.sleep(0.05)
+        assert r.returncode == 0 and int(pidfile.read_text()) == pid
+    finally:
+        if pid:
+            os.kill(pid, 9)
 
 
 def test_status_parses_heartbeats_and_actor_count():
