@@ -168,9 +168,11 @@ GPU_TYPES = {"gpuTypes": [
 class FakeRunPod:
     """The REST + GraphQL endpoints this module uses, in memory."""
 
-    def __init__(self, balance=10.0, pods=(), cost=0.13, fail=None):
+    def __init__(self, balance=10.0, pods=(), cost=0.13, fail=None, post_fails=None):
         self.calls, self.balance, self.pods, self.cost, self.fail = [], balance, list(pods), cost, fail
         self.gets = []      # successive GET /pods/<id> answers (the last one repeats)
+        self.post_fails = post_fails    # an exception the POST raises after RunPod made the pod (a lost reply)
+        self.delete_fails = False
 
     def __call__(self, method, url, data, headers):
         body = json.loads(data) if data else None
@@ -189,11 +191,18 @@ class FakeRunPod:
         if url == f"{rp.REST}/pods" and method == "GET":
             return 200, json.dumps(self.pods)
         if url == f"{rp.REST}/pods" and method == "POST":
-            return 200, json.dumps({"id": "pod123", "name": body["name"], "costPerHr": self.cost, "vcpuCount": 18})
+            pod = {"id": "pod123", "name": body["name"], "costPerHr": self.cost, "vcpuCount": 18}
+            self.pods.append(pod)
+            if self.post_fails:
+                raise self.post_fails
+            return 200, json.dumps(pod)
         if url.startswith(f"{rp.REST}/pods/") and method == "GET":
             g = self.gets.pop(0) if len(self.gets) > 1 else (self.gets[0] if self.gets else {})
             return 200, json.dumps(g)
         if url.startswith(f"{rp.REST}/pods/") and method == "DELETE":
+            if self.delete_fails:
+                return 500, "internal error"
+            self.pods = [p for p in self.pods if p.get("id") != url.rsplit("/", 1)[1]]
             return 200, ""
         return 404, "no route"
 
@@ -274,6 +283,38 @@ def test_create_posts_the_spec_and_removes_a_pod_billing_above_the_cap():
     assert fake.made("DELETE", "/pods/pod123")
 
 
+def test_a_create_that_fails_after_the_pod_exists_removes_it():
+    """The POST times out (or the reply is lost) but RunPod made the pod: it must not stay up, unarmed."""
+    spec = rp.PodSpec(name="dz-a1", gpu="NVIDIA GeForce RTX 3070", max_price=0.2)
+    fake = FakeRunPod(post_fails=TimeoutError("The read operation timed out"))
+    logs = []
+    api = rp.RunPodAPI(key=KEY, http=fake, log=logs.append, sleep=lambda s: None)
+    with pytest.raises(rp.RunPodError, match="removed pod pod123"):
+        api.create(spec)
+    assert fake.made("DELETE", "/pods/pod123") and fake.pods == []
+    # the pod shows up only on a later look
+    fake = FakeRunPod(post_fails=ValueError("Expecting value: line 1 column 1 (char 0)"))
+    listed = []
+
+    def late(method, url, data, headers):
+        if method == "GET" and url == f"{rp.REST}/pods":
+            listed.append(1)
+            if len(listed) == 2:                      # the create's own name check, then the first look
+                return 200, "[]"
+        return fake(method, url, data, headers)
+    sleeps = []
+    with pytest.raises(rp.RunPodError, match="removed pod pod123"):
+        rp.RunPodAPI(key=KEY, http=late, log=logs.append, sleep=sleeps.append).create(spec)
+    assert sleeps and fake.made("DELETE", "/pods/pod123")
+    # removing it fails: say so loudly
+    fake = FakeRunPod(post_fails=ConnectionResetError("reset"))
+    fake.delete_fails = True
+    logs.clear()
+    with pytest.raises(rp.RunPodError, match="TERMINATE FAILED"):
+        rp.RunPodAPI(key=KEY, http=fake, log=logs.append, sleep=lambda s: None).create(spec)
+    assert any("TERMINATE FAILED" in m and "dz pod down" in m for m in logs) and KEY not in " ".join(logs)
+
+
 def test_cpu_quote_and_terminate_and_list():
     fake = FakeRunPod(pods=[{"id": "a", "name": "x"}])
     api = _api(fake)
@@ -305,18 +346,14 @@ def test_wait_ssh_waits_for_an_endpoint_that_answers():
         _api(fake).wait_ssh("pod123", timeout=300, probe=probe, sleep=lambda s: None, clock=lambda: next(clock))
 
 
-def test_runpodctl_gpu_create_args_and_key_in_env_only():
-    r = Recorder(Result(0, json.dumps({"id": "p", "ssh": {"ip": "1.2.3.4", "port": 4000}})))
+def test_runpodctl_only_reads_and_its_key_goes_in_the_env():
+    """Pods are rented only through RunPodAPI.create, which holds the money guards: runpodctl has no create path."""
+    assert not hasattr(rp.RunPodCtl, "create") and not hasattr(rp.RunPodCtl, "argv_create")
+    r = Recorder(Result(0, json.dumps({"clientBalance": 3.5})))
     ctl = rp.RunPodCtl(ctl="/bin/runpodctl", runner=r, key=KEY)
-    spec = rp.PodSpec(name="dz-a1", gpu="NVIDIA GeForce RTX 3070", max_price=0.2, datacenters=("CA-MTL-3",))
-    assert ctl.create(spec)["id"] == "p"
+    assert ctl.user()["clientBalance"] == 3.5
     argv, env = r.calls[0]["argv"], r.calls[0]["env"]
-    assert argv[:3] == ["/bin/runpodctl", "pod", "create"]
-    assert argv[argv.index("--cloud-type") + 1] == "COMMUNITY" and "--public-ip" in argv and "--wait" in argv
-    assert argv[argv.index("--data-center-ids") + 1] == "CA-MTL-3"
-    assert KEY not in " ".join(argv) and env["RUNPOD_API_KEY"] == KEY
-    with pytest.raises(ValueError):
-        ctl.argv_create(rp.PodSpec(name="c", cpu="cpu5c", max_price=1, cloud="SECURE", allow_secure=True, datacenters=("A",)))
+    assert argv[:2] == ["/bin/runpodctl", "user"] and KEY not in " ".join(argv) and env["RUNPOD_API_KEY"] == KEY
     r = Recorder(Result(1, "", "boom"))
     with pytest.raises(rp.RunPodError):
         rp.RunPodCtl(runner=r).user()
