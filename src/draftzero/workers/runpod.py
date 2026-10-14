@@ -38,7 +38,8 @@ Steps, each usable alone:
   SSH proxy (`<podHostId>@ssh.runpod.io`) there is only a PTY: no rsync, so no relay. A network that blocks high
   ports (docs/005) cannot run relay actors.
 - `arm(target, max_hours)`: deploy/runpod_arm.sh piped over SSH: the pod terminates itself after max_hours with its
-  own key, even if d1 dies. Do it first; `up` arms it for what is left of its
+  own key, even if d1 dies (retrying the terminate for up to 30 min, each try logged in /root/selfdestruct.log; it
+  arms nothing and fails without the pod's key). Do it first; `up` arms it for what is left of its
   max_hours since the create.
 - `bundle(target, b)`: rsync the dzgorge binary + bin/dzgorge.build.json and .cards (at the same absolute path as
   on d1, so a config's engine.root works unchanged), the deck pool to <repo>/data/gorge/, and the repo (git archive

@@ -511,7 +511,8 @@ def cost_guard(spec, max_hours: float, balance: str) -> str:
             f"  cost guard: at most ${spec.max_price:.3f}/h (a quote above it is refused, a pod billing above it is\n"
             f"  terminated) for at most {max_hours:g} h from its create, the wait for SSH included (it is armed to\n"
             f"  terminate itself then, even if this machine dies; one whose SSH is not up by then is removed): at\n"
-            f"  most ${worst:.2f} in all. Balance {balance}. `dz pod down ID` stops the billing sooner.")
+            f"  most ${worst:.2f} in all, more only if RunPod's API refuses the terminate (the pod retries it for\n"
+            f"  30 min). Balance {balance}. `dz pod down ID` stops the billing sooner.")
 
 
 def cmd_pod(a) -> int:

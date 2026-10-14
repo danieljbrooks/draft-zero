@@ -399,6 +399,67 @@ def test_arm_pipes_the_self_destruct_script():
             rp.arm(t, bad, runner=r)
 
 
+def _armed_here() -> bool:
+    """A real self-destruct on this machine (a pod): the arm script's pkill would disarm it, so skip."""
+    try:
+        if Path("/root/selfdestruct.deadline").exists():
+            return True
+    except OSError:
+        pass
+    return subprocess.run(["pgrep", "-f", "^selfdestruct_sleep "], capture_output=True).returncode == 0
+
+
+def _arm_env(tmp_path, environ: bytes, **extra) -> dict:
+    # a script that ignored these would arm this machine's /root: never run one
+    assert all(v in rp.ARM_SCRIPT.read_text() for v in ("DZ_SELFDESTRUCT_DIR", "DZ_SELFDESTRUCT_ENVIRON"))
+    (tmp_path / "environ").write_bytes(environ)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RUNPOD_")}
+    return {**env, "DZ_SELFDESTRUCT_DIR": str(tmp_path), "DZ_SELFDESTRUCT_ENVIRON": str(tmp_path / "environ"), **extra}
+
+
+def test_arm_refuses_without_the_pods_key(tmp_path):
+    """No RUNPOD_API_KEY or RUNPOD_POD_ID in PID 1's environment: the script must fail, so up() removes the pod."""
+    r = subprocess.run(["bash", str(rp.ARM_SCRIPT), "3600"], capture_output=True, text=True, timeout=30,
+                       env=_arm_env(tmp_path, b"PATH=/usr/bin\0RUNPOD_POD_ID=pod123\0"))
+    assert r.returncode != 0 and "armed:" not in r.stdout and "NOT armed" in r.stderr
+    assert not (tmp_path / "selfdestruct_now.sh").exists()
+
+
+@pytest.mark.skipif(_armed_here(), reason="a real self-destruct is armed on this machine")
+def test_the_self_destruct_retries_until_runpod_accepts(tmp_path):
+    """At the deadline the pod asks RunPod to terminate it; a refused or failed call is retried (with a timeout on
+    each), every try is logged on the pod, and it stops once RunPod accepts."""
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    calls, args = tmp_path / "calls", tmp_path / "args"
+    curl = bin_ / "curl"
+    curl.write_text(f"""#!/bin/sh
+n=$(cat {calls} 2>/dev/null || echo 0); n=$((n + 1)); echo $n > {calls}
+printf '%s ' "$@" >> {args}; echo >> {args}
+case $n in
+1) echo "curl: (7) Failed to connect to api.runpod.io port 443" >&2; printf '\\nHTTP 000'; exit 7 ;;
+2) printf '{{"errors":[{{"message":"rate limited"}}],"data":null}}\\nHTTP 200' ;;
+*) printf '{{"data":{{"podTerminate":null}}}}\\nHTTP 200' ;;
+esac
+""")
+    curl.chmod(0o755)
+    env = _arm_env(tmp_path, b"PATH=/usr/bin\0RUNPOD_POD_ID=pod123\0RUNPOD_API_KEY=rpa_TEST\0",
+                   PATH=f"{bin_}:{os.environ['PATH']}", DZ_SELFDESTRUCT_DELAY="0")
+    r = subprocess.run(["bash", str(rp.ARM_SCRIPT), "2"], capture_output=True, text=True, timeout=30, env=env)
+    assert r.returncode == 0 and "armed: terminates pod123" in r.stdout, r.stderr
+    log = tmp_path / "selfdestruct.log"
+    for _ in range(300):
+        if "accepted" in (log.read_text() if log.exists() else ""):
+            break
+        time.sleep(0.1)
+    text = log.read_text()
+    assert "try 1" in text and "try 2" in text and "try 3" in text and "terminate accepted" in text, text
+    assert calls.read_text().strip() == "3" and "rpa_TEST" not in text
+    sent = args.read_text().splitlines()[0]
+    assert "--max-time" in sent and "Bearer rpa_TEST" in sent and 'podTerminate(input:{podId:\\"pod123\\"})' in sent
+    assert oct((tmp_path / "selfdestruct_now.sh").stat().st_mode & 0o777) == "0o700"
+
+
 def _bundle(tmp_path, **kw):
     eng = tmp_path / "gorge"
     (eng / "bin").mkdir(parents=True)
