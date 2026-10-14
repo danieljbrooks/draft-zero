@@ -197,6 +197,7 @@ class Controller:
             job = ev.make_job(version, opp, self.cfg, now)
             if job["job"] in have or self.store.exists(ctl.eval_summary_path(job["job"])):
                 continue
+            have.add(job["job"])                         # an opponent listed twice is one job
             c["evals"].append(job)
             self.log(f"controller: evaluation {job['job']} opened ({job['pairs']} pairs, {len(job['shards'])} shards)")
 

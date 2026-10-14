@@ -616,7 +616,8 @@ def test_learner_with_the_real_trainer_and_exporter(tmp_path):
 # ------------------------------------------------------------------------------------------------ evaluator
 
 def test_eval_jobs_and_opponents(tmp_path):
-    assert job_id(4, "prev") == "v0004-vs-prev" and job_id(4, "file:/x/best.dzgw") == "v0004-vs-file-x-best.dzgw"
+    assert job_id(4, "prev") == "v0004-vs-prev" and job_id(4, "file:/x/best.dzgw") == \
+        "v0004-vs-file-x-best.dzgw-" + hashlib.sha1(b"file:/x/best.dzgw").hexdigest()[:8]
     assert not opponent_valid(0, "prev") and not opponent_valid(0, "nonet") and opponent_valid(0, "sbtactical")
     assert opponent_valid(3, "v1") and not opponent_valid(3, "v3") and not opponent_valid(3, "v5")
     assert not opponent_valid(3, "nonsense") and not opponent_valid(3, "spec:bot") and not opponent_valid(3, "random")
@@ -631,6 +632,34 @@ def test_eval_jobs_and_opponents(tmp_path):
     spec = policy_spec(make_cfg(tmp_path, search={"closedlist": False, "keys": ["autopay"]}), sims=5, explore=False,
                        gonet=None)
     assert (spec.sims, spec.closedlist, spec.keys, spec.explore, spec.topk) == (5, False, ("autopay",), False, None)
+
+
+def test_eval_job_ids_are_unique_per_opponent(tmp_path):
+    """Opponents whose cleaned labels agree (long file: paths in one folder) get distinct job ids, a name listed
+    twice opens one job, and every opponent is played and scored on its own."""
+    ref = tmp_path / "workspace" / "draftzero" / "models" / "reference"
+    ref.mkdir(parents=True)
+    paths = [ref / "fdn-mlp-v12.dzgw", ref / "fdn-mlp-v13.dzgw"]
+    for p in paths:
+        p.write_bytes(b"DZGW0001" + p.name.encode())
+    opps = [f"file:{p}" for p in paths]
+    ids = [job_id(5, o) for o in opps]
+    assert ids[0] != ids[1] and all(len(i) <= 64 for i in ids) and job_id(5, opps[0]) == ids[0]
+    assert job_id(5, "prev") == "v0005-vs-prev" and job_id(5, "v3") == "v0005-vs-v3"
+    r = Run(tmp_path, make_cfg(tmp_path, eval={"opponents": [*opps, "sbtactical", "sbtactical"], "pairs": 2}))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    assert r.evaluator.step() == "wait"                        # its heartbeat
+    c = r.controller.tick()
+    jobs = [j["job"] for j in c["evals"]]
+    assert len(jobs) == len(set(jobs)) == 3
+    while r.evaluator.step() == "played":
+        pass
+    assert sorted(Path(p["b"].gonet).name for p in r.gorge.plays if not isinstance(p["b"], str)) == \
+        ["fdn-mlp-v12.dzgw", "fdn-mlp-v13.dzgw"]
+    assert r.controller.tick()["evals"] == []
+    summaries = [r.store.read_json(p) for p in r.store.list("evals/") if p.endswith("summary.json")]
+    assert sorted(s["opponent"] for s in summaries) == sorted([*opps, "sbtactical"])
 
 
 def test_evaluator_plays_assigned_shards_and_scores_them(tmp_path):

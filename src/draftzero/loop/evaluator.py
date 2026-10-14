@@ -20,6 +20,7 @@ opponents, such as random or any policy spec, outside a run.)
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -35,9 +36,13 @@ BUILTIN = ("sbtactical", "bot")
 
 
 def job_id(version: int, opponent: str) -> str:
+    """"v0004-vs-prev"; an opponent that needs cleaning or cutting (file:/path.dzgw) keeps the first 38 characters
+    of its label plus 8 hex digits of its sha1, so two opponents never share a job (and its store folder)."""
     label = re.sub(r"[^A-Za-z0-9._-]+", "-", opponent)
     label = re.sub(r"-{2,}", "-", label).strip("-")
-    return f"v{int(version):04d}-vs-{label[:48]}"
+    if label != opponent or len(label) > 48:
+        label = f"{label[:38]}-{hashlib.sha1(opponent.encode()).hexdigest()[:8]}"
+    return f"v{int(version):04d}-vs-{label}"
 
 
 def opponent_valid(version: int, opponent: str) -> bool:
