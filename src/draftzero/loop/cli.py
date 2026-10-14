@@ -27,6 +27,27 @@ import time
 from pathlib import Path
 
 ROLES = ("actor", "learner", "evaluator", "controller", "local")
+COMMANDS = ROLES + ("status", "stop", "plan")
+HELP = {
+    "actor": "play self-play chunks with the current version and upload them as shards (many, on any machine)",
+    "learner": "pack new shards, train on the newest window and publish versions (one per run, holding a lease)",
+    "evaluator": "play the evaluation shards the controller assigns to this machine and score finished jobs",
+    "controller": "write config.yml, manifest.json and control.json; apply plan changes; assign evaluation "
+                  "shards; write status.md and status.json; stop the run at stop.request or the budget (one)",
+    "local": "every role on this machine as separate processes sharing one store (`dz run`)",
+    "status": "print the run's status page (status.md, or status.json with --json)",
+    "stop": "ask the controller to stop the run (writes stop.request)",
+    "plan": "request a live config change (`set PATH=VALUE ...`) or list requested, rejected and applied ones",
+}
+PLAN_EPILOG = """examples:
+  plan runs/smoke set learner.lr=3e-4             applied at the next version
+  plan runs/smoke set paused=true                 paused and budget.* apply at once
+  plan runs/smoke list
+
+Only live fields change (draftzero.config.LIVE: actor.sims, actor.pcr.*, actor.record_every, actor.chunk_games,
+learner.lr, learner.window_positions, learner.min_new_positions, learner.steps_per_position, learner.epochs,
+eval.every_versions, eval.pairs, eval.sims, budget.*, paused). A request the controller rejects moves to
+plan/rejected/ with the reason; an applied one is a line of events.jsonl."""
 
 
 def _log(msg: str) -> None:
@@ -37,36 +58,39 @@ def _host() -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", socket.gethostname().split(".")[0]) or "host"
 
 
-def _parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="python -m draftzero.loop.cli", description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+def _parser(prog: str = "python -m draftzero.loop.cli") -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog=prog, description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="role", required=True)
     for role in ROLES:
-        p = sub.add_parser(role)
-        p.add_argument("--config", required=True)
+        p = sub.add_parser(role, help=HELP[role], description=HELP[role])
+        p.add_argument("--config", required=True, help="the run's config (YAML)")
         p.add_argument("--store", default=None, help="default: the config's store")
         p.add_argument("--poll", type=float, default=None,
                        help="seconds between looks at the store (default 30; 60 on a bucket)")
         if role != "controller":
-            p.add_argument("--machine", default=None)
-            p.add_argument("--work-dir", type=Path, default=None)
+            p.add_argument("--machine", default=None,
+                           help="this process's name in the store; unique per actor (default: the host name)")
+            p.add_argument("--work-dir", type=Path, default=None,
+                           help="local cache and logs (default runs/<run>/work/...)")
         if role == "actor":
             p.add_argument("--max-chunks", type=int, default=None, help="exit after this many chunks")
         if role == "controller":
             p.add_argument("--once", action="store_true", help="one tick, then exit")
             p.add_argument("--status-every", type=float, default=None, help="seconds between status pages")
         if role == "local":
-            p.add_argument("--actors", type=int, default=1)
-            p.add_argument("--max-hours", type=float, default=None, help="stop the run after this long")
+            p.add_argument("--actors", type=int, default=1, help="actor processes (default 1)")
+            p.add_argument("--max-hours", type=float, default=None,
+                           help="stop the run after this long (exit code 2)")
     for role in ("status", "stop"):
-        p = sub.add_parser(role)
-        p.add_argument("store_pos", nargs="?", metavar="STORE")
-        p.add_argument("--store", default=None)
+        p = sub.add_parser(role, help=HELP[role], description=HELP[role])
+        p.add_argument("store_pos", nargs="?", metavar="STORE", help="the run's store: a folder or hf://buckets/...")
+        p.add_argument("--store", default=None, help="the same as STORE")
         if role == "status":
             p.add_argument("--json", action="store_true", help="status.json instead of status.md")
-    p = sub.add_parser("plan")
+    p = sub.add_parser("plan", help=HELP["plan"], description=HELP["plan"], epilog=PLAN_EPILOG,
+                       formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("words", nargs="+", metavar="[STORE] set PATH=VALUE... | [STORE] list")
-    p.add_argument("--store", default=None)
+    p.add_argument("--store", default=None, help="the run's store, instead of STORE")
     p.add_argument("--by", default=None, help="who asks (default user@host)")
     return ap
 
@@ -78,8 +102,9 @@ def _sigterm_exits() -> None:
     signal.signal(signal.SIGTERM, handler)
 
 
-def main(argv=None) -> int:
-    a = _parser().parse_args(argv)
+def main(argv=None, prog: str | None = None) -> int:
+    """`prog` names the command in usage and help (`dz` passes "dz")."""
+    a = (_parser(prog) if prog else _parser()).parse_args(argv)
     from draftzero.loop import control as ctl
     from draftzero.loop.store import open_store
 
