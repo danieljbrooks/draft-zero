@@ -5,10 +5,30 @@
 Writes OUT/config.json, OUT/curves.jsonl (one line per log interval and per evaluation), OUT/best.pt
 (lowest holdout policy CE + value log loss) and OUT/last.pt, and prints a final summary JSON line.
 The holdout is the training directories' games with crc32(game id) % 20 == 0.
+
+Opt-in extras (all off by default, which leaves training bit-identical):
+  --surprise-weight F   KataGo's policy surprise weighting: each state's policy loss is weighted
+                        (1 - F) + F * KL(target || prior) / its batch mean (targets.policy_surprise; the prior is
+                        the one the search used, cand_prior), so the weights average 1 over a batch.
+  --value-surprise F    the same for the value loss, the surprise being |value target - sigmoid(value logit)| with
+                        the network's own current prediction (no gradient through the weight). KataGo's form is
+                        the KL of the target from the actor network's raw value at the root, which the shards do
+                        not record; with the trained network's prediction a KL would weight confident misses
+                        without bound, and a game outcome is a noisy label in MTG, so the bounded |error| is used.
+                        Training log lines report the unweighted policy CE and value log loss either way.
+  --ema-decay D         keep a moving average of the weights, updated every --ema-every steps and bias-corrected
+                        as Adam's moments are: after n updates it is sum_i D^(n-i) w_i / sum_i D^(n-i) over the
+                        weights w_i at the updates (the starting weights excluded, which a plain EMA started at a
+                        random init keeps a share D^n of). Each evaluation also evaluates it (curves.jsonl eval lines
+                        gain "ema": {set: metrics}) and saves it as OUT/ema.pt (the newest, as last.pt).
+  --export-ema          best.pt may hold the EMA: at each evaluation the EMA and the raw weights are candidates,
+                        the one with the lower holdout total (the raw weights on a tie) is that evaluation's, and
+                        best.pt keeps the lowest seen so far; its meta and the summary say "weights": "ema" | "raw".
 """
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import sys
@@ -49,6 +69,14 @@ def parse_args(argv=None):
     ap.add_argument("--visits-temp", type=float, default=1.0)
     ap.add_argument("--value-weight", type=float, default=1.0)
     ap.add_argument("--value-blend", type=float, default=0.0, help="value target (1-x) outcome + x root_value")
+    ap.add_argument("--surprise-weight", type=float, default=0.0,
+                    help="policy surprise weighting F in [0, 1]: weight (1-F) + F x KL(target || prior) / batch mean")
+    ap.add_argument("--value-surprise", type=float, default=0.0,
+                    help="value surprise weighting F in [0, 1]: weight (1-F) + F x |target - prediction| / batch mean")
+    ap.add_argument("--ema-decay", type=float, default=0.0, help="weight moving average, saved as ema.pt (0 = off)")
+    ap.add_argument("--ema-every", type=int, default=1, help="steps between moving-average updates")
+    ap.add_argument("--export-ema", action="store_true",
+                    help="best.pt holds the moving average when its holdout total is lower than the raw weights'")
     ap.add_argument("--eval-every", type=int, default=None, help="steps (default: 4 times an epoch)")
     ap.add_argument("--eval-max", type=int, default=100000, help="records per evaluation set (fixed subsample)")
     ap.add_argument("--eval-batch", type=int, default=1024)
@@ -64,7 +92,17 @@ def parse_args(argv=None):
     ap.add_argument("--loader-procs", type=int, default=0,
                     help="collate in N worker processes instead of threads (scales with cores; batches pass "
                          "through /dev/shm)")
-    return ap.parse_args(argv)
+    args = ap.parse_args(argv)
+    for k in ("surprise_weight", "value_surprise"):
+        if not 0.0 <= getattr(args, k) <= 1.0:
+            ap.error(f"--{k.replace('_', '-')} must be in [0, 1]")
+    if not 0.0 <= args.ema_decay < 1.0:
+        ap.error("--ema-decay must be in [0, 1)")
+    if args.ema_every < 1:
+        ap.error("--ema-every must be >= 1")
+    if args.export_ema and args.ema_decay == 0:
+        ap.error("--export-ema needs --ema-decay > 0")
+    return args
 
 
 # ------------------------------------------------------------------------------------------------
@@ -86,8 +124,10 @@ def seg_argmax(x, seg, n):
     return x.new_full((n,), float(big)).scatter_reduce(0, seg, hit, "amin").long()
 
 
-def losses(model, b, args):
-    """(total, policy CE, value log loss, extras) for one batch."""
+def losses(model, b, args, weighted: bool = True):
+    """(total, policy CE, value log loss, extras) for one batch. The policy CE and value log loss are plain means
+    over the states that have them; with `weighted` (training) and --surprise-weight / --value-surprise above 0,
+    `total` is made of the surprise-weighted means instead (targets.surprise_weights)."""
     scores, vlogit = model(b)
     z, lp = M.candidate_logits(scores, b)
     tgt = T.policy_target(b, args.policy_target, args.visits_temp, args.cq_c_visit, args.cq_c_scale)
@@ -99,7 +139,16 @@ def losses(model, b, args):
     vl = F.binary_cross_entropy_with_logits(vlogit.float(), vt, reduction="none")
     nval = vm.sum()
     vloss = torch.where(vm, vl, torch.zeros_like(vl)).sum() / nval.clamp(min=1)
-    total = pce + args.value_weight * vloss
+    pw = getattr(args, "surprise_weight", 0.0) if weighted else 0.0
+    vw = getattr(args, "value_surprise", 0.0) if weighted else 0.0
+    pce_w, vloss_w = pce, vloss
+    if pw > 0:
+        w = T.surprise_weights(T.policy_surprise(b, tgt), pm, pw)
+        pce_w = torch.where(pm, w * ce_state, torch.zeros_like(ce_state)).sum() / npol.clamp(min=1)
+    if vw > 0:
+        w = T.surprise_weights((vt - torch.sigmoid(vlogit.detach().float())).abs(), vm, vw)
+        vloss_w = torch.where(vm, w * vl, torch.zeros_like(vl)).sum() / nval.clamp(min=1)
+    total = pce_w + args.value_weight * vloss_w
     return total, pce, vloss, {"scores": scores, "vlogit": vlogit, "z": z, "lp": lp, "tgt": tgt, "pm": pm,
                                "ce_state": ce_state, "npol": npol, "nval": nval}
 
@@ -129,7 +178,7 @@ def evaluate(model, ds: D.ShardSet, idx: np.ndarray, args, device) -> dict:
     for b in loader:
         b = b.to(device)
         with M.autocast(device, args.amp):
-            _, _, _, x = losses(model, b, args)
+            _, _, _, x = losses(model, b, args, weighted=False)
         pm = x["pm"]
         acc["npol"] += float(pm.sum())
         acc["ce"] += float(x["ce_state"][pm].sum())
@@ -205,6 +254,27 @@ def _lr_at(step: int, peak: float, warmup: int, total: int, min_frac: float) -> 
     return peak * (min_frac + (1 - min_frac) * 0.5 * (1 + math.cos(math.pi * t)))
 
 
+class EMA:
+    """A bias-corrected exponential moving average of a model's parameters (buffers are copied as they are): after
+    n updates, sum_i decay^(n-i) w_i / sum_i decay^(n-i) over the weights w_i at the updates. Kept in place as
+    avg += (w - avg) * (1 - decay) / (1 - decay^n), so the first update copies the weights."""
+
+    def __init__(self, model: nn.Module, decay: float):
+        self.decay, self.n = float(decay), 0
+        self.model = copy.deepcopy(model)
+        for p in self.model.parameters():
+            p.requires_grad_(False)
+
+    @torch.no_grad()
+    def update(self, model: nn.Module) -> None:
+        self.n += 1
+        w = (1 - self.decay) / (1 - self.decay ** self.n)
+        for a, p in zip(self.model.parameters(), model.parameters()):
+            a.lerp_(p.detach(), w)
+        for a, b in zip(self.model.buffers(), model.buffers()):
+            a.copy_(b)
+
+
 def _subsample(idx: np.ndarray, k: int | None, seed: int) -> np.ndarray:
     if k is None or len(idx) <= k:
         return idx
@@ -253,6 +323,7 @@ def main(argv=None) -> dict:
     params = model.parameter_counts()
     lr = args.lr if args.lr is not None else DEFAULT_LR[arch]
     opt = _optimizer(model, lr, args.wd, device)
+    ema = EMA(model, args.ema_decay) if args.ema_decay > 0 else None
 
     steps_per_epoch = max(1, len(tr_idx) // args.batch) if len(tr_idx) >= args.batch else 1
     total_steps = max(1, int(math.ceil(args.epochs * steps_per_epoch)))
@@ -281,34 +352,57 @@ def main(argv=None) -> dict:
     stop_reason = "steps"
     win = {"n": 0, "pce": 0.0, "vl": 0.0, "samples": 0, "t": time.time(), "npol": 0.0, "nval": 0.0}
 
+    def eval_all(m) -> dict:
+        res = {}
+        if len(ho_idx):
+            res["holdout"] = evaluate(m, ds, ho_idx, args, device)
+        for name, vds, vidx in vals:
+            res[name] = evaluate(m, vds, vidx, args, device)
+        return res
+
     def do_eval():
         nonlocal since_best
         model_meta = {"step": step, "epoch": step / steps_per_epoch, "samples": samples}
-        res = {}
-        if len(ho_idx):
-            res["holdout"] = evaluate(model, ds, ho_idx, args, device)
-        for name, vds, vidx in vals:
-            res[name] = evaluate(model, vds, vidx, args, device)
-        log({"type": "eval", **model_meta, "wall": time.time() - t0, "eval": res})
+        res = eval_all(model)
+        eres = eval_all(ema.model) if ema is not None and ema.n > 0 else None
+        log({"type": "eval", **model_meta, "wall": time.time() - t0, "eval": res,
+             **({"ema": eres, "ema_updates": ema.n} if eres is not None else {})})
         # early stopping and best.pt follow the holdout (or, without one, the first --val set)
         key_set = "holdout" if "holdout" in res else (vals[0][0] if vals else None)
         key = res[key_set]["total"] if key_set else float("nan")
         meta = {**model_meta, "metrics": res, "args": vars(args), "wall": time.time() - t0}
-        improved = math.isfinite(key) and key < best["total"]
+        # --export-ema: the moving average is this evaluation's candidate when its holdout total is lower
+        cand, cmeta, ckey, which = model, meta, key, "raw"
+        if eres is not None and args.export_ema and key_set is not None:
+            ekey = eres[key_set]["total"]
+            if math.isfinite(ekey) and not (math.isfinite(key) and key <= ekey):
+                cand, ckey, which = ema.model, ekey, "ema"
+                cmeta = {**meta, "metrics": eres, "weights": "ema", "ema_updates": ema.n}
+            else:
+                cmeta = {**meta, "weights": "raw"}
+        improved = math.isfinite(ckey) and ckey < best["total"]
         if improved or key_set is None or best["step"] is None:
             if improved:
-                best["total"] = key
-            best["step"], best["metrics"] = step, res
+                best["total"] = ckey
+            best["step"], best["metrics"], best["weights"] = step, cmeta["metrics"], which
             since_best = 0
-            M.save(model, out / "best.pt", _jsonable(meta))
+            M.save(cand, out / "best.pt", _jsonable(cmeta))
         else:
             since_best += 1
         M.save(model, out / "last.pt", _jsonable(meta))
+        if eres is not None:
+            M.save(ema.model, out / "ema.pt", _jsonable({**meta, "metrics": eres, "weights": "ema",
+                                                         "ema_decay": args.ema_decay, "ema_updates": ema.n}))
         h = res.get("holdout", {})
         print(f"  eval step {step}: holdout policy CE {h.get('policy_ce', float('nan')):.4f} "
               f"(uniform {h.get('policy_ce_uniform', float('nan')):.4f}), value log loss "
               f"{h.get('value_logloss', float('nan')):.4f} (base {h.get('value_base_logloss', float('nan')):.4f}), "
               f"AUC {h.get('value_auc', float('nan')):.3f}", file=sys.stderr, flush=True)
+        if eres is not None and key_set is not None:
+            print(f"  eval step {step}: moving average ({ema.n} updates) {key_set} total "
+                  f"{eres[key_set]['total']:.4f} vs {key:.4f}"
+                  + (f"; this evaluation's candidate for best.pt: {which}" if args.export_ema else ""),
+                  file=sys.stderr, flush=True)
         return args.patience > 0 and since_best >= args.patience
 
     last_eval = -1
@@ -331,6 +425,8 @@ def main(argv=None) -> dict:
             opt.step()
             step += 1
             samples += b.B
+            if ema is not None and step % args.ema_every == 0:
+                ema.update(model)
             win["n"] += 1
             win["samples"] += b.B
             # accumulate on the device: no host sync per step
@@ -370,6 +466,8 @@ def main(argv=None) -> dict:
                "epochs": step / steps_per_epoch, "wall_s": wall, "train_s": train_time,
                "train_samples_per_s": samples / max(train_time, 1e-9),
                "stopped": stop_reason, "best_step": best["step"], "best": best["metrics"], "out": str(out)}
+    if ema is not None:
+        summary.update(best_weights=best.get("weights", "raw"), ema_decay=args.ema_decay, ema_updates=ema.n)
     print(json.dumps(_jsonable(summary)), flush=True)
     return summary
 

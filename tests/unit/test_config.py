@@ -39,7 +39,9 @@ def test_defaults_are_the_contract_values(cfg):
                           "workers": 2, "pcr": {"prob": 0.0, "cheap_sims": 40, "by_kind": {}}}
     assert d["learner"] == {"device": "cpu", "min_new_positions": 20000, "window_positions": 300000, "epochs": 2.0,
                             "steps_per_position": None, "batch": 512, "lr": 1e-4, "warmup": 100,
-                            "policy_target": "visits", "value_blend": 1.0, "warm_start": True, "threads": 4}
+                            "policy_target": "visits", "value_blend": 1.0, "warm_start": True, "threads": 4,
+                            "surprise_weight": 0.0, "value_surprise": 0.0, "ema_decay": 0.0,
+                            "window": {"kind": "fixed", "c": 150000, "alpha": 0.75, "beta": 0.4}}
     assert d["eval"] == {"every_versions": 1, "sims": 100, "pairs": 100, "seed": 3131, "workers": 2,
                          "opponents": ["prev", "sbtactical"]}
     assert d["store"] == "runs/smoke" and d["tracking"] == {"trackio": False, "project": "draftzero"}
@@ -92,6 +94,19 @@ def test_values_are_converted_to_the_field_type():
     assert c.player.init is None and c.budget.max_hours == 2.0
 
 
+def test_learner_extras_default_off_and_convert():
+    c = C.from_dict({"run": "t"})
+    assert (c.learner.surprise_weight, c.learner.value_surprise, c.learner.ema_decay) == (0.0, 0.0, 0.0)
+    assert (c.learner.window.kind, c.learner.window.c, c.learner.window.alpha, c.learner.window.beta) == \
+        ("fixed", 150000, 0.75, 0.4)
+    c = C.from_dict({"run": "t", "learner": {"surprise_weight": "0.5", "value_surprise": 0.1, "ema_decay": "0.999",
+                                             "window": {"kind": "katago", "c": "1.5e5"}}})
+    assert (c.learner.surprise_weight, c.learner.value_surprise, c.learner.ema_decay) == (0.5, 0.1, 0.999)
+    assert c.learner.window.kind == "katago" and c.learner.window.c == 150000 and c.learner.window.alpha == 0.75
+    with pytest.raises(C.ConfigError, match=r"did you mean learner\.window\.kind\?"):
+        C.from_dict({"run": "t", "learner": {"window": {"kinds": "katago"}}})
+
+
 @pytest.mark.parametrize("d, path", [
     ({"actor": {"sims": 1.5}}, "actor.sims"),
     ({"actor": {"sims": True}}, "actor.sims"),
@@ -123,6 +138,13 @@ def test_wrong_types_name_the_path(d, path):
     ({"learner": {"window_positions": 10, "min_new_positions": 20}}, "learner.window_positions"),
     ({"learner": {"policy_target": "q"}}, "learner.policy_target"),
     ({"learner": {"value_blend": 1.5}}, "learner.value_blend"),
+    ({"learner": {"surprise_weight": 1.5}}, "learner.surprise_weight"),
+    ({"learner": {"value_surprise": -0.1}}, "learner.value_surprise"),
+    ({"learner": {"ema_decay": 1.0}}, "learner.ema_decay"),
+    ({"learner": {"window": {"kind": "sqrt"}}}, "learner.window.kind"),
+    ({"learner": {"window": {"c": 0}}}, "learner.window.c"),
+    ({"learner": {"window": {"alpha": 0}}}, "learner.window.alpha"),
+    ({"learner": {"window": {"beta": 1.5}}}, "learner.window.beta"),
     ({"eval": {"opponents": ["prev", "gnubg"]}}, "eval.opponents[1]"),
     ({"budget": {"max_versions": 0}}, "budget.max_versions"),
     ({"store": "hf://danbrooks/repo"}, "store"),
@@ -356,6 +378,9 @@ def test_apply_change_sections_and_dict_entries(cfg):
     ("actor.sims.deeper", 1, "unknown key actor.sims.deeper"),
     ("actor.pcr.by_kind.combat", 0.5, "actor.pcr.by_kind.combat"),
     ("learner.window_positions", 10, "learner.window_positions"),
+    ("learner.surprise_weight", 0.5, "learner.surprise_weight is fixed"),
+    ("learner.ema_decay", 0.999, "learner.ema_decay is fixed"),
+    ("learner.window.kind", "katago", "learner.window.kind is fixed"),
 ])
 def test_apply_change_rejects(cfg, path, value, match):
     with pytest.raises(C.ConfigError, match=match):

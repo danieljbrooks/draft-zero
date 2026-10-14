@@ -10,13 +10,17 @@
      "<actor>-<seq>-" so the crc32 holdout differs across actors and chunks); learner/ingested.json lists them;
   4. trains when due: async, once min_new_positions recorded positions arrived since the last version; sync, once
      the store holds sync.games_per_version games of the newest version (exactly once per version). Training is
-     draftzero.nets.train on the newest window_positions positions, warm-started from the newest version's model.pt
-     with its own arch and config when learner.warm_start (else from random init with player.arch/config; so a
-     player.init of another shape than player.config keeps its shape), for learner.epochs passes or, with
-     steps_per_position, ceil(steps_per_position x new positions / batch) steps;
+     draftzero.nets.train on the newest window_positions positions (learner.window.kind katago: KataGo's window,
+     growing with every position ingested, at most window_positions; see katago_window), warm-started from the
+     newest version's model.pt with its own arch and config when learner.warm_start (else from random init with
+     player.arch/config; so a player.init of another shape than player.config keeps its shape), for
+     learner.epochs passes or, with steps_per_position, ceil(steps_per_position x new positions / batch) steps.
+     learner.surprise_weight, value_surprise and ema_decay pass through as nets.train's --surprise-weight,
+     --value-surprise and --ema-decay (with --export-ema) when above 0;
   5. exports model.dzgw (mlp), publishes versions/player/v{N+1} (model.pt, model.dzgw, meta.json) and latest.json
      last; model.pt is the run's best.pt, and meta.json's metrics, its "step" and the learn.* metrics are that
-     checkpoint's holdout evaluation (curves.jsonl at the summary's best_step; "steps" is the run's length);
+     checkpoint's holdout evaluation (curves.jsonl at the summary's best_step, the moving average's evaluation when
+     best.pt holds it: meta.json's "weights" is then "ema"; "steps" is the run's length);
   6. deletes local packs that fell out of the window. It stops on control "stop" or budget.max_versions.
 
     python -m draftzero.loop.cli learner --config C --store S [--machine M] [--work-dir DIR]
@@ -59,18 +63,28 @@ def default_export(pt: Path, dzgw: Path) -> None:
         raise RuntimeError(f"draftzero.nets.export {pt} {dzgw} exited {rc}")
 
 
-def curve_metrics(curves: Path, step: int | None = None) -> dict:
+def curve_metrics(curves: Path, step: int | None = None, weights: str = "raw") -> dict:
     """An evaluation in a nets.train curves.jsonl, its holdout set (else the first validation set): the one at
-    `step` (best.pt's: the summary's best_step), else the last (last.pt's)."""
+    `step` (best.pt's: the summary's best_step), else the last (last.pt's); with weights "ema", the moving
+    average's evaluation at that step (best.pt holds it: the summary's best_weights)."""
     lines = curves.read_text().splitlines() if curves.exists() else []
     evals = [rec for rec in (json.loads(x) for x in lines if x.strip()) if rec.get("type") == "eval"]
     at = [rec for rec in evals if step is not None and rec.get("step") == step]
     last = (at or evals or [None])[-1]
     if not last:
         return {}
-    ev = last.get("eval") or {}
+    ev = (last.get("ema") if weights == "ema" else None) or last.get("eval") or {}
     res = ev.get("holdout") or (next(iter(ev.values())) if ev else {})
     return {"step": last.get("step"), **{k: v for k, v in res.items() if isinstance(v, (int, float)) or v is None}}
+
+
+def katago_window(total: int, c: float, alpha: float, beta: float) -> int:
+    """KataGo's growing replay window (arXiv 1902.10565, section 2): all `total` positions up to c, then
+    c * (1 + beta * ((total / c)^alpha - 1) / alpha), which grows as total^alpha. With c 150k, alpha 0.75 and
+    beta 0.4: 150k at 150k, ~400k at 1M, ~1.9M at 10M."""
+    if total <= c:
+        return int(total)
+    return int(round(c * (1 + beta * ((total / c) ** alpha - 1) / alpha)))
 
 
 LEARN = {   # learn.<name> from the holdout evaluation, and the sample size it is over
@@ -302,14 +316,26 @@ class Learner:
             return f"{new} new positions"
         return None
 
+    def window_cap(self) -> int:
+        """Positions the window holds: learner.window_positions (learner.window.kind fixed), or KataGo's growing
+        window over every position ingested so far (katago_window with learner.window's c, alpha and beta), at
+        most learner.window_positions."""
+        cap = int(self.c("learner.window_positions"))
+        if (self.c("learner.window.kind", "fixed") or "fixed") == "fixed":
+            return cap
+        total = sum(e["positions"] for e in self.ingested)
+        k = katago_window(total, float(self.c("learner.window.c")), float(self.c("learner.window.alpha")),
+                          float(self.c("learner.window.beta")))
+        return max(1, min(cap, k))
+
     def window(self) -> list[dict]:
-        """The newest shards holding learner.window_positions positions (oldest first)."""
+        """The newest shards holding window_cap() positions (oldest first)."""
         if self.c("mode", "async") == "sync":
             key = lambda e: (e.get("version") or 0, e["seq"], e.get("actor") or "")          # noqa: E731
         else:
             key = lambda e: (e.get("version") or 0, str(e.get("time") or ""), e["seq"],    # noqa: E731
                              e.get("actor") or "")
-        out, n, cap = [], 0, int(self.c("learner.window_positions"))
+        out, n, cap = [], 0, self.window_cap()
         for e in sorted((e for e in self.ingested if e["positions"] > 0), key=key, reverse=True):
             out.append(e)
             n += e["positions"]
@@ -331,6 +357,13 @@ class Learner:
                 "--value-blend", repr(float(self.c("learner.value_blend"))),
                 "--device", str(self.c("learner.device", "cpu")), "--in-ram",
                 "--seed", str((int(self.c("seed", 1)) * 1_000_003 + version) % 2**31)]
+        for key, flag in (("surprise_weight", "--surprise-weight"), ("value_surprise", "--value-surprise")):
+            x = float(self.c(f"learner.{key}", 0.0) or 0.0)
+            if x > 0:
+                argv += [flag, repr(x)]
+        ema = float(self.c("learner.ema_decay", 0.0) or 0.0)
+        if ema > 0:                     # the version publishes the moving average when its holdout total is lower
+            argv += ["--ema-decay", repr(ema), "--export-ema"]
         spp = self.c("learner.steps_per_position")
         if spp:
             argv += ["--epochs", "1000000", "--max-steps", str(max(1, math.ceil(float(spp) * new_positions / batch)))]
@@ -369,7 +402,8 @@ class Learner:
         pt = out / "best.pt" if (out / "best.pt").exists() else out / "last.pt"
         if not pt.exists():
             raise RuntimeError(f"training version {v} wrote no checkpoint in {out}")
-        m = curve_metrics(out / "curves.jsonl", summary.get("best_step") if pt.name == "best.pt" else None)
+        weights = summary.get("best_weights", "raw") if pt.name == "best.pt" else "raw"
+        m = curve_metrics(out / "curves.jsonl", summary.get("best_step") if pt.name == "best.pt" else None, weights)
         total = m.get("total")
         if total is not None and not math.isfinite(float(total)):
             raise RuntimeError(f"version {v}: the holdout loss is {total}; not publishing")
@@ -391,6 +425,10 @@ class Learner:
                 "init": f"v{parent:04d}" if init else None, "step": m.get("step"),   # the published weights'
                 "steps": summary.get("steps"), "argv": [a if not a.startswith(str(self.wd)) else
                                                         os.path.relpath(a, self.wd) for a in argv]}
+        if "best_weights" in summary:                   # learner.ema_decay > 0: raw weights or the moving average
+            meta["weights"] = weights
+        if (self.c("learner.window.kind", "fixed") or "fixed") != "fixed":
+            meta["window_cap"] = self.window_cap()
         mpath = out / "metrics.jsonl"
         mlog = ctl.metrics_log(mpath, self.cfg, "learner", self.machine)
         for k, nk in LEARN.items():

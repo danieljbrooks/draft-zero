@@ -5,6 +5,12 @@ Policy targets are per candidate (a distribution within each state):
   cq      Gumbel MuZero's completed-Q improved policy: softmax(log prior + sigma(normalised completed q))
 Value target: the outcome, optionally blended with the search's root value.
 States with fewer than 2 candidates or no visits get no policy loss; outcome -1 gets no value loss.
+
+Surprise weighting (KataGo's policy and value surprise, arXiv 1902.10565 and KataGoMethods.md) reweights the
+states of a batch by (1 - frac) + frac * s / mean(s), which averages 1 over the states that have that loss. The
+policy surprise s is KL(target || prior) = sum t log(t / p) over the state's candidates, p being the prior the
+search used (cand_prior, before root noise, renormalised over the candidates). The value surprise is
+|value target - the network's prediction| (see draftzero.nets.train.losses).
 """
 from __future__ import annotations
 
@@ -72,6 +78,31 @@ def policy_target(b, kind: str = "visits", temp: float = 1.0, c_visit: float = 5
     if kind == "cq":
         return cq_target(b, c_visit, c_scale)
     raise ValueError(f"unknown policy target {kind!r} (visits, cq)")
+
+
+def policy_surprise(b, tgt: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    """[B] KL(target || prior) per state, sum over candidates of t log(t / p) (KataGo's "KL divergence of the
+    policy target from the policy prior"). The prior is cand_prior renormalised over the state's candidates (uniform
+    if it sums to 0, e.g. a search without a net that recorded no prior) and floored at eps, so a visited candidate
+    the prior gave 0 adds at most t log(t / eps). The reverse KL(prior || target) would be infinite whenever a
+    candidate with prior > 0 got no visits."""
+    seg, B = b.cand_state, b.B
+    p = b.cand_prior.float().clamp(min=0)
+    tot = _seg_sum(p, seg, B)
+    k = _seg_sum(torch.ones_like(p), seg, B)
+    p = torch.where(tot[seg] > 0, p / tot.clamp(min=1e-12)[seg], 1.0 / k.clamp(min=1)[seg])
+    t = tgt.float()
+    term = torch.where(t > 0, t * (torch.log(t.clamp(min=1e-30)) - torch.log(p.clamp(min=eps))), torch.zeros_like(t))
+    return _seg_sum(term, seg, B).clamp(min=0)
+
+
+def surprise_weights(s: torch.Tensor, mask: torch.Tensor, frac: float) -> torch.Tensor:
+    """[B] loss weights (1 - frac) + frac * s / mean(s over mask): their mean over the masked states is 1 (all 1
+    when the masked surprise is all 0). Weights outside the mask are meaningless (the loss masks them out)."""
+    m = mask.float()
+    mean = (s * m).sum() / m.sum().clamp(min=1)
+    rel = torch.where(mean > 0, s / mean.clamp(min=1e-12), torch.ones_like(s))
+    return (1 - frac) + frac * rel
 
 
 def value_target(b, blend: float = 0.0) -> tuple[torch.Tensor, torch.Tensor]:

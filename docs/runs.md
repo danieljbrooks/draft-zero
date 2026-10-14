@@ -70,6 +70,21 @@ since no version arrives while actors are paused); every other live change waits
 `budget.max_hours` and `dz stop` stop the run at once; `max_versions` and `max_games` first pause the actors, then
 stop once every evaluation job is closed.
 
+### Learner options from KataGo (opt-in)
+
+Each is off by default, and off leaves training bit-identical (the tests in `tests/unit/nets/test_train.py` check
+it). None is live: they are fixed for a run, but `learner.window_positions` stays live and caps the window.
+
+| Field | Default | What it does |
+| --- | --- | --- |
+| `learner.surprise_weight` | `0.0` | Policy surprise weighting (`nets.train --surprise-weight`). Each state's policy loss gets weight (1 − x) + x · KL(target ‖ prior) / its batch mean, where the prior is the one the search used (`cand_prior`). The weights average 1 over a batch. KataGo uses 0.5. |
+| `learner.value_surprise` | `0.0` | The same for the value loss (`--value-surprise`), with \|value target − the network's prediction\| as the surprise. KataGo uses 0.1. KataGo's own form needs the actor network's raw root value, which the shards do not record. |
+| `learner.ema_decay` | `0.0` | A moving average of the weights (`--ema-decay D --export-ema`), bias-corrected so the starting weights drop out. Each evaluation also scores it and saves it as `ema.pt`. The published `model.pt` is the moving average when its holdout loss is lower than the raw weights'. `meta.json` then says `"weights": "ema"`, and its metrics are the average's. Try 0.999. |
+| `learner.window` | `{kind: fixed, c: 150000, alpha: 0.75, beta: 0.4}` | `fixed` trains on the newest `window_positions` positions. `katago` uses KataGo's growing window over the N positions ingested so far: all N up to c, then c(1 + β((N/c)^α − 1)/α), at most `window_positions`. With these values that is ~400k positions at N = 1M and ~1.9M at 10M. `meta.json` records `window_cap`. |
+
+The training log's `policy_ce` and `value_logloss` are always unweighted. Model selection uses the unweighted
+holdout total.
+
 For several machines, start each role on its own, against a shared store:
 
 ```bash

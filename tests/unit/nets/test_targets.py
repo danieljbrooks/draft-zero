@@ -75,3 +75,27 @@ def test_policy_and_value_masks():
     assert np.allclose(t.numpy(), [1.0, 0.0, 0.5, 0.0])
     t, m = T.value_target(b, blend=0.25)
     assert np.allclose(t.numpy()[[0, 2, 3]], [0.75 + 0.25 * 0.5, 0.375 + 0.125, 0.25 * 0.2])
+
+
+def test_policy_surprise_by_hand():
+    b = batch_of([{"visits": [3, 1, 0], "prior": [0.5, 0.3, 0.2], "q": [0.6, 0.4, 0]},
+                  {"visits": [0, 2], "prior": [2.0, 2.0], "q": [0, 0.7]},           # prior renormalised: 0.5, 0.5
+                  {"visits": [1, 1, 1], "prior": [0, 0, 0], "q": [0.5, 0.5, 0.5]},  # no prior: uniform
+                  {"visits": [2, 6], "prior": [0.25, 0.75], "q": [0.4, 0.6]},       # target = prior
+                  {"visits": [0, 4], "prior": [1.0, 0.0], "q": [0, 0.6]}])          # visited, prior 0: floored
+    kl = T.policy_surprise(b, T.visits_target(b)).numpy()
+    want = [0.75 * math.log(0.75 / 0.5) + 0.25 * math.log(0.25 / 0.3), math.log(2), 0.0, 0.0, -math.log(1e-6)]
+    assert np.allclose(kl, want, atol=1e-5), kl
+    assert (kl >= 0).all()
+
+
+def test_surprise_weights():
+    import torch
+    s = torch.tensor([1.0, 3.0, 0.0, 100.0])
+    mask = torch.tensor([True, True, True, False])
+    w = T.surprise_weights(s, mask, 0.5)
+    assert np.allclose(w[:3].numpy(), [0.5 + 0.5 * 0.75, 0.5 + 0.5 * 2.25, 0.5])    # mean surprise 4/3
+    assert abs(float(w[mask].mean()) - 1) < 1e-6
+    assert torch.equal(T.surprise_weights(s, mask, 0.0), torch.ones(4))
+    assert torch.equal(T.surprise_weights(torch.zeros(4), mask, 0.5), torch.ones(4))   # no surprise: uniform
+    assert np.allclose(T.surprise_weights(s, mask, 1.0)[:3].numpy(), [0.75, 2.25, 0.0])
