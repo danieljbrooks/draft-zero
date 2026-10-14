@@ -1,0 +1,14 @@
+# The rigid interfaces (docs/architecture.md, "The ten rigid interfaces").
+# A pull request that touches any of these paths needs Dan's review.
+# Interfaces 2, 4 and 5 live in gorge and reach this repository only through engine/gorge/GORGE_REF.
+
+/engine/gorge/                    @danieljbrooks
+/src/draftzero/nets/SPEC.md       @danieljbrooks
+/src/draftzero/nets/packfmt.py    @danieljbrooks
+/src/draftzero/nets/export.py     @danieljbrooks
+/src/draftzero/config.py          @danieljbrooks
+/src/draftzero/manifest.py        @danieljbrooks
+/src/draftzero/metrics.py         @danieljbrooks
+/src/draftzero/eval/              @danieljbrooks
+/assets/decks.tsv                 @danieljbrooks
+/assets/sealed/                   @danieljbrooks
