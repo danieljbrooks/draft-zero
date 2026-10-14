@@ -22,6 +22,8 @@ def test_ssh_target_parse_and_spec_round_trip():
     t2 = SSHTarget.parse("-i ~/.ssh/k -o ControlMaster=auto dan@r1.lan")
     assert (t2.user, t2.host, t2.port, t2.key, t2.options) == ("dan", "r1.lan", 22, "~/.ssh/k", ("ControlMaster=auto",))
     assert SSHTarget.parse(t2.spec) == t2
+    pod = SSHTarget("1.2.3.4", port=40001, key="/k", strict=False)
+    assert "StrictHostKeyChecking=no" in pod.spec and SSHTarget.parse(pod.spec) == pod   # a relay host keeps it
     assert SSHTarget.parse("box").user == "root"
     for bad in ("", "-p 22", "a@b c@d", "a@b -L 1:2", "a@b -p"):
         with pytest.raises(ValueError):

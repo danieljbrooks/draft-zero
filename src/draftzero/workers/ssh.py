@@ -60,6 +60,9 @@ class SSHTarget:
         if not dest:
             raise ValueError(f"ssh spec {spec!r} has no user@host")
         user, _, host = dest.rpartition("@")
+        if any(o.lower() == "stricthostkeychecking=no" for o in opts):     # a pod's spec: strict=False
+            kw.setdefault("strict", False)
+            opts = [o for o in opts if o.lower() not in ("stricthostkeychecking=no", "userknownhostsfile=/dev/null")]
         return cls(host=host, user=user or "root", port=port, key=kw.pop("key", key),
                    options=tuple(opts) + tuple(kw.pop("options", ())), **kw)
 
@@ -69,11 +72,12 @@ class SSHTarget:
 
     @property
     def spec(self) -> str:
-        """Back to the string `parse` reads."""
+        """Back to the string `parse` reads (a non-strict target says so with -o StrictHostKeyChecking=no)."""
         s = f"{self.dest} -p {self.port}"
         if self.key:
             s += f" -i {shlex.quote(str(self.key))}"
-        return s + "".join(f" -o {shlex.quote(o)}" for o in self.options)
+        opts = (*self.options, *(() if self.strict else ("StrictHostKeyChecking=no",)))
+        return s + "".join(f" -o {shlex.quote(o)}" for o in opts)
 
     def opts(self) -> list[str]:
         o = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30"]
