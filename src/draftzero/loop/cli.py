@@ -15,6 +15,9 @@ the store (heartbeats/<machine>.json, shards/<machine>/): it must be unique per 
 name (with the role appended for the other roles). --work-dir defaults to runs/<run>/work/<role>-<machine>.
 Roles poll the store every --poll seconds (default 30 on a folder, 60 on a bucket; local mode passes it on); the
 controller writes its status page every --status-every seconds (default 60 on a folder, 300 on a bucket).
+A controller started on a store whose run has started runs on the store's config.yml plus events.jsonl: C may differ
+from it only in machine paths (draftzero.config.MACHINE), unless --allow-config-change (controller, and local, which
+passes it on) lets C change other fields too, recorded in events.jsonl.
 status, stop and plan refuse a STORE that is not a run's store (no config.yml or control.json, which the controller
 writes when the run starts), so a mistyped path creates nothing and reports no success; `plan ... --before-start`
 queues changes in a store whose run has not started yet.
@@ -42,6 +45,9 @@ HELP = {
     "stop": "ask the controller to stop the run (writes stop.request)",
     "plan": "request a live config change (`set PATH=VALUE ...`) or list requested, rejected and applied ones",
 }
+ALLOW_HELP = ("on a store whose run has started, let this config change the run's config (the store's config.yml "
+              "plus events.jsonl) beyond machine paths; the changes are recorded in events.jsonl. Without it such "
+              "a config is refused (change live fields with `plan set`)")
 PLAN_EPILOG = """examples:
   plan runs/smoke set learner.lr=3e-4             applied at the next version
   plan runs/smoke set paused=true                 paused and budget.* apply at once
@@ -85,6 +91,9 @@ def _parser(prog: str = "python -m draftzero.loop.cli") -> argparse.ArgumentPars
             p.add_argument("--actors", type=int, default=1, help="actor processes (default 1)")
             p.add_argument("--max-hours", type=float, default=None,
                            help="stop the run after this long (exit code 2)")
+        if role in ("controller", "local"):
+            p.add_argument("--allow-config-change", action="store_true",
+                           help=("passed on to the controller: " if role == "local" else "") + ALLOW_HELP)
     for role in ("status", "stop"):
         p = sub.add_parser(role, help=HELP[role], description=HELP[role])
         p.add_argument("store_pos", nargs="?", metavar="STORE", help="the run's store: a folder or hf://buckets/...")
@@ -126,7 +135,7 @@ def main(argv=None, prog: str | None = None) -> int:
         from draftzero.loop import local
         wd = a.work_dir or Path("runs") / run / "work"
         return local.run(a.config, store_spec, wd, machine=a.machine or "local", actors=a.actors,
-                         max_hours=a.max_hours, poll_s=a.poll, log=_log)
+                         max_hours=a.max_hours, poll_s=a.poll, log=_log, allow_config_change=a.allow_config_change)
 
     _sigterm_exits()
     store = open_store(store_spec)
@@ -136,8 +145,9 @@ def main(argv=None, prog: str | None = None) -> int:
     if a.role == "controller":
         from draftzero.loop.controller import Controller
         every = a.status_every if a.status_every is not None else (300.0 if remote else 60.0)
-        return Controller(store, cfg, log=_log, status_every_s=every, hb_cache_s=120.0 if remote else 0.0,
-                          tracker=_tracker(cfg)).run(poll_s=poll, once=a.once)
+        controller = Controller(store, cfg, log=_log, status_every_s=every, hb_cache_s=120.0 if remote else 0.0,
+                                tracker=_tracker(cfg), allow_config_change=a.allow_config_change)
+        return controller.run(poll_s=poll, once=a.once)
     machine = ctl.check_name(a.machine or (_host() if a.role == "actor" else f"{_host()}-{a.role}"))
     wd = a.work_dir or Path("runs") / run / "work" / f"{a.role}-{machine}"
     if a.role == "actor":

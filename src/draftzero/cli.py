@@ -185,6 +185,8 @@ def cmd_run(a) -> int:
         argv += ["--max-hours", str(a.max_hours)]
     if a.machine:
         argv += ["--machine", a.machine]
+    if a.allow_config_change:
+        argv += ["--allow-config-change"]
     poll = a.poll if a.poll is not None else (None if _is_remote(store) else LOCAL_POLL_S)
     if poll is not None:
         argv += ["--poll", str(poll)]
@@ -659,7 +661,8 @@ def parser() -> argparse.ArgumentParser:
                         "store (python -m draftzero.loop.cli local). Returns when the run stops: 0 at its budget or "
                         "`dz stop`, 1 when a role failed, 2 at --max-hours, 130 on Ctrl-C, 143 on SIGTERM, 129 on "
                         "SIGHUP (the roles are stopped either way). Starting it again on the same store resumes the "
-                        "run.")
+                        "run, on the store's config.yml plus events.jsonl: CONFIG (with --set) may then differ from "
+                        "it only in machine paths, unless --allow-config-change.")
     p.add_argument("config", metavar="CONFIG")
     p.add_argument("--store", default=None, help="a folder or hf://buckets/<owner>/<bucket> (default: the config's)")
     p.add_argument("--actors", type=int, default=1, help="actor processes (default 1)")
@@ -670,6 +673,8 @@ def parser() -> argparse.ArgumentParser:
                                                               f"(default {LOCAL_POLL_S:g} on a folder, 60 on a bucket)")
     p.add_argument("--set", action="append", default=[], metavar="PATH=VALUE",
                    help="override a config field at launch (repeatable); the store's config.yml records it")
+    from draftzero.loop.cli import ALLOW_HELP
+    p.add_argument("--allow-config-change", action="store_true", help=ALLOW_HELP)
     p.add_argument("--no-check", action="store_true", help="skip the engine and deck-pool checks")
     p.set_defaults(func=cmd_run)
 

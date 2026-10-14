@@ -1145,3 +1145,22 @@ def test_cli_plan_status_and_stop(tmp_path, capsys):
     assert cli.main(["status", st, "--json"]) == 0 and json.loads(capsys.readouterr().out)["run"] == "t"
     assert cli.main(["stop", st]) == 0 and r.store.exists(ctl.STOP)
     assert cli.main(["status"]) == 2
+
+
+def test_cli_controller_changes_the_runs_config_only_when_allowed(tmp_path, monkeypatch):
+    """`controller --allow-config-change` lets a restart change a fixed field, recorded in events.jsonl; without
+    it the restart is refused and nothing is recorded."""
+    from draftzero import config
+    from draftzero.loop import cli
+    monkeypatch.setattr(cli, "_sigterm_exits", lambda: None)          # leave pytest's SIGTERM handler alone
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    edited = tmp_path / "edited.yml"
+    edited.write_text(config.dump(make_cfg(tmp_path, learner={"batch": 32})))
+    argv = ["controller", "--config", str(edited), "--store", str(r.store.root), "--once"]
+    with pytest.raises(ValueError, match="learner.batch") as e:
+        cli.main(argv)
+    assert "--allow-config-change" in str(e.value) and ctl.read_events(r.store) == []
+    assert cli.main(argv + ["--allow-config-change"]) == 0
+    assert [(e["path"], e["old"], e["new"]) for e in ctl.read_events(r.store)] == [("learner.batch", 64, 32)]
+    assert cli.main(argv) == 0                                          # now the record: no change, no refusal

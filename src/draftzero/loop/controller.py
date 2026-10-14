@@ -129,8 +129,9 @@ class Controller:
         what = "; ".join(f"{p} {a!r} -> {b!r}" for p, (a, b) in sorted(changes.items()))
         if not self.allow_config_change:
             raise ValueError(f"this config changes the run's config (the store's config.yml and events.jsonl): "
-                             f"{what}. Change live fields with `dz plan set`; to change these anyway, start the "
-                             "controller allowing config changes (they are recorded in events.jsonl)")
+                             f"{what}. Change live fields with `dz plan set`; to change these anyway, add "
+                             "--allow-config-change (`dz run` or the controller; the changes are recorded in "
+                             "events.jsonl)")
         at = ctl.player_version(ctl.read(self.store)) or 0
         ctl.append_events(self.store, [{"time": ctl.now_iso(), "kind": "set", "path": p, "old": ctl.plain(a),
                                         "new": ctl.plain(b), "by": "controller restart", "at_version": at}

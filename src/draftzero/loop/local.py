@@ -2,15 +2,17 @@
 The same programs as on many machines; only the store differs.
 
     python -m draftzero.loop.cli local --config C [--store S] [--actors N] [--work-dir DIR] [--max-hours H]
+                                       [--allow-config-change]
 
 Starts the controller, the learner, one evaluator and N actors (`python -m draftzero.loop.cli <role>`), each in its
-own session with its log in <work-dir>/logs/<role>.log and its cache in <work-dir>/<role>-<machine>. It returns
-once the controller has stopped the run (budget, `stop`) and the others have followed. If a role dies, or at
---max-hours, it asks the run to stop (stop.request) and waits up to `grace_s` for the roles to exit. If the
-controller itself fails, nothing would act on a stop.request, so it stops the others at once and leaves none in the
-store (a stop.request it wrote that no controller acted on is withdrawn at the end): the next `dz run` resumes the
-run. On Ctrl-C, SIGTERM or SIGHUP (kill, a harness timeout, a closed terminal) it stops them at once. Whatever is
-left gets SIGTERM, then SIGKILL, including gorge processes they started; a second signal does not cut that short.
+own session with its log in <work-dir>/logs/<role>.log and its cache in <work-dir>/<role>-<machine>
+(--allow-config-change goes on to the controller). It returns once the controller has stopped the run (budget,
+`stop`) and the others have followed. If a role dies, or at --max-hours, it asks the run to stop (stop.request) and
+waits up to `grace_s` for the roles to exit. If the controller itself fails, nothing would act on a stop.request, so
+it stops the others at once and leaves none in the store (a stop.request it wrote that no controller acted on is
+withdrawn at the end): the next `dz run` resumes the run. On Ctrl-C, SIGTERM or SIGHUP (kill, a harness timeout, a
+closed terminal) it stops them at once. Whatever is left gets SIGTERM, then SIGKILL, including gorge processes they
+started; a second signal does not cut that short.
 
 Return code: 0 the run stopped normally, 1 a role failed, 2 --max-hours, 130 Ctrl-C, 143 SIGTERM, 129 SIGHUP.
 """
@@ -30,14 +32,14 @@ REPO_SRC = Path(__file__).resolve().parents[2]
 
 
 def role_commands(config: str, store: str, work_dir: Path, machine: str, actors: int,
-                  poll_s: float | None = None) -> dict[str, list[str]]:
-    """{log name: argv} for every role."""
+                  poll_s: float | None = None, allow_config_change: bool = False) -> dict[str, list[str]]:
+    """{log name: argv} for every role; allow_config_change goes to the controller (--allow-config-change)."""
     base = [sys.executable, "-m", "draftzero.loop.cli"]
     common = ["--config", str(config), "--store", str(store)] + (["--poll", str(poll_s)] if poll_s else [])
 
     def role(name: str, m: str) -> list[str]:
         return base + [name, *common, "--machine", m, "--work-dir", str(work_dir / f"{name}-{m}")]
-    cmds = {"controller": base + ["controller", *common],
+    cmds = {"controller": base + ["controller", *common] + (["--allow-config-change"] if allow_config_change else []),
             "learner": role("learner", f"{machine}-learner"),
             "evaluator": role("evaluator", f"{machine}-evaluator")}
     for i in range(actors):
@@ -103,13 +105,14 @@ def _set_handlers(sigs, handler) -> dict:
 
 def run(config: str, store: str, work_dir: Path, *, machine: str = "local", actors: int = 1,
         max_hours: float | None = None, grace_s: float = 180.0, poll_s: float | None = None, log=print,
-        commands: dict[str, list[str]] | None = None, tick_s: float = 2.0) -> int:
+        commands: dict[str, list[str]] | None = None, tick_s: float = 2.0, allow_config_change: bool = False) -> int:
     work_dir = Path(work_dir).resolve()
     (work_dir / "logs").mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     env["PYTHONPATH"] = str(REPO_SRC) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     env.setdefault("PYTHONUNBUFFERED", "1")
-    cmds = commands or role_commands(config, store, work_dir, machine, actors, poll_s)
+    cmds = commands or role_commands(config, store, work_dir, machine, actors, poll_s,
+                                     allow_config_change=allow_config_change)
     st = None
     if commands is None:
         from draftzero.loop.store import open_store

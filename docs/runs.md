@@ -54,12 +54,13 @@ stops at its budget or `dz stop`, 1 when a role failed, 2 at `--max-hours`, 130 
 SIGTERM or SIGHUP (the roles are stopped in every case). Starting it again on the same store resumes the run, on the
 store's `config.yml` plus `events.jsonl`: the config given then may differ only in machine paths (`engine.root`,
 `data.*` paths, `search.belief` paths, `player.init`, `store`, `tracking`); the controller refuses one that changes
-any other field (use `dz plan set` for live ones) unless it is started with `--allow-config-change`, which records
-the changes in `events.jsonl`. When a role fails, `dz run` asks the controller to stop the run (`stop.request`), but
-when the controller itself fails it stops the other roles directly and leaves no `stop.request` behind (one no
-controller acted on is withdrawn), so the next `dz run` does not stop at its first tick. `dz status`, `dz plan` and
-`dz stop` refuse a path that is not a run's store (no `config.yml` or `control.json`), so a typo creates nothing and
-reports no success; `dz plan STORE set ... --before-start` queues a change in a store whose run has not started yet.
+any other field (use `dz plan set` for live ones) unless `dz run` is given `--allow-config-change`, which it passes
+on to the controller (`dz controller` takes it too), and the changes are then recorded in `events.jsonl`. When a
+role fails, `dz run` asks the controller to stop the run (`stop.request`), but when the controller itself fails it
+stops the other roles directly and leaves no `stop.request` behind (one no controller acted on is withdrawn), so the
+next `dz run` does not stop at its first tick. `dz status`, `dz plan` and `dz stop` refuse a path that is not a run's
+store (no `config.yml` or `control.json`), so a typo creates nothing and reports no success; `dz plan STORE set ...
+--before-start` queues a change in a store whose run has not started yet.
 
 The controller is the only writer of `control.json`, `events.jsonl` and the status page. Each version it opens one
 evaluation job per opponent, split into shards of 10 pairs that it assigns to the live evaluators; a shard whose

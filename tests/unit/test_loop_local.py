@@ -35,6 +35,25 @@ def test_role_commands(tmp_path):
     a1 = cmds["actor-1"]
     assert a1[a1.index("--machine") + 1] == "box-1" and a1[a1.index("--work-dir") + 1] == str(tmp_path / "actor-box-1")
     assert cmds["learner"][cmds["learner"].index("--machine") + 1] == "box-learner"
+    assert not any("--allow-config-change" in argv for argv in cmds.values())
+    cmds = local.role_commands("c.yml", "runs/x", tmp_path, "box", 2, allow_config_change=True)
+    assert cmds["controller"][-1] == "--allow-config-change"
+    assert [n for n, argv in cmds.items() if "--allow-config-change" in argv] == ["controller"]
+
+
+def test_local_mode_passes_allow_config_change_on_to_the_controller(tmp_path, monkeypatch):
+    """`local --allow-config-change` (what `dz run --allow-config-change` runs) reaches the controller's command."""
+    from draftzero.loop import cli
+    seen = []
+
+    def roles(*a, **k):
+        seen.append(k.get("allow_config_change"))
+        return {"controller": [PY, "-c", "pass"]}
+    monkeypatch.setattr(local, "role_commands", roles)
+    smoke = Path(local.__file__).resolve().parents[3] / "configs" / "smoke.yml"
+    argv = ["local", "--config", str(smoke), "--store", str(tmp_path / "store"), "--work-dir", str(tmp_path / "w")]
+    assert cli.main(argv) == 0 and seen == [False]
+    assert cli.main(argv + ["--allow-config-change"]) == 0 and seen == [False, True]
 
 
 def test_stops_the_others_when_the_controller_finishes(tmp_path):

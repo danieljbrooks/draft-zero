@@ -89,6 +89,9 @@ def test_run_maps_onto_local_mode(tmp_path, fake_dzgorge, monkeypatch, capsys):
     assert used == tmp_path / "w2" / "config.yml" and argv[argv.index("--store") + 1] == str(tmp_path / "s2")
     assert C.load(used).actor.sims == 8 and argv[-2:] == ["--poll", "5.0"]
     assert "dz run: the run stopped" in capsys.readouterr().out
+    assert not any("--allow-config-change" in argv for argv in calls)
+    assert main(["run", str(cfg), "--work-dir", str(tmp_path / "w"), "--allow-config-change"]) == 0
+    assert calls[-1][:2] == ["local", "--config"] and calls[-1].count("--allow-config-change") == 1
 
 
 def test_run_checks_engine_store_and_overrides(tmp_path, monkeypatch, capsys):
