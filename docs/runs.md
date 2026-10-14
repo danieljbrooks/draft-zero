@@ -51,7 +51,10 @@ dz report runs/smoke --out runs/smoke/report          # the standard plots
 `--store`, `--actors N`, `--max-hours H`, `--work-dir DIR` (caches and role logs, default `runs/<id>/work`) and
 `--set PATH=VALUE` (any field, at launch; the store's `config.yml` records the result). It returns 0 when the run
 stops at its budget or `dz stop`, 1 when a role failed, 2 at `--max-hours`, 130 on Ctrl-C and 143 or 129 on
-SIGTERM or SIGHUP (the roles are stopped in every case). Starting it again on the same store resumes the run.
+SIGTERM or SIGHUP (the roles are stopped in every case). Starting it again on the same store resumes the run: when
+a role fails, `dz run` asks the controller to stop the run (`stop.request`), but when the controller itself fails it
+stops the other roles directly and leaves no `stop.request` behind (one no controller acted on is withdrawn), so the
+next `dz run` does not stop at its first tick.
 
 The controller is the only writer of `control.json`, `events.jsonl` and the status page. Each version it opens one
 evaluation job per opponent, split into shards of 10 pairs that it assigns to the live evaluators; a shard whose

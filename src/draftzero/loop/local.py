@@ -6,7 +6,9 @@ The same programs as on many machines; only the store differs.
 Starts the controller, the learner, one evaluator and N actors (`python -m draftzero.loop.cli <role>`), each in its
 own session with its log in <work-dir>/logs/<role>.log and its cache in <work-dir>/<role>-<machine>. It returns
 once the controller has stopped the run (budget, `stop`) and the others have followed. If a role dies, or at
---max-hours, it asks the run to stop (stop.request) and waits up to `grace_s` for the roles to exit; on Ctrl-C,
+--max-hours, it asks the run to stop (stop.request) and waits up to `grace_s` for the roles to exit. If the controller
+itself fails, nothing would act on a stop.request, so it stops the others at once and leaves none in the store (a
+stop.request it wrote that no controller acted on is withdrawn at the end): the next `dz run` resumes the run. On Ctrl-C,
 SIGTERM or SIGHUP (kill, a harness timeout, a closed terminal) it stops them at once. Whatever is left gets SIGTERM,
 then SIGKILL, including gorge processes they started; a second signal does not cut that short.
 
@@ -115,17 +117,18 @@ def run(config: str, store: str, work_dir: Path, *, machine: str = "local", acto
     procs: dict[str, subprocess.Popen] = {}
     logs = []
     deadline = None if max_hours is None else time.time() + max_hours * 3600
-    rc, stopping_since = 0, None
+    rc, stopping_since, requested, orphaned = 0, None, None, False
 
     def ask_stop(why: str, request: bool = True) -> None:
-        nonlocal stopping_since
+        nonlocal stopping_since, requested
         if stopping_since is None:
             log(f"local: {why}; " + ("asking the run to stop" if request else "waiting for the other roles"))
             stopping_since = time.time()
             if st is None:
                 _signal_all(procs, signal.SIGTERM)
             elif request:
-                st.put(ctl.STOP, f"stop requested by local mode: {why}\n".encode(), "stop requested")
+                requested = f"stop requested by local mode: {why}\n".encode()
+                st.put(ctl.STOP, requested, "stop requested")
 
     # The roles run in their own sessions, so a signal to this process reaches none of them: SIGTERM and SIGHUP
     # (kill, a harness timeout, a closed terminal) must end in the finally below, as Ctrl-C does.
@@ -137,6 +140,14 @@ def run(config: str, store: str, work_dir: Path, *, machine: str = "local", acto
             procs[name] = subprocess.Popen(argv, stdout=lf, stderr=subprocess.STDOUT, env=env, start_new_session=True)
             log(f"local: {name} started (pid {procs[name].pid}), log {work_dir / 'logs' / (name + '.log')}")
         while any(p.poll() is None for p in procs.values()):
+            ctrl = procs.get("controller")
+            if ctrl is not None and ctrl.poll() not in (None, 0) and not orphaned:
+                # no controller is left to turn a stop.request into control.json stop: stop the others here, and
+                # write no request (it would stop the next `dz run` on this store at its first tick)
+                rc, orphaned = 1, True
+                log(f"local: the controller exited with {ctrl.returncode} (see its log); stopping the other roles")
+                stopping_since = stopping_since or time.time()
+                _signal_all(procs, signal.SIGTERM)
             for name, p in procs.items():
                 if p.poll() not in (None, 0) and stopping_since is None:
                     rc = 1
@@ -181,6 +192,20 @@ def run(config: str, store: str, work_dir: Path, *, machine: str = "local", acto
         finally:
             for s, h in previous.items():
                 signal.signal(s, h if h is not None else signal.SIG_DFL)
+    if requested is not None:
+        _withdraw(st, requested, log)
     for name, p in procs.items():
         log(f"local: {name} exited with {p.returncode}")
     return rc
+
+
+def _withdraw(st, requested: bytes, log) -> None:
+    """Remove the stop.request local mode wrote when no controller acted on it (control.json doesn't say stop):
+    left there, it would stop the next `dz run` on this store at its first tick. A controller that did act on it
+    deletes it itself when the run resumes."""
+    try:
+        if not (st.read_json(ctl.CONTROL) or {}).get("stop") and st.read_bytes(ctl.STOP) == requested:
+            st.delete([ctl.STOP], "local mode: withdraw a stop request no controller acted on")
+            log("local: no controller acted on the stop request; withdrew it (the next `dz run` resumes the run)")
+    except Exception as e:                               # noqa: BLE001 - say so; the roles are already stopped
+        log(f"local: could not check {ctl.STOP} ({type(e).__name__}: {e}); delete it before the next `dz run`")

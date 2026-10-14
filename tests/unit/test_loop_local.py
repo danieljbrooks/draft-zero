@@ -66,6 +66,40 @@ def test_a_failed_role_fails_the_run_and_the_time_limit(tmp_path):
                      max_hours=1 / 3600) == 2
 
 
+def _roles(monkeypatch, **cmds):
+    monkeypatch.setattr(local, "role_commands", lambda *a, **k: {n: [PY, "-c", c] for n, c in cmds.items()})
+
+
+SLEEP = "import time; time.sleep(120)"
+
+
+def test_a_crashed_controller_leaves_no_stop_request(tmp_path, monkeypatch):
+    """No controller is left to act on a stop.request, so local mode stops the others itself and writes none:
+    one would stop the next `dz run` on this store at its first tick."""
+    store = tmp_path / "store"
+    _roles(monkeypatch, controller="raise SystemExit(1)", **{"actor-0": SLEEP})
+    t0 = time.time()
+    assert local.run("c", str(store), tmp_path / "w", log=lambda *_: None, grace_s=60, tick_s=0.2) == 1
+    assert time.time() - t0 < 30 and not (store / "stop.request").exists()
+
+
+def test_a_stop_request_no_controller_acted_on_is_removed(tmp_path, monkeypatch):
+    store = tmp_path / "store"
+    # the learner fails, local mode asks for a stop, and the controller dies before it acts on the request
+    _roles(monkeypatch, controller="import time; time.sleep(1.5); raise SystemExit(1)", learner="raise SystemExit(3)",
+           **{"actor-0": SLEEP})
+    t0 = time.time()
+    assert local.run("c", str(store), tmp_path / "w", log=lambda *_: None, grace_s=60, tick_s=0.2) == 1
+    assert time.time() - t0 < 30 and not (store / "stop.request").exists()
+    # a controller that acted on it (control.json says stop) keeps it: its next start resumes the run
+    acts = ("import json, os, sys, time\nwhile not os.path.exists(sys.argv[1] + '/stop.request'): time.sleep(0.1)\n"
+            "open(sys.argv[1] + '/control.json', 'w').write(json.dumps({'stop': True}))")
+    monkeypatch.setattr(local, "role_commands", lambda *a, **k: {"controller": [PY, "-c", acts, str(store)],
+                                                                 "learner": [PY, "-c", "raise SystemExit(3)"]})
+    assert local.run("c", str(store), tmp_path / "w2", log=lambda *_: None, grace_s=60, tick_s=0.2) == 1
+    assert (store / "stop.request").exists()
+
+
 @pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGHUP], ids=["SIGTERM", "SIGHUP"])
 def test_sigterm_or_sighup_stops_the_roles_as_ctrl_c_does(tmp_path, sig):
     """`kill`, a closed terminal or a harness timeout must not orphan the roles (they run in their own sessions)."""
