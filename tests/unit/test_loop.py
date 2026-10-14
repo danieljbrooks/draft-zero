@@ -1147,6 +1147,34 @@ def test_cli_plan_status_and_stop(tmp_path, capsys):
     assert cli.main(["status"]) == 2
 
 
+def test_cli_plan_set_checks_against_the_effective_config(tmp_path, capsys):
+    """`plan set` checks the changes against the config in effect (config.yml with events.jsonl replayed), each
+    change on top of the ones before it: a change valid only after an applied plan change is accepted, and one an
+    applied change made invalid is refused."""
+    from draftzero.loop import cli
+    r = Run(tmp_path, make_cfg(tmp_path))            # learner.min_new_positions 30, learner.window_positions 1000
+    r.controller.tick()
+    st = str(r.store.root)
+
+    def version(v):                                  # a version boundary: the controller applies waiting changes
+        r.store.write_json(ctl.latest_path(), {"version": v, "path": ctl.version_dir(v)})
+        r.controller.tick()
+
+    assert cli.main(["plan", st, "set", "learner.min_new_positions=3000"]) == 2      # more than the window
+    assert cli.main(["plan", st, "set", "learner.window_positions=5000"]) == 0
+    version(1)
+    assert [(e["path"], e["new"]) for e in ctl.read_events(r.store)] == [("learner.window_positions", 5000)]
+    capsys.readouterr()
+    assert cli.main(["plan", st, "set", "learner.min_new_positions=3000"]) == 0      # within the window in effect
+    version(2)
+    assert [e["path"] for e in ctl.read_events(r.store)][-1] == "learner.min_new_positions"
+    capsys.readouterr()
+    assert cli.main(["plan", st, "set", "learner.window_positions=2000"]) == 2       # under min_new_positions 3000
+    assert "at least learner.min_new_positions (3000)" in capsys.readouterr().err
+    assert cli.main(["plan", st, "set", "learner.window_positions=8000", "learner.min_new_positions=6000"]) == 0
+    assert not r.store.list(ctl.REJECTED)
+
+
 def test_cli_controller_changes_the_runs_config_only_when_allowed(tmp_path, monkeypatch):
     """`controller --allow-config-change` lets a restart change a fixed field, recorded in events.jsonl; without
     it the restart is refused and nothing is recorded."""

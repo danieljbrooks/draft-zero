@@ -249,7 +249,9 @@ def _not_a_store(role: str, spec: str) -> int:
 
 
 def _check_changes(store, ctl, changes) -> str | None:
-    """Validate against the store's config.yml when it loads here (the controller checks again either way)."""
+    """Validate the changes, in order, against the run's config in effect: the store's config.yml with events.jsonl
+    replayed (ctl.effective, as the controller and the roles see it), when that loads here (the controller checks
+    again either way)."""
     raw = store.read_bytes(ctl.CONFIG)
     if raw is None:
         return None
@@ -260,6 +262,7 @@ def _check_changes(store, ctl, changes) -> str | None:
             p = Path(d) / "config.yml"
             p.write_bytes(raw)
             cfg = config.load(p)
+        cfg = ctl.effective(cfg, store)
     except Exception:                                    # noqa: BLE001 - e.g. data paths of another machine
         return None
     for k, v in changes:
