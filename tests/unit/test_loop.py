@@ -619,7 +619,11 @@ def test_eval_jobs_and_opponents(tmp_path):
     assert job_id(4, "prev") == "v0004-vs-prev" and job_id(4, "file:/x/best.dzgw") == "v0004-vs-file-x-best.dzgw"
     assert not opponent_valid(0, "prev") and not opponent_valid(0, "nonet") and opponent_valid(0, "sbtactical")
     assert opponent_valid(3, "v1") and not opponent_valid(3, "v3") and not opponent_valid(3, "v5")
-    assert not opponent_valid(3, "nonsense") and opponent_valid(3, "spec:bot")
+    assert not opponent_valid(3, "nonsense") and not opponent_valid(3, "spec:bot") and not opponent_valid(3, "random")
+    from draftzero.config import OPPONENT_RE                 # the evaluator plays what a run config may name
+    for name in ("prev", "v1", "v3", "sbtactical", "bot", "nonet", "file:/x/m.dzgw", "file:/x/m.pt", "random",
+                 "spec:bot", "gnubg", "v", "file:"):
+        assert opponent_valid(5, name) == bool(OPPONENT_RE.match(name)), name
     job = make_job(4, "sbtactical", make_cfg(tmp_path, eval={"pairs": 25, "sims": 50, "seed": 9}), now=0)
     assert (job["job"], job["version"], job["opponent"], job["pairs"], job["sims"], job["seed"]) == \
         ("v0004-vs-sbtactical", 4, "sbtactical", 25, 50, 9)

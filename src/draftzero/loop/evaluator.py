@@ -11,9 +11,10 @@ and assigns the shards to live evaluators (control["evals"]). Each loop an evalu
      runs the sequential test against 50% (informational: jobs always play every pair), and writes
      evals/<job>/summary.json and the eval.score metric. The controller then closes the job.
 
-Opponents: prev (version v-1), v<N>, sbtactical, bot, random, nonet (the same search without a network, i.e.
-version 0's policy at eval.sims), file:/path/model.dzgw, spec:<raw gorge policy string>. Every version meets the
-same deals: the seed is eval.seed and pairs are deck pairs of the eval split.
+Opponents are the run config's (draftzero.config.OPPONENT_RE): prev (version v-1), v<N>, sbtactical, bot, nonet
+(the same search without a network, i.e. version 0's policy at eval.sims) and file:/path/model.dzgw. Every version
+meets the same deals: the seed is eval.seed and pairs are deck pairs of the eval split. (`dz eval` plays ad-hoc
+opponents, such as random or any policy spec, outside a run.)
 
     python -m draftzero.loop.cli evaluator --config C --store S [--machine M] [--work-dir DIR]
 """
@@ -30,7 +31,7 @@ from draftzero.loop import control as ctl
 from draftzero.loop.actor import check_playable, idle_sleep, policy_spec
 
 SHARD_PAIRS = 10
-BUILTIN = ("sbtactical", "bot", "random")
+BUILTIN = ("sbtactical", "bot")
 
 
 def job_id(version: int, opponent: str) -> str:
@@ -48,7 +49,7 @@ def opponent_valid(version: int, opponent: str) -> bool:
     m = re.fullmatch(r"v(\d+)", opponent)
     if m:
         return int(m.group(1)) != version and int(m.group(1)) <= version
-    return opponent in BUILTIN or opponent.startswith(("file:", "spec:"))
+    return opponent in BUILTIN or re.fullmatch(r"file:.+\.dzgw", opponent) is not None
 
 
 def make_job(version: int, opponent: str, cfg, now: float | None = None) -> dict:
@@ -177,10 +178,7 @@ class Evaluator:
             if not p.exists():
                 raise FileNotFoundError(f"eval opponent {opponent}: no such file")
             return policy_spec(self.cfg, sims=sims, explore=False, gonet=p)
-        if opponent.startswith("spec:"):
-            return opponent[len("spec:"):]
-        raise ValueError(f"eval opponent {opponent!r}: want prev, v<N>, nonet, sbtactical, bot, random, file:<path> "
-                         "or spec:<policy>")
+        raise ValueError(f"eval opponent {opponent!r}: want prev, v<N>, nonet, sbtactical, bot or file:<path>.dzgw")
 
     # ---------------------------------------------------------------------------- a shard
     def play_shard(self, job: dict, sh: dict) -> None:
@@ -229,7 +227,8 @@ class Evaluator:
         mlog = ctl.metrics_log(mpath, self.cfg, "evaluator", self.machine)
         if s.get("score") is not None:
             mlog.log("eval.score", float(s["score"]), version=job["version"], n=s.get("n_pairs"), lo=s.get("lo"),
-                     hi=s.get("hi"), opponent=job["opponent"], job=job["job"], sims=job["sims"])
+                     hi=s.get("hi"), opponent=job["opponent"], job=job["job"], sims=job["sims"],
+                     n_games=s.get("n_games"), n_pairs=s.get("n_pairs"))   # the ratings fit weighs by n_games
         files: dict = {ctl.eval_summary_path(job["job"]): json.dumps(summary, indent=1, sort_keys=True).encode()}
         if mpath.exists():
             files = {ctl.metrics_path("evaluator", self.machine, self.mseq): mpath, **files}

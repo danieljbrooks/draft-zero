@@ -48,9 +48,9 @@ def belief(cfg):
     b = ctl.as_dict(ctl.get(cfg, "search.belief"))
     if not b.get("decks") and not b.get("pool") and b.get("split", "train") == "train":
         return None
-    from draftzero.engine.gorge import Belief
-    return Belief(Path(b.get("decks") or ctl.get(cfg, "data.decks")), Path(b.get("pool") or ctl.get(cfg, "data.pool")),
-                  split=b.get("split") or "train")
+    from draftzero.engine.gorge import Belief, resolve_path     # relative paths as Gorge.from_config reads data.*
+    return Belief(resolve_path(b.get("decks") or ctl.get(cfg, "data.decks")),
+                  resolve_path(b.get("pool") or ctl.get(cfg, "data.pool")), split=b.get("split") or "train")
 
 
 def idle_sleep(poll_s: float, idle: int) -> float:
