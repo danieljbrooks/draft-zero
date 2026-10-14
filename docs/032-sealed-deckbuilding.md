@@ -3,9 +3,9 @@
 *Status (Wednesday 14 October 2026): finished. A deck builder trained only on its own games builds simple, white-based
 creature decks that its pilot can play well, and with them beats the human decks from the same pools 64% of the time
 on fresh test pools; more search in its training games makes its decks steadily more human. Phase C's later
-generations ran on r1, which closed before they could be collected or judged. The code is on the
-[`sealed-deckbuilding`](https://github.com/danieljbrooks/draft-zero/tree/sealed-deckbuilding) branch
-(`gorge/sealed/`).*
+generations ran on r1, which closed before they could be collected or judged. The final builder is on
+[Hugging Face](https://huggingface.co/danbrooks/draftzero-fdn-sealed-builder), and its code is at the tag
+[`sealed-builder-v1`](https://github.com/danieljbrooks/draft-zero/tree/sealed-builder-v1) (`gorge/sealed/`).*
 
 **The goal:** a model that builds a 40-card sealed deck from a pool of six FDN packs, trained **only from games it
 plays**, never from human decklists, as a step toward bots that play sealed at a high level.
@@ -193,6 +193,11 @@ On the 1,000 Premier Draft test pools (no builder trained on draft pools):
   (56.6%), imitation 54.7% (54.3%).
 
 ![Win rate against the human decks at 100 simulations, per builder (val pools)](img/032-builders-light.png)
+
+**The released model** is phase C's generation 1 ensemble, with phase B's generation 4 beside it:
+[`danbrooks/draftzero-fdn-sealed-builder`](https://huggingface.co/danbrooks/draftzero-fdn-sealed-builder) on Hugging
+Face (CC BY 4.0), with an example pool, these numbers and a few lines of Python that build a deck from a pool in about
+a second on a laptop.
 
 ### 5.2 What the builder learns: decks its pilot can play
 
