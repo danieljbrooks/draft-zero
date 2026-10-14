@@ -613,6 +613,36 @@ def test_learner_with_the_real_trainer_and_exporter(tmp_path):
     assert header["arch"] == "mlp" and header["config"]["d"] == 32
 
 
+def test_published_metrics_are_the_published_checkpoints(tmp_path):
+    """The learner publishes best.pt: its meta.json metrics, its learn.* lines and the finite-loss check are those
+    of best.pt's evaluation (summary best_step), not of the last one (last.pt)."""
+    def train(argv):
+        out = Path(argv[argv.index("--out") + 1])
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "best.pt").write_bytes(b"best")
+        (out / "last.pt").write_bytes(b"last")
+        ev = lambda ce, total: {"holdout": {"n_policy": 40, "policy_ce": ce, "n_value": 40,     # noqa: E731
+                                            "value_logloss": 0.6, "total": total}}
+        (out / "curves.jsonl").write_text("".join(json.dumps(x) + "\n" for x in (
+            {"type": "eval", "step": 3, "eval": ev(1.0, 1.6)}, {"type": "train", "step": 6, "policy_ce": 0.9},
+            {"type": "eval", "step": 6, "eval": ev(1.3, float("nan"))})))
+        return {"steps": 6, "best_step": 3}
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.learner._train = train
+    r.controller.tick()
+    r.learner.step()
+    r.controller.tick()
+    r.actors[0].step()
+    r.actors[0].step()
+    assert r.learner.step() == "published"                     # the last eval's loss is NaN; best.pt's isn't
+    meta = r.store.read_json(ctl.version_file(1, "meta.json"))
+    assert r.store.read_bytes(ctl.version_file(1, "model.pt")) == b"best"
+    assert meta["metrics"]["policy_ce"] == 1.0 and meta["step"] == 3 and meta["steps"] == 6
+    lines = [json.loads(x) for x in r.store.read_bytes("metrics/learner/l1/000001.jsonl").decode().splitlines()]
+    ce = next(x for x in lines if x["name"] == "learn.policy_ce")
+    assert (ce["value"], ce["step"]) == (1.0, 3)
+
+
 def test_warm_start_keeps_the_checkpoints_own_config(tmp_path):
     """A player.init of another width than player.config: version 1 warm-starts from it with its own arch and
     config (player.arch/config are for a random init) instead of failing to load its weights."""

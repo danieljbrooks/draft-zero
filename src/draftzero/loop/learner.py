@@ -13,7 +13,8 @@
      player.init of another shape than player.config keeps its shape), for learner.epochs passes or, with
      steps_per_position, ceil(steps_per_position x new positions / batch) steps;
   5. exports model.dzgw (mlp), publishes versions/player/v{N+1} (model.pt, model.dzgw, meta.json) and latest.json
-     last, with learn.* metrics from the run's final holdout evaluation (curves.jsonl);
+     last; model.pt is the run's best.pt, and meta.json's metrics, its "step" and the learn.* metrics are that
+     checkpoint's holdout evaluation (curves.jsonl at the summary's best_step; "steps" is the run's length);
   6. deletes local packs that fell out of the window. It stops on control "stop" or budget.max_versions.
 
     python -m draftzero.loop.cli learner --config C --store S [--machine M] [--work-dir DIR]
@@ -56,15 +57,13 @@ def default_export(pt: Path, dzgw: Path) -> None:
         raise RuntimeError(f"draftzero.nets.export {pt} {dzgw} exited {rc}")
 
 
-def curve_metrics(curves: Path) -> dict:
-    """The last evaluation in a nets.train curves.jsonl: its holdout set (else the first validation set)."""
-    last = None
-    if curves.exists():
-        for line in curves.read_text().splitlines():
-            if line.strip():
-                rec = json.loads(line)
-                if rec.get("type") == "eval":
-                    last = rec
+def curve_metrics(curves: Path, step: int | None = None) -> dict:
+    """An evaluation in a nets.train curves.jsonl, its holdout set (else the first validation set): the one at
+    `step` (best.pt's: the summary's best_step), else the last (last.pt's)."""
+    lines = curves.read_text().splitlines() if curves.exists() else []
+    evals = [rec for rec in (json.loads(x) for x in lines if x.strip()) if rec.get("type") == "eval"]
+    at = [rec for rec in evals if step is not None and rec.get("step") == step]
+    last = (at or evals or [None])[-1]
     if not last:
         return {}
     ev = last.get("eval") or {}
@@ -340,7 +339,7 @@ class Learner:
         pt = out / "best.pt" if (out / "best.pt").exists() else out / "last.pt"
         if not pt.exists():
             raise RuntimeError(f"training version {v} wrote no checkpoint in {out}")
-        m = curve_metrics(out / "curves.jsonl")
+        m = curve_metrics(out / "curves.jsonl", summary.get("best_step") if pt.name == "best.pt" else None)
         total = m.get("total")
         if total is not None and not math.isfinite(float(total)):
             raise RuntimeError(f"version {v}: the holdout loss is {total}; not publishing")
@@ -359,7 +358,7 @@ class Learner:
                 "shards": [e["shard"] for e in win], "positions": sum(e["positions"] for e in win),
                 "games": sum(e["games"] for e in win), "new_positions": new_pos, "new_shards": len(new),
                 "metrics": metrics, "time": ctl.now_iso(), "train_s": round(train_s, 1),
-                "init": f"v{parent:04d}" if init else None,
+                "init": f"v{parent:04d}" if init else None, "step": m.get("step"),   # the published weights'
                 "steps": summary.get("steps"), "argv": [a if not a.startswith(str(self.wd)) else
                                                         os.path.relpath(a, self.wd) for a in argv]}
         mpath = out / "metrics.jsonl"
