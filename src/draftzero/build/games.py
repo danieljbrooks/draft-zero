@@ -2,9 +2,10 @@
 Play explicit deck pairs in gorge and read the results.
 
 `dzgorge play -deckfile D -pairs-file P -single` plays each line of P (deckA, deckB, seed) once, deckA in seat 0, both
-seats the same policy. This runs P in chunks, each under its own time limit (Go ignores SIGALRM; subprocess kills
-with SIGKILL), keeps a killed chunk's complete games, replays the first missing game alone, and skips it if it hangs
-again. Resumable: games already in OUT are not replayed.
+seats the same policy. This runs P in chunks through draftzero.engine.Gorge.play, so each chunk gets its own time
+limit, a killed chunk keeps its complete games, the first missing game is replayed alone and skipped (a
+`{"result": "skipped"}` line) if it hangs again. Resumable: games already in OUT (by `line`) are not replayed, and OUT
+grows chunk by chunk.
 
   python -m draftzero.build.games DECKS.jsonl PAIRS.tsv OUT.jsonl --sims 100 --workers 15
 """
@@ -20,6 +21,7 @@ import time
 
 import numpy as np
 
+from draftzero.data.paths import GORGE_DECKS, GORGE_POOL
 from draftzero.data.paths import REPO as _REPO
 
 REPO = str(_REPO)
@@ -45,31 +47,27 @@ def read_pairs(path):
     return [l.rstrip("\n").split("\t") for l in open(path) if l.strip() and not l.startswith("#")]
 
 
-def _run(deckfile, pairs, pol, workers, secs, out_lines):
-    with tempfile.NamedTemporaryFile("w", suffix=".tsv", delete=False) as f:
-        for p in pairs:
-            f.write("\t".join(p) + "\n")
-        pf = f.name
-    outp = pf + ".jsonl"
-    cmd = [os.path.join(GORGE, "bin/dzgorge"), "play", "-cards", os.path.join(GORGE, ".cards"), "-deckfile", deckfile,
-           "-pairs-file", pf, "-pairs", "0", "-single", "-a", pol, "-b", pol, "-workers", str(workers), "-mulligans", "2",
-           "-mull-heuristic", "-topk-max-options", "64", "-progress", "0", "-out", outp]
-    try:
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=secs)
-    except subprocess.TimeoutExpired:
-        pass
-    got = []
-    if os.path.exists(outp):
-        raw = open(outp, "rb").read()
-        raw = raw[: raw.rfind(b"\n") + 1]
-        got = [json.loads(l) for l in raw.splitlines() if l.strip()]
-    for p in (pf, outp, outp + ".summary.json"):
-        if os.path.exists(p):
-            os.remove(p)
-    return got
+def gorge(root=None):
+    """The Gorge that plays the pairs: root (default GORGE) with v0.1.0's engine settings (2 mulligans by land count,
+    topk-max-options 64, census on). The pool is unused: -pairs-file names the decks and -deckfile holds them."""
+    from draftzero.engine.gorge import Gorge
+    return Gorge(root or GORGE, GORGE_DECKS, GORGE_POOL)
 
 
-def play(deckfile, pairs_path, out, sims=100, workers=7, chunk=None, pol=None, chunk_secs=None, log=sys.stderr):
+def _run(g, deckfile, pairs, pol, workers, secs, probe_secs):
+    """Play `pairs` (a chunk of lines) once each; -> (games with `pair` = index in the chunk, skipped indices)."""
+    with tempfile.TemporaryDirectory(prefix="dz-sealed-games-") as tmp:
+        pf = os.path.join(tmp, "pairs.tsv")
+        with open(pf, "w") as f:
+            for p in pairs:
+                f.write("\t".join(p) + "\n")
+        r = g.play(pol, pol, pairs=0, seed=1, out_dir=os.path.join(tmp, "out"), workers=workers, deckfile=deckfile,
+                   pairs_file=pf, single=True, timeout_s=secs, probe_timeout_s=probe_secs)
+        return r.games, r.skipped
+
+
+def play(deckfile, pairs_path, out, sims=100, workers=7, chunk=None, pol=None, chunk_secs=None, log=sys.stderr,
+         gorge_root=None, probe_secs=None):
     """Play every pair in pairs_path not yet in out; append games (one JSON line each, with `line`, the pair's line
     index) to out. Returns the number of games played now."""
     pol = pol or spec(sims)
@@ -84,28 +82,23 @@ def play(deckfile, pairs_path, out, sims=100, workers=7, chunk=None, pol=None, c
     # about 3x a game's usual time at these settings, per wave of `workers` games, plus 10 minutes
     per_game = 0.05 if sims <= 0 else 1.5 + 0.12 * sims
     secs = chunk_secs or int(3 * per_game * chunk / workers + (120 if sims <= 0 else 600))
+    probe = probe_secs or (60 if sims <= 0 else max(300, int(10 * per_game)))
+    g = gorge(gorge_root) if todo else None
     t0, n = time.time(), 0
     with open(out, "a") as f:
         while todo:
             batch = todo[:chunk]
-            got = _run(deckfile, [pairs[i] for i in batch], pol, workers, secs, None)
-            for g in got:
-                g["line"] = batch[g["pair"]]
-                f.write(json.dumps(g) + "\n")
+            got, skipped = _run(g, deckfile, [pairs[i] for i in batch], pol, workers, secs, probe)
+            for x in got:
+                x["line"] = batch[x["pair"]]
+                f.write(json.dumps(x) + "\n")
+            for k in skipped:
+                miss = batch[k]
+                print(f"line {miss} ({pairs[miss][:2]}) did not finish; skipped", file=log)
+                f.write(json.dumps({"line": miss, "result": "skipped", "decks": pairs[miss][:2], "winner": -1}) + "\n")
             f.flush()
             n += len(got)
-            if len(got) < len(batch):          # killed: replay the first missing game alone
-                miss = batch[len(got)]
-                g1 = _run(deckfile, [pairs[miss]], pol, 1, 60 if sims <= 0 else max(300, int(10 * per_game)), None)
-                if g1:
-                    g1[0]["line"] = miss
-                    f.write(json.dumps(g1[0]) + "\n"); n += 1
-                else:
-                    print(f"line {miss} ({pairs[miss][:2]}) did not finish; skipped", file=log)
-                    f.write(json.dumps({"line": miss, "result": "skipped", "decks": pairs[miss][:2], "winner": -1}) + "\n")
-                todo = todo[len(got) + 1:]
-            else:
-                todo = todo[len(batch):]
+            todo = todo[len(batch):]
             el = time.time() - t0
             print(f"[{time.strftime('%H:%M:%S')}] {n} games, {n / el * 3600:.0f}/h, {len(todo)} left", file=log, flush=True)
     return n
