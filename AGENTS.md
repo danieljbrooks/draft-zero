@@ -35,15 +35,15 @@ Free to change with green tests: new network architectures (added beside the old
 
 ## Tests
 
-- Before every commit, run the unit and contract tests: `pytest -m 'not engine and not smoke'`.
-- When you change the engine wrapper, the driver flags or the loop, also run `pytest -m engine` and `pytest -m smoke` against a built gorge (`dz engine build`).
+- Before every commit, run the unit and contract tests: `pytest` (its default markers leave out the engine and smoke tiers). CI (`.github/workflows/ci.yml`) runs the same on every push and pull request, on Python 3.11 and 3.12, with no secrets and no engine.
+- When you change the engine wrapper, the driver flags or the loop, also run `pytest -m engine` and `pytest -m smoke` against a built gorge (`dz engine build --dir DIR`; point `DZ_GORGE_ROOT` at it for the engine tests). The smoke run plays the sample decks in `assets/sample`; the engine tests also want the full pool in `data/gorge` (`DZ_GORGE_DATA`).
 - Every bug fix comes with a test. Every file in `configs/` must pass the schema test.
 - Keep tests small: synthetic shards, the sample decks, a few games. Put a hard timeout on anything long.
 
 ## Commits, runs and anything public
 
 - End every commit message written in an agent session with a `Co-Authored-By:` line naming the model, for example `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-- Do not push to `main`, create tags or releases, upload to Hugging Face, start paid machines or delete remote data unless Dan asked for that action. Publishing a run always stops for his confirmation.
+- Do not push to `main`, create tags or releases, upload to Hugging Face, start paid machines (`dz pod up`) or delete remote data unless Dan asked for that action. Publishing a run always stops for his confirmation.
 - Register an experiment in [docs/runs.md](docs/runs.md#experiment-register), with its question and success criterion, before launching it. A publishable run starts from a release tag and a clean tree.
 
 ## Docs

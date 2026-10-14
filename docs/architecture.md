@@ -13,8 +13,8 @@ DraftZero trains agents for Magic limited by self-play on gorge, a Go rules engi
 | Repository or service | Language, licence | Owns | How DraftZero uses it |
 | --- | --- | --- | --- |
 | [danieljbrooks/draft-zero](https://github.com/danieljbrooks/draft-zero) | Python, MIT | The actor-learner loop, network training and export, run configs, manifests, metrics, evaluation, plots, deck data, docs | This repository |
-| [danieljbrooks/gorge](https://github.com/danieljbrooks/gorge), branch `draftzero` | Go, Apache-2.0 | gorge main `813dcf3b4` plus four DraftZero commits: 0008 topk-max-options, 0009 sims-by-kind, the 0009 mayplay fix, and the driver deltas (`-deckfile`, `-pairs-file`, `ksims=`, `-topk-max-options`, `-audit-*`) | Pinned by `engine/gorge/GORGE_REF`; `engine/gorge/build.sh` builds its `cmd/dzgorge` |
-| [adams-shaun/gorge](https://github.com/adams-shaun/gorge) (dama's upstream) | Go, Apache-2.0 | The rules engine, the search (`internal/azmcts`), the position encoding (`internal/policynet`), the in-engine MLP (`internal/gonet`), `cmd/dzgorge`, closed-list worlds, `draftlab` and `gorge-agent/1` | The fork rebases onto it. Once it takes our four commits, DraftZero pins it directly and the fork retires |
+| [danieljbrooks/gorge](https://github.com/danieljbrooks/gorge), branch `draftzero` | Go, Apache-2.0 | gorge main `813dcf3b4` plus five DraftZero commits: 0008 topk-max-options, 0009 sims-by-kind, the 0009 mayplay fix, the driver deltas (`-deckfile`, `-pairs-file`, `ksims=`, `-topk-max-options`, `-audit-*`) and playout-cap randomization (`pcr=`, `cheap=`, `pcrk=`; `5fd039e`) | Pinned by `engine/gorge/GORGE_REF`; `engine/gorge/build.sh` (`dz engine build`) builds its `cmd/dzgorge` |
+| [adams-shaun/gorge](https://github.com/adams-shaun/gorge) (dama's upstream) | Go, Apache-2.0 | The rules engine, the search (`internal/azmcts`), the position encoding (`internal/policynet`), the in-engine MLP (`internal/gonet`), `cmd/dzgorge`, closed-list worlds, `draftlab` and `gorge-agent/1` | The fork rebases onto it. Once it takes our five commits, DraftZero pins it directly and the fork retires |
 | [adams-shaun/forge](https://github.com/adams-shaun/forge) (dama's fork of Forge) | Java, GPL-3.0 | The card scripts, at gorge's `FORGE_REF` (`098b0553`) | gorge downloads and compiles them into `.cards/`. Never committed or published |
 | [Hugging Face](https://huggingface.co/danbrooks) (`danbrooks`) | — | Private Storage Buckets for runs in progress; public model and dataset repos for published runs; the private `draftzero-checkpoints` archive | Storage only; compute comes from elsewhere. See [runs.md](runs.md) |
 | [17lands public data](https://www.17lands.com/public_datasets) | CC BY 4.0 | FDN decks, sealed pools, games-in-hand win rates | `assets/decks.tsv`, `assets/sealed/`, `assets/reference/`, with attribution |
@@ -90,7 +90,7 @@ draft-zero/
 | `draftzero.eval` | `gorge/analyze.py`, `gorge/recipe/score.py`, `stats.py`, `reference.py` |
 | `draftzero.plots` | `gorge/figures.py`, `gorge/dzg_figures.py`, `gorge/recipe/figs.py` |
 
-Tests sit in four tiers, selected by pytest markers. `tests/unit/` covers one module at a time on synthetic data; `tests/contract/` has one test per rigid interface. Both run with `pytest -m 'not engine and not smoke'`. `tests/engine/` needs a built gorge, and `tests/smoke/` runs a whole tiny run.
+Tests sit in four tiers, selected by pytest markers. `tests/unit/` covers one module at a time on synthetic data; `tests/contract/` has one test per rigid interface. Both run with plain `pytest` (the default markers leave out the other two), and CI (`.github/workflows/ci.yml`) runs them on every push and pull request. `tests/engine/` needs a built gorge (`pytest -m engine`), and `tests/smoke/` runs a whole tiny run on the sample decks (`pytest -m smoke`); both run locally.
 
 ### The engine from Python
 
@@ -103,20 +103,20 @@ Tests sit in four tiers, selected by pytest markers. `tests/unit/` covers one mo
 | `play(a, b, pairs=…, seed=…)` | Runs `dzgorge play` between two policy specs; returns complete games, the summary and, with `record=True`, the visit corpus. A hung chunk is killed at its timeout and its first missing pair replayed once, then skipped |
 | `pack(corpus, out_dir)` | Runs `dzgorge pack` into `dzg-pack-1` shards, shrinks card features to float16 and prefixes game ids per actor |
 
-`PolicySpec` builds and parses policy strings: kind (`az`, `prior`, `bot`, `sbtactical`, `random`), simulations, `cpuct`, `topk`, `explore`, `closedlist` and `gonet=`.
+`PolicySpec` builds and parses policy strings: kind (`az`, `prior`, `bot`, `sbtactical`, `random`), simulations, `cpuct`, `topk`, `explore`, `closedlist`, playout-cap randomization (`pcr`, `cheap`, `pcrk`) and `gonet=`. From the shell, `dz engine version` prints the build record, `dz engine coverage` the decks the engine fully supports, and `dz play --a SPEC --b SPEC --pairs N` plays two specs against each other.
 
 ## The actor-learner loop
 
 ![The actor-learner loop](img/033-actor-learner-light.png)
 
-Actors write shards and read new versions; learners read a window of shards and write versions. Nothing else connects them, so actors can run on any machine. Each role is `python -m draftzero.loop.cli <role> --config X --store S [--machine M]`, and `dz run CONFIG` starts all of them on one machine.
+Actors write shards and read new versions; learners read a window of shards and write versions. Nothing else connects them, so actors can run on any machine. Each role is `dz <role> --config X --store S [--machine M]` (the same as `python -m draftzero.loop.cli <role> ...`), and `dz run CONFIG` starts all of them on one machine.
 
 | Role | How many | What it does |
 | --- | --- | --- |
 | Actor | many, on any machine | Reads `control.json`; fetches the current player version (`.dzgw`); plays a chunk of self-play games through `Gorge.play` with exploration, `:closedlist` and the network in the search; uploads the shard (corpus, games, meta), a heartbeat and metrics in one batch. Version 0 has no network |
 | Learner | one per learned model, holding a lease | Ingests new shards and packs them; trains on the newest window, warm-started from the current version; exports `.dzgw`; publishes `versions/player/v{N+1}` and `latest.json`; logs `learn.*` metrics |
-| Evaluator | a few | For each new version: paired games against each opponent in `eval.opponents` (`prev`, `sbtactical`, `bot`, `nonet`, `v<N>`, `file:…`) on the eval split, without exploration; writes `evals/<job>/summary.json` and `eval.score` metrics |
-| Controller | one | Writes `config.yml` and `manifest.json` at the start; applies plan requests at version boundaries and logs them to `events.jsonl`; keeps `control.json` current; writes `status.md`; stops the run on `stop.request` or the budget |
+| Evaluator | a few | Plays the evaluation shards the controller assigns to it: paired games of a version against one opponent of `eval.opponents` (`prev`, `sbtactical`, `bot`, `nonet`, `v<N>`, `file:…`) on the eval split, without exploration; uploads each shard's games, and whichever evaluator uploads a job's last shard writes `evals/<job>/summary.json` and the `eval.score` metric |
+| Controller | one | Writes `config.yml` and `manifest.json` at the start; applies plan requests (`paused` and `budget.*` at once, the rest at the next version), logs them to `events.jsonl` and moves rejected ones to `plan/rejected/`; keeps `control.json` current; opens an evaluation job per evaluated version and opponent, split into shards of 10 pairs, assigns them to live evaluators and moves a shard whose evaluator went quiet; writes `status.md` and `status.json`; stops the run on `stop.request` or the budget |
 
 **Two modes.** Async is the default: actors never wait, and each shard records the version that produced it. Runs are fully audited but not bit-for-bit repeatable. In sync mode the controller fixes the version, actors play until `sync.games_per_version` games exist for it, and the learner trains exactly once per version, so the run replays exactly from its manifest.
 
@@ -124,14 +124,17 @@ Actors write shards and read new versions; learners read a window of shards and 
 
 ### Store layout
 
-The store is a local folder, a Hugging Face Storage Bucket (`hf://buckets/<owner>/<bucket>`) or, for machines without a token, a relay over ssh (`ssh://host/path`). The layout is the same in all three:
+The store is a local folder or a Hugging Face Storage Bucket (`hf://buckets/<owner>/<bucket>`); machines without a token run against a local folder of their own that a relay keeps in step over ssh. The layout is the same everywhere:
 
 ```
 config.yml, manifest.json                  the run as launched (controller, at start)
 control.json                               {"format": "dz-control/1", "version": {"player": N}, "play": {…},
-                                            "evals": [...], "stop": bool, "paused": bool, "updated": …}
+                                            "evals": [jobs with their shard assignments], "stop": bool,
+                                            "paused": bool, "updated": …}
+status.md, status.json                     the controller's status page (`dz status STORE [--json]`)
 events.jsonl                               plan changes {time, kind: "set", path, old, new, by, at_version}
 plan/requests/<uuid>.json                  a requested change {path, value, by, time}, from `dz plan … set`
+plan/rejected/<uuid>.json                  a refused request and its reason
 versions/player/v0001/                     model.pt, model.dzgw, meta.json {version, parent, sha256, shards,
                                             positions, games, metrics, time}
 versions/player/latest.json                {version, path}
@@ -142,16 +145,20 @@ evals/<job>/summary.json                   paired score per opponent
 heartbeats/<machine>.json                  liveness, one file per machine
 metrics/<component>/<machine>/000001.jsonl metrics in the draftzero-metrics/1 schema
 learner/lease.json, ingested.json, status.json
+relay/status.json, relay/uploaded.json     the relay's last sync and upload ledger (relay runs only)
 stop.request                               present = stop the run
 ```
 
-**One writer per file.** Each actor writes only under `shards/<actor>/`, the learner only `versions/` and `learner/`, the evaluator only `evals/`, and the controller only `control.json`, `events.jsonl` and `status.md`. `dz plan` writes a request file, and the controller applies it. On Hugging Face this keeps API calls low: an actor uploads one batch per chunk.
+A local store lists no dot-files: rsync's and the relay's temporary files (`.relay-tmp/`) are never read as store
+files.
 
-**The relay.** A machine that holds no token hands its shards over ssh to a relay, the only process with the token. The relay pulls `shards/` and `heartbeats/` from remote actor folders into its store and pushes `versions/` and `control.json` back.
+**One writer per file.** Each actor writes only under `shards/<actor>/`, the learner only `versions/` and `learner/`, the evaluators only `evals/`, and the controller only `config.yml`, `manifest.json`, `control.json`, `events.jsonl`, `plan/rejected/` and the status page. `dz plan` writes a request file, and the controller applies it. On Hugging Face this keeps API calls low: an actor uploads one batch per chunk.
+
+**The relay.** A machine that holds no token hands its shards over ssh to a relay (`dz relay`), the only process with the token. The relay pulls complete shards, `heartbeats/` and `metrics/` from remote actor folders into its store and pushes `config.yml`, `control.json` and the newest versions back; with a bucket store it mirrors through a local folder.
 
 ### Changing the plan mid-run
 
-Fields are live or fixed. Live fields (`actor.sims`, `actor.deep.*`, `actor.record_every`, `actor.chunk_games`, `learner.lr`, `learner.window_positions`, `learner.min_new_positions`, `learner.steps_per_position`, `learner.epochs`, `eval.every_versions`, `eval.pairs`, `eval.sims`, `budget.*`, `paused`) change with `dz plan STORE set learner.lr=3e-4`. The controller validates the change, applies it at the next version and appends an event. The effective config at any version is the launch config plus the events up to it. Any other field is fixed: change it by starting a new run.
+Fields are live or fixed. Live fields (`actor.sims`, `actor.pcr.*`, `actor.record_every`, `actor.chunk_games`, `learner.lr`, `learner.window_positions`, `learner.min_new_positions`, `learner.steps_per_position`, `learner.epochs`, `eval.every_versions`, `eval.pairs`, `eval.sims`, `budget.*`, `paused`) change with `dz plan STORE set learner.lr=3e-4`. The controller validates the change; a rejected one moves to `plan/rejected/` with the reason. It applies `paused` and `budget.*` at once (no version arrives while actors are paused, so a pause must lift without one) and every other change at the next version, and appends an event either way. The effective config at any version is the launch config plus the events up to it. Any other field is fixed: change it by starting a new run (`dz run --set` sets any field at launch).
 
 ## Where the parts plug together
 

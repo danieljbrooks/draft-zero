@@ -20,14 +20,14 @@ docs/033's work plan. Steps 0–4 run in order; after step 4, steps 5–7 can ru
 | Step | What | Done when | Status |
 | --- | --- | --- | --- |
 | 0 | Freeze and tag v0.1.0 | GitHub shows only `main`, release v0.1.0 and the two archive tags | done 14 October; docs/031's play network still to add to the release |
-| 1 | Pin gorge through our fork | The fork's `dzgorge` builds and plays a fixed-seed smoke match | done 14 October: gorge main `813dcf3b4` plus four commits; the GitHub push waits for a token with the `workflow` permission |
+| 1 | Pin gorge through our fork | The fork's `dzgorge` builds and plays a fixed-seed smoke match | done 14 October: gorge main `813dcf3b4` plus five commits (the fifth adds playout-cap randomization), pushed to `danieljbrooks/gorge`, branch `draftzero` (`5fd039e`) |
 | 2 | New layout, XMage out | A fresh `pip install -e .` pulls no MageZero, unit tests pass, no XMage import remains | open |
 | 3 | Config, manifest, run directory, metrics schema | The smoke config writes its manifest and metrics; every file in `configs/` passes the schema test | open |
 | 4 | The actor-learner on gorge | The smoke run passes in both modes; a mid-run change lands and is logged; a sync replay is byte-identical | open |
 | 5 | Evaluator, ratings, plots, report, tracker | `dz report` draws the standard plots for the smoke run, and Trackio shows the same run | open |
 | 6 | The deck builder on the loop | It reproduces docs/032's generation-1 result within its interval | open |
 | 7 | Opponent-deck model | `:closedlist` on the run's own decks, then a learned model; held-out metrics logged; sampled worlds measured against true-deck worlds | open |
-| 8 | Tests and CI | CI is green on `main`; a change to a contract file without a version bump fails CI | open |
+| 8 | Tests and CI | CI is green on `main`; a change to a contract file without a version bump fails CI | started 14 October: `.github/workflows/ci.yml` runs the unit and contract tests on Python 3.11 and 3.12; the version-bump check remains |
 | 9 | Docs | Every doc has its date line; the README has every section of the outline | drafted 14 October; the date-stamp script and a template for new docs remain |
 | 10 | Reproduce a baseline, tag v0.2.0 | docs/031's best recipe, rerun on the new pipeline, matches its v0.1.0 strength within the interval | open |
 | 11 | Walkthrough with Dan | Dan launches, changes and publishes a run without help | open |

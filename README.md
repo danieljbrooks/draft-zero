@@ -37,44 +37,54 @@ The best result so far for each component. They come from v0.1.0, where gorge's 
 
 ![The actor-learner loop](docs/img/033-actor-learner-light.png)
 
-Actors play games on gorge with the latest networks and write shards of games and recorded decisions to a shared store. Learners train on a window of recent shards and publish new versions. An evaluator plays each version against a fixed set of opponents in paired games, and a controller decides which versions play and applies plan changes. The store is a local folder, an ssh host or a private Hugging Face Storage Bucket, so actors can run on any machine. Ten interfaces between the parts are rigid and need Dan's review to change. [docs/architecture.md](docs/architecture.md) has the details.
+Actors play games on gorge with the latest networks and write shards of games and recorded decisions to a shared store. Learners train on a window of recent shards and publish new versions. An evaluator plays each version against a fixed set of opponents in paired games, and a controller decides which versions play and applies plan changes. The store is a local folder or a private Hugging Face Storage Bucket, and a relay carries shards and versions over ssh for machines without a token, so actors can run on any machine. Ten interfaces between the parts are rigid and need Dan's review to change. [docs/architecture.md](docs/architecture.md) has the details.
 
 ## Quick start
 
-Needs Python 3.10 or newer, Go 1.25 or newer and git.
+Needs Python 3.10 or newer, Go 1.25 or newer, make and git.
 
 ```bash
 git clone https://github.com/danieljbrooks/draft-zero && cd draft-zero
-pip install -e ".[dev]"
-pytest -m 'not engine and not smoke'                  # unit and contract tests, no engine needed
+pip install -e ".[dev,plots]"
+pytest                                                # unit and contract tests, no engine needed
 
-dz engine build                                       # gorge at engine/gorge/GORGE_REF, its cards, dzgorge
-
-python tools/extract_decks.py --set FDN --format PremierDraft --min-winrate 0.60   # ~57 MB from 17lands
-python -m draftzero.data.decks                        # -> data/gorge/decks/*.json, data/gorge/pool.tsv
-
-dz run configs/smoke.yml                              # a tiny run: actors, learner, evaluator, controller
+export GORGE=$HOME/gorge-dz
+dz engine build --dir $GORGE                          # the gorge fork at engine/gorge/GORGE_REF, its cards, bin/dzgorge
+dz run configs/smoke.yml --set engine.root=$GORGE     # a tiny run on the 80 sample decks: every role, a few minutes
 dz status runs/smoke
+dz report runs/smoke                                  # figures in runs/smoke/report
+
+python tools/extract_decks.py --set FDN --format PremierDraft --min-winrate 0.60   # the full pool: ~57 MB from 17lands
+python -m draftzero.data.decks                        # -> data/gorge/decks/*.json, data/gorge/pool.tsv
 ```
 
-Optional extras: `tracking` (Trackio), `plots` (matplotlib), `sealed` (pandas, scipy).
+`configs/base/player.yml`, which every run config extends, expects the engine at `/work/gorge-fork`: build it there,
+or set `engine.root` in your config or with `--set` as above. `dz engine version` prints the build record (fork
+commit, binary SHA-256, card lock) that every manifest records. `dz --help` lists every command.
+
+Optional extras: `tracking` (Trackio), `plots` (matplotlib, for `dz report`), `sealed` (pandas, scipy). CI
+(`.github/workflows/ci.yml`) runs the unit and contract tests on Python 3.11 and 3.12; the engine and smoke tiers
+(`pytest -m engine`, `pytest -m smoke`) need a built engine and run locally.
 
 ## Running experiments
 
 - **Configs.** A run is one YAML file in `configs/runs/`, extending `configs/base/player.yml`. It is checked against the schema: unknown keys fail with their dotted path.
-- **Launch.** `dz run CONFIG` starts every role on one machine. For several machines, run `dz controller`, `dz learner`, `dz evaluator` and any number of `dz actor --machine NAME` against a shared store such as `hf://buckets/danbrooks/dz-<run>`.
-- **Change the plan mid-run.** `dz plan STORE set learner.lr=3e-4` changes a live field (budgets, learning rate, window, evaluation schedule, pause). The controller applies it at the next version and logs it to `events.jsonl`. Fixed fields (engine pin, architecture, seed, splits) need a new run; `dz run fork RUN --at v12` **(planned)**.
+- **Launch.** `dz run CONFIG` starts every role on one machine (`--actors N`, `--max-hours H`, `--store S`, `--set PATH=VALUE`). For several machines, run `dz controller`, `dz learner`, `dz evaluator` and any number of `dz actor --machine NAME`, each with `--config CONFIG --store S`, against a shared store such as `hf://buckets/danbrooks/dz-<run>`. Machines without a token (RunPod pods from `dz pod up`, borrowed hosts) run actors on a local folder that `dz relay` keeps in step with the store over rsync.
+- **Change the plan mid-run.** `dz plan STORE set learner.lr=3e-4` changes a live field (budgets, learning rate, window, evaluation schedule, pause). The controller applies `paused` and `budget.*` at once and anything else at the next version, logs each change to `events.jsonl`, and moves a rejected request to `plan/rejected/` with the reason. Fixed fields (engine pin, architecture, seed, splits) need a new run; `dz run fork RUN --at v12` **(planned)**.
 - **Resume.** Start the roles again with the same config and store; they continue from what the store holds.
-- **Watch it.** `dz status STORE`, the controller's `status.md`, and Trackio when `tracking.trackio` is on. `dz report STORE` draws the standard plots. `dz stop STORE` ends the run.
+- **Watch it.** `dz status STORE` prints the controller's `status.md` (`--json` for `status.json`); Trackio mirrors the metrics when `tracking.trackio` is on. `dz report STORE` draws the standard plots. `dz stop STORE` ends the run.
 - **Register first.** Every experiment gets a row in the [experiment register](docs/runs.md#experiment-register), with its question and success criterion, before it launches.
 
 ## Using trained models
 
 ```bash
-dz models pull hf://danbrooks/draftzero-<run>@v0042/model.dzgw
+dz models pull hf://danbrooks/draftzero-<run>@v0042/model.dzgw    # prints the local path
 dz play --a "az:sims=100:closedlist:topk=6:gonet=<path>/model.dzgw" --b sbtactical --pairs 100
-dz eval <path>/model.dzgw --opponents sbtactical,nonet
+dz eval <path>/model.dzgw --opponents sbtactical,nonet            # a table and JSON; or a run's STORE[@vN]
 ```
+
+`dz play` and `dz eval` take the engine, deck pool and search settings from `--config` (default
+`configs/base/player.yml`; `dz eval STORE` uses the run's own `config.yml`).
 
 In Python, `draftzero.hub.resolve("hf://…")` returns a local path, and `draftzero.engine.Gorge` plays it. A one-call `draftzero.models.load("hf://…")` is **(planned)**. [docs/runs.md](docs/runs.md) lists every published run.
 
@@ -101,7 +111,7 @@ In Python, `draftzero.hub.resolve("hf://…")` returns a local path, and `draftz
 | `configs/` | `base/`, `runs/`, the smoke configs |
 | `assets/` | Small versioned inputs: deck splits, sealed pools, card tables, the 17lands reference, sample decks |
 | `docs/` | Numbered, dated docs and their [index](docs/README.md), [architecture.md](docs/architecture.md), [runs.md](docs/runs.md) |
-| `tests/` | `unit/`, `contract/`, `engine/`, `smoke/` |
+| `tests/` | `unit/`, `contract/`, `engine/`, `smoke/`; CI in `.github/workflows/ci.yml` runs the first two |
 | `data/`, `runs/` | Generated and gitignored: decks, pools, downloads, local runs |
 
 ## Data and licences
@@ -115,7 +125,7 @@ In Python, `draftzero.hub.resolve("hf://…")` returns a local path, and `draftz
 
 | Project | How it relates |
 | --- | --- |
-| [gorge](https://github.com/adams-shaun/gorge) (dama) | The rules engine and search every 0.2.0 game runs on. Our fork [danieljbrooks/gorge](https://github.com/danieljbrooks/gorge) adds four commits on its main branch |
+| [gorge](https://github.com/adams-shaun/gorge) (dama) | The rules engine and search every 0.2.0 game runs on. Our fork [danieljbrooks/gorge](https://github.com/danieljbrooks/gorge) adds five commits on its main branch (branch `draftzero`) |
 | [Forge](https://github.com/Card-Forge/forge) and dama's fork [adams-shaun/forge](https://github.com/adams-shaun/forge) | Forge's card scripts define what every card does; gorge compiles them from dama's fork |
 | [mtg-kernel](https://github.com/jackmaiorino/mtg-kernel) | A Rust rules engine; docs/025 tried FDN self-play on it, and it may join later behind the same engine interface |
 | [MageZero](https://github.com/WillWroble/MageZero) (Will Wroble) | AlphaZero-style training on XMage; DraftZero's v0.1.0 experiments 1–4 built on it |

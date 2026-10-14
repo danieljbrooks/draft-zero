@@ -18,14 +18,16 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 - Evaluation (`draftzero.eval`): paired-game scoring, SPRT, Bradley–Terry ratings; `sbtactical` and `nonet` as standard opponents. Standard figures in `draftzero.plots`.
 - `draftzero.oppdeck`: a belief corpus of the run's own decks for gorge's `:closedlist`, the version-0 opponent-deck model.
 - `draftzero.hub`: `hf://owner/repo[@rev]/path` model files.
-- The `dz` commands `run`, `actor`, `learner`, `evaluator`, `controller`, `plan`, `status`, `stop`, `report`, `models pull`, `play`, `eval` and `engine build|version|coverage`.
+- The `dz` commands `version`, `manifest` (alias `provenance`), `run`, `actor`, `learner`, `evaluator`, `controller`, `plan`, `status`, `stop`, `report`, `models pull`, `play`, `eval`, `engine build|version|coverage`, `pod up|down|list|balance|offers` (RunPod pods for relay actors; `up` requires `--max-price` and `--max-hours`) and `relay`.
+- `assets/sample/`: 80 FDN decks in gorge's format (40 train, 40 eval), which the smoke configs play.
+- CI: `.github/workflows/ci.yml` runs the unit and contract tests on Python 3.11 and 3.12.
 - Four test tiers with pytest markers: `tests/unit/`, `tests/contract/` (one test per rigid interface), `tests/engine/` and `tests/smoke/`.
 - `AGENTS.md`, `CODEOWNERS` (the rigid-interface paths) and this changelog.
 - Docs: a start-date line on every doc, the [docs index](docs/README.md), [architecture.md](docs/architecture.md), [runs.md](docs/runs.md) with the experiment register, and docs/033, the refactor plan.
 
 ### Changed
 
-- **The engine is gorge only,** pinned through the fork `danieljbrooks/gorge`, branch `draftzero`: gorge main `813dcf3b4` plus four DraftZero commits (0008 topk-max-options, 0009 sims-by-kind, the 0009 mayplay fix, the driver deltas). v0.1.0 pinned `adams-shaun/gorge` at `c9a422b` and applied patches 0001–0009 at build time; 0001–0007 and the driver itself are now upstream.
+- **The engine is gorge only,** pinned through the fork `danieljbrooks/gorge`, branch `draftzero`: gorge main `813dcf3b4` plus five DraftZero commits (0008 topk-max-options, 0009 sims-by-kind, the 0009 mayplay fix, the driver deltas, playout-cap randomization). v0.1.0 pinned `adams-shaun/gorge` at `c9a422b` and applied patches 0001–0009 at build time; 0001–0007 and the driver itself are now upstream.
 - gorge's paid-mana census is on by default, and the search hides the opponent's decklist (`:closedlist`). Results and networks from v0.1.0 are not comparable with 0.2.0's.
 - Packages moved: `gorge/dzg/` → `draftzero.nets`, `gorge/sealed/` → `draftzero.build`, `draftzero.selfplay` → `draftzero.loop`, `gorge/decks.py` → `draftzero.data`, `gorge/analyze.py`, `stats.py` and `reference.py` → `draftzero.eval`, figure scripts → `draftzero.plots`, `tools/compute_bench/pods.py` → `draftzero.workers.runpod`.
 - `tools/extract_decks.py` no longer needs an XMage jar.
@@ -43,9 +45,9 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 
 All ten rigid interfaces are named and versioned for the first time.
 
-1. **Engine pin:** `engine/gorge/GORGE_REF` = `436712c1c753df2a901b09acd0a0ef0f44e1338b` on `danieljbrooks/gorge` (was `gorge/GORGE_REF` = `c9a422b703f40acec744cb8c947b724f057305b3` on `adams-shaun/gorge` plus patches).
+1. **Engine pin:** `engine/gorge/GORGE_REF` = `5fd039efe87fc601773df51f615fe45bf66a47e1` on `danieljbrooks/gorge` (was `gorge/GORGE_REF` = `c9a422b703f40acec744cb8c947b724f057305b3` on `adams-shaun/gorge` plus patches).
 2. **Card corpus pin:** gorge's `FORGE_REF` = `098b0553` on `adams-shaun/forge` (was `ab2a79bd`).
-3. **Driver CLI and policy strings:** upstream's `cmd/dzgorge` plus DraftZero's deltas. New: the `:closedlist` key with `-belief-decks`, `-belief-pool` and `-belief-split`; the `sbtactical` policy; `-no-paid-mana-census`, since the census is now on by default. Kept from v0.1.0: `-deckfile`, `-pairs-file`, `ksims=`, `-topk-max-options`, `-audit-*`.
+3. **Driver CLI and policy strings:** upstream's `cmd/dzgorge` plus DraftZero's deltas. New: the `:closedlist` key with `-belief-decks`, `-belief-pool` and `-belief-split`; the `sbtactical` policy; `-no-paid-mana-census`, since the census is now on by default; playout-cap randomization (`pcr=`, `cheap=`, `pcrk=`). Kept from v0.1.0: `-deckfile`, `-pairs-file`, `ksims=`, `-topk-max-options`, `-audit-*`.
 4. **Scorer hook:** `policynet.External` unchanged, now upstream; the in-engine MLP moved to gorge's `internal/gonet`.
 5. **Position encoding:** gorge main's, which may differ from `c9a422b`'s. Check v0.1.0 networks with `dzgorge gonet-check` and retrain rather than reuse them.
 6. **Training data and socket format:** `dzg-pack-1` and `GZB1`/`GZR1`, unchanged; the spec moved to `src/draftzero/nets/SPEC.md`.

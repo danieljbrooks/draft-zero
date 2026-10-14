@@ -1,7 +1,8 @@
 # FDN card tables (frozen)
 
 Two tab-separated tables (one `#` comment line, then a header) that the sealed deck builder
-(`draftzero.build.cards`) and the evaluation code (`draftzero.eval.stats`, `draftzero.eval.analyze`) read.
+(`draftzero.build.cards`), the deck pool tools (`draftzero.data.pools`, for deck colours) and the card statistics
+against 17lands (`draftzero.eval.gih`, which `python -m draftzero.eval.analyze gih` runs) read.
 They came from v0.1.0's XMage-era id mapping (docs/008) and moved here from `assets/gameplay/` in v0.2.0.
 
 | file | rows | what |
