@@ -32,6 +32,19 @@ def test_local_store_round_trips_and_lists(tmp_path):
     s.ensure()
 
 
+def test_local_store_list_skips_dot_files(tmp_path):
+    """rsync stages a pulled file as .<name>.XXXXXX next to it, and the relay stages in .relay-tmp/: neither is a
+    store file (a reader would take a half-written meta.json for a complete shard)."""
+    s = LocalStore(tmp_path / "st")
+    s.put_many({"shards/a/000001/games.jsonl": b"g", "heartbeats/a.json": b"{}"})
+    for p in ("shards/a/000001/.meta.json.Ab12Cd", "heartbeats/.a.json.x", ".relay-tmp/shards/a/000002/meta.json",
+              "shards/.hidden/000001/meta.json", "shards/a/000001/.tmp-123"):
+        (tmp_path / "st" / p).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "st" / p).write_bytes(b"partial")
+    assert s.list("shards/") == ["shards/a/000001/games.jsonl"]
+    assert s.list("") == ["heartbeats/a.json", "shards/a/000001/games.jsonl"]
+
+
 # ------------------------------------------------------------------------------------------------ a fake bucket
 
 @dataclasses.dataclass

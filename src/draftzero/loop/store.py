@@ -118,13 +118,19 @@ class LocalStore(Store):
         return dest
 
     def list(self, prefix):
+        """Every file under prefix, except dot-files and anything in a dot-folder: this store's own `.tmp-*`
+        files, rsync's temporary `.name.XXXXXX` files while a relay pulls, and the relay's `.relay-tmp/`."""
         base = self._p(prefix) if prefix else self.root
         if base.is_file():
             return [prefix]
         if not base.exists():
             return []
-        return sorted(p.relative_to(self.root).as_posix() for p in base.rglob("*")
-                      if p.is_file() and not p.name.startswith(".tmp-"))
+        out = []
+        for p in base.rglob("*"):
+            rel = p.relative_to(self.root)
+            if p.is_file() and not any(part.startswith(".") for part in rel.parts):
+                out.append(rel.as_posix())
+        return sorted(out)
 
     def delete(self, paths, message=""):
         for path in paths:
