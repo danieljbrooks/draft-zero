@@ -268,6 +268,10 @@ def test_create_posts_the_spec_and_removes_a_pod_billing_above_the_cap():
     with pytest.raises(rp.RunPodError, match="terminated"):
         _api(fake).create(spec)
     assert fake.made("DELETE", "/pods/pod123")
+    fake = FakeRunPod()                                      # the pod reports 18 vCPU
+    with pytest.raises(rp.RunPodError, match="below min_vcpu"):
+        _api(fake).create(rp.PodSpec(name="dz-a1", gpu="NVIDIA GeForce RTX 3070", max_price=0.2, min_vcpu=24))
+    assert fake.made("DELETE", "/pods/pod123")
 
 
 def test_cpu_quote_and_terminate_and_list():

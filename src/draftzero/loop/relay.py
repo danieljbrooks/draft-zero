@@ -244,28 +244,30 @@ class Relay:
         except (OSError, ValueError):
             ledger = {"shards": [], "files": {}}
         done = set(ledger["shards"])
-        shards = 0
-        for meta in sorted((self.root / "shards").glob("*/*/meta.json")):
-            sid = str(meta.parent.relative_to(self.root / "shards"))
-            if sid in done:
-                continue
-            files = sorted((p for p in meta.parent.iterdir() if p.is_file()), key=lambda p: (p.name == "meta.json", p.name))
-            up.put_many({f"shards/{sid}/{p.name}": p for p in files}, message=f"relay: shard {sid}")
-            done.add(sid)
-            shards += 1
-        changed = {}
-        for d in PULL_DIRS:
-            for p in sorted((self.root / d).rglob("*")) if (self.root / d).is_dir() else ():
-                if not p.is_file() or p.name.startswith("."):
+        shards, changed = 0, {}
+        try:
+            for meta in sorted((self.root / "shards").glob("*/*/meta.json")):
+                sid = str(meta.parent.relative_to(self.root / "shards"))
+                if sid in done:
                     continue
-                rel, st = str(p.relative_to(self.root)), p.stat()
-                if ledger["files"].get(rel) != [st.st_mtime_ns, st.st_size]:
-                    changed[rel] = (p, [st.st_mtime_ns, st.st_size])
-        if changed:
-            up.put_many({rel: p for rel, (p, _) in changed.items()}, message="relay: heartbeats and metrics")
-            ledger["files"].update({rel: sig for rel, (_, sig) in changed.items()})
-        ledger["shards"] = sorted(done)
-        _atomic_write(ledger_path, json.dumps(ledger, sort_keys=True).encode())
+                files = sorted((p for p in meta.parent.iterdir() if p.is_file()),
+                               key=lambda p: (p.name == "meta.json", p.name))
+                up.put_many({f"shards/{sid}/{p.name}": p for p in files}, message=f"relay: shard {sid}")
+                done.add(sid)
+                shards += 1
+            for d in PULL_DIRS:
+                for p in sorted((self.root / d).rglob("*")) if (self.root / d).is_dir() else ():
+                    if not p.is_file() or p.name.startswith("."):
+                        continue
+                    rel, st = str(p.relative_to(self.root)), p.stat()
+                    if ledger["files"].get(rel) != [st.st_mtime_ns, st.st_size]:
+                        changed[rel] = (p, [st.st_mtime_ns, st.st_size])
+            if changed:
+                up.put_many({rel: p for rel, (p, _) in changed.items()}, message="relay: heartbeats and metrics")
+                ledger["files"].update({rel: sig for rel, (_, sig) in changed.items()})
+        finally:     # what went up stays recorded even when a later upload fails
+            ledger["shards"] = sorted(done)
+            _atomic_write(ledger_path, json.dumps(ledger, sort_keys=True).encode())
         return {"shards": shards, "files": len(changed)}
 
     def run(self, interval: float = 60, *, iterations: Optional[int] = None, stop_when_done: bool = True,

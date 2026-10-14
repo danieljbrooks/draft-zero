@@ -318,10 +318,13 @@ class RunPodAPI:
         pid = pod.get("id")
         if not pid:
             raise RunPodError(f"create returned no pod id: {self._scrub(json.dumps(pod))[:400]}")
-        cost = pod.get("costPerHr")
+        cost, vcpu = pod.get("costPerHr"), pod.get("vcpuCount")
         if cost is not None and float(cost) > spec.max_price:
             self.terminate(pid)
             raise RunPodError(f"pod {pid} bills ${cost}/h, above max_price ${spec.max_price}/h: terminated")
+        if spec.gpu and vcpu is not None and float(vcpu) < spec.min_vcpu:   # a quote is a floor, not a promise
+            self.terminate(pid)
+            raise RunPodError(f"pod {pid} came with {vcpu} vCPU, below min_vcpu {spec.min_vcpu}: terminated")
         self.log(f"runpod: created {pid} {spec.name} ({spec.gpu or spec.cpu}, ${cost}/h, {pod.get('vcpuCount')} vCPU)")
         return pod
 
