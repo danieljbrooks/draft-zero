@@ -31,7 +31,7 @@ from draftzero.loop import control as ctl
 from draftzero.loop.actor import Actor, policy_spec
 from draftzero.loop.controller import Controller, status_md
 from draftzero.loop.evaluator import Evaluator, job_id, make_job, opponent_valid
-from draftzero.loop.learner import LeaseHeld, Learner
+from draftzero.loop.learner import LeaseHeld, Learner, curve_metrics, katago_window
 from draftzero.loop.store import LocalStore
 
 # ------------------------------------------------------------------------------------------------ stand-ins
@@ -51,7 +51,8 @@ DEFAULTS = {
               "pcr": {"prob": 0.0, "cheap_sims": 40, "by_kind": {}}},
     "learner": {"device": "cpu", "min_new_positions": 20000, "window_positions": 300000, "epochs": 2,
                 "steps_per_position": None, "batch": 512, "lr": 1.0e-4, "warmup": 100, "policy_target": "visits",
-                "value_blend": 1.0, "warm_start": True, "threads": 4},
+                "value_blend": 1.0, "warm_start": True, "threads": 4, "surprise_weight": 0.0, "value_surprise": 0.0,
+                "ema_decay": 0.0, "window": {"kind": "fixed", "c": 150000, "alpha": 0.75, "beta": 0.4}},
     "eval": {"every_versions": 1, "sims": 100, "pairs": 100, "seed": 3131, "workers": 2,
              "opponents": ["prev", "sbtactical"]},
     "store": "runs/smoke", "tracking": {"trackio": False, "project": "draftzero"},
@@ -591,6 +592,91 @@ def test_learner_window_and_steps_per_position(tmp_path):
     assert r.store.read_json(ctl.version_file(1, "meta.json"))["shards"] == ["shards/a1/000002", "shards/a1/000003"]
     packs = {p.name for p in (r.learner.wd / "packs").iterdir()}
     assert packs == {"a1-000002", "a1-000003"}                 # the shard outside the window was pruned locally
+
+
+def test_katago_window_formula():
+    assert katago_window(0, 150000, 0.75, 0.4) == 0 and katago_window(100000, 150000, 0.75, 0.4) == 100000
+    assert katago_window(150000, 150000, 0.75, 0.4) == 150000                  # continuous at c
+    assert katago_window(1_000_000, 150000, 0.75, 0.4) == pytest.approx(402_000, rel=2e-3)
+    assert katago_window(10_000_000, 150000, 0.75, 0.4) == pytest.approx(1_936_000, rel=2e-3)
+    assert katago_window(5_000_000, 150000, 1.0, 1.0) == 5_000_000            # alpha = beta = 1: everything
+    assert katago_window(5_000_000, 150000, 0.75, 0.0) == 150000              # beta = 0: fixed at c
+    sizes = [katago_window(n, 1000, 0.75, 0.4) for n in range(0, 100_000, 997)]
+    assert sizes == sorted(sizes) and all(w <= n for w, n in zip(sizes, range(0, 100_000, 997)))
+
+
+def test_learner_katago_window(tmp_path):
+    """learner.window.kind katago: the window grows with every position ingested (KataGo's formula), at most
+    learner.window_positions; meta.json records the cap. kind fixed (the default) is window_positions."""
+    win = {"kind": "katago", "c": 20, "alpha": 0.75, "beta": 0.4}
+    r = Run(tmp_path, make_cfg(tmp_path, learner={"window_positions": 1000, "window": win}))
+    r.controller.tick()
+    r.learner.step()
+    r.controller.tick()
+    for _ in range(3):
+        r.actors[0].step()                                     # 3 shards of 20 positions
+    r.learner.ingest()
+    assert r.learner.window_cap() == katago_window(60, 20, 0.75, 0.4) == 34
+    assert [e["shard"] for e in r.learner.window()] == ["shards/a1/000002", "shards/a1/000003"]
+    assert r.learner.step() == "published"
+    meta = r.store.read_json(ctl.version_file(1, "meta.json"))
+    assert meta["window_cap"] == 34 and meta["positions"] == 40
+    (tmp_path / "c").mkdir()
+    capped = Run(tmp_path / "c", make_cfg(tmp_path / "c", learner={"window_positions": 30, "window": win}))
+    capped.learner.ingested = r.learner.ingested
+    assert capped.learner.window_cap() == 30
+    (tmp_path / "f").mkdir()
+    fixed = Run(tmp_path / "f", make_cfg(tmp_path / "f"))
+    fixed.learner.ingested = r.learner.ingested
+    assert fixed.learner.window_cap() == 1000 and len(fixed.learner.window()) == 3
+
+
+def test_learner_passes_the_trainer_extras(tmp_path):
+    (tmp_path / "p").mkdir()
+    plain = Run(tmp_path / "p", make_cfg(tmp_path / "p")).learner.train_args(tmp_path / "o", [], None, 1, 10)
+    assert {a for a in plain if a.startswith("--")} == {
+        "--arch", "--config", "--train", "--out", "--batch", "--lr", "--warmup", "--policy-target", "--value-blend",
+        "--device", "--in-ram", "--seed", "--epochs"}                     # the defaults add nothing
+    cfg = make_cfg(tmp_path, learner={"surprise_weight": 0.5, "value_surprise": 0.1, "ema_decay": 0.999})
+    argv = Run(tmp_path, cfg).learner.train_args(tmp_path / "o", [tmp_path / "pk"], None, 1, 10)
+    assert argv[argv.index("--surprise-weight") + 1] == "0.5" and argv[argv.index("--value-surprise") + 1] == "0.1"
+    assert argv[argv.index("--ema-decay") + 1] == "0.999" and "--export-ema" in argv
+    from draftzero.nets import train
+    a = train.parse_args(argv)
+    assert (a.surprise_weight, a.value_surprise, a.ema_decay, a.export_ema) == (0.5, 0.1, 0.999, True)
+
+
+def test_curve_metrics_of_the_moving_average(tmp_path):
+    c = tmp_path / "curves.jsonl"
+    ev = lambda ce: {"holdout": {"policy_ce": ce, "total": ce + 0.5}}           # noqa: E731
+    c.write_text("".join(json.dumps(x) + "\n" for x in (
+        {"type": "eval", "step": 3, "eval": ev(1.0), "ema": ev(0.9)}, {"type": "eval", "step": 6, "eval": ev(0.8)})))
+    assert curve_metrics(c, 3)["policy_ce"] == 1.0 and curve_metrics(c, 3, "ema")["policy_ce"] == 0.9
+    assert curve_metrics(c, None)["policy_ce"] == 0.8 and curve_metrics(c, 6, "ema")["policy_ce"] == 0.8
+
+
+def test_learner_publishes_the_moving_average_with_its_metrics(tmp_path):
+    """learner.ema_decay > 0 with the real trainer: best.pt is the raw weights or the moving average, whichever
+    had the lower holdout total; meta.json says which and carries that evaluation's metrics."""
+    cfg = make_cfg(tmp_path, learner={"min_new_positions": 200, "batch": 32, "warmup": 2, "ema_decay": 0.5})
+    r = Run(tmp_path, cfg, records=25)
+    r.learner._train = None
+    r.learner._export = __import__("draftzero.loop.learner", fromlist=["x"]).default_export
+    r.controller.tick()
+    r.learner.step()
+    r.controller.tick()
+    r.actors[0].step()
+    r.actors[0].step()
+    assert r.learner.step() == "published"
+    meta = r.store.read_json(ctl.version_file(1, "meta.json"))
+    assert meta["weights"] in ("raw", "ema") and "--export-ema" in meta["argv"]
+    out = r.learner.wd / "train" / "v0001"
+    rec = next(x for x in map(json.loads, (out / "curves.jsonl").read_text().splitlines())
+               if x["type"] == "eval" and x["step"] == meta["step"])
+    src = rec["ema"] if meta["weights"] == "ema" else rec["eval"]
+    assert meta["metrics"]["policy_ce"] == src["holdout"]["policy_ce"]
+    from draftzero.nets import models as M
+    assert M.load(out / "best.pt")[1]["meta"]["weights"] == meta["weights"] and (out / "ema.pt").exists()
 
 
 def test_learner_lease(tmp_path):

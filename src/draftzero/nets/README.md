@@ -62,6 +62,19 @@ uniform-policy baseline, the targets' own entropy, top-1 agreement with the sear
 with the bot's candidate (candidate 0), the value log loss, AUC (decisive games), Brier score and the base-rate log
 loss. Early stopping (`--patience K`) and `best.pt` follow the holdout's policy cross-entropy plus value log loss.
 
+Opt-in extras from KataGo. Each is off by default, and off leaves training bit-identical:
+
+- `--surprise-weight F` weights each state's policy loss by `(1 - F) + F x KL(target || prior) / batch mean`. The
+  prior is `cand_prior`, the search's prior before root noise.
+- `--value-surprise F` does the same for the value loss, using `|value target - sigmoid(value logit)|`.
+- `--ema-decay D` keeps a bias-corrected moving average of the weights, updated every `--ema-every` steps. Each
+  evaluation also scores it (the `ema` key in `curves.jsonl`) and saves it as `ema.pt`.
+- `--export-ema` lets `best.pt` hold the moving average when its holdout total is lower than the raw weights' at
+  the same evaluation. Ties go to the raw weights. The checkpoint's meta and the summary say `"weights": "ema"` or
+  `"raw"`.
+
+Training log lines and model selection always use the unweighted losses. The `train.py` docstring has the details.
+
 ## Throughput
 
 `python -m draftzero.nets.bench` on synthetic data (per state: 29 sparse rows, 19.5 cards, 37 identity rows, 5.5 options),

@@ -26,7 +26,9 @@ SCHEMA_KEYS = [
     "actor.pcr.prob", "actor.pcr.cheap_sims", "actor.pcr.by_kind",
     "learner.device", "learner.min_new_positions", "learner.window_positions", "learner.epochs",
     "learner.steps_per_position", "learner.batch", "learner.lr", "learner.warmup", "learner.policy_target",
-    "learner.value_blend", "learner.warm_start", "learner.threads",
+    "learner.value_blend", "learner.warm_start", "learner.threads", "learner.surprise_weight",
+    "learner.value_surprise", "learner.ema_decay", "learner.window.kind", "learner.window.c", "learner.window.alpha",
+    "learner.window.beta",
     "eval.every_versions", "eval.sims", "eval.pairs", "eval.seed", "eval.workers", "eval.opponents",
     "store", "tracking.trackio", "tracking.project", "sync.games_per_version", "paused",
 ]

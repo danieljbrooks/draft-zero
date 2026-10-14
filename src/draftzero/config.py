@@ -53,6 +53,7 @@ CONFIGS = REPO / "configs"
 MODES = ("async", "sync")
 ARCHS = ("mlp", "transformer", "gnn")             # only mlp runs inside the engine (.dzgw); see nets/
 POLICY_TARGETS = ("visits", "cq")
+WINDOW_KINDS = ("fixed", "katago")                # learner.window.kind
 SEARCH_KEYS = ("autopay", "oppnodes", "oppfull", "morekinds")      # draftzero.engine.specs.FULL; any of FLAG_KEYS
 # decision kinds the fork's playout-cap randomization takes a per-kind probability for (dzgorge kinds= names)
 PCR_KINDS = ("priority", "attackers", "blockers", "target", "modes", "optional", "choose", "multitarget")
@@ -147,6 +148,17 @@ class ActorConfig:
 
 
 @dataclass
+class WindowConfig:
+    """The learner's training window. fixed: the newest learner.window_positions positions. katago: KataGo's
+    growing window over the N positions ingested so far, N while N <= c, then c * (1 + beta * ((N / c)^alpha - 1) /
+    alpha), at most learner.window_positions (draftzero.loop.learner.katago_window)."""
+    kind: str = "fixed"
+    c: int = 150000
+    alpha: float = 0.75
+    beta: float = 0.4
+
+
+@dataclass
 class LearnerConfig:
     device: str = "cpu"
     min_new_positions: int = 20000               # train once this many new recorded positions arrived (async) ...
@@ -160,6 +172,10 @@ class LearnerConfig:
     value_blend: float = 1.0                     # value target (1-x) game outcome + x root value
     warm_start: bool = True                      # continue from the current version's weights
     threads: int = 4
+    surprise_weight: float = 0.0                 # KataGo policy surprise weighting (nets.train); 0 = off
+    value_surprise: float = 0.0                  # value surprise weighting (--value-surprise); 0 = off
+    ema_decay: float = 0.0                       # weight moving average, published when better; 0 = off
+    window: WindowConfig = field(default_factory=WindowConfig)
 
 
 @dataclass
@@ -651,6 +667,14 @@ def check(cfg: RunConfig) -> None:
     need(lr.policy_target in POLICY_TARGETS, "learner.policy_target", f"one of {POLICY_TARGETS}")
     need(0.0 <= lr.value_blend <= 1.0, "learner.value_blend", "in [0, 1]")
     need(lr.threads >= 1, "learner.threads", ">= 1")
+    need(0.0 <= lr.surprise_weight <= 1.0, "learner.surprise_weight", "in [0, 1] (0 = off)")
+    need(0.0 <= lr.value_surprise <= 1.0, "learner.value_surprise", "in [0, 1] (0 = off)")
+    need(0.0 <= lr.ema_decay < 1.0, "learner.ema_decay", "in [0, 1) (0 = off)")
+    w = lr.window
+    need(w.kind in WINDOW_KINDS, "learner.window.kind", f"one of {WINDOW_KINDS}, not {w.kind!r}")
+    need(w.c >= 1, "learner.window.c", ">= 1")
+    need(0.0 < w.alpha <= 1.0, "learner.window.alpha", "in (0, 1]")
+    need(0.0 <= w.beta <= 1.0, "learner.window.beta", "in [0, 1]")
     ev = cfg.eval
     for k in ("every_versions", "sims", "pairs", "workers"):
         need(getattr(ev, k) >= 1, f"eval.{k}", ">= 1")

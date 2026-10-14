@@ -56,6 +56,13 @@ learner:
   value_blend: 1.0              # value target (1-x) game outcome + x root value (E7: root value)
   warm_start: true              # continue from the current version's weights
   threads: 4
+  surprise_weight: 0.0          # KataGo policy surprise weighting: state weight (1-x) + x KL(target||prior)/mean; 0 = off
+  value_surprise: 0.0           # the same for the value loss, by |value target - prediction|; 0 = off (KataGo: 0.1)
+  ema_decay: 0.0                # weight moving average (bias-corrected); a version publishes it when its holdout
+                                # loss is lower than the raw weights'; 0 = off (e.g. 0.999)
+  window: {kind: fixed, c: 150000, alpha: 0.75, beta: 0.4}   # fixed: the newest window_positions; katago: KataGo's
+                                # growing window, N positions so far up to c, then c(1 + beta((N/c)^alpha - 1)/alpha),
+                                # at most window_positions (~400k at N = 1M)
 
 eval:
   every_versions: 1             # live
