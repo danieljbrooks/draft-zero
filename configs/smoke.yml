@@ -1,8 +1,11 @@
 # The smallest run that exercises every role on one machine: `dz run configs/smoke.yml` (store runs/smoke).
 # Two versions from scratch (version 0 = the search without a net), 16-simulation games, 4 games a shard, a learner
 # that trains on its first 200 positions, and a 4-pair evaluation against the previous version. Minutes, not hours.
+# It plays the 80 sample decks in assets/sample (40 train, 40 eval), so a fresh clone needs only `dz engine build`;
+# engine.root comes from base/player.yml (override with `dz run configs/smoke.yml --set engine.root=DIR`).
 extends: base/player.yml
 run: smoke
+data: {decks: assets/sample/decks, pool: assets/sample/pool.tsv}
 actor: {sims: 16, chunk_games: 4, chunk_secs: 600, workers: 2}
 learner: {min_new_positions: 200, window_positions: 5000, epochs: 1, threads: 2}
 eval: {pairs: 4, sims: 16, opponents: [prev]}
