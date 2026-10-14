@@ -24,6 +24,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import zlib
 from collections.abc import Mapping, Sequence
@@ -58,11 +59,13 @@ class Belief:
 @dataclass
 class PlayResult:
     games: list[dict]           # parsed games.jsonl rows (complete games only)
-    summary: dict               # dzgorge -out summary json (or {} if missing); recomputed when the call needed several runs
+    summary: dict               # dzgorge -out summary json; recomputed from the kept games after a kill (partial)
     games_path: Path
     corpus_path: Path | None    # visits.jsonl.gz when record=True
     skipped: list[int]          # pair indices skipped after a hang
-    runs: list[dict] = field(default_factory=list)  # one per dzgorge run: first_pair, pairs, returncode, killed, wall_s, games
+    # additions to contracts §2: one record per dzgorge run (first_pair, pairs, timeout_s, returncode, killed,
+    # wall_s, games), and the wall time of the whole call
+    runs: list[dict] = field(default_factory=list)
     wall_s: float = 0.0
 
 
@@ -286,7 +289,8 @@ class Gorge:
         self.topk_max_options = int(topk_max_options or 0)
 
     def __repr__(self) -> str:
-        return f"Gorge(root={str(self.root)!r}, decks={str(self.decks)!r}, pool={str(self.pool)!r}, census={self.census})"
+        return (f"Gorge(root={str(self.root)!r}, decks={str(self.decks)!r}, pool={str(self.pool)!r}, "
+                f"census={self.census})")
 
     @classmethod
     def from_config(cls, cfg: "RunConfig") -> "Gorge":
@@ -309,7 +313,8 @@ class Gorge:
         ref = _git(self.root, "rev-parse", "HEAD")
         status = _git(self.root, "status", "--porcelain", "--untracked-files=no") if ref else None
         sha = sha256_file(self.binary)
-        repo = build.get("repo") or _git(self.root, "remote", "get-url", "fork") or _git(self.root, "remote", "get-url", "origin")
+        repo = (build.get("repo") or _git(self.root, "remote", "get-url", "fork")
+                or _git(self.root, "remote", "get-url", "origin"))
         return {"repo": repo, "ref": ref or build.get("ref"), "dirty": bool(status) if ref else build.get("dirty"),
                 "binary_sha256": sha, "build": build, "cards_lock": _read_json(self.cards / "cards.lock"),
                 "census": self.census, "root": str(self.root), "binary": str(self.binary),
@@ -318,7 +323,6 @@ class Gorge:
     def coverage(self) -> dict:
         """`dzgorge coverage` over the pool: {cards, decks, unsupported_cards, failed_decks, supported_decks,
         unsupported: {card: {decks, missing}}, supported: [deck names playing only supported cards]}."""
-        import tempfile
         with tempfile.TemporaryDirectory(prefix="dzcov-") as tmp:
             out, txt = Path(tmp) / "coverage.out", Path(tmp) / "supported.txt"
             with open(out, "wb") as so, open(Path(tmp) / "coverage.err", "wb") as se:
@@ -351,7 +355,8 @@ class Gorge:
         """The `dzgorge play` command line of one run (corpus set = record)."""
         sa, sb = _spec_str(a), _spec_str(b)
         argv = [str(self.binary), "play", "-cards", str(self.cards), "-decks", str(self.decks), "-pool", str(self.pool),
-                "-split", split, "-seed", str(int(seed)), "-first-pair", str(int(first_pair)), "-pairs", str(int(pairs)),
+                "-split", split, "-seed", str(int(seed)), "-first-pair", str(int(first_pair)),
+                "-pairs", str(int(pairs)),
                 "-workers", str(int(workers)), "-a", sa, "-b", sb, "-out", str(out),
                 "-max-turns", str(self.max_turns), "-max-intents", str(self.max_intents),
                 "-mulligans", str(self.mulligans), "-progress", "0"]
@@ -369,7 +374,8 @@ class Gorge:
             if belief.split == split and split != "train":
                 raise ValueError(f"belief split {belief.split!r} is the games' own split: the belief would hold "
                                  "the opponents' real decks (dzgorge refuses it)")
-            argv += ["-belief-decks", str(belief.decks), "-belief-pool", str(belief.pool), "-belief-split", belief.split]
+            argv += [
+                "-belief-decks", str(belief.decks), "-belief-pool", str(belief.pool), "-belief-split", belief.split]
         if deckfile is not None:
             argv += ["-deckfile", str(deckfile)]
         if pairs_file is not None:

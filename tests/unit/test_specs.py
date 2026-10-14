@@ -59,7 +59,8 @@ def test_canonical_strings_render_back(s):
 
 def test_parse_fields():
     p = PolicySpec.parse("az:sims=200:explore:autopay:oppnodes:oppfull:morekinds:cpuct=0.25:topk=6:gonet=/a/b.dzgw")
-    assert (p.kind, p.sims, p.explore, p.keys, p.cpuct, p.topk, p.gonet) == ("az", 200, True, FULL, 0.25, 6, "/a/b.dzgw")
+    assert (p.kind, p.sims, p.explore, p.keys) == ("az", 200, True, FULL)
+    assert (p.cpuct, p.topk, p.gonet) == (0.25, 6, "/a/b.dzgw")
     assert p.closedlist is False and p.pcr is None and p.extra == ()
     # the order of the fields in the string does not matter to the fork; parse puts them in their fields (keys
     # keep their own order)

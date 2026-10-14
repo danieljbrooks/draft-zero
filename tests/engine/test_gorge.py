@@ -159,7 +159,8 @@ def test_fake_pairs_file(fake_dzgorge, tmp_path):
     r = g.play(SP, "bot", pairs=0, seed=1, out_dir=tmp_path / "b", pairs_file=pf, first_pair=1, single=True)
     assert [(x["pair"], x["leg"]) for x in r.games] == [(1, 0), (2, 0)]
     argv = fake_dzgorge.calls()[-1]
-    assert argv[argv.index("-pairs-file") + 1] == str(pf) and "-single" in argv and argv[argv.index("-pairs") + 1] == "2"
+    assert argv[argv.index("-pairs-file") + 1] == str(pf) and "-single" in argv
+    assert argv[argv.index("-pairs") + 1] == "2"
     with pytest.raises(ValueError):
         g.play(SP, SP, pairs=0, seed=1, out_dir=tmp_path / "c")
 
@@ -172,7 +173,7 @@ def test_play_argv_flags(tmp_path):
     opt = lambda a, k: a[a.index(k) + 1]                                         # noqa: E731
     assert opt(argv, "-cards") == str(tmp_path / "gorge" / ".cards")
     assert (opt(argv, "-a"), opt(argv, "-b")) == (SP.render(), "bot")
-    assert (opt(argv, "-seed"), opt(argv, "-pairs"), opt(argv, "-first-pair"), opt(argv, "-split")) == ("11", "3", "0", "train")
+    assert [opt(argv, k) for k in ("-seed", "-pairs", "-first-pair", "-split")] == ["11", "3", "0", "train"]
     assert (opt(argv, "-max-turns"), opt(argv, "-max-intents"), opt(argv, "-mulligans")) == ("100", "20000", "2")
     assert "-mull-heuristic" in argv and opt(argv, "-topk-max-options") == "64"
     # census on is dzgorge's default: no flag; off renders -no-paid-mana-census
@@ -190,12 +191,13 @@ def test_play_argv_flags(tmp_path):
     a4 = g.play_argv(closed, closed, pairs=1, seed=1, out=tmp_path / "o.jsonl", belief=b)
     assert (opt(a4, "-belief-decks"), opt(a4, "-belief-pool")) == (str(b.decks), str(b.pool))
     with pytest.raises(ValueError, match="own split"):
-        g.play_argv(closed, "bot", pairs=1, seed=1, out=tmp_path / "o", split="eval", belief=Belief(b.decks, b.pool, "eval"))
+        g.play_argv(closed, "bot", pairs=1, seed=1, out=tmp_path / "o", split="eval",
+                    belief=Belief(b.decks, b.pool, "eval"))
     # record flags, deckfile / pairs-file / single passthrough, extra flags last
     a5 = g.play_argv(SP, SP, pairs=1, seed=1, out=tmp_path / "o.jsonl", corpus=tmp_path / "v.gz", record_every=4,
                      deckfile=tmp_path / "d.jsonl", pairs_file=tmp_path / "p.tsv", single=True,
                      extra_flags=["-mm-stats", "-gonet-cache", "0"])
-    assert (opt(a5, "-record-features"), opt(a5, "-record-every"), opt(a5, "-corpus")) == ("entity", "4", str(tmp_path / "v.gz"))
+    assert [opt(a5, k) for k in ("-record-features", "-record-every", "-corpus")] == ["entity", "4", str(tmp_path / "v.gz")]
     assert opt(a5, "-deckfile") == str(tmp_path / "d.jsonl") and opt(a5, "-pairs-file") == str(tmp_path / "p.tsv")
     assert "-single" in a5 and a5[-3:] == ["-mm-stats", "-gonet-cache", "0"]
 
