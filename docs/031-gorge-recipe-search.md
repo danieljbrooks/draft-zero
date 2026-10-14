@@ -1,11 +1,11 @@
 # Searching for a self-play recipe that scales: laptop experiments on gorge
 
-*Status (Tuesday 13 October 2026, 4:45 PM PT): running, results appended in §6. So far: the AlphaZero loop on cheap games
-stalls (its policy targets are nearly uniform; gains come only through the value); lower exploration (`cpuct` 0.25) is
+*Status (Wednesday 14 October 2026, 1:45 AM PT): stopped at Dan's request; §7 sums up. In short: the AlphaZero loop on
+cheap games stalls (nearly uniform policy targets; gains only through the value); lower exploration (`cpuct` 0.25) is
 worth ~30 Elo at test time; labels from 100-200-simulation searches with every decision recorded (E7, loop F) beat the
 plateau and make the policy learn. Measures added: a rating ladder, an audit against a deeper search, card-quality
-calibration. Machines: Dan's laptop and desktop (d1); r1 is down. Code: the
-[`gorge-train`](https://github.com/danieljbrooks/draft-zero/tree/gorge-train) branch (`gorge/recipe/`).*
+calibration. Code: the [`gorge-train`](https://github.com/danieljbrooks/draft-zero/tree/gorge-train) branch
+(`gorge/recipe/`, gorge patches 0008-0009).*
 
 **The goal (Dan, 11 October): find a recipe that keeps getting better on millions of games,** not just the best bot
 a laptop can train in a day. A laptop plays about 10^5 cheap games a day, so each experiment here measures a *slope*:
@@ -752,3 +752,45 @@ Monday are on the laptop. When it returns, results get copied off every generati
 **Loop F′** continues loop F's recipe from its generation 5, split across the laptop (4 workers) and d1 (6): each
 generation's 1,200 games are dealt by one seed, d1 playing the first 600 deck pairs and the laptop the rest; the laptop
 packs the union, trains, and plays the head-to-head against loop B's generation 17 (`gorge/recipe/loopf2.sh`).
+
+Loop F′'s generation 6 did not finish: by Wednesday 1:40 AM d1 had played its 600 games and the laptop 300 of its 600
+(it ran far slower overnight than in the evening). Stopped there at Dan's request; the 900 games are on the laptop and d1
+(`loops/F2/gen6`), unpacked.
+
+## 7. Where this leaves the recipe (Wednesday 14 October, 1:45 AM)
+
+**What the 2.5 days found:**
+
+| Finding | Evidence |
+|---|---|
+| The AlphaZero loop on cheap games (25 simulations, gorge's default exploration) stalls after a few generations | Loops A, B, D, E: 18 generations, 55-58% against the zero point; B's slow value gain is real (54.3% against the start head to head) but flattens by generation 10 |
+| Its policy cannot learn: the visit counts it learns from are nearly uniform | entropy 0.97 against a uniform 1.04; the prior adds nothing inside the search |
+| Lower exploration is free strength at test time | `cpuct` 0.25: 74.1% → 78.9% against the bot at 100 simulations; ~+30 Elo; it needs the network's value |
+| Labels from a 100-200-simulation search, every decision recorded, break the plateau | E7: 1,200 such games beat 64,000 cheap ones (53.7% against B17); 400 simulations is too deep at equal compute |
+| With those games the policy compounds | Loop F: policy alone 50.5% → 64.9% against the bot; at 25 simulations F5 equals B13 at 100 |
+| Network width, value regularisation, target sharpening, per-kind budgets, fixed worlds, `topk` don't help | E1, E2, E5, E6, the test-time sweeps |
+| Search pays most on casting decisions; targeting and blocking mistakes mostly vanish by 100 simulations | the kinds ablation; the audit |
+
+**The best bot:** E7's root-value network inside the full search at `cpuct` 0.25: 82.0% against gorge's bot at 100
+simulations, about 270 Elo above it on the ladder (the network-free search at 100 simulations: 152).
+
+**The recipe to scale to millions of games** (what the evidence supports, not yet run at scale):
+1. **Self-play at 100-200 simulations with `cpuct` 0.25, every decision recorded,** the network inside the search
+   (loop F). Not cheap 25-simulation games: they teach the value slowly and the policy nothing.
+2. **The value learns the search's root value; the policy learns visit counts,** which are sharp at these settings.
+3. **Warm-start each generation** on a window of recent generations (warm starting costs nothing against retraining,
+   and only it scales); the window and the learning rate are untested at scale.
+4. **Evaluate on the rating ladder and by head-to-head against a fixed reference,** not against gorge's bot alone
+   (saturated near 82%), with the audit and card-quality calibration as non-saturating checks.
+
+**Open questions and next steps:**
+- **Does loop F keep compounding?** Its policy did for five generations while its head-to-head held at 54-55%; the
+  bigger test is many more generations (r1-scale compute), with the policy's gain measured where it matters (low
+  simulations, policy-only play, Spellbench).
+- **Gumbel root search** (docs/030 stage 0) would give policy-improvement targets even at low simulations; loop F gets
+  sharp targets the expensive way.
+- **A stronger fixed opponent** for the ladder's top (the start network at 3,000 simulations, or a frozen loop F
+  network) as the bot saturates.
+- **The value's plateau** is the remaining limit; auxiliary targets (life totals, turns left) and the network's inputs
+  are the untested levers (width and regularisation are ruled out).
+- **When r1 returns:** copy loop F's generations 6+ and their matches off it, and add them here.
