@@ -1,0 +1,14 @@
+# E2b (docs/runs.md): arm p0-control of e2-p0-control.yml, warm-started from B17 (docs/031 loop B generation 17, the reference
+# the docs/031 loops were judged against; on the new engine it scores 61.0% ± 3.6 against sbtactical, E0-b17).
+# All three E2b arms run their actors on ONE pod at the same time with the same workers, so they get equal CPU-hours;
+# learners, controllers and evaluators run on d1 (dz relay). Per-version evaluation is a cheap guard only (25 pairs
+# against the previous version); the decisive test is a head-to-head of each arm's final version against B17 and
+# against the other arms afterwards (100 and 25 simulations).
+# B17's weights are not published: player.init is d1's copy (/work/dz031/.../r1nets/B17/best.pt).
+extends: e2-p0-control.yml
+run: e2b-p0-control
+player: {init: /work/dz031/wt/data/gorge/runs/r31/r1nets/B17/best.pt}
+actor: {workers: 6, chunk_games: 24}
+learner: {threads: 2, min_new_positions: 15000}
+eval: {every_versions: 1, pairs: 25, sims: 100, workers: 2, opponents: [prev]}
+store: runs/e2b-p0-control
