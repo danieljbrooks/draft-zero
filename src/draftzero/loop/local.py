@@ -6,10 +6,11 @@ The same programs as on many machines; only the store differs.
 Starts the controller, the learner, one evaluator and N actors (`python -m draftzero.loop.cli <role>`), each in its
 own session with its log in <work-dir>/logs/<role>.log and its cache in <work-dir>/<role>-<machine>. It returns
 once the controller has stopped the run (budget, `stop`) and the others have followed. If a role dies, or at
---max-hours, it asks the run to stop (stop.request) and waits up to `grace_s` for the roles to exit; on Ctrl-C it
-stops them at once. Whatever is left gets SIGTERM, then SIGKILL, including gorge processes they started.
+--max-hours, it asks the run to stop (stop.request) and waits up to `grace_s` for the roles to exit; on Ctrl-C,
+SIGTERM or SIGHUP (kill, a harness timeout, a closed terminal) it stops them at once. Whatever is left gets SIGTERM,
+then SIGKILL, including gorge processes they started; a second signal does not cut that short.
 
-Return code: 0 the run stopped normally, 1 a role failed, 2 --max-hours, 130 Ctrl-C.
+Return code: 0 the run stopped normally, 1 a role failed, 2 --max-hours, 130 Ctrl-C, 143 SIGTERM, 129 SIGHUP.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -78,6 +80,25 @@ def _signal_all(procs: dict, sig: int) -> None:
                 pass
 
 
+class Terminated(Exception):
+    """SIGTERM or SIGHUP reached local mode: the roles are stopped as on Ctrl-C."""
+
+    def __init__(self, signum: int):
+        super().__init__(signal.Signals(signum).name)
+        self.signum = signum
+
+
+def _raise_terminated(signum, frame):
+    raise Terminated(signum)
+
+
+def _set_handlers(sigs, handler) -> dict:
+    """Set `handler` for each signal and return the previous handlers (only the main thread can: {} elsewhere)."""
+    if threading.current_thread() is not threading.main_thread():
+        return {}
+    return {s: signal.signal(s, handler) for s in sigs}
+
+
 def run(config: str, store: str, work_dir: Path, *, machine: str = "local", actors: int = 1,
         max_hours: float | None = None, grace_s: float = 180.0, poll_s: float | None = None, log=print,
         commands: dict[str, list[str]] | None = None, tick_s: float = 2.0) -> int:
@@ -93,11 +114,6 @@ def run(config: str, store: str, work_dir: Path, *, machine: str = "local", acto
         st = open_store(store)
     procs: dict[str, subprocess.Popen] = {}
     logs = []
-    for name, argv in cmds.items():
-        lf = open(work_dir / "logs" / f"{name}.log", "ab")
-        logs.append(lf)
-        procs[name] = subprocess.Popen(argv, stdout=lf, stderr=subprocess.STDOUT, env=env, start_new_session=True)
-        log(f"local: {name} started (pid {procs[name].pid}), log {work_dir / 'logs' / (name + '.log')}")
     deadline = None if max_hours is None else time.time() + max_hours * 3600
     rc, stopping_since = 0, None
 
@@ -111,7 +127,15 @@ def run(config: str, store: str, work_dir: Path, *, machine: str = "local", acto
             elif request:
                 st.put(ctl.STOP, f"stop requested by local mode: {why}\n".encode(), "stop requested")
 
+    # The roles run in their own sessions, so a signal to this process reaches none of them: SIGTERM and SIGHUP
+    # (kill, a harness timeout, a closed terminal) must end in the finally below, as Ctrl-C does.
+    previous = _set_handlers((signal.SIGTERM, signal.SIGHUP), _raise_terminated)
     try:
+        for name, argv in cmds.items():
+            lf = open(work_dir / "logs" / f"{name}.log", "ab")
+            logs.append(lf)
+            procs[name] = subprocess.Popen(argv, stdout=lf, stderr=subprocess.STDOUT, env=env, start_new_session=True)
+            log(f"local: {name} started (pid {procs[name].pid}), log {work_dir / 'logs' / (name + '.log')}")
         while any(p.poll() is None for p in procs.values()):
             for name, p in procs.items():
                 if p.poll() not in (None, 0) and stopping_since is None:
@@ -129,25 +153,34 @@ def run(config: str, store: str, work_dir: Path, *, machine: str = "local", acto
     except KeyboardInterrupt:
         log("local: interrupted; stopping everything")
         rc = 130
+    except Terminated as e:
+        log(f"local: {e}; stopping everything")
+        rc = 128 + e.signum
     finally:
-        below = {pid for p in procs.values() if p.poll() is None for pid in descendants(p.pid)}
-        _signal_all(procs, signal.SIGTERM)
-        t0 = time.time()
-        while any(p.poll() is None for p in procs.values()) and time.time() - t0 < 30:
-            time.sleep(0.5)
-        _signal_all(procs, signal.SIGKILL)
-        for pid in below:                                # orphans whose role already exited
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                pass
-        for p in procs.values():
-            try:
-                p.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                pass
-        for lf in logs:
-            lf.close()
+        # a second Ctrl-C, kill or hang-up must not cut the cleanup short (it would skip the SIGKILL pass)
+        previous = {**_set_handlers((signal.SIGINT, signal.SIGTERM, signal.SIGHUP), signal.SIG_IGN), **previous}
+        try:
+            below = {pid for p in procs.values() if p.poll() is None for pid in descendants(p.pid)}
+            _signal_all(procs, signal.SIGTERM)
+            t0 = time.time()
+            while any(p.poll() is None for p in procs.values()) and time.time() - t0 < 30:
+                time.sleep(0.5)
+            _signal_all(procs, signal.SIGKILL)
+            for pid in below:                                # orphans whose role already exited
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
+            for p in procs.values():
+                try:
+                    p.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass
+            for lf in logs:
+                lf.close()
+        finally:
+            for s, h in previous.items():
+                signal.signal(s, h if h is not None else signal.SIG_DFL)
     for name, p in procs.items():
         log(f"local: {name} exited with {p.returncode}")
     return rc

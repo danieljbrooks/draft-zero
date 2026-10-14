@@ -192,7 +192,7 @@ def cmd_run(a) -> int:
           f"watch with `dz status {store}`, end with `dz stop {store}`", flush=True)
     rc = loop_cli.main(argv)
     why = {0: "the run stopped", 1: "a role failed (see its log)", 2: f"--max-hours {a.max_hours} reached",
-           130: "interrupted"}.get(rc, f"exit {rc}")
+           130: "interrupted", 143: "terminated (SIGTERM)", 129: "hung up (SIGHUP)"}.get(rc, f"exit {rc}")
     print(f"dz run: {why}; `dz status {store}`, `dz report {store}`", flush=True)
     return rc
 
@@ -639,8 +639,9 @@ def parser() -> argparse.ArgumentParser:
     p = add("run", "start every role of a run on this machine (local mode)",
             description="Start the controller, the learner, one evaluator and N actors on this machine against one "
                         "store (python -m draftzero.loop.cli local). Returns when the run stops: 0 at its budget or "
-                        "`dz stop`, 1 when a role failed, 2 at --max-hours, 130 on Ctrl-C. Starting it again on the "
-                        "same store resumes the run.")
+                        "`dz stop`, 1 when a role failed, 2 at --max-hours, 130 on Ctrl-C, 143 on SIGTERM, 129 on "
+                        "SIGHUP (the roles are stopped either way). Starting it again on the same store resumes the "
+                        "run.")
     p.add_argument("config", metavar="CONFIG")
     p.add_argument("--store", default=None, help="a folder or hf://buckets/<owner>/<bucket> (default: the config's)")
     p.add_argument("--actors", type=int, default=1, help="actor processes (default 1)")

@@ -3,6 +3,8 @@ controller finishes, a failed role, the time limit, and no stray child processes
 from __future__ import annotations
 
 import os
+import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -62,6 +64,38 @@ def test_a_failed_role_fails_the_run_and_the_time_limit(tmp_path):
     cmds = {"controller": [PY, "-c", "import time; time.sleep(120)"]}
     assert local.run("c", "s", tmp_path / "b", commands=cmds, log=lambda *_: None, grace_s=0.5, tick_s=0.2,
                      max_hours=1 / 3600) == 2
+
+
+@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGHUP], ids=["SIGTERM", "SIGHUP"])
+def test_sigterm_or_sighup_stops_the_roles_as_ctrl_c_does(tmp_path, sig):
+    """`kill`, a closed terminal or a harness timeout must not orphan the roles (they run in their own sessions)."""
+    role = "import os, sys, time; open(sys.argv[1], 'w').write(str(os.getpid())); time.sleep(300)"
+    cmds = {name: [PY, "-c", role, str(tmp_path / f"{name}.pid")] for name in ("controller", "actor-0")}
+    parent = (f"import sys; from draftzero.loop import local; sys.exit(local.run('c', 's', {str(tmp_path / 'w')!r}, "
+              f"commands={cmds!r}, log=lambda *a: None, grace_s=60, tick_s=0.2))")
+    env = dict(os.environ, PYTHONPATH=str(Path(local.__file__).resolve().parents[2]))
+    p = subprocess.Popen([PY, "-c", parent], env=env)
+    pids = []
+    try:
+        for _ in range(200):
+            if all((tmp_path / f"{n}.pid").exists() and (tmp_path / f"{n}.pid").read_text() for n in cmds):
+                break
+            time.sleep(0.05)
+        pids = [int((tmp_path / f"{n}.pid").read_text()) for n in cmds]
+        p.send_signal(sig)
+        assert p.wait(timeout=60) == 128 + sig
+        for _ in range(50):
+            if not any(_alive(pid) for pid in pids):
+                break
+            time.sleep(0.1)
+        assert not [pid for pid in pids if _alive(pid)], "roles outlived local mode"
+    finally:
+        p.kill()
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 @pytest.mark.skipif(not Path("/proc").exists(), reason="descendants() reads /proc")
