@@ -156,7 +156,7 @@ dz evaluator  --config configs/runs/X.yml --store hf://buckets/danbrooks/dz-X
 dz actor      --config configs/runs/X.yml --store hf://buckets/danbrooks/dz-X --machine pod1
 ```
 
-A machine without a Hugging Face token runs its actor against a local folder, and a relay beside the store moves files over rsync: it pushes `config.yml`, `control.json` and the newest versions to each host and pulls complete shards, heartbeats and metrics back. With a bucket store, the relay keeps a local mirror folder and is the only process holding the token. `configs/smoke-distributed.yml` describes this path.
+A machine without a Hugging Face token runs its actor against a local folder, and a relay beside the store moves files over rsync: it pushes `config.yml`, `control.json` and the newest versions (`versions/player/` and, with `builder.learn`, `versions/builder/`) to each host and pulls complete shards (`shards/` and `builder/shards/`), heartbeats and metrics back. A builder actor on such a host (`dz builder-actor --config <root>/store/config.yml --store <root>/store --machine NAME`, a name of its own) generates its sealed pools there with the bundled `dzgorge sealed-pools` and `.cards`. With a bucket store, the relay keeps a local mirror folder and is the only process holding the token. `configs/smoke-distributed.yml` describes this path.
 
 ```bash
 dz relay configs/runs/X.yml --host pod1 /root/dz/run "root@1.2.3.4 -p 40066" --once   # first sync

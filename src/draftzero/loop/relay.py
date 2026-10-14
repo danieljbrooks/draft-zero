@@ -15,15 +15,18 @@ and the relay, running beside the run's real store (a local folder on d1), keeps
 
 Each sync, for every host (a host that fails is logged and retried next time; the others go on):
 
-- **push** `versions/<kind>/v<N>/` for the latest version and the one before, and the one control.json names if it
-  is older (older ones are deleted on the host; each version's files appear together), then `latest.json`, then
-  `config.yml` and `control.json`. The pointers are read before the versions go (control.json first: the controller
-  names a version only once it is latest) and pushed as read, so a host never points at a version it lacks; a
-  version published meanwhile goes at the next sync. Nothing else is pushed.
+- **push** `versions/<kind>/v<N>/` of every kind here (the player's; the deck builder's, `versions/builder/`, when
+  the run has one) for the latest version and the one before, and the one control.json names if it is older (older
+  ones are deleted on the host; each version's files appear together), then `latest.json`, then `config.yml` and
+  `control.json`. The pointers are read before the versions go (control.json first: the controller names a version
+  only once it is latest) and pushed as read, so a host never points at a version it lacks; a version published
+  meanwhile goes at the next sync. Nothing else is pushed.
 - **pull** `<root>/store/shards/<actor>/<seq>/` for each shard that is complete there (its `meta.json` exists:
   actors write it last) and not yet here: every other file first, `meta.json` last, so a reader here also sees a
-  complete shard or no meta.json. Then `heartbeats/` and `metrics/` (rsync's quick check skips unchanged files).
-  Shards are never deleted on the host.
+  complete shard or no meta.json. Then the deck builder's shards, `builder/shards/<actor>/<seq>/` (draftzero.loop.
+  builder: decks.jsonl, games.jsonl, meta.json last), the same way, once this store has `versions/builder/` (a
+  builder actor plays only once control.json names a builder version). Then `heartbeats/` and `metrics/` (rsync's
+  quick check skips unchanged files). Shards are never deleted on the host.
 
 Transport: rsync. A host with "ssh" ("user@host -p port [-i key] [-o opt]") goes over SSH (connections shared through
 an ssh ControlMaster); a host without one is a local path (tests, or a mounted disk). Pass `transport=` to plug in
@@ -32,16 +35,20 @@ relay host needs a direct public IP and port.
 
 **Upstream.** When the run's store is not a local folder (`hf://buckets/...`: the relay is then the only process with
 the token), pass it as `upstream=` (CLI `--upstream SPEC`) and give the relay a folder of its own as the local
-store: each sync first mirrors the latest + previous versions (and the one control.json names), then config.yml and
+store: each sync first mirrors the latest + previous versions of each kind (`kinds`: player and builder, plus any
+kind control.json names; a kind the upstream lacks is skipped) and the ones control.json names, then config.yml and
 control.json, down from the upstream store into the folder (when a version fails to come down, the folder keeps its
 previous control.json, so hosts are never pointed at it), and after the pulls uploads every newly pulled complete
-shard (one put_many each, meta.json last) and the heartbeat and metrics files that changed. Only the Store API is
-used (read_bytes, list, get, put_many).
+shard, the player's and the builder's (one put_many each, meta.json last), and the heartbeat and metrics files that
+changed. Only the Store API is used (read_bytes, list, get, put_many).
 
-Notes: give every actor machine a unique --machine name (shards/<actor>/ and heartbeats/<machine>.json are merged
-from all hosts into one store). rsync stages pulled files in `<store>/.relay-tmp/`. In sync mode an actor behind the
-relay sees only its own host's shards when it counts the version's games. `relay/status.json` in the store holds
-the last sync's per-host result.
+Notes: give every actor machine a unique --machine name (shards/<actor>/, builder/shards/<actor>/ and
+heartbeats/<machine>.json are merged from all hosts into one store; a player actor and a builder actor on one pod
+need two names). rsync stages pulled files in `<store>/.relay-tmp/`. In sync mode an actor behind the relay sees
+only its own host's shards when it counts the version's games, and so does a builder actor counting
+builder.games_per_version (each host plays up to that many until the builder learner publishes the next version).
+`relay/status.json` in the store holds the last sync's per-host result ("pulled": shards of both kinds,
+"builder_pulled": the builder's).
 """
 from __future__ import annotations
 
@@ -65,6 +72,10 @@ from draftzero.workers.ssh import SSHTarget
 VERSION_RE = re.compile(r"^v(\d+)$")
 PUSH_FILES = ("config.yml", "control.json")        # in this order: control.json last
 PULL_DIRS = ("heartbeats", "metrics")
+# shard folders pulled from hosts, each with the version kind whose folder here turns it on (None: always): the
+# player's, then the deck builder's (draftzero.loop.builder.SHARDS)
+SHARD_DIRS = (("shards", None), ("builder/shards", "builder"))
+KINDS = ("player", "builder")                       # the version kinds an upstream mirror looks for
 MULTIPLEX = ("ControlMaster=auto", "ControlPath=/tmp/dz-relay-%C", "ControlPersist=120")
 STATUS = "relay/status.json"
 TMP = ".relay-tmp"
@@ -167,7 +178,7 @@ class Relay:
     def __init__(self, local_store_root, hosts: Iterable["Host | Mapping"], *,
                  transport: Optional[Callable[[Host], Transport]] = None, keep_versions: int = 2,
                  multiplex: bool = True, log: Callable[[str], None] = _log, status_path: Optional[str] = STATUS,
-                 upstream=None, kinds: Iterable[str] = ("player",)):
+                 upstream=None, kinds: Iterable[str] = KINDS):
         self.upstream, self.kinds, self.upstream_status = upstream, tuple(kinds), {}
         self.hosts = [Host.of(h) for h in hosts]
         names = [h.name for h in self.hosts]
@@ -188,20 +199,23 @@ class Relay:
     # ── one round ──
     def sync_once(self) -> dict[str, dict]:
         """Push then pull, every host (with an upstream: mirror it down first, upload what came in last). Returns
-        {host: {ok, pushed, versions, pulled, seconds[, error]}}; the upstream's result is in .upstream_status."""
+        {host: {ok, pushed, versions, pulled, builder_pulled, seconds[, error]}}; the upstream's result is in
+        .upstream_status."""
         if self.upstream is not None:
             self.upstream_status = self._guard("upstream down", self.mirror_down)
         out = {}
         for h in self.hosts:
             t0 = time.monotonic()
             try:
-                st = {"ok": True, **self.push(h), "pulled": self.pull(h)}
+                st = {"ok": True, **self.push(h), **self.pull(h)}
             except Exception as e:      # one unreachable pod must not stop the others
                 st = {"ok": False, "error": f"{type(e).__name__}: {e}"[:600]}
                 self.log(f"{h.name}: {st['error']}")
             st["seconds"] = round(time.monotonic() - t0, 2)
             if st["ok"] and (st["pulled"] or st["versions"]):
-                self.log(f"{h.name}: pulled {st['pulled']} shards, versions {st['versions']}")
+                self.log(f"{h.name}: pulled {st['pulled']} shards"
+                         + (f" ({st['builder_pulled']} builder)" if st["builder_pulled"] else "")
+                         + f", versions {st['versions']}")
             out[h.name] = st
         if self.upstream is not None:
             self.upstream_status = {"down": self.upstream_status, "up": self._guard("upstream up", self.mirror_up)}
@@ -218,15 +232,15 @@ class Relay:
 
     # ── upstream: the run's real store when this folder is only the relay's mirror (hf://buckets/...) ──
     def mirror_down(self) -> dict:
-        """config.yml, control.json and the versions hosts get (latest + previous of each kind, and the one
-        control.json names) from the upstream store into this folder: a version's files before its meta.json,
-        latest.json after the version, config.yml and control.json last. control.json is read first (so latest.json,
-        read after it, is at least as new) but written only once every version it names is here: a failed download
-        raises and leaves the previous control.json, which the hosts then keep getting."""
+        """config.yml, control.json and the versions hosts get (latest + previous of each kind in .kinds or named
+        by control.json, and the ones control.json names) from the upstream store into this folder: a version's
+        files before its meta.json, latest.json after the version, config.yml and control.json last. control.json is
+        read first (so latest.json, read after it, is at least as new) but written only once every version it names
+        is here: a failed download raises and leaves the previous control.json, which the hosts then keep getting."""
         up, got = self.upstream, []
         pointers = {f: up.read_bytes(f) for f in PUSH_FILES}
         named = _named_versions(pointers["control.json"])
-        for kind in self.kinds:
+        for kind in dict.fromkeys([*self.kinds, *named]):
             latest = up.read_bytes(f"versions/{kind}/latest.json")
             if latest is None:
                 continue
@@ -243,7 +257,7 @@ class Relay:
             if _differs(self.root / "versions" / kind / "latest.json", latest):
                 _atomic_write(self.root / "versions" / kind / "latest.json", latest)
         lacking = [f"{k}/v{v:04d}" for k, v in named.items()
-                   if k in self.kinds and not (self.root / "versions" / k / f"v{v:04d}" / "meta.json").exists()]
+                   if not (self.root / "versions" / k / f"v{v:04d}" / "meta.json").exists()]
         if lacking:
             raise RuntimeError(f"control.json names {', '.join(lacking)}, which the upstream store did not give: "
                                "keeping the previous control.json")
@@ -255,26 +269,29 @@ class Relay:
         return {"got": got}
 
     def mirror_up(self) -> dict:
-        """Upload what the hosts sent: each complete shard not yet uploaded (one put_many, meta.json last), then the
-        heartbeats and metrics files that changed. A ledger (relay/uploaded.json) remembers what went up."""
+        """Upload what the hosts sent: each complete shard not yet uploaded, the player's then the builder's (one
+        put_many, meta.json last), then the heartbeats and metrics files that changed. A ledger (relay/uploaded.json)
+        remembers what went up: {<shard dir>: ["actor/seq", ...], "files": {path: [mtime_ns, size]}}."""
         up = self.upstream
         ledger_path = self.root / "relay" / "uploaded.json"
         try:
             ledger = json.loads(ledger_path.read_text())
         except (OSError, ValueError):
             ledger = {"shards": [], "files": {}}
-        done = set(ledger["shards"])
+        done = {rel: set(ledger.get(rel, ())) for rel, _ in SHARD_DIRS}
         shards, changed = 0, {}
         try:
-            for meta in sorted((self.root / "shards").glob("*/*/meta.json")):
-                sid = str(meta.parent.relative_to(self.root / "shards"))
-                if sid in done:
-                    continue
-                files = sorted((p for p in meta.parent.iterdir() if p.is_file()),
-                               key=lambda p: (p.name == "meta.json", p.name))
-                up.put_many({f"shards/{sid}/{p.name}": p for p in files}, message=f"relay: shard {sid}")
-                done.add(sid)
-                shards += 1
+            for rel, kind in SHARD_DIRS:
+                for meta in sorted((self.root / rel).glob("*/*/meta.json")):
+                    sid = meta.parent.relative_to(self.root / rel).as_posix()
+                    if sid in done[rel]:
+                        continue
+                    files = sorted((p for p in meta.parent.iterdir() if p.is_file()),
+                                   key=lambda p: (p.name == "meta.json", p.name))
+                    up.put_many({f"{rel}/{sid}/{p.name}": p for p in files},
+                                message=f"relay: {kind + ' ' if kind else ''}shard {sid}")
+                    done[rel].add(sid)
+                    shards += 1
             for d in PULL_DIRS:
                 for p in sorted((self.root / d).rglob("*")) if (self.root / d).is_dir() else ():
                     if not p.is_file() or p.name.startswith("."):
@@ -286,7 +303,7 @@ class Relay:
                 up.put_many({rel: p for rel, (p, _) in changed.items()}, message="relay: heartbeats and metrics")
                 ledger["files"].update({rel: sig for rel, (_, sig) in changed.items()})
         finally:     # what went up stays recorded even when a later upload fails
-            ledger["shards"] = sorted(done)
+            ledger.update({rel: sorted(ids) for rel, ids in done.items() if ids or rel in ledger})
             _atomic_write(ledger_path, json.dumps(ledger, sort_keys=True).encode())
         return {"shards": shards, "files": len(changed)}
 
@@ -374,27 +391,39 @@ class Relay:
                 _check(t.rsync([*(f"{d}/{f}" for f in files), dest], mkdir=h.store), "push " + ", ".join(files))
         return {"versions": versions, "pushed": files}
 
-    # ── pull: complete shards (meta.json last), heartbeats, metrics ──
-    def pull(self, h: Host) -> int:
+    # ── pull: complete shards (meta.json last), the builder's too, then heartbeats and metrics ──
+    def pull(self, h: Host) -> dict:
+        """{"pulled": shards pulled (both kinds), "builder_pulled": the builder's}. Builder shards are looked for
+        only once this store has versions/builder/ (SHARD_DIRS)."""
         t = self.transports[h.name]
-        src = t.remote(posixpath.join(h.store, "shards") + "/")
+        got = {rel: self.pull_shards(h, rel) for rel, kind in SHARD_DIRS
+               if kind is None or (self.root / "versions" / kind).is_dir()}
+        tmp = self.root / TMP
+        _check(t.rsync([f"--temp-dir={tmp}", *(t.remote(posixpath.join(h.store, d)) for d in PULL_DIRS),
+                        f"{self.root}/"]), "pull " + " and ".join(PULL_DIRS))
+        return {"pulled": sum(got.values()), "builder_pulled": got.get("builder/shards", 0)}
+
+    def pull_shards(self, h: Host, rel: str) -> int:
+        """The complete shards under the host's <store>/<rel>/ that this store lacks: every file but meta.json, then
+        the meta.jsons. Returns how many."""
+        t = self.transports[h.name]
+        src = t.remote(posixpath.join(h.store, rel) + "/")
         listing = _check(t.rsync(["--list-only", "--include=*/", "--include=meta.json", "--exclude=*", src]),
-                         "list shards")
-        local = self.root / "shards"
+                         f"list {rel}")
+        local = self.root / rel
         new = sorted(s for s in complete_shards(listing.out) if not (local / s / "meta.json").exists())
         tmp = self.root / TMP
         tmp.mkdir(exist_ok=True)
         if new:
-            local.mkdir(exist_ok=True)
+            local.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(dir=tmp, prefix="lists-") as d:
                 data, meta = Path(d) / "data", Path(d) / "meta"
                 data.write_text("".join(f"{s}/\n" for s in new))
                 meta.write_text("".join(f"{s}/meta.json\n" for s in new))
                 _check(t.rsync([f"--files-from={data}", "--exclude=meta.json", f"--temp-dir={tmp}", src, f"{local}/"]),
-                       "pull shards")
-                _check(t.rsync([f"--files-from={meta}", f"--temp-dir={tmp}", src, f"{local}/"]), "pull shard meta.json")
-        _check(t.rsync([f"--temp-dir={tmp}", *(t.remote(posixpath.join(h.store, d)) for d in PULL_DIRS),
-                        f"{self.root}/"]), "pull " + " and ".join(PULL_DIRS))
+                       f"pull {rel}")
+                _check(t.rsync([f"--files-from={meta}", f"--temp-dir={tmp}", src, f"{local}/"]),
+                       f"pull {rel} meta.json")
         return len(new)
 
     def _write_status(self, hosts: dict) -> None:
