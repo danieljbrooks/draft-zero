@@ -1,13 +1,18 @@
 """The relay between a run's store and actor hosts' stores, with real rsync between two local directories (the
-transport is pluggable: a host without "ssh" is a local path), plus the SSH command lines it builds."""
+transport is pluggable: a host without "ssh" is a local path), plus the SSH command lines it builds. The player's
+shards and versions first, then the deck builder's (builder/shards/, versions/builder/)."""
 import json
+import os
 import shutil
 from pathlib import Path
 
 import pytest
 
+from draftzero.loop import builder as bld
+from draftzero.loop import control as ctl
 from draftzero.loop import relay as rl
 from draftzero.loop.relay import Host, Relay, Transport
+from draftzero.loop.store import LocalStore
 from draftzero.workers.base import Result, local_run
 from draftzero.workers.ssh import SSHTarget
 
@@ -411,3 +416,234 @@ def test_missing_remote_dir_over_ssh_is_not_an_error():
     assert rl._missing_only(Result(23, "", err))
     assert not rl._missing_only(Result(23, "", err + "rsync: [sender] read errors mapping \"x\": Input/output error (5)\n"))
     assert not rl._missing_only(Result(12, "", err))
+
+
+# ── the deck builder's files (draftzero.loop.builder): builder/shards/ pulled, versions/builder/ pushed ──
+
+
+def _bshard(store: Path, actor: str, seq: int, complete: bool = True) -> Path:
+    """A builder shard as BuilderActor.play_decks uploads it: decks.jsonl, games.jsonl, meta.json last."""
+    d = store / bld.shard_dir(actor, seq)
+    _w(d / "decks.jsonl", f'{{"name": "b-{actor}-{seq}"}}\n')
+    _w(d / "games.jsonl", '{"winner": 0}\n')
+    if complete:
+        _w(d / "meta.json", json.dumps({"actor": actor, "seq": seq, "version": 0, "games": 1, "decided": 1}))
+    return d
+
+
+def _bversion(store: Path, n: int, latest: bool = True) -> None:
+    """A builder version as BuilderLearner publishes it: ens.pt and meta.json (version 0 untrained: meta only),
+    then latest.json."""
+    meta = {"version": n, "net": n > 0, "sha256": {}}
+    if n > 0:
+        pt = _w(store / ctl.version_file(n, "ens.pt", bld.COMPONENT), f"ens {n}")
+        meta["sha256"] = {"pt": ctl.sha256(pt)}
+    _w(store / ctl.version_file(n, "meta.json", bld.COMPONENT), json.dumps(meta))
+    if latest:
+        _w(store / ctl.latest_path(bld.COMPONENT),
+           json.dumps({"version": n, "path": ctl.version_dir(n, bld.COMPONENT)}))
+
+
+def _a_minute_on(store: Path) -> None:
+    """Age the host's pointers by a relay interval. rsync's quick check compares sizes and whole-second mtimes, and a
+    pointer often keeps its size (latest.json v0002 -> v0003; control.json builder 2 -> 3): two syncs in the same
+    second, as a test makes them, would see it unchanged (a relay's syncs are an interval apart)."""
+    for p in [store / "control.json", store / "config.yml", *store.glob("versions/*/latest.json")]:
+        if p.exists():
+            t = p.stat().st_mtime - 60
+            os.utime(p, (t, t))
+
+
+def _control(store: Path, player: int, builder=None) -> None:
+    v = {"player": player, **({"builder": builder} if builder is not None else {})}
+    (store / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": v, "stop": False}))
+
+
+@pytest.fixture
+def bworld(world):
+    """The world with the deck builder on: builder versions 0-2 here, named by control.json; on the host two complete
+    builder shards, one being written, and a stale builder version."""
+    local, root = world
+    for n in (0, 1, 2):
+        _bversion(local, n)
+    _control(local, 3, 2)
+    remote = root / "store"
+    _bshard(remote, "pod1-b", 1)
+    _bshard(remote, "pod1-b", 2, complete=False)
+    _bshard(remote, "pod1-c", 1)
+    _w(remote / "heartbeats" / "pod1-b.json", json.dumps({"machine": "pod1-b", "role": "builder-actor"}))
+    _w(remote / "metrics" / "builder-actor" / "pod1-b" / "000001.jsonl", '{"name": "data.builder_games"}\n')
+    _bversion(remote, 0)                                                # stale: deleted by the push
+    _w(remote / ctl.latest_path(bld.COMPONENT), json.dumps({"version": 0}))
+    _w(remote / "builder" / "shards" / "pod1-b" / "000003" / ".tmp-x", "half-written")       # never a shard
+    return local, root
+
+
+def test_builder_shards_come_in_and_builder_versions_go_out(bworld, tmp_path):
+    local, root = bworld
+    remote = root / "store"
+    st = Relay(local, [Host("pod1", str(root))], log=lambda m: None).sync_once()["pod1"]
+    assert st["ok"] and st["pulled"] == 4 and st["builder_pulled"] == 2
+    assert st["versions"] == ["builder/v0002", "builder/v0001", "player/v0003", "player/v0002"]
+    assert st["pushed"] == ["config.yml", "control.json"]
+    # pull: complete builder shards whole, beside the player's; the one being written not at all
+    for actor in ("pod1-b", "pod1-c"):
+        d = local / bld.shard_dir(actor, 1)
+        assert sorted(p.name for p in d.iterdir()) == ["decks.jsonl", "games.jsonl", "meta.json"]
+        assert (d / "decks.jsonl").read_text() == f'{{"name": "b-{actor}-1"}}\n'
+    assert not (local / bld.shard_dir("pod1-b", 2)).exists() and not (local / "builder/shards/pod1-b/000003").exists()
+    assert (local / "shards" / "pod1-a" / "000001" / "meta.json").exists()
+    assert json.loads((local / "heartbeats" / "pod1-b.json").read_text())["role"] == "builder-actor"
+    assert (local / "metrics" / "builder-actor" / "pod1-b" / "000001.jsonl").exists()
+    # the builder learner here sees exactly the complete shards
+    idx = bld.ShardIndex(LocalStore(local))
+    assert sorted(m["path"] for m in idx.refresh()) == [bld.shard_dir("pod1-b", 1), bld.shard_dir("pod1-c", 1)]
+    # push: latest + previous builder versions, the stale one gone, the pointers current
+    vb = remote / "versions" / "builder"
+    assert sorted(p.name for p in vb.iterdir()) == ["latest.json", "v0001", "v0002"]
+    assert json.loads((vb / "latest.json").read_text())["version"] == 2
+    assert json.loads((remote / "control.json").read_text())["version"] == {"player": 3, "builder": 2}
+    # a builder actor on the host fetches the version control.json names from its own store
+    meta, files = ctl.fetch_version(LocalStore(remote), 2, tmp_path / "bv", ("ens.pt",), component=bld.COMPONENT)
+    assert meta["version"] == 2 and files["ens.pt"].read_text() == "ens 2"
+    assert (remote / bld.shard_dir("pod1-b", 2) / "games.jsonl").exists()      # the host's shards stay
+    assert not list((local / rl.TMP).rglob("*"))
+    assert json.loads((local / rl.STATUS).read_text())["hosts"]["pod1"]["builder_pulled"] == 2
+    # later: the shard being written completes, the builder learner publishes v3 and the controller names it
+    _w(remote / bld.shard_dir("pod1-b", 2) / "meta.json", json.dumps({"actor": "pod1-b", "seq": 2}))
+    _bversion(local, 3)
+    _control(local, 3, 3)
+    _a_minute_on(remote)
+    st = Relay(local, [Host("pod1", str(root))], log=lambda m: None).sync_once()["pod1"]
+    assert st["pulled"] == 1 and st["builder_pulled"] == 1
+    assert (local / bld.shard_dir("pod1-b", 2) / "meta.json").exists()
+    assert sorted(p.name for p in vb.iterdir()) == ["latest.json", "v0002", "v0003"]
+    assert json.loads((remote / "control.json").read_text())["version"]["builder"] == 3
+    assert Relay(local, [Host("pod1", str(root))], log=lambda m: None).sync_once()["pod1"]["pulled"] == 0
+
+
+def test_builder_meta_json_is_copied_after_the_rest(bworld):
+    local, root = bworld
+    calls = []
+
+    def runner(argv, **kw):
+        calls.append(argv)
+        return local_run(argv, **kw)
+    Relay(local, [Host("pod1", str(root))], transport=lambda h: Transport(runner=runner),
+          log=lambda m: None).sync_once()
+    pulls = [a for a in calls if any(x.startswith("--files-from=") for x in a)]
+    assert [a[-1] for a in pulls] == [f"{local.resolve()}/shards/"] * 2 + [f"{local.resolve()}/builder/shards/"] * 2
+    assert all(a[-2].endswith("/store/builder/shards/") for a in pulls[2:])
+    assert "--exclude=meta.json" in pulls[2] and "--exclude=meta.json" not in pulls[3]
+    assert Path(next(x for x in pulls[3] if x.startswith("--files-from="))[13:]).name == "meta"
+    # the pushes: both kinds' versions, both latest.jsons, then config + control
+    pushes = [a for a in calls if a[-1].endswith("/store/") and "--list-only" not in a]
+    assert [a[-2].rsplit("/./", 1)[-1] for a in pushes[:4]] == ["versions/builder/", "versions/player/",
+                                                                "versions/builder/latest.json",
+                                                                "versions/player/latest.json"]
+    assert [Path(p).name for p in pushes[4][-3:-1]] == ["config.yml", "control.json"]
+
+
+def test_builder_shards_wait_for_the_builder(world):
+    """A run without the deck builder (no versions/builder/ here): the relay never looks for builder shards, so its
+    rsync calls are the player's alone; once the builder learner publishes version 0, they come in."""
+    local, root = world
+    _bshard(root / "store", "pod1-b", 1)
+    calls = []
+
+    def runner(argv, **kw):
+        calls.append(argv)
+        return local_run(argv, **kw)
+    r = Relay(local, [Host("pod1", str(root))], transport=lambda h: Transport(runner=runner), log=lambda m: None)
+    st = r.sync_once()["pod1"]
+    assert st["pulled"] == 2 and st["builder_pulled"] == 0 and not (local / "builder").exists()
+    assert not any("builder/shards" in x or "versions/builder" in x for a in calls for x in a)
+    _bversion(local, 0)
+    st = r.sync_once()["pod1"]
+    assert st["builder_pulled"] == 1 and (local / bld.shard_dir("pod1-b", 1) / "meta.json").exists()
+    assert "builder/v0000" in st["versions"]
+
+
+def test_push_sends_the_builder_pointers_as_they_were_before_the_versions(bworld):
+    """The builder learner publishes v3 and the controller names it while the versions are in flight (right after
+    the builder's versions rsync): the host keeps getting latest.json and control.json naming v2 until the next sync."""
+    local, root = bworld
+    remote = root / "store"
+    bumped = []
+
+    def runner(argv, **kw):
+        r = local_run(argv, **kw)
+        if "--delete-excluded" in argv and argv[-2].endswith("/./versions/builder/") and not bumped:
+            _bversion(local, 3)
+            _control(local, 3, 3)
+            bumped.append(1)
+        return r
+    r = Relay(local, [Host("pod1", str(root))], transport=lambda h: Transport(runner=runner), log=lambda m: None)
+    st = r.sync_once()["pod1"]
+    assert bumped and st["ok"] and st["versions"][:2] == ["builder/v0002", "builder/v0001"]
+    vb = remote / "versions" / "builder"
+    named = json.loads((remote / "control.json").read_text())["version"]["builder"]
+    assert named == 2 and json.loads((vb / "latest.json").read_text())["version"] == 2
+    assert (vb / f"v{named:04d}" / "meta.json").exists() and not (vb / "v0003").exists()
+    _a_minute_on(remote)
+    r.sync_once()
+    assert json.loads((remote / "control.json").read_text())["version"]["builder"] == 3
+    assert (vb / "v0003" / "ens.pt").read_text() == "ens 3"
+
+
+def test_push_keeps_the_builder_version_control_json_names(bworld):
+    """The controller lags the builder learner (control.json names builder v0, latest is v2): the host keeps v0 too;
+    a control.json naming a builder version this store lacks is not pushed."""
+    local, root = bworld
+    _control(local, 3, 0)
+    st = Relay(local, [Host("pod1", str(root))], log=lambda m: None).sync_once()["pod1"]
+    assert st["versions"][:3] == ["builder/v0002", "builder/v0001", "builder/v0000"]
+    vb = root / "store" / "versions" / "builder"
+    assert sorted(p.name for p in vb.iterdir()) == ["latest.json", "v0000", "v0001", "v0002"]
+    _control(local, 3, 7)
+    st = Relay(local, [Host("pod1", str(root))], log=lambda m: None).sync_once()["pod1"]
+    assert st["ok"] and st["pushed"] == ["config.yml"]
+    assert json.loads((root / "store" / "control.json").read_text())["version"]["builder"] == 0
+
+
+def test_upstream_mirrors_builder_versions_and_uploads_builder_shards(bworld, tmp_path):
+    run, root = bworld                      # the run folder plays the upstream store
+    up = FolderStore(run)
+    mirror = tmp_path / "relay-mirror"
+    r = Relay(mirror, [Host("pod1", str(root))], upstream=up, log=lambda m: None)
+    st = r.sync_once()["pod1"]
+    assert r.upstream_status["ok"] and r.upstream_status["down"]["got"] == [
+        "player/v0003", "player/v0002", "builder/v0002", "builder/v0001", "config.yml", "control.json"]
+    assert st["versions"] == ["builder/v0002", "builder/v0001", "player/v0003", "player/v0002"]
+    assert json.loads((root / "store/control.json").read_text())["version"] == {"player": 3, "builder": 2}
+    assert (root / "store/versions/builder/v0002/ens.pt").read_text() == "ens 2"
+    # up: the player's two shards and the builder's two, meta.json last in each batch
+    bputs = [p for p in up.puts if p[0].startswith("builder/shards/")]
+    assert len(bputs) == 2 and all(p[-1].endswith("/meta.json") for p in bputs)
+    assert sorted(p[-1] for p in bputs) == [f"{bld.shard_dir(a, 1)}/meta.json" for a in ("pod1-b", "pod1-c")]
+    assert (run / bld.shard_dir("pod1-c", 1) / "decks.jsonl").read_text() == '{"name": "b-pod1-c-1"}\n'
+    assert r.upstream_status["up"]["shards"] == 4
+    ledger = json.loads((mirror / "relay" / "uploaded.json").read_text())
+    assert ledger["builder/shards"] == ["pod1-b/000001", "pod1-c/000001"] and len(ledger["shards"]) == 2
+    n = len(up.puts)
+    r.sync_once()
+    assert len(up.puts) == n                                    # nothing new: nothing uploaded again
+
+
+def test_upstream_mirrors_a_kind_control_json_names(bworld, tmp_path):
+    """A relay told only of the player still mirrors the builder versions control.json names: otherwise it would
+    hold back every control.json (a host is never pointed at a version it lacks)."""
+    run, root = bworld
+    _control(run, 3, 1)
+    r = Relay(tmp_path / "m", [Host("pod1", str(root))], upstream=FolderStore(run), kinds=("player",),
+              log=lambda m: None)
+    r.sync_once()
+    assert r.upstream_status["ok"] and (tmp_path / "m/versions/builder/v0001/meta.json").exists()
+    assert json.loads((root / "store/control.json").read_text())["version"]["builder"] == 1
+
+
+def test_a_player_only_upload_ledger_has_no_builder_entry(world, tmp_path):
+    run, root = world
+    r = Relay(tmp_path / "m", [Host("pod1", str(root))], upstream=FolderStore(run), log=lambda m: None)
+    r.sync_once()
+    assert set(json.loads((tmp_path / "m" / "relay" / "uploaded.json").read_text())) == {"shards", "files"}

@@ -815,10 +815,11 @@ def parser() -> argparse.ArgumentParser:
 
     p = add("relay", "move shards and versions between the run's store and actor hosts over rsync",
             description="Run the relay (draftzero.loop.relay) for CONFIG's run: push config.yml, control.json and "
-                        "the latest versions to each host's <ROOT>/store and pull complete shards, heartbeats and "
-                        "metrics back, every --interval seconds until the run stops. The store is the config's "
-                        "(a local folder); when that is an hf://buckets/ store, give the relay a folder with "
-                        "--store and the bucket becomes its upstream.")
+                        "the latest versions (the player's and the deck builder's) to each host's <ROOT>/store and "
+                        "pull complete shards (shards/ and builder/shards/), heartbeats and metrics back, every "
+                        "--interval seconds until the run stops. The store is the config's (a local folder); when "
+                        "that is an hf://buckets/ store, give the relay a folder with --store and the bucket becomes "
+                        "its upstream.")
     p.add_argument("config", metavar="CONFIG")
     p.add_argument("--host", nargs="+", action="append", default=[], metavar="NAME ROOT [SSH]",
                    help='one actor host (repeatable): NAME ROOT ["user@host -p PORT"]; no SSH: ROOT is a local path')

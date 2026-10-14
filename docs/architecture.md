@@ -155,7 +155,7 @@ files.
 
 **One writer per file.** Each actor writes only under `shards/<actor>/`, the learner only `versions/` and `learner/`, the evaluators only `evals/`, and the controller only `config.yml`, `manifest.json`, `control.json`, `events.jsonl`, `plan/rejected/` and the status page. `dz plan` writes a request file, and the controller applies it. On Hugging Face this keeps API calls low: an actor uploads one batch per chunk.
 
-**The relay.** A machine that holds no token hands its shards over ssh to a relay (`dz relay`), the only process with the token. The relay pulls complete shards, `heartbeats/` and `metrics/` from remote actor folders into its store and pushes `config.yml`, `control.json` and the newest versions back; with a bucket store it mirrors through a local folder.
+**The relay.** A machine that holds no token hands its shards over ssh to a relay (`dz relay`), the only process with the token. The relay pulls complete shards (the player's `shards/` and the deck builder's `builder/shards/`), `heartbeats/` and `metrics/` from remote actor folders into its store and pushes `config.yml`, `control.json` and the newest versions of each kind back; with a bucket store it mirrors through a local folder.
 
 ### Changing the plan mid-run
 

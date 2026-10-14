@@ -34,6 +34,11 @@ The controller (draftzero.loop.controller) moves control["version"]["builder"] t
 one evaluation job per version v >= 1 with v % builder.eval.every_versions == 0, assigns its shards to live builder
 evaluators, and counts builder versions against budget.max_versions.
 
+A builder actor on a machine without the run's store (a RunPod pod) plays against a folder of its own that the relay
+(draftzero.loop.relay) keeps in step: it pushes versions/builder/ (and the player versions a pilot uses) and pulls
+builder/shards/. The actor makes its pools there with the bundled dzgorge and .cards (engine.root); builder.pilot,
+a machine path, must exist on that machine. Builder evaluators write evals/, which the relay does not carry.
+
     python -m draftzero.loop.cli builder-actor|builder-learner|builder-evaluator --config C --store S [--machine M]
 """
 from __future__ import annotations
