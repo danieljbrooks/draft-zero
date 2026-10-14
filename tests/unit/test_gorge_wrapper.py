@@ -260,6 +260,30 @@ def test_shrink_and_prefix(tmp_path):
     assert len(ds2) == 120 and str(ds2.collate(np.arange(5)).card_raw.dtype) == "torch.float32"
 
 
+def test_pack_keeps_weight_npy(fake_dzgorge, tmp_path, monkeypatch):
+    """Gorge.pack's shrink (card_raw to float16) and game prefix leave a shard's optional weight.npy (SPEC §2) as
+    dzgorge wrote it, and the loader reads it; shards without weighted records stay without the file."""
+    from draftzero.nets import packfmt
+    from draftzero.nets.data import ShardSet
+    g = fake_dzgorge.gorge
+    c = tmp_path / "v.jsonl.gz"
+    c.write_bytes(gzip.compress(b"{}\n"))
+    monkeypatch.setenv("FAKE_WEIGHTED", "0.3")
+    shards = g.pack([c], tmp_path / "pack", shard=20, game_prefix="a1-000004-")
+    ref = packfmt.write_synthetic(tmp_path / "ref", 50, seed=1, shard_size=20, game_len=10, weighted=0.3)
+    assert [p.name for p in shards] == [p.name for p in ref] == ["00000", "00001", "00002"]
+    for p, q in zip(shards, ref):
+        assert (p / "weight.npy").read_bytes() == (q / "weight.npy").read_bytes()
+        assert np.load(p / "card_raw.npy", mmap_mode="r").dtype == np.float16
+        assert all(x.startswith("a1-000004-") for x in json.loads((p / "meta.json").read_text())["games"])
+    want = np.concatenate([np.load(q / "weight.npy") for q in ref])
+    assert np.any(want < 1) and np.array_equal(ShardSet(tmp_path / "pack").array("weight"), want)
+    monkeypatch.delenv("FAKE_WEIGHTED")
+    plain = g.pack([c], tmp_path / "plain", shard=20)
+    assert not any((p / "weight.npy").exists() for p in plain)
+    assert np.all(ShardSet(tmp_path / "plain").array("weight") == 1)
+
+
 def test_fake_pack_is_atomic(fake_dzgorge, tmp_path):
     g = fake_dzgorge.gorge
     c = tmp_path / "v.jsonl.gz"

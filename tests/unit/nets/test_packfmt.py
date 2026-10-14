@@ -43,6 +43,47 @@ def test_shard_roundtrip(tmp_path, syn):
     assert pf.shard_dirs(tmp_path) == [tmp_path / "s"]
 
 
+def test_weight_is_optional(tmp_path, syn):
+    """weight.npy (SPEC §2): absent means all ones (no file is written for them); present, it is read back exactly
+    and memory-mapped like the rest; the other arrays are the same either way."""
+    pack, games = syn
+    pf.write_shard(tmp_path / "plain", pack, games)
+    assert not (tmp_path / "plain" / "weight.npy").exists()
+    back, _ = pf.read_shard(tmp_path / "plain")
+    assert back["weight"].dtype == pf.F32 and back["weight"].shape == (400,) and np.all(back["weight"] == 1)
+    pf.validate(back)
+    pf.write_shard(tmp_path / "ones", {**pack, "weight": np.ones(400, np.float32)}, games)
+    assert not (tmp_path / "ones" / "weight.npy").exists()       # all ones: as dzgorge pack, no file
+    wpack, _ = pf.synthetic(400, seed=7, weighted=0.3)
+    _same(pack, wpack, pf.STATE_NAMES + pf.TRAIN_NAMES)         # the weights leave the other arrays alone
+    w = wpack["weight"]
+    assert set(np.unique(w).tolist()) == {np.float32(0.1), 1.0} and 0.15 < float(np.mean(w < 1)) < 0.45
+    pf.write_shard(tmp_path / "w", wpack, games)
+    assert (tmp_path / "w" / "weight.npy").exists()
+    for in_ram in (False, True):
+        back, meta = pf.read_shard(tmp_path / "w", in_ram=in_ram)
+        _same(wpack, back, pf.STATE_NAMES + pf.TRAIN_NAMES + ["weight"])
+        assert isinstance(back["weight"], np.memmap) != in_ram
+        pf.validate(back)
+    recs = [pf.get_record(wpack, i) for i in range(20)]
+    assert [r["weight"] for r in recs] == [float(x) for x in w[:20]]
+    _same({"weight": w[:20]}, pf.pack_records(recs), ["weight"])
+
+
+@pytest.mark.parametrize("bad, match", [
+    (np.full(400, 0.5, np.float64), "weight.npy is float64"),
+    (np.full(399, 0.5, np.float32), "weight.npy is float32 \\(399,\\)"),
+    (np.full(400, -0.5, np.float32), "finite values >= 0"),
+    (np.full(400, np.nan, np.float32), "finite values >= 0"),
+])
+def test_read_shard_checks_weight(tmp_path, syn, bad, match):
+    pack, games = syn
+    pf.write_shard(tmp_path / "s", pack, games)
+    np.save(tmp_path / "s" / "weight.npy", bad)
+    with pytest.raises(ValueError, match=match):
+        pf.read_shard(tmp_path / "s")
+
+
 def test_records_roundtrip(syn):
     pack, _ = syn
     back = pf.pack_records([pf.get_record(pack, i) for i in range(len(pack["dense"]))])
@@ -111,6 +152,14 @@ def test_wire_response_roundtrip():
         assert struct.unpack_from("<4I", msg, 4) == (pf.RESP_MAGIC, B, no, 0)
         v2, s2 = pf.decode_response(msg[4:])
         assert np.array_equal(v, v2) and np.array_equal(s, s2)
+
+
+def test_validate_checks_an_optional_weight(syn):
+    pack, _ = syn
+    pf.validate({**pack, "weight": np.ones(400, np.float32)})
+    for bad in (np.ones(399, np.float32), np.ones(400, np.float64), np.full(400, -1, np.float32)):
+        with pytest.raises(ValueError, match="weight"):
+            pf.validate({**pack, "weight": bad})
 
 
 def test_validate_rejects():

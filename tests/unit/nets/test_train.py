@@ -186,6 +186,90 @@ def test_extras_reject_bad_values(shards, tmp_path):
             _run(shards, tmp_path / "bad", *bad)
 
 
+# ------------------------------------------------------------------------------------------------ record weights
+
+@pytest.fixture(scope="module")
+def weighted_shards(tmp_path_factory):
+    """The `shards` data again with weight.npy: 30% of the records at weight 0.1 (a decided-game search's)."""
+    root = tmp_path_factory.mktemp("synw")
+    pf.write_synthetic(root / "train", 12000, seed=11, shard_size=8000, game_len=10, weighted=0.3)
+    pf.write_synthetic(root / "eval", 1000, seed=12, game_len=10, weighted=0.3)
+    return root
+
+
+def _with_ones(src, dst):
+    """A copy of a synthetic shard tree with an explicit weight.npy of ones in every shard."""
+    import shutil
+    shutil.copytree(src, dst)
+    for meta in dst.rglob("meta.json"):
+        n = json.loads(meta.read_text())["n"]
+        np.save(meta.parent / "weight.npy", np.ones(n, np.float32))
+    return dst
+
+
+def test_record_weights_of_one_are_bit_identical(shards, tmp_path, monkeypatch):
+    """A batch whose record weights are all 1 trains bit for bit as before record weights (the losses before the
+    extras): with no weight.npy (read as ones) and with an explicit weight.npy of ones alike."""
+    ones = _with_ones(shards, tmp_path / "ones")
+    s_ones = _run(ones, tmp_path / "w1")
+    s_none = _run(shards, tmp_path / "w0")
+    monkeypatch.setattr(train, "losses", _losses_before_extras)
+    s_old = _run(shards, tmp_path / "old")
+    for name in ("best.pt", "last.pt"):
+        assert _same(_weights(tmp_path / "w1" / name), _weights(tmp_path / "old" / name)), name
+        assert _same(_weights(tmp_path / "w0" / name), _weights(tmp_path / "old" / name)), name
+    assert _evals(tmp_path / "w1") == _evals(tmp_path / "w0") == _evals(tmp_path / "old")
+    assert s_ones["best"] == s_none["best"] == s_old["best"]
+
+
+def test_record_weighted_losses_by_hand():
+    import torch
+    from draftzero.nets import targets as T
+    torch.manual_seed(0)
+    model = M.build("mlp", TINY["mlp"])
+    b = _one_batch()
+    rw = torch.where(torch.arange(b.B) % 3 == 0, torch.tensor(0.1), torch.tensor(1.0))
+    with torch.no_grad():
+        t0, p0, v0, x = train.losses(model, b, _args())                        # b.weight None: unweighted
+        b.weight = torch.ones(b.B)
+        t1, p1, v1, _ = train.losses(model, b, _args())
+        assert torch.equal(t1, t0) and torch.equal(p1, p0) and torch.equal(v1, v0)
+        b.weight = rw
+        tw, pw, vw, _ = train.losses(model, b, _args())
+        te, *_ = train.losses(model, b, _args(), weighted=False)
+        tn, *_ = train.losses(model, b, _args(record_weights=False))
+        ts, *_ = train.losses(model, b, _args(surprise_weight=0.5, value_surprise=0.1))
+        b.weight = torch.zeros(b.B)
+        tz, *_ = train.losses(model, b, _args())
+    assert torch.equal(pw, p0) and torch.equal(vw, v0)                         # the reported losses stay unweighted
+    assert torch.equal(te, t0) and torch.equal(tn, t0)                         # evaluation and --no-record-weights
+    pm, ce = x["pm"], x["ce_state"]
+    pce_w = float((rw * ce)[pm].sum() / rw[pm].sum())
+    vt, vm = T.value_target(b, 0.5)
+    vl = torch.nn.functional.binary_cross_entropy_with_logits(x["vlogit"].float(), vt, reduction="none")
+    vloss_w = float((rw * vl)[vm].sum() / rw[vm].sum())
+    assert abs(float(tw) - (pce_w + vloss_w)) < 1e-5 and abs(float(tw) - float(t0)) > 1e-4
+    # with surprise weighting too: the record weight multiplies the surprise weight, normalised by the record weights
+    sw = 0.5 + 0.5 * T.policy_surprise(b, x["tgt"]) / T.policy_surprise(b, x["tgt"])[pm].mean()
+    err = (vt - torch.sigmoid(x["vlogit"].float())).abs()
+    vsw = 0.9 + 0.1 * err / err[vm].mean()
+    want = float((rw * sw * ce)[pm].sum() / rw[pm].sum() + (rw * vsw * vl)[vm].sum() / rw[vm].sum())
+    assert abs(float(ts) - want) < 1e-5
+    assert float(tz) == 0.0                                                     # every weight 0: nothing to learn
+
+
+def test_record_weights_train_and_differ(shards, weighted_shards, tmp_path):
+    """Weighted records change training; --no-record-weights trains exactly as the same data without weight.npy."""
+    base = _run(shards, tmp_path / "base")
+    w = _run(weighted_shards, tmp_path / "w")
+    off = _run(weighted_shards, tmp_path / "off", "--no-record-weights")
+    assert np.isfinite(w["best"]["holdout"]["total"]) and w["steps"] == base["steps"] == 12
+    assert not _same(_weights(tmp_path / "w" / "last.pt"), _weights(tmp_path / "base" / "last.pt"))
+    assert _same(_weights(tmp_path / "off" / "last.pt"), _weights(tmp_path / "base" / "last.pt"))
+    assert _evals(tmp_path / "off") == _evals(tmp_path / "base")             # evaluation is unweighted either way
+    assert json.loads((tmp_path / "off" / "config.json").read_text())["args"]["record_weights"] is False
+
+
 def test_ema_is_the_bias_corrected_average():
     import torch
     lin = torch.nn.Linear(2, 1)

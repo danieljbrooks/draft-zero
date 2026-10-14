@@ -267,3 +267,29 @@ def test_drop_unwanted_options(syn):
         assert np.array_equal(out[f"{q}_row"], np.concatenate(rows))
     same, none = D.drop_unwanted_options(sub, np.ones(10, np.uint8))
     assert none is None and same is sub
+
+
+def test_record_weights_reach_the_batch(tmp_path):
+    """The optional weight (SPEC §2) follows its records through take, collate, the multi-shard and in-RAM paths,
+    flatten and the loader: shards without weight.npy weigh 1, a bare pack without "weight" gives weight None."""
+    wpack, games = pf.synthetic(150, seed=21, weighted=0.4)
+    pf.write_shard(tmp_path / "pk" / "00000", wpack, games)                     # with weight.npy
+    plain, games2 = pf.synthetic(120, seed=22)
+    pf.write_shard(tmp_path / "pk" / "00001", plain, games2)                    # without
+    assert (tmp_path / "pk" / "00000" / "weight.npy").exists()
+    assert not (tmp_path / "pk" / "00001" / "weight.npy").exists()
+    want = np.concatenate([wpack["weight"], np.ones(120, np.float32)])
+    sel = np.array([3, 140, 149, 150, 0, 269, 77])
+    for in_ram in (False, True):
+        ds = D.ShardSet(tmp_path / "pk", in_ram=in_ram)
+        assert np.array_equal(ds.array("weight"), want)
+        b = ds.collate(sel)
+        # memory-mapped, a batch's states come grouped by shard (in the given order within each shard)
+        order = sel if in_ram else np.array([3, 140, 149, 0, 77, 150, 269])
+        assert b.weight.dtype == torch.float32 and torch.equal(b.weight, torch.from_numpy(want[order]))
+        _batch_equal(b, b.flatten().unflatten())
+        (lb,) = list(D.Loader(ds, [sel], workers=1))
+        assert torch.equal(lb.weight, b.weight)
+    assert D.collate(plain, np.arange(5)).weight is None                       # a bare pack: no weights
+    assert torch.equal(D.collate(wpack, np.array([7, 2])).weight, torch.from_numpy(wpack["weight"][[7, 2]]))
+    assert D.batch_from_wire(D.take(wpack, np.arange(3), targets=False)).weight is None

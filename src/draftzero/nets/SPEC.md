@@ -78,6 +78,19 @@ Training shards add, per state (one record = one searched decision):
 | `co_off` | i32 | [ncand+1] | |
 | `co_opt` | i32 | [nco] | option index **within the state** (0-based) |
 
+One training array is **optional**: a shard may lack its file, and readers must then take its default.
+
+| Array | dtype | shape | default | |
+|---|---|---|---|---|
+| `weight` | f32 | [B] | 1 | the record's training weight, finite and ≥ 0 |
+
+`dzgorge pack` writes `weight.npy` only in a shard that holds a weighted record: a visit record's `weight` field,
+which gorge's az seat sets on its decided-game searches (`:decided=H`, at `:decidedw=W`, in (0, 1); W = 1 records
+them unweighted and W = 0 does not record them). A corpus without such records packs exactly as before, with no
+`weight.npy`. `draftzero.nets.train` weights each state's policy and value loss by it (the batch's loss is the
+weighted mean); `packfmt.read_shard` returns all ones for a shard without the file. The format stays `dzg-pack-1`:
+the array is an addition, and a reader that predates it ignores the file and trains every record at weight 1.
+
 **On disk** a shard is a directory: one `<name>.npy` per array (standard `.npy`, little-endian, C
 order; read with `np.load(path, mmap_mode="r")`) plus `meta.json`:
 `{"format": "dzg-pack-1", "n": B, "games": ["<game id>", ...], "source": "<corpus path>"}`.

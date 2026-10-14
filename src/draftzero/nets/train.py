@@ -6,6 +6,13 @@ Writes OUT/config.json, OUT/curves.jsonl (one line per log interval and per eval
 (lowest holdout policy CE + value log loss) and OUT/last.pt, and prints a final summary JSON line.
 The holdout is the training directories' games with crc32(game id) % 20 == 0.
 
+Record weights: a shard's optional weight.npy (SPEC.md §2; dzgorge writes it for the decided-game searches of
+az :decided=, at weight decidedw=) weights each state's policy and value loss. A batch's loss is then the
+weighted mean, sum(w * loss) / sum(w) over the states that have that loss: a weight is a record's share relative
+to the others in its batch (on average what keeping each record with probability w would give), the gradient's
+scale stays that of a plain mean, and a batch of weight 1 trains bit for bit as without weights. Shards without
+weight.npy weigh 1. --no-record-weights ignores them. Evaluation and the logged losses are unweighted.
+
 Opt-in extras (all off by default, which leaves training bit-identical):
   --surprise-weight F   KataGo's policy surprise weighting: each state's policy loss is weighted
                         (1 - F) + F * KL(target || prior) / its batch mean (targets.policy_surprise; the prior is
@@ -73,6 +80,8 @@ def parse_args(argv=None):
                     help="policy surprise weighting F in [0, 1]: weight (1-F) + F x KL(target || prior) / batch mean")
     ap.add_argument("--value-surprise", type=float, default=0.0,
                     help="value surprise weighting F in [0, 1]: weight (1-F) + F x |target - prediction| / batch mean")
+    ap.add_argument("--no-record-weights", dest="record_weights", action="store_false",
+                    help="ignore the shards' record weights (weight.npy): every record weighs 1")
     ap.add_argument("--ema-decay", type=float, default=0.0, help="weight moving average, saved as ema.pt (0 = off)")
     ap.add_argument("--ema-every", type=int, default=1, help="steps between moving-average updates")
     ap.add_argument("--export-ema", action="store_true",
@@ -124,10 +133,25 @@ def seg_argmax(x, seg, n):
     return x.new_full((n,), float(big)).scatter_reduce(0, seg, hit, "amin").long()
 
 
+def weighted_mean(x, mask, n, sw=None, rw=None):
+    """A loss over the states in `mask` (n of them): the mean of sw * x (sw the surprise weights, None for 1), and with
+    record weights rw the rw-weighted mean sum(rw * sw * x) / sum(rw). With rw all 1 that is the plain mean bit for
+    bit: rw * y is y, and the float sum of n ones is n. A batch whose masked weights are all 0 gives 0."""
+    if sw is not None:
+        x = sw * x
+    zero = torch.zeros_like(x)
+    if rw is None:
+        return torch.where(mask, x, zero).sum() / n.clamp(min=1)
+    rw = rw.to(x.dtype)
+    den = torch.where(mask, rw, torch.zeros_like(rw)).sum()
+    return torch.where(mask, rw * x, zero).sum() / torch.where(den > 0, den, torch.ones_like(den))
+
+
 def losses(model, b, args, weighted: bool = True):
     """(total, policy CE, value log loss, extras) for one batch. The policy CE and value log loss are plain means
-    over the states that have them; with `weighted` (training) and --surprise-weight / --value-surprise above 0,
-    `total` is made of the surprise-weighted means instead (targets.surprise_weights)."""
+    over the states that have them; with `weighted` (training), `total` is made of the weighted means instead
+    (weighted_mean): by the batch's record weights (b.weight, unless --no-record-weights) and, with
+    --surprise-weight / --value-surprise above 0, by the surprise weights (targets.surprise_weights)."""
     scores, vlogit = model(b)
     z, lp = M.candidate_logits(scores, b)
     tgt = T.policy_target(b, args.policy_target, args.visits_temp, args.cq_c_visit, args.cq_c_scale)
@@ -141,13 +165,14 @@ def losses(model, b, args, weighted: bool = True):
     vloss = torch.where(vm, vl, torch.zeros_like(vl)).sum() / nval.clamp(min=1)
     pw = getattr(args, "surprise_weight", 0.0) if weighted else 0.0
     vw = getattr(args, "value_surprise", 0.0) if weighted else 0.0
+    rw = b.weight if weighted and getattr(args, "record_weights", True) else None
     pce_w, vloss_w = pce, vloss
-    if pw > 0:
-        w = T.surprise_weights(T.policy_surprise(b, tgt), pm, pw)
-        pce_w = torch.where(pm, w * ce_state, torch.zeros_like(ce_state)).sum() / npol.clamp(min=1)
-    if vw > 0:
-        w = T.surprise_weights((vt - torch.sigmoid(vlogit.detach().float())).abs(), vm, vw)
-        vloss_w = torch.where(vm, w * vl, torch.zeros_like(vl)).sum() / nval.clamp(min=1)
+    if pw > 0 or rw is not None:
+        sw = T.surprise_weights(T.policy_surprise(b, tgt), pm, pw) if pw > 0 else None
+        pce_w = weighted_mean(ce_state, pm, npol, sw, rw)
+    if vw > 0 or rw is not None:
+        sw = T.surprise_weights((vt - torch.sigmoid(vlogit.detach().float())).abs(), vm, vw) if vw > 0 else None
+        vloss_w = weighted_mean(vl, vm, nval, sw, rw)
     total = pce_w + args.value_weight * vloss_w
     return total, pce, vloss, {"scores": scores, "vlogit": vlogit, "z": z, "lp": lp, "tgt": tgt, "pm": pm,
                                "ce_state": ce_state, "npol": npol, "nval": nval}
