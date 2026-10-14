@@ -8,10 +8,12 @@ token, mirrors the metric lines it reads from the store:
     tr.close()
 
 Tracker is a no-op when cfg.tracking.trackio is false, and also (with one warning a process) when trackio is not
-installed (`pip install 'draftzero[tracking]'`) or fails: tracking never stops a run. A line becomes one tracker
-metric named after the line, with its tags appended ("eval.score/opponent=prev") and, for actor lines, its machine
-("throughput.games_per_hour/machine=r1"), logged at step = the line's version (else its step, else none).
-Swapping trackers means replacing this module.
+installed (`pip install 'draftzero[tracking]'`) or fails: tracking never stops a run. A line becomes one point of
+a tracker series named after the line with its string tags appended ("eval.score/opponent=prev") and, for actor
+lines, its machine ("throughput.games_per_hour/machine=r1"), logged at step = the line's version (else its step,
+else none). Tags that differ from point to point stay out of the name, so every version's evaluation lands in one
+series: a job id (job=v0004-vs-prev) is dropped, and numeric tags (sims, n_games, n_pairs) are logged beside the
+point as "<series>/<tag>". Swapping trackers means replacing this module.
 """
 from __future__ import annotations
 
@@ -27,13 +29,23 @@ def _warn_once(key: str, msg: str) -> None:
         warnings.warn(msg, RuntimeWarning, stacklevel=3)
 
 
+PER_POINT = ("job",)        # string tags that name one point (an evaluation job), never a series
+
+
 def metric_key(line: Mapping[str, Any]) -> str:
-    """The tracker's name for a metric line: name, then sorted tags (and the machine for actor lines)."""
+    """The tracker's series for a metric line: name, then its sorted string tags but PER_POINT ones (and the
+    machine for actor lines)."""
     from draftzero.metrics import tags
-    extra = dict(tags(line))
+    extra = {k: v for k, v in tags(line).items() if isinstance(v, str) and k not in PER_POINT}
     if line.get("component") == "actor" and line.get("machine"):
         extra["machine"] = line["machine"]
     return "/".join([str(line.get("name"))] + [f"{k}={extra[k]}" for k in sorted(extra)])
+
+
+def metadata(line: Mapping[str, Any]) -> dict[str, float]:
+    """A line's numeric tags (sims, n_games, n_pairs): logged beside its value as <series>/<tag>."""
+    from draftzero.metrics import tags
+    return {k: v for k, v in tags(line).items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
 
 
 def _identity(line: Mapping[str, Any]) -> tuple:
@@ -79,11 +91,13 @@ class Tracker:
                 continue
             self._seen.add(ident)
             step = line.get("version") if line.get("version") is not None else line.get("step")
+            key = metric_key(line)
+            point = {key: line["value"], **{f"{key}/{k}": v for k, v in metadata(line).items()}}
             try:
                 if step is None:
-                    self._tk.log({metric_key(line): line["value"]})
+                    self._tk.log(point)
                 else:
-                    self._tk.log({metric_key(line): line["value"]}, step=int(step))
+                    self._tk.log(point, step=int(step))
             except Exception as e:
                 _warn_once("log", f"trackio.log failed ({type(e).__name__}: {e}); continuing without it")
                 continue

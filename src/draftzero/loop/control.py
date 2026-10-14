@@ -4,13 +4,14 @@
     control.json                                  {"format": "dz-control/1", "version": {"player": N}, "play": {...},
                                                    "evals": [jobs], "stop": bool, "paused": bool, "updated": iso}
     events.jsonl                                  plan changes {time, kind: "set", path, old, new, by, at_version}
+                                                  (old/new as JSON: a whole section is a mapping)
     plan/requests/<uuid>.json                     a requested change {path, value, by, time} (`plan set`)
     plan/rejected/<uuid>.json                     ...one the controller refused, with the reason
     versions/player/v0001/                        model.pt, model.dzgw, meta.json
     versions/player/latest.json                   {version, path}
     shards/<actor>/000001/                        corpus.jsonl.gz, games.jsonl, meta.json (written last)
     evals/<job>/0000.games.jsonl, summary.json    evaluation games per shard, and the job's score
-    heartbeats/<machine>.json                     liveness, one per role process
+    heartbeats/<machine>.json                     liveness, one per role process (every 5 min, playing too)
     metrics/<component>/<machine>/000001.jsonl    draftzero-metrics/1 lines
     learner/lease.json, ingested.json, status.json
     status.md, status.json                        the controller's status page
@@ -29,9 +30,11 @@ An evaluation job (opened by the controller, played by evaluators):
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -55,7 +58,7 @@ INGESTED = "learner/ingested.json"
 LEARNER_STATUS = "learner/status.json"
 
 # changes the controller applies as soon as it sees them; any other live field waits for the next version
-IMMEDIATE = ("paused", "budget.")
+IMMEDIATE = ("paused", "budget", "budget.")
 
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
@@ -153,6 +156,12 @@ def as_dict(x: Any) -> dict:
     if dataclasses.is_dataclass(x):
         return dataclasses.asdict(x)
     return dict(vars(x))
+
+
+def plain(x: Any) -> Any:
+    """A config value as JSON data: a section (dataclass) becomes a dict, anything else stays as it is."""
+    import dataclasses
+    return dataclasses.asdict(x) if dataclasses.is_dataclass(x) and not isinstance(x, type) else x
 
 
 def parse_value(s: str) -> Any:
@@ -260,6 +269,29 @@ def heartbeat(machine: str, role: str, run: str, **fields) -> tuple[str, bytes]:
     hb = {"machine": machine, "role": role, "run": run, "time": time.time(), "iso": now_iso(),
           "host": socket.gethostname(), "pid": os.getpid(), **fields}
     return heartbeat_path(machine), json.dumps(hb, indent=1, sort_keys=True, default=str).encode()
+
+
+@contextlib.contextmanager
+def heartbeating(store, beat, every_s: float, log=print):
+    """Put `beat()` (a heartbeat's (path, bytes)) every `every_s` seconds from a thread while the block runs: a
+    role is silent while Gorge.play runs, which a hung game stretches past timeout_s (its pair's replay adds a
+    probe), longer than the controller's liveness window. A failed put is logged; the next one retries."""
+    stop = threading.Event()
+
+    def loop():
+        while not stop.wait(every_s):
+            try:
+                path, hb = beat()
+                store.put_many({path: hb}, "heartbeat")
+            except Exception as e:                       # noqa: BLE001 - a heartbeat never stops a role
+                log(f"heartbeat failed ({type(e).__name__}: {e})")
+    t = threading.Thread(target=loop, name="heartbeat", daemon=True)
+    t.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        t.join(timeout=60)
 
 
 def metrics_log(path: Path, cfg, component: str, machine: str):

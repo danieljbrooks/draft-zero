@@ -100,8 +100,27 @@ def test_tracker_failures_never_raise(tmp_path, monkeypatch):
         assert T.Tracker(cfg(True)).enabled is False
 
 
+def test_evaluations_of_every_version_form_one_series(tmp_path, monkeypatch):
+    """The evaluator tags eval.score with its job (one per version), sims and counts: the series is the name and
+    the grouping tags (opponent), logged at step = version; numeric tags ride along as <series>/<tag>."""
+    fake = FakeTrackio()
+    monkeypatch.setitem(sys.modules, "trackio", fake)
+    ev = M.MetricsLog(tmp_path / "e.jsonl", run="t1", component="evaluator", machine="d1")
+    lines = [ev.log("eval.score", 0.5 + v / 100, version=v, n=n // 2, lo=0.4, hi=0.7, opponent="prev",
+                    job=f"v{v:04d}-vs-prev", sims=100, n_games=n, n_pairs=n // 2)
+             for v, n in ((1, 200), (2, 200), (3, 198))]
+    with T.Tracker(cfg(True)) as tr:
+        assert tr.mirror(lines) == 3
+    assert [(sorted(m), step) for m, step in fake.logged] == [
+        (["eval.score/opponent=prev", "eval.score/opponent=prev/n_games", "eval.score/opponent=prev/n_pairs",
+          "eval.score/opponent=prev/sims"], v) for v in (1, 2, 3)]
+    assert [m["eval.score/opponent=prev"] for m, _ in fake.logged] == [0.51, 0.52, 0.53]
+    assert fake.logged[2][0]["eval.score/opponent=prev/n_games"] == 198
+
+
 def test_metric_key():
     assert T.metric_key({"name": "eval.elo", "component": "evaluator", "machine": "d1", "opponent": "bot",
-                         "sims": 100}) == "eval.elo/opponent=bot/sims=100"
+                         "sims": 100, "job": "v0003-vs-bot"}) == "eval.elo/opponent=bot"
+    assert T.metric_key({"name": "learn.policy_ce", "split": "holdout"}) == "learn.policy_ce/split=holdout"
     assert T.metric_key({"name": "throughput.games_per_hour", "component": "actor", "machine": "r2"}) == \
         "throughput.games_per_hour/machine=r2"

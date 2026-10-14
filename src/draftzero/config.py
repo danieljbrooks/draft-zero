@@ -1,7 +1,8 @@
 """config.py — the run config (interface 8, contracts §3): one YAML file per run, read by every role.
 
     run: e1-baseline-mlp            # the run id (required)
-    extends: base/player.yml        # merged (deep) first: dicts merge, lists and scalars replace
+    extends: base/player.yml        # merged (deep) first: dicts merge, lists and scalars replace, {} clears a
+                                    # free dict (actor.pcr.by_kind, player.config)
     actor: {sims: 200}              # everything else as in configs/base/player.yml
 
 The YAML mirrors the nested dataclasses below (RunConfig and one class per section). Unknown keys are errors
@@ -11,26 +12,33 @@ converted to the field's type: YAML reads `1e-4` as text (a YAML float needs a d
 `base/player.yml`), else to the repo's configs/; it may be a list (merged in order) and may chain.
 
 `dump` writes the whole merged config (no `extends`), and `config_hash` fingerprints its canonical JSON, so the
-store's config.yml reloads to the same hash. `player.config` is the architecture's free-form override dict
-(draftzero.nets.models.full_config checks its keys); it merges like any dict, so a run that changes
-`player.arch` should restate the whole `player.config`.
+store's config.yml reloads to the same hash. `player.config` overrides the architecture's defaults for a network
+built from random init (a warm start keeps its checkpoint's config): its keys are checked at load against
+draftzero.nets.models.DEFAULTS[player.arch] and each value takes its default's type ("5e-2" is 0.05). It merges
+like any dict, and a key set to null is dropped (the arch's default), so a run that changes `player.arch` sets
+the old arch's other keys to null (`card_d: null` for a transformer that extends base/player.yml).
 
 Plan changes mid-run: only LIVE paths may change. `apply_change` validates one change, the controller records it
 in events.jsonl ({kind: "set", path, old, new, at_version, ...}), and `effective` replays the events onto the
 launched config: the config in effect for version N is the launched one plus every event with at_version <= N.
+The MACHINE paths (checkouts, data, the store) may differ between a run's machines and are not part of that record.
 
     python -m draftzero.config configs/smoke.yml     prints the merged config and its hash
 """
 from __future__ import annotations
 
+import ast
 import copy
 import dataclasses
 import difflib
+import functools
 import hashlib
+import importlib.util
 import json
 import math
 import os
 import re
+import sys
 import types
 import typing
 from dataclasses import dataclass, field, fields, is_dataclass
@@ -45,7 +53,7 @@ CONFIGS = REPO / "configs"
 MODES = ("async", "sync")
 ARCHS = ("mlp", "transformer", "gnn")             # only mlp runs inside the engine (.dzgw); see nets/
 POLICY_TARGETS = ("visits", "cq")
-SEARCH_KEYS = ("autopay", "oppnodes", "oppfull", "morekinds")      # draftzero.engine.specs.FULL
+SEARCH_KEYS = ("autopay", "oppnodes", "oppfull", "morekinds")      # draftzero.engine.specs.FULL; any of FLAG_KEYS
 # decision kinds the fork's playout-cap randomization takes a per-kind probability for (dzgorge kinds= names)
 PCR_KINDS = ("priority", "attackers", "blockers", "target", "modes", "optional", "choose", "multitarget")
 OPPONENT_RE = re.compile(r"^(prev|sbtactical|bot|nonet|v\d+|file:.+\.dzgw)$")
@@ -208,6 +216,14 @@ LIVE: frozenset[str] = frozenset({
 })
 
 
+# the paths that name things on one machine (a checkout, data, the init checkpoint, the store, the tracker): a run's
+# machines may differ in them, so each role's own config file supplies them; every other field is the run's
+MACHINE: frozenset[str] = frozenset({
+    "engine.root", "data.decks", "data.pool", "search.belief.decks", "search.belief.pool", "player.init", "store",
+    "tracking.trackio", "tracking.project",
+})
+
+
 # ------------------------------------------------------------------------------------------------ types
 
 _NONE_WORDS = ("null", "~")
@@ -335,7 +351,44 @@ def _build(cls, d: Mapping, path: str):
             kw[f.name] = _coerce(d[f.name], hints[f.name], prefix + f.name)
         elif f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING:
             raise ConfigError(f"missing required key {prefix}{f.name}", prefix + f.name)
-    return cls(**kw)
+    obj = cls(**kw)
+    if cls is PlayerConfig:
+        obj.config = _player_config(obj.arch, obj.config, prefix + "config")
+    return obj
+
+
+@functools.lru_cache(maxsize=1)
+def _arch_defaults() -> dict[str, dict[str, Any]]:
+    """draftzero.nets.models.DEFAULTS (each arch's config keys and default values), read from the module's source
+    unless it is loaded: it imports torch, which loading a config (in every actor, say) should not."""
+    m = sys.modules.get("draftzero.nets.models")
+    if m is not None:
+        return m.DEFAULTS
+    spec = importlib.util.find_spec("draftzero.nets.models")
+    for node in ast.parse(Path(spec.origin).read_text()).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "DEFAULTS" for t in node.targets):
+            return ast.literal_eval(node.value)
+    from draftzero.nets import models
+    return models.DEFAULTS
+
+
+def _player_config(arch: str, config: dict, path: str) -> dict:
+    """player.config checked against the arch's keys, each value converted to its default's type ("5e-2" is
+    0.05); a key set to null is dropped (the arch's default). An unknown arch is left to check()."""
+    defaults = _arch_defaults().get(arch)
+    if defaults is None:
+        return config
+    out = {}
+    for k, v in config.items():
+        if v is None or (isinstance(v, str) and v.strip().lower() in _NONE_WORDS):
+            continue
+        if k not in defaults:
+            near = difflib.get_close_matches(k, list(defaults), n=1)
+            raise ConfigError(f"unknown key {path}.{k} for a {arch}"
+                              + (f" (did you mean {path}.{near[0]}?)" if near else "")
+                              + f"; its keys: {', '.join(defaults)}", f"{path}.{k}")
+        out[k] = _coerce(v, type(defaults[k]), f"{path}.{k}")
+    return out
 
 
 def _check_keys(raw: Mapping, cls, prefix: str, where: str) -> None:
@@ -351,12 +404,17 @@ def _check_keys(raw: Mapping, cls, prefix: str, where: str) -> None:
 
 # ------------------------------------------------------------------------------------------------ loading
 
-def _merge(base: Mapping, over: Mapping) -> dict:
-    """`over` deep-merged onto `base`: mappings merge key by key; anything else (lists too) replaces."""
+def _merge(base: Mapping, over: Mapping, tp=None) -> dict:
+    """`over` deep-merged onto `base`: mappings merge key by key; anything else (lists too) replaces. With the
+    schema type `tp` of `base`, an empty mapping for a free dict field (player.config, actor.pcr.by_kind) clears
+    it, where it would otherwise change nothing."""
+    hints = _hints(tp) if is_dataclass(tp) else {}
     out = copy.deepcopy(dict(base))
     for k, v in over.items():
-        if isinstance(out.get(k), Mapping) and isinstance(v, Mapping):
-            out[k] = _merge(out[k], v)
+        ftp = _optional_of(hints.get(k)) or hints.get(k)
+        clear = isinstance(v, Mapping) and not v and typing.get_origin(ftp) is dict
+        if isinstance(out.get(k), Mapping) and isinstance(v, Mapping) and not clear:
+            out[k] = _merge(out[k], v, ftp)
         else:
             out[k] = copy.deepcopy(v)
     return out
@@ -405,15 +463,15 @@ def _raw(data, src: str, here: Path | None, seen: tuple[Path, ...]) -> dict:
         if bp in seen:
             raise ConfigError(f"{src}: extends cycle through {bp}", "extends")
         base = yaml.safe_load(bp.read_text())
-        merged = _merge(merged, _raw(base, str(bp), bp.parent, (*seen, bp)))
-    return _merge(merged, data)
+        merged = _merge(merged, _raw(base, str(bp), bp.parent, (*seen, bp)), RunConfig)
+    return _merge(merged, data, RunConfig)
 
 
 def from_dict(d: Mapping, overrides: Mapping[str, Any] | None = None) -> RunConfig:
     """A RunConfig from a plain mapping (to_dict's shape); `extends` is resolved against the working directory."""
     raw = _raw(d, "config", None, ())
     if overrides:
-        raw = _merge(raw, _expand(overrides))
+        raw = _merge(raw, _expand(overrides), RunConfig)
     cfg = _coerce(raw, RunConfig, "")
     check(cfg)
     return cfg
@@ -424,7 +482,7 @@ def loads(text: str, overrides: Mapping[str, Any] | None = None, *, base_dir: st
     here = Path(base_dir).resolve() if base_dir is not None else Path.cwd()
     raw = _raw(yaml.safe_load(text), "config", here, ())
     if overrides:
-        raw = _merge(raw, _expand(overrides))
+        raw = _merge(raw, _expand(overrides), RunConfig)
     cfg = _coerce(raw, RunConfig, "")
     check(cfg)
     return cfg
@@ -440,7 +498,7 @@ def load(path: str | Path, overrides: Mapping[str, Any] | None = None) -> RunCon
         raise ConfigError(f"{path}: not valid YAML: {e}") from None
     raw = _raw(data, str(path), p.parent, (p,))
     if overrides:
-        raw = _merge(raw, _expand(overrides))
+        raw = _merge(raw, _expand(overrides), RunConfig)
     try:
         cfg = _coerce(raw, RunConfig, "")
         check(cfg)
@@ -550,6 +608,10 @@ def check(cfg: RunConfig) -> None:
     need(cfg.player.arch in ARCHS, "player.arch", f"one of {ARCHS}, not {cfg.player.arch!r}")
     for k, v in cfg.player.config.items():
         need(isinstance(v, (int, float, str, bool)) or v is None, f"player.config.{k}", "a scalar")
+    pc = {**_arch_defaults().get(cfg.player.arch, {}), **cfg.player.config}
+    if "heads" in pc:
+        need(pc["heads"] >= 1 and pc["d"] % pc["heads"] == 0, "player.config.heads",
+             f"divides player.config.d ({pc['d']})")
     init = cfg.player.init
     need(init is None or bool(init.strip()), "player.init", "null, a path or hf://owner/repo[@rev]/file")
     if init is not None and init.startswith("hf://"):
@@ -560,8 +622,9 @@ def check(cfg: RunConfig) -> None:
             ok = False
         need(ok, "player.init", f"hf://owner/repo[@rev]/file, not {init!r}")
     s = cfg.search
+    from draftzero.engine.specs import FLAG_KEYS        # what PolicySpec.keys takes (a light module)
     for i, k in enumerate(s.keys):
-        need(bool(k) and ":" not in k, f"search.keys[{i}]", f"an engine flag without ':' ({k!r})")
+        need(k in FLAG_KEYS, f"search.keys[{i}]", f"a bare engine flag, one of {', '.join(FLAG_KEYS)} (not {k!r})")
     need(s.topk is None or s.topk >= 1, "search.topk", "null or >= 1")
     need(s.cpuct is None or s.cpuct > 0, "search.cpuct", "null or > 0")
     a = cfg.actor
@@ -651,7 +714,7 @@ def _set(cfg: RunConfig, path: str, value) -> RunConfig:
                     v = _parse_text(value) if isinstance(value, str) else value
                     if not isinstance(v, Mapping):
                         raise _bad(here, "a mapping", value)
-                    node[part] = _merge(node[part] or {}, v)
+                    node[part] = _merge(node[part] or {}, v, ftp)
                 else:
                     node[part] = value
             else:
@@ -670,8 +733,9 @@ def _set(cfg: RunConfig, path: str, value) -> RunConfig:
 
 def apply_change(cfg: RunConfig, path: str, value) -> RunConfig:
     """`cfg` with one plan change applied (a new object; `cfg` is untouched). The path must be live (is_live) and
-    the value must fit its type; text values are read as YAML ("3e-4", "true", "null", "{prob: 0.5}"). Setting a
-    by_kind entry to None removes it. ConfigError otherwise."""
+    the value must fit its type; text values are read as YAML ("3e-4", "true", "null", "{prob: 0.5}"). A section
+    merges into the current one; setting a by_kind entry to None removes it, and an empty by_kind ({}, alone or in
+    an actor.pcr section) clears it. ConfigError otherwise."""
     if not is_live(path):
         get(cfg, path)                           # an unknown path says so first
         raise ConfigError(f"{path} is fixed for the run; live paths: {', '.join(sorted(LIVE))}", path)

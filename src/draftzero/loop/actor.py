@@ -4,7 +4,8 @@
   2. in sync mode, idles once the store holds sync.games_per_version games of the current version (a chunk is
      cut to what is missing, so one actor plays exactly that many);
   3. fetches the current player version's .dzgw (checked against its SHA-256); version 0 without player.init
-     has no network: the search runs on its own priors, without topk;
+     has no network: the search runs on its own priors, without topk. A version control.json names but the
+     store lacks (a relay host that has control.json before the version) is waited for, not an error;
   4. plays one chunk of self-play games, the same spec on both seats: Gorge.play(spec, spec, pairs=chunk_games,
      record=True, record_every, timeout=chunk_secs) on the train split, with exploration and :closedlist;
   5. uploads the shard (corpus.jsonl.gz, games.jsonl, meta.json last), its heartbeat and its metrics in ONE
@@ -60,14 +61,19 @@ def idle_sleep(poll_s: float, idle: int) -> float:
 
 
 def check_playable(cfg) -> None:
+    """ValueError for a config this loop cannot play, when a role starts (not once the run is up): an arch other
+    than mlp, or search and actor settings that make no PolicySpec."""
     arch = ctl.get(cfg, "player.arch", "mlp")
     if arch != "mlp":
         raise ValueError(f"player.arch {arch}: only an mlp runs inside gorge (.dzgw); a {arch} needs a network "
                          "server (dzg serve, remote=), which the v0.2.0 loop doesn't start")
+    play = ctl.as_dict(ctl.get(cfg, "actor"))
+    policy_spec(cfg, sims=int(play.get("sims") or 1), explore=bool(play.get("explore")), gonet=Path("check.dzgw"),
+                pcr=ctl.as_dict(play.get("pcr")))
 
 
 class Actor:
-    HEARTBEAT_EVERY_S = 300.0        # while idle; a played chunk always carries one
+    HEARTBEAT_EVERY_S = 300.0        # while idle or playing; a played chunk always carries one
 
     def __init__(self, store, cfg, machine: str, work_dir: Path, *, gorge=None, log=print, poll_s: float = 30.0):
         self.store, self.cfg, self.log, self.poll_s = store, cfg, log, poll_s
@@ -83,7 +89,7 @@ class Actor:
         self.versions: dict[int, Path | None] = {}
         self.games = self.records = self.chunks = self.failed = 0
         self.last = {}                 # the last chunk's numbers, for the heartbeat
-        self.state, self.hb_time = None, 0.0
+        self.state, self.why, self.hb_time = None, None, 0.0
 
     @property
     def gorge(self):
@@ -129,19 +135,23 @@ class Actor:
             if left <= 0:
                 return self._idle("waiting", f"sync: version {v} has its {play['games_per_version']} games")
             n = min(n, left)
-        gonet = self.ensure_version(v)
+        try:
+            gonet = self.ensure_version(v)
+        except FileNotFoundError as e:              # e.g. a relay copied control.json before the version itself
+            return self._idle("waiting", f"version {v} is not in this store yet ({e}); retrying at each poll")
         spec = policy_spec(self.cfg, sims=play["sims"], explore=play.get("explore", True), gonet=gonet,
                            pcr=play.get("pcr"))
         return "played" if self.play_chunk(v, spec, n, play) else "failed"
 
     def _idle(self, state: str, why: str, force: bool = False, ret: str = "wait") -> str:
+        """Heartbeat (on a change of state, else every HEARTBEAT_EVERY_S); `why` is logged once while it holds."""
         now = time.time()
-        if state != self.state:
+        if (state, why) != (self.state, self.why):
             self.log(f"actor {self.machine}: {why}")
         if force or state != self.state or now - self.hb_time >= self.HEARTBEAT_EVERY_S:
             path, hb = self._heartbeat(state)
             self._upload({path: hb})
-        self.state = state
+        self.state, self.why = state, why
         return ret
 
     # ---------------------------------------------------------------------------- versions
@@ -174,11 +184,12 @@ class Actor:
         shutil.rmtree(out, ignore_errors=True)
         out.mkdir(parents=True)
         t0 = time.time()
-        res = self.gorge.play(spec, spec, pairs=games, seed=seed, out_dir=out,
-                              split=ctl.get(self.cfg, "data.train_split", "train"),
-                              workers=int(play.get("workers", 2)), record=True,
-                              record_every=int(play.get("record_every", 1)), belief=belief(self.cfg),
-                              timeout_s=float(play["chunk_secs"]) if play.get("chunk_secs") else None)
+        with ctl.heartbeating(self.store, lambda: self._heartbeat("playing"), self.HEARTBEAT_EVERY_S, self.log):
+            res = self.gorge.play(spec, spec, pairs=games, seed=seed, out_dir=out,
+                                  split=ctl.get(self.cfg, "data.train_split", "train"),
+                                  workers=int(play.get("workers", 2)), record=True,
+                                  record_every=int(play.get("record_every", 1)), belief=belief(self.cfg),
+                                  timeout_s=float(play["chunk_secs"]) if play.get("chunk_secs") else None)
         wall = time.time() - t0
         rows = list(res.games)
         records = sum(int(g.get("visits") or 0) for g in rows)

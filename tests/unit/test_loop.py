@@ -18,6 +18,7 @@ import json
 import math
 import random
 import sys
+import threading
 import time
 import types
 from pathlib import Path
@@ -462,6 +463,19 @@ def test_actor_spec_with_a_network_and_playout_caps(tmp_path):
         r.actors[0].ensure_version(2)
 
 
+def test_a_search_config_the_engine_refuses_fails_at_start(tmp_path):
+    """A config whose search settings make no PolicySpec stops an actor or evaluator when it starts, not after
+    the run is up (config.check refuses such search.keys at load; this is the backstop)."""
+    from draftzero.loop.actor import check_playable
+    cfg = make_cfg(tmp_path)
+    cfg.search.keys = ["autopay", "worlds=4"]
+    with pytest.raises(ValueError, match="worlds=4"):
+        check_playable(cfg)
+    for role in (Actor, Evaluator):
+        with pytest.raises(ValueError, match="worlds=4"):
+            role(LocalStore(tmp_path / "s"), cfg, "m1", tmp_path / "w", gorge=FakeGorge(), log=lambda *_: None)
+
+
 def test_actor_stop_pause_and_spooled_uploads(tmp_path):
     r = Run(tmp_path, make_cfg(tmp_path))
     r.controller.tick()
@@ -478,6 +492,25 @@ def test_actor_stop_pause_and_spooled_uploads(tmp_path):
     assert a.step() == "paused" and r.store.read_json("heartbeats/a1.json")["state"] == "paused"
     r.store.put(ctl.CONTROL, json.dumps({**r.control(), "paused": False, "stop": True}).encode())
     assert a.run() == 0 and r.store.read_json("heartbeats/a1.json")["state"] == "stopped"
+
+
+def test_actor_waits_for_a_version_its_store_lacks(tmp_path):
+    """control.json can name a version this host's store does not hold yet (a relay copied control.json before
+    the version): the actor waits and retries on its next poll, saying so once, instead of dying."""
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()
+    r.controller.tick()
+    a = r.actors[0]
+    assert a.step() == "played"
+    r.store.put(ctl.CONTROL, json.dumps({**r.control(), "version": {"player": 1}}).encode())
+    r.log.clear()
+    assert [a.step() for _ in range(3)] == ["wait"] * 3
+    assert len([x for x in r.log if "version 1" in x]) == 1
+    assert r.store.read_json("heartbeats/a1.json")["state"] == "waiting"
+    meta1 = {"version": 1, "net": False, "sha256": {}}
+    r.store.put_many({ctl.version_file(1, "meta.json"): json.dumps(meta1).encode()})
+    assert a.step() == "played" and r.store.read_json("shards/a1/000002/meta.json")["version"] == 1
 
 
 def test_actor_sync_mode_plays_exactly_games_per_version(tmp_path):
@@ -575,6 +608,55 @@ def test_learner_lease(tmp_path):
     other.lease()                                              # a released lease is free at once
 
 
+def test_a_learner_that_lost_its_lease_does_not_publish_and_forgets_its_state(tmp_path):
+    """While learner A trains, its lease runs out and B takes it and publishes version 1: A does not publish over
+    it; it forgets what it knew of the store, so once it holds the lease again it starts from B's ingested.json
+    and does not train again on the data B used."""
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    r.controller.tick()
+    r.actors[0].step()
+    r.actors[0].step()                                         # 40 new positions: due
+    a = r.learner
+    b = Learner(r.store, r.cfg, "l2", tmp_path / "work" / "l2", gorge=r.gorge, train=fake_train(r.trains),
+                export=fake_export, log=r.log.append)
+    inner = a._train
+
+    def overtaken(argv):
+        r.store.write_json(ctl.LEASE, {**r.store.read_json(ctl.LEASE), "expires": time.time() - 1})
+        assert b.step() == "published"                         # B takes the lapsed lease and publishes v1
+        return inner(argv)
+    a._train = overtaken
+    with pytest.raises(LeaseHeld):
+        a.step()
+    assert sum(ctl.version_file(1, "model.pt") in p for p in r.store.puts) == 1
+    assert r.store.read_bytes(ctl.version_file(1, "model.pt")) == b"weights 1"      # B's (A trained second)
+    assert a.index is None and a.ingested == [] and a.local == {}
+    with pytest.raises(LeaseHeld):
+        a.step()                                               # B holds the lease
+    b.release()
+    trained = len(r.trains)
+    assert a.step() == "wait" and len(r.trains) == trained     # nothing new since B's v1
+    assert all(e["used"] == 1 for e in r.store.read_json(ctl.INGESTED))
+
+
+def test_a_learner_renews_its_lease_while_it_ingests(tmp_path):
+    """Ingesting a backlog and re-packing the window can take longer than the lease: the step renews it from a
+    thread throughout, not only while training."""
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()
+    r.controller.tick()
+    r.actors[0].step()
+    renewing = []
+    pack = r.gorge.pack
+    r.gorge.pack = lambda *a, **k: renewing.append(any(
+        t.name == "learner-lease" and t.is_alive() for t in threading.enumerate())) or pack(*a, **k)
+    r.learner.step()
+    assert renewing == [True]
+
+
 def test_learner_sync_mode_trains_once_per_version(tmp_path):
     r = Run(tmp_path, make_cfg(tmp_path, mode="sync", sync={"games_per_version": 10},
                                learner={"min_new_positions": 1}))
@@ -613,10 +695,64 @@ def test_learner_with_the_real_trainer_and_exporter(tmp_path):
     assert header["arch"] == "mlp" and header["config"]["d"] == 32
 
 
+def test_published_metrics_are_the_published_checkpoints(tmp_path):
+    """The learner publishes best.pt: its meta.json metrics, its learn.* lines and the finite-loss check are those
+    of best.pt's evaluation (summary best_step), not of the last one (last.pt)."""
+    def train(argv):
+        out = Path(argv[argv.index("--out") + 1])
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "best.pt").write_bytes(b"best")
+        (out / "last.pt").write_bytes(b"last")
+        ev = lambda ce, total: {"holdout": {"n_policy": 40, "policy_ce": ce, "n_value": 40,     # noqa: E731
+                                            "value_logloss": 0.6, "total": total}}
+        (out / "curves.jsonl").write_text("".join(json.dumps(x) + "\n" for x in (
+            {"type": "eval", "step": 3, "eval": ev(1.0, 1.6)}, {"type": "train", "step": 6, "policy_ce": 0.9},
+            {"type": "eval", "step": 6, "eval": ev(1.3, float("nan"))})))
+        return {"steps": 6, "best_step": 3}
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.learner._train = train
+    r.controller.tick()
+    r.learner.step()
+    r.controller.tick()
+    r.actors[0].step()
+    r.actors[0].step()
+    assert r.learner.step() == "published"                     # the last eval's loss is NaN; best.pt's isn't
+    meta = r.store.read_json(ctl.version_file(1, "meta.json"))
+    assert r.store.read_bytes(ctl.version_file(1, "model.pt")) == b"best"
+    assert meta["metrics"]["policy_ce"] == 1.0 and meta["step"] == 3 and meta["steps"] == 6
+    lines = [json.loads(x) for x in r.store.read_bytes("metrics/learner/l1/000001.jsonl").decode().splitlines()]
+    ce = next(x for x in lines if x["name"] == "learn.policy_ce")
+    assert (ce["value"], ce["step"]) == (1.0, 3)
+
+
+def test_warm_start_keeps_the_checkpoints_own_config(tmp_path):
+    """A player.init of another width than player.config: version 1 warm-starts from it with its own arch and
+    config (player.arch/config are for a random init) instead of failing to load its weights."""
+    from draftzero.loop.learner import default_export
+    from draftzero.nets import models as M
+    init = tmp_path / "init.pt"
+    M.save(M.build("mlp", {"d": 48, "ff": 64, "layers": 1, "d_emb": 16, "card_d": 24, "head_hidden": 32}), init)
+    cfg = make_cfg(tmp_path, player={"init": str(init)}, learner={"min_new_positions": 200, "batch": 32, "warmup": 2})
+    r = Run(tmp_path, cfg, records=25)
+    r.learner._train, r.learner._export = None, default_export
+    r.controller.tick()
+    r.learner.step()                                           # v0: the init checkpoint
+    r.controller.tick()
+    r.actors[0].step()
+    r.actors[0].step()
+    assert r.learner.step() == "published"
+    argv = r.learner.train_args(tmp_path / "o", [], tmp_path / "init.pt", 2, 1)
+    assert "--init" in argv and "--config" not in argv and "--arch" not in argv
+    from draftzero.nets import export
+    header, _ = export.read(r.store.get(ctl.version_file(1, "model.dzgw"), tmp_path / "m.dzgw"))
+    assert header["config"]["d"] == 48
+
+
 # ------------------------------------------------------------------------------------------------ evaluator
 
 def test_eval_jobs_and_opponents(tmp_path):
-    assert job_id(4, "prev") == "v0004-vs-prev" and job_id(4, "file:/x/best.dzgw") == "v0004-vs-file-x-best.dzgw"
+    assert job_id(4, "prev") == "v0004-vs-prev" and job_id(4, "file:/x/best.dzgw") == \
+        "v0004-vs-file-x-best.dzgw-" + hashlib.sha1(b"file:/x/best.dzgw").hexdigest()[:8]
     assert not opponent_valid(0, "prev") and not opponent_valid(0, "nonet") and opponent_valid(0, "sbtactical")
     assert opponent_valid(3, "v1") and not opponent_valid(3, "v3") and not opponent_valid(3, "v5")
     assert not opponent_valid(3, "nonsense") and not opponent_valid(3, "spec:bot") and not opponent_valid(3, "random")
@@ -631,6 +767,34 @@ def test_eval_jobs_and_opponents(tmp_path):
     spec = policy_spec(make_cfg(tmp_path, search={"closedlist": False, "keys": ["autopay"]}), sims=5, explore=False,
                        gonet=None)
     assert (spec.sims, spec.closedlist, spec.keys, spec.explore, spec.topk) == (5, False, ("autopay",), False, None)
+
+
+def test_eval_job_ids_are_unique_per_opponent(tmp_path):
+    """Opponents whose cleaned labels agree (long file: paths in one folder) get distinct job ids, a name listed
+    twice opens one job, and every opponent is played and scored on its own."""
+    ref = tmp_path / "workspace" / "draftzero" / "models" / "reference"
+    ref.mkdir(parents=True)
+    paths = [ref / "fdn-mlp-v12.dzgw", ref / "fdn-mlp-v13.dzgw"]
+    for p in paths:
+        p.write_bytes(b"DZGW0001" + p.name.encode())
+    opps = [f"file:{p}" for p in paths]
+    ids = [job_id(5, o) for o in opps]
+    assert ids[0] != ids[1] and all(len(i) <= 64 for i in ids) and job_id(5, opps[0]) == ids[0]
+    assert job_id(5, "prev") == "v0005-vs-prev" and job_id(5, "v3") == "v0005-vs-v3"
+    r = Run(tmp_path, make_cfg(tmp_path, eval={"opponents": [*opps, "sbtactical", "sbtactical"], "pairs": 2}))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    assert r.evaluator.step() == "wait"                        # its heartbeat
+    c = r.controller.tick()
+    jobs = [j["job"] for j in c["evals"]]
+    assert len(jobs) == len(set(jobs)) == 3
+    while r.evaluator.step() == "played":
+        pass
+    assert sorted(Path(p["b"].gonet).name for p in r.gorge.plays if not isinstance(p["b"], str)) == \
+        ["fdn-mlp-v12.dzgw", "fdn-mlp-v13.dzgw"]
+    assert r.controller.tick()["evals"] == []
+    summaries = [r.store.read_json(p) for p in r.store.list("evals/") if p.endswith("summary.json")]
+    assert sorted(s["opponent"] for s in summaries) == sorted([*opps, "sbtactical"])
 
 
 def test_evaluator_plays_assigned_shards_and_scores_them(tmp_path):
@@ -675,6 +839,33 @@ def test_evaluator_plays_assigned_shards_and_scores_them(tmp_path):
     assert "v0001-vs-prev" in md and "| e1 | evaluator |" in md and "| a1 | actor |" in md
 
 
+def test_playing_roles_heartbeat_so_a_hung_game_does_not_look_dead(tmp_path):
+    """One hung game keeps Gorge.play busy past timeout_s (its pair's replay adds a probe), longer than the
+    controller's liveness window: a playing evaluator (and actor) heartbeats every HEARTBEAT_EVERY_S, so the
+    controller does not declare it dead and move its shard to another evaluator."""
+    r = Run(tmp_path, make_cfg(tmp_path, eval={"opponents": ["sbtactical"], "pairs": 2}))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    assert r.evaluator.step() == "wait"
+    r.controller.tick()                                        # the job's shard goes to e1
+    r.controller.live_s, r.controller.late_s = 0.4, 60.0
+    r.evaluator.HEARTBEAT_EVERY_S = r.actors[0].HEARTBEAT_EVERY_S = 0.05
+    play, seen = r.gorge.play, []
+
+    def hung(a, b, **kw):                                      # longer than the liveness window
+        t0 = time.time()
+        time.sleep(0.8)
+        if kw["record"]:
+            seen.append(r.store.read_json("heartbeats/a1.json")["time"] > t0)
+        else:
+            r.store.write_json("heartbeats/e2.json", {"machine": "e2", "role": "evaluator", "time": time.time()})
+            seen.append(r.controller.tick()["evals"][0]["shards"][0]["machine"])
+        return play(a, b, **kw)
+    r.gorge.play = hung
+    assert r.evaluator.step() == "played" and seen == ["e1"]
+    assert r.actors[0].step() == "played" and seen == ["e1", True]
+
+
 def test_controller_reassigns_shards_of_a_quiet_evaluator(tmp_path):
     cfg = make_cfg(tmp_path, eval={"opponents": ["sbtactical"], "pairs": 10})
     s = LocalStore(tmp_path / "st")
@@ -706,6 +897,43 @@ def test_controller_writes_config_and_manifest_once(tmp_path):
     assert made == [1] and ctl.read(s)["started"]
     with pytest.raises(ValueError, match="holds run"):
         Controller(s, make_cfg(tmp_path, run="other"), log=lambda *_: None, write_manifest=lambda *a: None).tick()
+
+
+def test_a_restart_with_an_edited_config_is_refused_unless_allowed(tmp_path):
+    """The store's config.yml plus events.jsonl is the run's config. A controller restarted with a file that changes
+    it (a fixed field, or a live one other than by `plan set`) refuses to start, unless allowed to, which records
+    the changes in events.jsonl; machine paths (config.MACHINE) may differ, and the launch file stays fine after
+    plan changes."""
+    from draftzero import config
+    s = LocalStore(tmp_path / "st")
+    new = lambda c, **kw: Controller(s, c, log=lambda *_: None, write_manifest=lambda *a: None, **kw)  # noqa: E731
+    cfg = make_cfg(tmp_path)
+    new(cfg).tick()
+    ctl.request_change(s, "paused", True, "dan")
+    new(cfg).tick()                                            # a plan change
+    assert new(cfg).tick()["paused"] is True                   # the launch file again: the plan change stays
+    moved = make_cfg(tmp_path, engine={"root": "/elsewhere/gorge"}, data={"decks": "/x/decks", "pool": "/x/p.tsv"},
+                     store="/x/store", player={"init": "/x/init.pt"})
+    c = new(moved)
+    c.tick()
+    assert c.cfg.engine.root == "/elsewhere/gorge" and c.cfg.data.pool == "/x/p.tsv" and c.cfg.paused is True
+    edited = make_cfg(tmp_path, actor={"explore": False, "workers": 6}, learner={"batch": 32}, search={"cpuct": 1.0})
+    with pytest.raises(ValueError, match="actor.explore") as e:
+        new(edited).tick()
+    assert all(p in str(e.value) for p in ("actor.workers", "learner.batch", "search.cpuct"))
+    with pytest.raises(ValueError, match="actor.sims"):
+        new(make_cfg(tmp_path, actor={"sims": 16})).tick()     # live: `dz plan set` changes it
+    play = ctl.read(s)["play"]
+    assert play["explore"] is True and play["workers"] == 1 and not s.exists(ctl.STOP)
+    c = new(edited, allow_config_change=True)
+    play = c.tick()["play"]
+    assert play["explore"] is False and play["workers"] == 6 and c.cfg.learner.batch == 32
+    ev = ctl.read_events(s)
+    assert {e["path"] for e in ev if e["path"] != "paused"} == {"actor.explore", "actor.workers", "learner.batch",
+                                                                 "search.cpuct"}
+    stored = config.loads(s.read_bytes(ctl.CONFIG).decode())
+    assert config.diff(config.effective(stored, ev), edited) == {"paused": (True, False)}
+    assert new(edited).tick()["play"]["workers"] == 6          # now the record: no change, no refusal
 
 
 def test_controller_opens_an_eval_for_every_version_passed(tmp_path):
@@ -763,6 +991,65 @@ def test_plan_changes_apply_at_version_boundaries(tmp_path):
     r.learner.step()
     argv2, argv3 = r.trains[-2], r.trains[-1]
     assert argv2[argv2.index("--lr") + 1] == "0.0001" and argv3[argv3.index("--lr") + 1] == "0.0003"
+
+
+def test_deferred_plan_requests_are_checked_in_a_chain(tmp_path):
+    """Requests waiting for the next version are checked against the config with the earlier waiting ones applied,
+    as `plan set` checks them, so a change that is valid only together is not half rejected."""
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    r.controller.tick()
+    ctl.request_change(r.store, "actor.pcr.cheap_sims", 4, "dan")
+    ctl.request_change(r.store, "actor.pcr.prob", 0.25, "dan")                 # needs cheap_sims <= sims (8)
+    ctl.request_change(r.store, "actor.pcr.by_kind.target", 1.0, "dan")        # needs prob > 0
+    ctl.request_change(r.store, "learner.window_positions", 5000, "dan")
+    ctl.request_change(r.store, "learner.min_new_positions", 2000, "dan")      # needs window >= it
+    ctl.request_change(r.store, "paused", True, "dan")                         # at once, alone
+    c = r.controller.tick()                                    # between versions
+    assert not r.store.list(ctl.REJECTED) and c["paused"] and c["play"]["pcr"]["prob"] == 0.0
+    assert [x["path"] for _, x in ctl.pending_requests(r.store)] == [
+        "actor.pcr.cheap_sims", "actor.pcr.prob", "actor.pcr.by_kind.target", "learner.window_positions",
+        "learner.min_new_positions"]
+    assert r.controller.cfg.learner.window_positions == 1000   # nothing deferred applies before the version
+    ctl.request_change(r.store, "paused", False, "dan")
+    r.controller.tick()
+    for _ in range(2):
+        r.actors[0].step()
+    r.learner.step()                                           # v1
+    c = r.controller.tick()
+    assert not r.store.list(ctl.REJECTED) and not ctl.pending_requests(r.store)
+    assert c["play"]["pcr"]["prob"] == 0.25 and c["play"]["pcr"]["by_kind"] == {"target": 1.0}
+    assert (r.controller.cfg.learner.window_positions, r.controller.cfg.learner.min_new_positions) == (5000, 2000)
+
+
+def test_whole_section_plan_changes_are_stored_as_json_and_replay(tmp_path):
+    """A change of a whole section (budget, actor.pcr) goes into events.jsonl as a plain mapping, not a dataclass's
+    repr, so every role (and a restarted controller) can replay it; budget applies at once, like budget.*."""
+    from draftzero import config
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    r.controller.tick()
+    ctl.request_change(r.store, "budget", {"max_versions": 10}, "dan")
+    ctl.request_change(r.store, "actor.pcr", "{prob: 0.5, cheap_sims: 4}", "dan")
+    r.controller.tick()                                        # no new version: only budget applies
+    assert [e["path"] for e in ctl.read_events(r.store)] == ["budget"]
+    for _ in range(2):
+        r.actors[0].step()
+    assert r.learner.step() == "published"                     # v1: actor.pcr applies
+    r.controller.tick()
+    ev = ctl.read_events(r.store)
+    assert [e["path"] for e in ev] == ["budget", "actor.pcr"]
+    assert ev[0]["new"] == {"max_versions": 10, "max_hours": None, "max_games": None}
+    assert ev[1]["old"] == {"prob": 0.0, "cheap_sims": 40, "by_kind": {}}
+    assert ev[1]["new"] == {"prob": 0.5, "cheap_sims": 4, "by_kind": {}}
+    eff = config.effective(r.cfg, ev)
+    assert eff.actor.pcr.prob == 0.5 and eff.actor.pcr.cheap_sims == 4 and eff.budget.max_versions == 10
+    again = Controller(r.store, r.cfg, log=lambda *_: None, write_manifest=lambda *a: None)
+    assert again.tick()["play"]["pcr"]["prob"] == 0.5          # a restarted controller replays them
+    assert r.evaluator.step() in ("wait", "played") and r.learner.step() == "wait"
+    assert r.actors[0].step() == "played" and r.gorge.plays[-1]["a"].pcr == 0.5
 
 
 def test_budget_drains_then_stops_and_stop_request(tmp_path):

@@ -128,6 +128,9 @@ def test_wrong_types_name_the_path(d, path):
     ({"store": "hf://danbrooks/repo"}, "store"),
     ({"store": "ssh://host"}, "store"),
     ({"search": {"keys": ["autopay:x"]}}, "search.keys[0]"),
+    ({"search": {"keys": ["autopay", "worlds=4"]}}, "search.keys[1]"),        # PolicySpec takes FLAG_KEYS only
+    ({"search": {"keys": ["explore"]}}, "search.keys[0]"),
+    ({"search": {"keys": ["autopay", "oppnodez"]}}, "search.keys[1]"),
     ({"engine": {"name": "xmage"}}, "engine.name"),
     ({"player": {"init": "hf://danbrooks/repo"}}, "player.init"),
     ({"player": {"init": "hf://buckets/danbrooks/dz-e1/x.pt"}}, "player.init"),
@@ -141,6 +144,47 @@ def test_checks_name_the_path(d, path):
 @pytest.mark.parametrize("init", [None, "runs/x/model.pt", "hf://danbrooks/draftzero-v0.1.0@v1/player/model.pt"])
 def test_player_init(init):
     assert C.from_dict({"run": "t", "player": {"init": init}}).player.init == init
+
+
+def test_player_config_is_checked_and_converted_at_load():
+    """player.config keys are the arch's (draftzero.nets.models.DEFAULTS), each value of its default's type:
+    YAML reads 5e-2 as text, a typo or another arch's key is a load error, not a crash at the first training."""
+    from draftzero.nets import models as M
+    c = C.loads("run: x\nplayer: {config: {d: '96', emb_std: 5e-2, dropout: 1e-1, policy_layers: 3.0}}")
+    assert c.player.config == {"d": 96, "emb_std": 0.05, "dropout": 0.1, "policy_layers": 3}
+    assert all(type(v) is type(M.DEFAULTS["mlp"][k]) for k, v in c.player.config.items())
+    for bad, path in (({"head_hiden": 128}, "player.config.head_hiden"), ({"heads": 4}, "player.config.heads"),
+                      ({"d": 1.5}, "player.config.d"), ({"emb_std": "wide"}, "player.config.emb_std")):
+        with pytest.raises(C.ConfigError) as e:
+            C.from_dict({"run": "t", "player": {"config": bad}})
+        assert e.value.path == path
+    with pytest.raises(C.ConfigError, match="did you mean player.config.head_hidden"):
+        C.from_dict({"run": "t", "player": {"config": {"head_hiden": 128}}})
+    # a null drops a key (the arch's default): how a run that extends base/player.yml changes player.arch
+    base = {"run": "t", "extends": "base/player.yml"}
+    t = C.from_dict(C._merge(base, {"player": {"arch": "transformer", "config": {"card_d": None, "heads": 4}}}))
+    assert t.player.config == {"d": 128, "ff": 256, "layers": 1, "d_emb": 32, "head_hidden": 128, "heads": 4}
+    M.full_config("transformer", t.player.config)
+    with pytest.raises(C.ConfigError) as e:
+        C.from_dict(C._merge(base, {"player": {"arch": "transformer", "config": {"card_d": None, "heads": 5}}}))
+    assert e.value.path == "player.config.heads"                         # d 128 is not a multiple of 5
+    with pytest.raises(C.ConfigError) as e:
+        C.from_dict(C._merge(base, {"player": {"arch": "transformer", "config": {"heads": 4}}}))
+    assert e.value.path == "player.config.card_d"                        # mlp-only
+
+
+def test_arch_defaults_are_read_without_importing_torch(monkeypatch):
+    import sys
+    from draftzero.nets import models as M
+    monkeypatch.delitem(sys.modules, "draftzero.nets.models")
+    assert C._arch_defaults.__wrapped__() == M.DEFAULTS and "draftzero.nets.models" not in sys.modules
+
+
+def test_search_keys_are_the_engines_bare_flags():
+    from draftzero.engine.specs import FLAG_KEYS
+    assert C.from_dict({"run": "t", "search": {"keys": list(FLAG_KEYS)}}).search.keys == list(FLAG_KEYS)
+    with pytest.raises(C.ConfigError, match="nonoise"):                   # the message lists them
+        C.from_dict({"run": "t", "search": {"keys": ["fpu=0.1"]}})
 
 
 def test_cheap_sims_above_sims_is_fine_while_pcr_is_off():
@@ -167,6 +211,24 @@ def test_extends_merges_deep_and_chains(tmp_path):
     assert c.actor.pcr.prob == 0.5 and c.actor.pcr.by_kind == {"priority": 0.6, "target": 0.3}   # dicts merge
     assert c.player.config == {"d": 96, "ff": 128}
     assert c.eval.opponents == ["bot"]                                                           # lists replace
+
+
+def test_an_empty_mapping_clears_a_free_dict(tmp_path):
+    """{} for actor.pcr.by_kind or player.config clears it (a child config, an override, a section plan change);
+    a non-empty mapping merges key by key; an empty section is no change."""
+    write(tmp_path / "configs/base/arm.yml",
+          "run: arm\nactor: {pcr: {prob: 0.5, cheap_sims: 40, by_kind: {priority: 0.65, target: 0.3}}}\n")
+    leaf = write(tmp_path / "configs/runs/uniform.yml",
+                 "extends: base/arm.yml\nrun: uniform\nactor: {pcr: {by_kind: {}}}\nbudget: {}\n")
+    c = C.load(leaf)
+    assert c.actor.pcr.by_kind == {} and c.actor.pcr.prob == 0.5
+    assert C.load(tmp_path / "configs/base/arm.yml", {"actor.pcr.by_kind": {}}).actor.pcr.by_kind == {}
+    arm = C.load(tmp_path / "configs/base/arm.yml")
+    assert C.apply_change(arm, "actor.pcr", {"prob": 0.4, "by_kind": {}}).actor.pcr.by_kind == {}
+    assert C.apply_change(arm, "actor.pcr", "{by_kind: {}}").actor.pcr.prob == 0.5
+    assert C.apply_change(arm, "actor.pcr", {"by_kind": {"blockers": 0.2}}).actor.pcr.by_kind == \
+        {"priority": 0.65, "target": 0.3, "blockers": 0.2}
+    assert C.from_dict({"run": "t", "player": {"config": {}}}).player.config == {}
 
 
 def test_extends_list_and_absolute(tmp_path):

@@ -4,10 +4,12 @@ At the start it writes config.yml and manifest.json (once per store; a restart k
   1. reads versions/player/latest.json; a newer version is a version boundary: control["version"]["player"]
      moves to it, and every version passed (none is skipped when several land between ticks) with
      v % eval.every_versions == 0 gets one evaluation job per opponent in eval.opponents (evaluator.make_job);
-  2. applies plan requests (plan/requests/*.json): each is checked at once with config.apply_change (a bad one
+  2. applies plan requests (plan/requests/*.json, in the order made): each is checked at once with
+     config.apply_change on the config with the earlier requests applied, waiting ones too (a bad one
      moves to plan/rejected/ with the reason); a valid one applies at the next version boundary, except `paused`
-     and budget.* which apply at once; each applied change appends {time, kind: "set", path, old, new, by,
-     at_version} to events.jsonl, so config.effective(launch config, events) is the config at any version;
+     and budget (budget.*) which apply at once; each applied change appends {time, kind: "set", path, old, new,
+     by, at_version} to events.jsonl (values as JSON: a whole section is a mapping), so
+     config.effective(launch config, events) is the config at any version;
   3. keeps control["play"] (the actors' live settings) and control["paused"] current;
   4. tracks evaluation jobs: marks shards whose games are in, assigns the others to live evaluators (a heartbeat
      newer than live_s; a shard whose evaluator went quiet, or that is very late, moves to another), and closes a
@@ -22,10 +24,8 @@ from __future__ import annotations
 
 import copy
 import json
-import tempfile
 import time
 from datetime import datetime
-from pathlib import Path
 
 from draftzero.loop import control as ctl
 from draftzero.loop import evaluator as ev
@@ -51,11 +51,13 @@ def _ts(iso: str | None) -> float | None:
 
 class Controller:
     def __init__(self, store, cfg, *, log=print, status_every_s: float = 60.0, live_s: float | None = None,
-                 hb_cache_s: float = 120.0, write_manifest=None, tracker=None):
+                 hb_cache_s: float = 120.0, write_manifest=None, tracker=None, allow_config_change: bool = False):
         """status_every_s: status page interval; live_s: a heartbeat older than this is a dead machine (default
-        actor.chunk_secs + 15 min, as an evaluator is silent while it plays a shard); hb_cache_s: heartbeats are
-        re-read at most this often (each is a Hub call or two on a bucket)."""
+        actor.chunk_secs + 15 min; roles heartbeat every 5 minutes, while they play too); hb_cache_s: heartbeats
+        are re-read at most this often (each is a Hub call or two on a bucket); allow_config_change: on a store
+        that has a run, `cfg` may change the run's config (see _rebase), recorded in events.jsonl."""
         self.store, self.base, self.cfg, self.log = store, cfg, cfg, log
+        self.allow_config_change = allow_config_change
         self.status_every_s, self.hb_cache_s = status_every_s, hb_cache_s
         chunk = float(ctl.get(cfg, "actor.chunk_secs") or 3600)
         self.live_s = live_s if live_s is not None else chunk + 900
@@ -77,7 +79,7 @@ class Controller:
         if stored is None:
             self.store.put(ctl.CONFIG, config.dump(self.base).encode(), "config.yml")
         else:
-            self._check_same_run(stored)
+            self._rebase(stored)
         if not self.store.exists(ctl.MANIFEST):
             self.write_manifest(self.store, self.base)
         self.cfg = ctl.effective(self.base, self.store)
@@ -97,21 +99,43 @@ class Controller:
         self.started = True
         return c
 
-    def _check_same_run(self, stored: bytes) -> None:
+    def _rebase(self, stored: bytes) -> None:
+        """A restart: the run's config is the store's config.yml (plus events.jsonl); this controller's config
+        supplies only the machine paths (config.MACHINE). A field it changes otherwise (a fixed one, or a live one
+        other than by `plan set`) is refused (ValueError), unless allow_config_change, which records the changes
+        in events.jsonl ("set" events at the current version), so the record stays the config in effect."""
         from draftzero import config
-        with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / "config.yml"
-            p.write_bytes(stored)
-            try:
-                old = config.load(p)
-            except Exception as e:                       # noqa: BLE001
-                self.log(f"controller: the store's config.yml doesn't load here ({e}); keeping it")
-                return
-        if ctl.get(old, "run") != ctl.get(self.base, "run"):
-            raise ValueError(f"the store holds run {ctl.get(old, 'run')!r}, not {ctl.get(self.base, 'run')!r}")
-        if config.config_hash(old) != config.config_hash(self.base):
-            self.log("controller: this config differs from the store's config.yml (machine paths?); the store's "
-                     "copy stays the record")
+        try:
+            old = config.loads(stored.decode())
+        except Exception as e:                           # noqa: BLE001
+            self.log(f"controller: the store's config.yml doesn't load here ({e}); running on this config")
+            return
+        given = self.base
+        if ctl.get(old, "run") != ctl.get(given, "run"):
+            raise ValueError(f"the store holds run {ctl.get(old, 'run')!r}, not {ctl.get(given, 'run')!r}")
+        d = config.to_dict(old)
+        for path in config.MACHINE:
+            *head, last = path.split(".")
+            node = d
+            for k in head:
+                node = node[k]
+            node[last] = config.get(given, path)
+        self.base = config.from_dict(d)
+        launch = config.flatten(self.base)
+        changes = {p: (a, b) for p, (a, b) in config.diff(ctl.effective(self.base, self.store), given).items()
+                   if p not in config.MACHINE and b != launch[p]}       # the launch value: a plan change stays
+        if not changes:
+            return
+        what = "; ".join(f"{p} {a!r} -> {b!r}" for p, (a, b) in sorted(changes.items()))
+        if not self.allow_config_change:
+            raise ValueError(f"this config changes the run's config (the store's config.yml and events.jsonl): "
+                             f"{what}. Change live fields with `dz plan set`; to change these anyway, start the "
+                             "controller allowing config changes (they are recorded in events.jsonl)")
+        at = ctl.player_version(ctl.read(self.store)) or 0
+        ctl.append_events(self.store, [{"time": ctl.now_iso(), "kind": "set", "path": p, "old": ctl.plain(a),
+                                        "new": ctl.plain(b), "by": "controller restart", "at_version": at}
+                                       for p, (a, b) in sorted(changes.items())])
+        self.log(f"controller: config changed at restart, from version {at}: {what}")
 
     # ---------------------------------------------------------------------------- a tick
     def tick(self, now: float | None = None) -> dict:
@@ -147,14 +171,19 @@ class Controller:
 
     # ---------------------------------------------------------------------------- plan changes
     def apply_requests(self, boundary: bool, at_version: int) -> list[dict]:
+        """Each request is checked against the config with the requests before it applied, waiting ones too (as
+        `plan set` checks a multi-field change), and applied now if it is due."""
         from draftzero import config
         events, applied = [], []
+        pending = self.cfg                               # self.cfg plus the requests accepted so far in this pass
         for path, r in ctl.pending_requests(self.store):
             key, value = r.get("path"), r.get("value")
             try:
                 if not isinstance(key, str):
                     raise ValueError("a request needs a dotted config path")
-                new_cfg = config.apply_change(self.cfg, key, value)
+                chained = config.apply_change(pending, key, value)
+                due = boundary or ctl.immediate(key)
+                new_cfg = config.apply_change(self.cfg, key, value) if due and pending is not self.cfg else chained
             except Exception as e:                       # noqa: BLE001 - ConfigError, bad JSON shapes...
                 reason = f"{type(e).__name__}: {e}"
                 self.log(f"controller: plan request {key}={value!r} rejected: {reason}")
@@ -163,11 +192,12 @@ class Controller:
                                     "plan: rejected")
                 self.store.delete([path], "plan: rejected")
                 continue
-            if not (boundary or ctl.immediate(key)):
+            pending = chained
+            if not due:
                 continue                                 # waits for the next version
-            events.append({"time": ctl.now_iso(), "kind": "set", "path": key, "old": ctl.get(self.cfg, key),
-                           "new": ctl.get(new_cfg, key), "by": r.get("by"), "at_version": at_version,
-                           "requested": r.get("time")})
+            events.append({"time": ctl.now_iso(), "kind": "set", "path": key, "old": ctl.plain(ctl.get(self.cfg, key)),
+                           "new": ctl.plain(ctl.get(new_cfg, key)), "by": r.get("by"), "at_version": at_version,
+                           "requested": r.get("time")})       # a section as a mapping, so config.effective replays it
             self.cfg = new_cfg
             applied.append(path)
             self.log(f"controller: plan change {key}: {events[-1]['old']!r} -> {events[-1]['new']!r} "
@@ -189,6 +219,7 @@ class Controller:
             job = ev.make_job(version, opp, self.cfg, now)
             if job["job"] in have or self.store.exists(ctl.eval_summary_path(job["job"])):
                 continue
+            have.add(job["job"])                         # an opponent listed twice is one job
             c["evals"].append(job)
             self.log(f"controller: evaluation {job['job']} opened ({job['pairs']} pairs, {len(job['shards'])} shards)")
 

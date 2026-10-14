@@ -12,8 +12,11 @@ randomization off (pcr None or 0) drops cheap and pcrk, and a no-search kind (bo
 search fields and the default keys, so PolicySpec(kind="sbtactical").render() == "sbtactical".
 
 Bare flags the fork knows (FLAG_KEYS) go in `keys`; anything else the fork accepts (kinds=..., worlds=4, fpu=0.1,
-ksims=..., skippass=2, net=..., remote=...) goes in `extra`, verbatim and in order. gonet= takes no ':' (the fork
-splits the spec on colons); remote= takes the rest of the spec, so it must be the last extra.
+ksims=..., skippass=2, net=..., remote=...) goes in `extra`, verbatim and in order. The fork reads a spec left to
+right and a later key wins (morekinds after kinds=priority means every kind; skippass after skippass=3 means 1),
+so a bare flag written after an extra entry stays in `extra`, in its place: extra may hold bare flags, just not
+first. gonet= takes no ':' (the fork splits the spec on colons); remote= takes the rest of the spec, so it must be
+the last extra.
 """
 from __future__ import annotations
 
@@ -134,8 +137,9 @@ class PolicySpec:
         extra = tuple(self.extra)
         for i, x in enumerate(extra):
             k = x.partition("=")[0]
-            if not x or k in FIELD_KEYS or x in FLAG_KEYS:
-                raise ValueError(f"PolicySpec.extra: {x!r} has a field or keys entry of its own")
+            if not x or k in FIELD_KEYS or (x in FLAG_KEYS and i == 0):
+                raise ValueError(f"PolicySpec.extra: {x!r} has a field or keys entry of its own (a bare key "
+                                 "goes in extra only after another extra entry)")
             if ":" in x and not (k == "remote" and i == len(extra) - 1):
                 raise ValueError(f"PolicySpec.extra: {x!r} has a ':' (only a last remote=... may)")
         put("extra", extra)
@@ -180,7 +184,8 @@ class PolicySpec:
 
     @staticmethod
     def parse(s: str) -> "PolicySpec":
-        """The inverse of render, and a reader for any spec the fork accepts: unknown keys land in extra."""
+        """The inverse of render, and a reader for any spec the fork accepts: unknown keys land in extra, and so
+        does a bare key after them (see the module docstring), so the rendered spec means what `s` meant."""
         s = s.strip()
         rest = ""
         if (i := s.find(":remote=")) >= 0:     # remote=unix:/path and remote=tcp:host:port take the rest
@@ -198,15 +203,17 @@ class PolicySpec:
                     f[t] = True
                 elif eq and k in ("cpuct", "pcr"):
                     f[k] = float(v)
-                elif eq and k in ("topk", "cheap"):
-                    f[k] = int(v)
+                elif eq and k == "topk":
+                    f["topk"] = int(v) or None          # the fork's topk=0 is no top-k cut, i.e. none
+                elif eq and k == "cheap":
+                    f["cheap"] = int(v)
                 elif eq and k == "gonet":
                     f["gonet"] = v
                 elif eq and k == "pcrk":
                     f["pcrk"] = _parse_pcrk(v)
-                elif not eq and t in FLAG_KEYS:
+                elif not eq and t in FLAG_KEYS and not f["extra"]:
                     f["keys"].append(t)
-                else:
+                else:                                   # a bare key after an extra entry stays in its place
                     f["extra"].append(t)
             except ValueError as e:
                 raise ValueError(f"policy spec {s!r}: {t!r}: {e}") from None

@@ -1,7 +1,9 @@
 """The learner (contracts §4): exactly one per learned model, holding a lease. Each loop it
 
-  1. holds the lease (learner/lease.json, renewed every LEASE_S / 3, also while training): a second learner waits
-     until it expires;
+  1. holds the lease (learner/lease.json, renewed every LEASE_S / 3, from a thread while a step ingests, packs
+     and trains): a second learner waits until it expires. Before it publishes (or writes ingested.json) a learner
+     re-reads the lease and latest.json and gives up the step if another learner took over; a learner that lost
+     the lease, or takes it over, forgets its view of the store and reloads learner/ingested.json;
   2. on a fresh store, publishes version 0: player.init (a .pt path or hf://...) when given, else a version with no
      network ("net": false, meta only), which actors play as search on its own priors;
   3. ingests new shards: downloads each shard's corpus and packs it locally (Gorge.pack, game ids prefixed
@@ -9,10 +11,12 @@
   4. trains when due: async, once min_new_positions recorded positions arrived since the last version; sync, once
      the store holds sync.games_per_version games of the newest version (exactly once per version). Training is
      draftzero.nets.train on the newest window_positions positions, warm-started from the newest version's model.pt
-     when learner.warm_start (else from random init with player.arch/config), for learner.epochs passes or, with
+     with its own arch and config when learner.warm_start (else from random init with player.arch/config; so a
+     player.init of another shape than player.config keeps its shape), for learner.epochs passes or, with
      steps_per_position, ceil(steps_per_position x new positions / batch) steps;
   5. exports model.dzgw (mlp), publishes versions/player/v{N+1} (model.pt, model.dzgw, meta.json) and latest.json
-     last, with learn.* metrics from the run's final holdout evaluation (curves.jsonl);
+     last; model.pt is the run's best.pt, and meta.json's metrics, its "step" and the learn.* metrics are that
+     checkpoint's holdout evaluation (curves.jsonl at the summary's best_step; "steps" is the run's length);
   6. deletes local packs that fell out of the window. It stops on control "stop" or budget.max_versions.
 
     python -m draftzero.loop.cli learner --config C --store S [--machine M] [--work-dir DIR]
@@ -55,15 +59,13 @@ def default_export(pt: Path, dzgw: Path) -> None:
         raise RuntimeError(f"draftzero.nets.export {pt} {dzgw} exited {rc}")
 
 
-def curve_metrics(curves: Path) -> dict:
-    """The last evaluation in a nets.train curves.jsonl: its holdout set (else the first validation set)."""
-    last = None
-    if curves.exists():
-        for line in curves.read_text().splitlines():
-            if line.strip():
-                rec = json.loads(line)
-                if rec.get("type") == "eval":
-                    last = rec
+def curve_metrics(curves: Path, step: int | None = None) -> dict:
+    """An evaluation in a nets.train curves.jsonl, its holdout set (else the first validation set): the one at
+    `step` (best.pt's: the summary's best_step), else the last (last.pt's)."""
+    lines = curves.read_text().splitlines() if curves.exists() else []
+    evals = [rec for rec in (json.loads(x) for x in lines if x.strip()) if rec.get("type") == "eval"]
+    at = [rec for rec in evals if step is not None and rec.get("step") == step]
+    last = (at or evals or [None])[-1]
     if not last:
         return {}
     ev = last.get("eval") or {}
@@ -98,6 +100,7 @@ class Learner:
         self.local: dict[str, list[Path]] = {}  # shard -> its local pack dirs
         self.tries: dict[str, int] = {}
         self.index: ctl.ShardIndex | None = None
+        self.lost = False                       # the renewal thread found another holder: publish nothing
         self.versions_made = 0
         self.last_status, self.state = 0.0, None
 
@@ -111,16 +114,38 @@ class Learner:
         return ctl.get(self.cfg, dotted, default)
 
     # ---------------------------------------------------------------------------- lease
-    def lease(self, now: float | None = None) -> None:
+    def lease(self, now: float | None = None, *, renew_only: bool = False) -> None:
+        """Take or renew the lease (the store is read at most every LEASE_S / 3). Taking it over from another
+        learner forgets what this one knew of the store. renew_only (in the middle of a step): a lease another
+        learner wrote, even an expired one, is lost: LeaseHeld."""
         now = time.time() if now is None else now
         if now - self.lease_renewed < self.LEASE_S / 3:
             return
         cur = self.store.read_json(ctl.LEASE)
-        if cur and cur.get("holder") != self.holder and cur.get("expires", 0) > now:
-            raise LeaseHeld(f"learner {cur['holder']} holds the lease until {time.ctime(cur['expires'])}")
+        if cur and cur.get("holder") != self.holder:
+            if renew_only or cur.get("expires", 0) > now:
+                raise LeaseHeld(f"learner {cur['holder']} holds the lease (until {time.ctime(cur.get('expires', 0))})")
+            self._forget()
         self.store.write_json(ctl.LEASE, {"holder": self.holder, "machine": self.machine, "expires": now + self.LEASE_S,
                                           "time": now}, f"lease: {self.holder}")
         self.lease_renewed = now
+
+    def _hold(self, parent: int | None = None) -> None:
+        """Before a write the lease guards (a version, ingested.json): LeaseHeld unless this learner still holds
+        the lease, read from the store now (and renewed), and no other learner published after `parent`."""
+        if self.lost:
+            raise LeaseHeld("the lease was lost during this step")
+        self.lease_renewed = float("-inf")
+        self.lease(renew_only=True)
+        cur = self.latest() if parent is not None else None
+        if cur is not None and int(cur["version"]) != parent:
+            raise LeaseHeld(f"version {cur['version']} was published by another learner")
+
+    def _forget(self) -> None:
+        """Drop what this learner knows of the store (another learner held the lease meanwhile: its versions and
+        learner/ingested.json are newer); the next ingest reloads it."""
+        self.index, self.ingested, self.local, self.tries = None, [], {}, {}
+        self.lease_renewed, self.lost = float("-inf"), False
 
     def release(self) -> None:
         cur = self.store.read_json(ctl.LEASE)
@@ -129,16 +154,22 @@ class Learner:
 
     @contextlib.contextmanager
     def _renewing(self):
-        """Renew the lease from a thread while a long call (training) runs."""
+        """Renew the lease from a thread while a step's long calls (ingest, re-pack, training) run; a lease another
+        learner took sets self.lost, so the step publishes nothing."""
         stop = threading.Event()
+        self.lost = False
 
         def loop():
             while not stop.wait(self.LEASE_S / 3):
                 try:
-                    self.lease()
+                    self.lease(renew_only=True)
+                except LeaseHeld as e:
+                    self.lost = True
+                    self.log(f"learner: lost the lease ({e}); this step publishes nothing")
+                    return
                 except Exception as e:                  # noqa: BLE001
                     self.log(f"learner: lease renewal failed: {e}")
-        t = threading.Thread(target=loop, daemon=True)
+        t = threading.Thread(target=loop, name="learner-lease", daemon=True)
         t.start()
         try:
             yield
@@ -289,10 +320,12 @@ class Learner:
     # ---------------------------------------------------------------------------- train and publish
     def train_args(self, out: Path, packs: list[Path], init: Path | None, version: int,
                    new_positions: int) -> list[str]:
+        """nets.train's argv: player.arch and player.config only for a random init; a warm start keeps the
+        checkpoint's own arch and config (a player.init of another width than player.config included)."""
         batch = int(self.c("learner.batch"))
-        argv = ["--arch", str(self.c("player.arch", "mlp")),
-                "--config", json.dumps(ctl.as_dict(self.c("player.config"))),
-                "--train", *[str(p) for p in packs], "--out", str(out), "--batch", str(batch),
+        argv = [] if init is not None else ["--arch", str(self.c("player.arch", "mlp")),
+                                            "--config", json.dumps(ctl.as_dict(self.c("player.config")))]
+        argv += ["--train", *[str(p) for p in packs], "--out", str(out), "--batch", str(batch),
                 "--lr", repr(float(self.c("learner.lr"))), "--warmup", str(int(self.c("learner.warmup"))),
                 "--policy-target", str(self.c("learner.policy_target", "visits")),
                 "--value-blend", repr(float(self.c("learner.value_blend"))),
@@ -331,13 +364,12 @@ class Learner:
                  + (f"warm start from v{parent}" if init else "random init"))
         self.status("training", force=True, training=v)
         t0 = time.time()
-        with self._renewing():
-            summary = (self._train or (lambda a: default_train(a, self.c("learner.threads"))))(argv) or {}
+        summary = (self._train or (lambda a: default_train(a, self.c("learner.threads"))))(argv) or {}
         train_s = time.time() - t0
         pt = out / "best.pt" if (out / "best.pt").exists() else out / "last.pt"
         if not pt.exists():
             raise RuntimeError(f"training version {v} wrote no checkpoint in {out}")
-        m = curve_metrics(out / "curves.jsonl")
+        m = curve_metrics(out / "curves.jsonl", summary.get("best_step") if pt.name == "best.pt" else None)
         total = m.get("total")
         if total is not None and not math.isfinite(float(total)):
             raise RuntimeError(f"version {v}: the holdout loss is {total}; not publishing")
@@ -356,7 +388,7 @@ class Learner:
                 "shards": [e["shard"] for e in win], "positions": sum(e["positions"] for e in win),
                 "games": sum(e["games"] for e in win), "new_positions": new_pos, "new_shards": len(new),
                 "metrics": metrics, "time": ctl.now_iso(), "train_s": round(train_s, 1),
-                "init": f"v{parent:04d}" if init else None,
+                "init": f"v{parent:04d}" if init else None, "step": m.get("step"),   # the published weights'
                 "steps": summary.get("steps"), "argv": [a if not a.startswith(str(self.wd)) else
                                                         os.path.relpath(a, self.wd) for a in argv]}
         mpath = out / "metrics.jsonl"
@@ -372,6 +404,7 @@ class Learner:
         files[ctl.version_file(v, "meta.json")] = json.dumps(meta, indent=1, sort_keys=True).encode()
         files[ctl.INGESTED] = json.dumps(self.ingested, indent=1, sort_keys=True).encode()
         files[ctl.latest_path()] = json.dumps({"version": v, "path": ctl.version_dir(v)}, indent=1).encode()
+        self._hold(parent)
         self.store.put_many(files, f"version {v}")
         self.versions_made += 1
         self.log(f"learner: published version {v} in {train_s:.0f} s: "
@@ -411,22 +444,32 @@ class Learner:
                             f"learner: {state}")
 
     def step(self) -> str:
-        """One pass: "stop", "published" or "wait"."""
+        """One pass: "stop", "published" or "wait". LeaseHeld when another learner holds the lease (or took it
+        during the pass, which then publishes nothing); this learner then forgets its view of the store."""
+        try:
+            return self._step()
+        except LeaseHeld:
+            self._forget()
+            raise
+
+    def _step(self) -> str:
         self.lease()
         c = ctl.read(self.store)
         if c and c.get("stop"):
             self.status("stopped", force=True, done=True)
             return "stop"
         self.cfg = ctl.effective(self.base, self.store)
-        latest = self.bootstrap()
-        new = self.ingest()
-        reason = self.due(latest)
-        if reason:
-            self.train_and_publish(latest, reason)
-            self.status("waiting", force=True)
-            return "published"
-        if new:
-            self.store.write_json(ctl.INGESTED, self.ingested, f"ingested {len(self.ingested)} shards")
+        with self._renewing():
+            latest = self.bootstrap()
+            new = self.ingest()
+            reason = self.due(latest)
+            if reason:
+                self.train_and_publish(latest, reason)
+                self.status("waiting", force=True)
+                return "published"
+            if new:
+                self._hold()
+                self.store.write_json(ctl.INGESTED, self.ingested, f"ingested {len(self.ingested)} shards")
         mx = self.c("budget.max_versions")
         self.status("done" if mx is not None and int(latest["version"]) >= int(mx) else "waiting",
                     force=bool(new))
