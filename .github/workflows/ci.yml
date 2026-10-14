@@ -1,0 +1,38 @@
+# Unit and contract tests on every push and pull request: `pytest -q`, whose default markers (pyproject.toml) leave
+# out the engine and smoke tiers. No secrets and no gorge build here: those tiers need a built dzgorge and its card
+# corpus, so run them locally before merging a change to the engine wrapper, the driver flags or the loop:
+#
+#   dz engine build                    # or: GORGE_DIR=/path/to/gorge bash engine/gorge/build.sh
+#   DZ_GORGE_ROOT=/path/to/gorge DZ_GORGE_DATA=data/gorge pytest -m engine tests/engine
+#   pytest -m smoke tests/smoke        # the local loop on configs/smoke.yml (a few minutes)
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install CPU torch and the test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy pyyaml huggingface_hub pytest matplotlib
+          pip install -e . --no-deps
+      - name: Unit and contract tests
+        run: pytest -q
