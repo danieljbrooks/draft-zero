@@ -316,6 +316,7 @@ def test_pod_up_needs_price_hours_and_confirmation(pods, monkeypatch, capsys):
     assert main(base + ["--max-price", "0.3", "--max-hours", "1.5", "--no-bundle"]) == 2
     out, err = capsys.readouterr()
     assert "cost guard" in out and "$0.300/h" in out and "1.5 h" in out and "$0.45" in out and "$30.50" in out
+    assert "1.5 h from its create, the wait for SSH included" in out
     assert "--yes" in err and pods == []
     assert main(base + ["--max-price", "0.3", "--max-hours", "1.5", "--no-bundle", "--yes"]) == 0
     assert len(pods) == 1 and pods[0]["max_hours"] == 1.5 and pods[0]["files"] is None

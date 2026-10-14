@@ -509,9 +509,9 @@ def cost_guard(spec, max_hours: float, balance: str) -> str:
     what = f"GPU {spec.gpu}" if spec.gpu else f"CPU {spec.cpu} x {spec.vcpu} vCPU"
     return (f"pod {spec.name}: {what} on {spec.cloud.title()} Cloud\n"
             f"  cost guard: at most ${spec.max_price:.3f}/h (a quote above it is refused, a pod billing above it is\n"
-            f"  terminated) for at most {max_hours:g} h (the pod is armed to terminate itself then, even if this\n"
-            f"  machine dies): at most ${worst:.2f} in all. Balance {balance}. Billing stops only at "
-            "`dz pod down ID`.")
+            f"  terminated) for at most {max_hours:g} h from its create, the wait for SSH included (it is armed to\n"
+            f"  terminate itself then, even if this machine dies; one whose SSH is not up by then is removed): at\n"
+            f"  most ${worst:.2f} in all. Balance {balance}. `dz pod down ID` stops the billing sooner.")
 
 
 def cmd_pod(a) -> int:
@@ -575,7 +575,8 @@ def cmd_pod(a) -> int:
     pod = rp.up(api, spec, max_hours=a.max_hours, files=files, setup=not a.no_setup,
                 keep_on_failure=a.keep_on_failure)
     print(json.dumps(rp.brief(pod.info) | {"id": pod.id, "ssh": pod.target.spec}, indent=1, default=str))
-    print(f"pod {pod.id} is up and armed for {a.max_hours:g} h. Remove it with `dz pod down {pod.id}`; "
+    print(f"pod {pod.id} is up and armed to terminate itself {a.max_hours:g} h after its create. Remove it with "
+          f"`dz pod down {pod.id}`; "
           + ("its actors run from " + files.remote_repo + " (`dz relay` pulls their shards)" if files else
              "nothing was copied to it (--no-bundle)"))
     return 0
@@ -743,17 +744,18 @@ def parser() -> argparse.ArgumentParser:
                         "/root/.runpod/env or ~/.runpod/env (RUNPOD_API_KEY). Pods bill until `dz pod down`.")
     psub = p.add_subparsers(dest="pod_cmd", required=True, metavar="up|down|list|balance|offers")
     q = psub.add_parser("up", help="rent a pod, arm its self-destruct, copy the engine, decks and repo, bootstrap it",
-                        description="Create a pod, wait for SSH, arm it to terminate itself after --max-hours, then "
-                                    "(unless --no-bundle) copy dzgorge, the card corpus, the deck pool and the repo "
-                                    "and bootstrap a venv. Any failure after the create removes the pod. Prints the "
-                                    "cost guard and asks before renting (--yes skips the question).")
+                        description="Create a pod, wait for SSH, arm it to terminate itself --max-hours after its create, "
+                                    "then (unless --no-bundle) copy dzgorge, the card corpus, the deck pool and the "
+                                    "repo and bootstrap a venv. Any failure after the create removes the pod. Prints "
+                                    "the cost guard and asks before renting (--yes skips the question).")
     q.add_argument("--name", required=True, help="pod name (unique: an existing name is refused)")
     g = q.add_mutually_exclusive_group(required=True)
     g.add_argument("--gpu", default=None, help="GPU type id from `dz pod offers` (bought for its vCPUs)")
     g.add_argument("--cpu", default=None, help="CPU flavor (cpu3c, cpu5c, ...): Secure Cloud only, needs --secure "
                                                "and --datacenter")
     q.add_argument("--max-price", type=float, required=True, help="$/h cap: required")
-    q.add_argument("--max-hours", type=float, required=True, help="hours until the pod terminates itself: required")
+    q.add_argument("--max-hours", type=float, required=True,
+                   help="the pod's whole life, from its create: it terminates itself then (required)")
     q.add_argument("--min-vcpu", type=int, default=8, help="GPU pods: vCPU floor (default 8)")
     q.add_argument("--vcpu", type=int, default=8, help="CPU pods: vCPUs (default 8)")
     q.add_argument("--datacenter", action="append", default=[], help="pin to a data center (repeatable)")
@@ -761,7 +763,8 @@ def parser() -> argparse.ArgumentParser:
     q.add_argument("--image", default=None, help="container image (default RunPod's base image)")
     q.add_argument("--no-bundle", action="store_true", help="only the armed pod: copy nothing")
     q.add_argument("--no-setup", action="store_true", help="copy the bundle but skip the bootstrap")
-    q.add_argument("--keep-on-failure", action="store_true", help="keep the (armed) pod when a step fails")
+    q.add_argument("--keep-on-failure", action="store_true",
+                   help="keep the pod when a step after arming it fails (one not armed yet is always removed)")
     q.add_argument("--yes", action="store_true", help="rent without asking")
     _add_config(q, "its engine.root and deck pool are copied; default /work/gorge-fork and data/gorge")
     q = psub.add_parser("down", help="terminate pods (billing stops only here)")

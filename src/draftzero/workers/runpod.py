@@ -38,7 +38,8 @@ Steps, each usable alone:
   SSH proxy (`<podHostId>@ssh.runpod.io`) there is only a PTY: no rsync, so no relay. A network that blocks high
   ports (docs/005) cannot run relay actors.
 - `arm(target, max_hours)`: deploy/runpod_arm.sh piped over SSH: the pod terminates itself after max_hours with its
-  own key, even if d1 dies. Do it first.
+  own key, even if d1 dies. Do it first; `up` arms it for what is left of its
+  max_hours since the create.
 - `bundle(target, b)`: rsync the dzgorge binary + bin/dzgorge.build.json and .cards (at the same absolute path as
   on d1, so a config's engine.root works unchanged), the deck pool to <repo>/data/gorge/, and the repo (git archive
   of HEAD, or rsync of the working tree) to <remote_root>/draftzero.
@@ -85,6 +86,7 @@ USER_AGENT = "curl/8.7.1"      # RunPod's API filter refuses urllib's default Us
 ARM_SCRIPT = REPO / "deploy" / "runpod_arm.sh"
 BOOTSTRAP = "deploy/pod_bootstrap.sh"
 MAX_ARM_HOURS = 72.0
+MIN_ARM_S = 60                                   # a pod whose SSH comes up with less of max_hours left is removed
 SSH_KEY = "~/.ssh/id_ed25519"
 
 
@@ -423,7 +425,7 @@ def arm(target: SSHTarget, max_hours: float, *, runner: Callable[..., Result] = 
     max_hours with the pod's own key. Arm first, before anything that can hang."""
     if not (0 < max_hours <= MAX_ARM_HOURS):
         raise ValueError(f"max_hours must be in (0, {MAX_ARM_HOURS}]")
-    secs = int(max_hours * 3600)
+    secs = int(round(max_hours * 3600))
     r = runner(target.ssh_argv(f"bash -s -- {secs}"), timeout=120, input=Path(script).read_text())
     if not r.ok or "armed:" not in r.out:
         raise RunPodError(f"arming the self-destruct failed (exit {r.code}): {(r.err or r.out)[-400:]}")
@@ -556,26 +558,36 @@ class Pod:
 def up(api: RunPodAPI, spec: PodSpec, *, max_hours: float, files: Bundle | None = None, setup: bool = True,
        key: str = SSH_KEY, wait_timeout: float = 900, runner: Callable[..., Result] = local_run,
        probe: Callable[[str, int], bool] = ssh_banner, sleep: Callable[[float], None] = time.sleep,
-       keep_on_failure: bool = False) -> Pod:
-    """Create -> wait for SSH -> arm the self-destruct for max_hours -> (bundle `files` -> bootstrap if `setup`).
-    Any failure after the create terminates the pod (keep_on_failure: keep it, its id in the error; an armed pod
-    still removes itself). The balance must cover max_hours at max_price (1-4 h of it)."""
+       keep_on_failure: bool = False, clock: Callable[[], float] = time.monotonic) -> Pod:
+    """Create -> wait for SSH -> arm the self-destruct -> (bundle `files` -> bootstrap if `setup`).
+    max_hours is the pod's whole life, counted from the create (it bills from there): SSH must come up within it,
+    and the self-destruct is armed for what is left, so the pod costs at most max_hours x max_price even if this
+    machine dies. Any failure after the create terminates the pod. keep_on_failure keeps it (its id in the error)
+    only once it is armed, so it still removes itself; a pod that is not armed yet is always terminated. The balance
+    must cover max_hours at max_price (1-4 h of it)."""
     if not (0 < max_hours <= MAX_ARM_HOURS):
         raise ValueError(f"max_hours must be in (0, {MAX_ARM_HOURS}]")
     if files is not None and files.missing():
         raise RunPodError(f"bundle: missing here: {', '.join(files.missing())}")
+    t0 = clock()
     pod = api.create(spec, balance_hours=max(1.0, min(max_hours, 4.0)))
-    pid = pod["id"]
+    pid, armed = pod["id"], False
     try:
-        target = api.wait_ssh(pid, timeout=wait_timeout, key=key, probe=probe, sleep=sleep)
-        arm(target, max_hours, runner=runner)
+        target = api.wait_ssh(pid, timeout=min(wait_timeout, max_hours * 3600 - (clock() - t0)), key=key,
+                              probe=probe, sleep=sleep)
+        left = max_hours * 3600 - (clock() - t0)
+        if left < MIN_ARM_S:
+            raise RunPodError(f"pod {pid}: SSH came up with {max(left, 0):.0f} s of --max-hours {max_hours:g} left")
+        arm(target, left / 3600, runner=runner)
+        armed = True
         if files is not None:
             bundle(target, files, runner=runner, log=api.log)
             if setup:
                 bootstrap(target, files, runner=runner)
     except BaseException as e:
-        if keep_on_failure:
-            raise RunPodError(f"pod {pid} kept after: {e}") from e
+        if keep_on_failure and armed:
+            raise RunPodError(f"pod {pid} kept after: {e} (it terminates itself {max_hours:g} h after its create; "
+                              f"`dz pod down {pid}` removes it sooner)") from e
         try:
             api.terminate(pid)
         except Exception as te:   # the original error matters more; say loudly that a pod may be billing
