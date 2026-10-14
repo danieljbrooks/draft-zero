@@ -1,0 +1,889 @@
+diff --git a/botpolicy/mulligan.go b/botpolicy/mulligan.go
+new file mode 100644
+index 00000000..9bc4d9b2
+--- /dev/null
++++ b/botpolicy/mulligan.go
+@@ -0,0 +1,264 @@
++package botpolicy
++
++import (
++	"cmp"
++	"slices"
++	"strings"
++
++	"github.com/adams-shaun/gorge/decision"
++)
++
++// MulliganRule selects how the policy answers the London mulligan round
++// (rules/mulligan.go): the keep/mulligan ask and the bottoming ask. It is
++// CONFIGURATION carried on the Board (Board.Mulligan), like Cast: the
++// adapters never fill it, and the zero value is the historical answer, byte
++// for byte.
++type MulliganRule uint8
++
++const (
++	// MulliganCoin is the default (the zero value): a keep/mulligan ask
++	// mulligans with probability 1/3 off the bot's rng, whatever the hand
++	// holds, and bottoming puts back chooseDiscard's least valuable cards.
++	MulliganCoin MulliganRule = iota
++	// MulliganLands is the opt-in Limited heuristic (40-card decks, ~17
++	// lands): keep or mulligan on the hand's land count, and bottom so the
++	// kept hand has a sensible land count (landMulligan, landBottoming).
++	// It consumes no rng.
++	MulliganLands
++	// MulliganNever always keeps: the "no mulligan" control for measuring a
++	// mulligan rule inside a game that runs the London round. It consumes no
++	// rng. (A seat that never mulligans is never asked to bottom in a
++	// two-player game; a multiplayer bottoming ask still uses chooseDiscard.)
++	MulliganNever
++)
++
++// mulliganByRule answers a KMulligan ask under a non-default rule. ok is
++// false for MulliganCoin, which decide answers itself.
++func (b Board) mulliganByRule(d *decision.Decision) (choices []int, ok bool) {
++	if b.Mulligan == MulliganCoin || len(d.Options) == 0 {
++		return nil, false
++	}
++	if d.Options[0].Kind == "bottom" {
++		if b.Mulligan == MulliganLands {
++			return b.landBottoming(d), true
++		}
++		return b.chooseDiscard(d), true
++	}
++	keep, mull := -1, -1
++	for _, o := range d.Options {
++		switch o.Kind {
++		case "keep":
++			keep = o.Index
++		case "mulligan":
++			mull = o.Index
++		}
++	}
++	if keep < 0 {
++		return nil, false // not a keep/mulligan shape: the default arm decides
++	}
++	if mull >= 0 && b.Mulligan == MulliganLands && !b.keepByLands(keepBottomCount(d.Prompt)) {
++		return []int{mull}, true
++	}
++	return []int{keep}, true
++}
++
++// isLandCard is the policy's land test for a hand card: a basic, or a
++// noncreature with no mana cost (CMC 0 and an empty or "no cost" printed
++// cost). Card carries no type line beyond Basic/Creature, so this is the
++// same proxy chooseDiscard's "basic or CMC-0 noncreature" class uses,
++// narrowed by the printed cost so a {0} artifact is a spell. It is exact
++// for the FDN Limited pool (every non-basic land there -- the gain lands,
++// Evolving Wilds, Rogue's Passage -- prints "no cost", and no nonland card
++// does); a suspend-only card with no mana cost would count as a land.
++func isLandCard(c Card) bool {
++	if c.Basic {
++		return true
++	}
++	if c.Creature || c.CMC != 0 {
++		return false
++	}
++	mc := strings.TrimSpace(c.ManaCost)
++	return mc == "" || strings.EqualFold(mc, "no cost")
++}
++
++// keepBottomCount reads the bottoming penalty a keep accepts off a
++// keep/mulligan prompt (rules/mulligan.go's keepMulliganPrompt: "... Keep
++// your hand (put 1 card on the bottom of your library) or take a
++// mulligan?"). The decision carries the count nowhere else; the hand is
++// always a full seven while the seat decides (CR 103.4), so the penalty is
++// how the policy knows how many mulligans it has taken. A prompt it cannot
++// read ("keep all seven cards", a multiplayer free mulligan, or any other
++// wording) is 0: the opening-seven rule.
++func keepBottomCount(prompt string) int {
++	i := strings.LastIndex(prompt, "Keep your hand (")
++	if i < 0 {
++		return 0
++	}
++	s := prompt[i+len("Keep your hand ("):]
++	if !strings.HasPrefix(s, "put ") {
++		return 0
++	}
++	s = s[len("put "):]
++	n, digits := 0, 0
++	for digits < len(s) && s[digits] >= '0' && s[digits] <= '9' {
++		n = n*10 + int(s[digits]-'0')
++		digits++
++	}
++	if digits == 0 {
++		return 0
++	}
++	return n
++}
++
++// handLands counts the deciding seat's hand and the lands in it. During
++// the pregame the castable, off-battlefield Cards entries are exactly the
++// hand (the graveyard and command zone are empty in Limited); ok is false
++// when that census disagrees with HandSize, and the caller then keeps.
++func (b Board) handLands() (hand, lands int, ok bool) {
++	for _, c := range b.Cards.All() {
++		if !c.Castable || c.OnBattlefield {
++			continue
++		}
++		hand++
++		if isLandCard(c) {
++			lands++
++		}
++	}
++	return hand, lands, hand > 0 && int32(hand) == b.HandSize
++}
++
++// keepByLands is MulliganLands' keep/mulligan rule for a hand that will
++// bottom `bottom` cards if kept (0 on the opening seven, 1 after one
++// London mulligan, ...). With K = hand - bottom cards to keep:
++//
++//   - K >= 6 (the opening seven, or one mulligan): keep 2 to 5 lands among
++//     the seven drawn; mulligan 0, 1, 6 or 7.
++//   - K == 5 (two mulligans): keep unless the seven hold no land or no
++//     spell.
++//   - K <= 4: always keep.
++//
++// A hand the census cannot read (handLands' ok false) is kept.
++func (b Board) keepByLands(bottom int) bool {
++	hand, lands, ok := b.handLands()
++	if !ok {
++		return true
++	}
++	switch k := hand - bottom; {
++	case k >= 6:
++		return lands >= 2 && lands <= 5
++	case k == 5:
++		return lands >= 1 && lands < hand
++	default:
++		return true
++	}
++}
++
++// landBottoming is MulliganLands' bottoming answer: d.Max cards go to the
++// bottom so the kept hand (K = len(d.Options) - d.Max cards) holds at most
++// maxLands = max(ceil(K/2), min(2, K)) lands. Lands go first while the kept
++// hand would hold more than that; every other pick is a spell, the highest
++// mana value first (ties on the lower option index, chooseDiscard's order
++// for spells). Since maxLands is at least 2 for K >= 2, the rule never
++// bottoms a hand below two lands while it has them. Among lands, the one
++// whose colours the hand's spells need least is bottomed first: each land
++// scores, over the colours it produces, the spells' pips of that colour
++// divided by how many remaining lands produce it (a land with no recorded
++// production, such as Evolving Wilds, or an "Any" producer counts for every
++// colour); the lowest score goes, ties on the lower index. The answer is in
++// ascending index order, like chooseLowest's.
++func (b Board) landBottoming(d *decision.Decision) []int {
++	m := d.Max
++	n := len(d.Options)
++	if m <= 0 {
++		return nil
++	}
++	if m > n {
++		m = n
++	}
++	type handCard struct {
++		idx  int
++		c    Card
++		land bool
++	}
++	var lands, spells []handCard
++	for _, o := range d.Options {
++		// A card the table does not hold (never, for a hand card) is a
++		// spell: the zero Card would otherwise read as a costless land.
++		c, known := b.Cards.Lookup(o.Obj)
++		hc := handCard{idx: o.Index, c: c, land: known && isLandCard(c)}
++		if hc.land {
++			lands = append(lands, hc)
++		} else {
++			spells = append(spells, hc)
++		}
++	}
++	k := n - m
++	maxLands := max((k+1)/2, min(2, k))
++	landsOut := min(max(len(lands)-maxLands, 0), m)
++	spellsOut := m - landsOut
++	if spellsOut > len(spells) { // unreachable for maxLands <= k; kept for safety
++		spellsOut = len(spells)
++		landsOut = m - spellsOut
++	}
++	out := make([]int, 0, m)
++
++	// Spells: highest mana value first, ties on the lower index.
++	ranked := slices.Clone(spells)
++	slices.SortStableFunc(ranked, func(a, c handCard) int {
++		return cmp.Or(cmp.Compare(c.c.CMC, a.c.CMC), cmp.Compare(a.idx, c.idx))
++	})
++	keptSpells := ranked[spellsOut:]
++	for _, s := range ranked[:spellsOut] {
++		out = append(out, s.idx)
++	}
++
++	// Lands: greedily drop the least needed one, recounting cover each time.
++	var need [5]int32
++	for _, s := range keptSpells {
++		p := colourPips(s.c.ManaCost)
++		for i := range need {
++			need[i] += p[i]
++		}
++	}
++	produces := func(c Card, colour int) bool {
++		pr := c.Produces
++		if pr.Any {
++			return true
++		}
++		none := true
++		for _, v := range pr.Colour {
++			if v != 0 {
++				none = false
++				break
++			}
++		}
++		return none || pr.Colour[colour] > 0
++	}
++	left := slices.Clone(lands)
++	for drop := 0; drop < landsOut; drop++ {
++		var cover [5]int32
++		for _, l := range left {
++			for col := range cover {
++				if produces(l.c, col) {
++					cover[col]++
++				}
++			}
++		}
++		best, bestScore := -1, 0.0
++		for li, l := range left {
++			score := 0.0
++			for col := range need {
++				if need[col] > 0 && produces(l.c, col) {
++					score += float64(need[col]) / float64(cover[col])
++				}
++			}
++			if best < 0 || score < bestScore {
++				best, bestScore = li, score
++			}
++		}
++		out = append(out, left[best].idx)
++		left = slices.Delete(left, best, best+1)
++	}
++	slices.Sort(out)
++	return out
++}
+diff --git a/botpolicy/mulligan_test.go b/botpolicy/mulligan_test.go
+new file mode 100644
+index 00000000..ab1de4d9
+--- /dev/null
++++ b/botpolicy/mulligan_test.go
+@@ -0,0 +1,287 @@
++package botpolicy
++
++import (
++	"fmt"
++	"slices"
++	"testing"
++
++	"github.com/adams-shaun/gorge/cards"
++	"github.com/adams-shaun/gorge/decision"
++	"github.com/adams-shaun/gorge/state"
++)
++
++// Hand-card fixtures for the land-count mulligan, shaped as the adapters fill
++// a hand card (Castable, not on the battlefield). Lands print "no cost", the
++// Forge script's cost for every land.
++func plainsCard() Card {
++	var p cards.ManaProduction
++	p.Colour[0] = 1
++	return Card{PrintedName: "Plains", Basic: true, ManaCost: "no cost", Castable: true, Produces: p}
++}
++
++func swampCard() Card {
++	var p cards.ManaProduction
++	p.Colour[2] = 1
++	return Card{PrintedName: "Swamp", Basic: true, ManaCost: "no cost", Castable: true, Produces: p}
++}
++
++// wildsCard is a non-basic land with no recorded production (Evolving Wilds).
++func wildsCard() Card {
++	return Card{PrintedName: "Evolving Wilds", ManaCost: "no cost", Castable: true}
++}
++
++func spellCard(cmc int32, cost string) Card {
++	return Card{PrintedName: "spell " + cost, Creature: true, Power: 2, CMC: cmc, ManaCost: cost, Castable: true}
++}
++
++// handBoard is a Board whose hand is cs, ObjIDs 1..len(cs) in order, with
++// the Mulligan rule set.
++func handBoard(rule MulliganRule, cs ...Card) Board {
++	m := map[state.ObjID]Card{}
++	for i, c := range cs {
++		m[state.ObjID(i+1)] = c
++	}
++	return Board{Mulligan: rule, Cards: TableOf(m), HandSize: int32(len(cs))}
++}
++
++// sevenWith is a seven-card hand of `lands` Plains and 7-lands 2-drops.
++func sevenWith(lands int) []Card {
++	var cs []Card
++	for i := 0; i < 7; i++ {
++		if i < lands {
++			cs = append(cs, plainsCard())
++		} else {
++			cs = append(cs, spellCard(2, "1 W"))
++		}
++	}
++	return cs
++}
++
++// keepPrompt is rules/mulligan.go's keepMulliganPrompt wording for a
++// two-player round (no free mulligan), copied verbatim.
++func keepPrompt(bottom int, canMulligan bool) string {
++	n := fmt.Sprintf("%d cards", bottom)
++	if bottom == 1 {
++		n = "1 card"
++	}
++	if canMulligan {
++		return "p0 plays first. Keep your hand (put " + n + " on the bottom of your library) or take a mulligan?"
++	}
++	return "p0 plays first. Keep your hand (put " + n + " on the bottom of your library)"
++}
++
++func keepMullDecision(bottom int, canMulligan bool) decision.Decision {
++	d := decision.Decision{Seq: 3, Player: 0, Kind: decision.KMulligan, Min: 1, Max: 1,
++		Prompt: keepPrompt(bottom, canMulligan), Options: []decision.Option{{Index: 0, Kind: "keep", Label: "keep"}}}
++	if canMulligan {
++		d.Options = append(d.Options, decision.Option{Index: 1, Kind: "mulligan", Label: "mulligan"})
++	}
++	return d
++}
++
++func TestKeepBottomCount(t *testing.T) {
++	for _, tc := range []struct {
++		prompt string
++		want   int
++	}{
++		{keepPrompt(0, true), 0},
++		{keepPrompt(1, true), 1},
++		{keepPrompt(2, true), 2},
++		{keepPrompt(2, false), 2},
++		{keepPrompt(12, false), 12},
++		// The multiplayer free mulligan's wording, and anything unreadable.
++		{"a plays first. Keep your hand (keep all seven cards) or take a mulligan?", 0},
++		{"", 0},
++		{"Keep your hand (put some cards on the bottom)", 0},
++		// A display name that itself reads like the prompt: the last match wins.
++		{"Keep your hand (put 5 cards plays first. Keep your hand (put 1 card on the bottom of your library) or take a mulligan?", 1},
++	} {
++		if got := keepBottomCount(tc.prompt); got != tc.want {
++			t.Errorf("keepBottomCount(%q) = %d, want %d", tc.prompt, got, tc.want)
++		}
++	}
++}
++
++// TestLandMulliganKeep pins the keep/mulligan table on constructed hands of
++// seven: 2-5 lands keep on the opening seven and after one mulligan, two
++// mulligans keep unless the seven are all lands or all spells, and three or
++// more always keep. No rng is consumed.
++func TestLandMulliganKeep(t *testing.T) {
++	want := map[int]map[int]bool{ // bottom -> lands -> keep
++		0: {0: false, 1: false, 2: true, 3: true, 4: true, 5: true, 6: false, 7: false},
++		1: {0: false, 1: false, 2: true, 3: true, 4: true, 5: true, 6: false, 7: false},
++		2: {0: false, 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: false},
++		3: {0: true, 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true},
++	}
++	for bottom := 0; bottom <= 3; bottom++ {
++		for lands := 0; lands <= 7; lands++ {
++			b := handBoard(MulliganLands, sevenWith(lands)...)
++			d := keepMullDecision(bottom, true)
++			r := rng(9)
++			in := Decide(b, &d, r)
++			if err := d.Validate(in); err != nil {
++				t.Fatalf("bottom %d lands %d: invalid answer %+v: %v", bottom, lands, in, err)
++			}
++			gotKeep := d.Options[in.Choices[0]].Kind == "keep"
++			if gotKeep != want[bottom][lands] {
++				t.Errorf("bottom %d, %d lands: keep = %v, want %v", bottom, lands, gotKeep, want[bottom][lands])
++			}
++			if r.Uint64() != rng(9).Uint64() {
++				t.Errorf("bottom %d, %d lands: the land rule consumed the rng", bottom, lands)
++			}
++		}
++	}
++	// A keep-only offer (the allowance is spent) keeps whatever the hand.
++	b := handBoard(MulliganLands, sevenWith(0)...)
++	d := keepMullDecision(2, false)
++	if in := Decide(b, &d, rng(1)); len(in.Choices) != 1 || in.Choices[0] != 0 {
++		t.Errorf("keep-only offer = %+v, want keep", in)
++	}
++	// A hand census that disagrees with HandSize (a castable card outside the
++	// hand, say) keeps rather than guessing.
++	b = handBoard(MulliganLands, sevenWith(0)...)
++	b.HandSize = 8
++	d = keepMullDecision(0, true)
++	if in := Decide(b, &d, rng(1)); in.Choices[0] != 0 {
++		t.Errorf("census mismatch = %+v, want keep", in)
++	}
++	// Non-basic lands count: gain lands and Evolving Wilds print "no cost".
++	hand := append(sevenWith(0)[:5], wildsCard(), wildsCard())
++	b = handBoard(MulliganLands, hand...)
++	if in := Decide(b, &d, rng(1)); in.Choices[0] != 0 {
++		t.Errorf("two Evolving Wilds = %+v, want keep (2 lands)", in)
++	}
++	// A {0} artifact is a spell, not a land.
++	zero := Card{PrintedName: "Ornament", CMC: 0, ManaCost: "0", Castable: true}
++	hand = append(sevenWith(1)[:6], zero)
++	b = handBoard(MulliganLands, hand...)
++	if in := Decide(b, &d, rng(1)); in.Choices[0] != 1 {
++		t.Errorf("one land and a {0} artifact = %+v, want mulligan", in)
++	}
++}
++
++// TestNeverMulligan pins MulliganNever: keep, whatever the hand, no rng.
++func TestNeverMulligan(t *testing.T) {
++	for lands := 0; lands <= 7; lands++ {
++		b := handBoard(MulliganNever, sevenWith(lands)...)
++		d := keepMullDecision(0, true)
++		r := rng(4)
++		if in := Decide(b, &d, r); in.Choices[0] != 0 {
++			t.Errorf("%d lands: never-mulligan = %+v, want keep", lands, in)
++		}
++		if r.Uint64() != rng(4).Uint64() {
++			t.Errorf("%d lands: never-mulligan consumed the rng", lands)
++		}
++	}
++}
++
++// TestCoinMulliganUnchanged pins that the zero rule is the historical answer
++// on both shapes: the coin draws exactly as the default Decide does, and
++// bottoming is chooseDiscard's.
++func TestCoinMulliganUnchanged(t *testing.T) {
++	hand := sevenWith(5)
++	for seed := uint64(0); seed < 30; seed++ {
++		d := keepMullDecision(0, true)
++		withHand := Decide(handBoard(MulliganCoin, hand...), &d, rng(seed))
++		bare := Decide(Board{}, &d, rng(seed))
++		if !slices.Equal(withHand.Choices, bare.Choices) {
++			t.Fatalf("seed %d: coin with a hand = %v, bare board = %v", seed, withHand.Choices, bare.Choices)
++		}
++	}
++	b := handBoard(MulliganCoin, hand...)
++	d := bottomDecision(7, 2)
++	if got, want := Decide(b, &d, rng(1)).Choices, b.chooseDiscard(&d); !slices.Equal(got, want) {
++		t.Errorf("coin bottoming = %v, want chooseDiscard's %v", got, want)
++	}
++}
++
++func bottomDecision(n, m int) decision.Decision {
++	d := decision.Decision{Seq: 9, Player: 0, Kind: decision.KMulligan, Min: m, Max: m}
++	for i := 0; i < n; i++ {
++		d.Options = append(d.Options, decision.Option{Index: i, Kind: "bottom", Obj: state.ObjID(i + 1)})
++	}
++	return d
++}
++
++// TestLandBottoming pins the bottoming rule on constructed sevens.
++func TestLandBottoming(t *testing.T) {
++	for _, tc := range []struct {
++		name string
++		hand []Card
++		m    int
++		want []int // option indices bottomed, ascending
++	}{
++		{
++			// 4 lands + 3 spells keeping 6: at most 3 lands, so a land goes.
++			// The spells need W twice and B once; Plains and Swamp cover two
++			// each, so a Swamp (B: 1/2) is needed less than a Plains (W: 2/2).
++			name: "four lands keep six: the less needed colour's land",
++			hand: []Card{plainsCard(), swampCard(), plainsCard(), swampCard(),
++				spellCard(2, "1 W"), spellCard(3, "2 W"), spellCard(2, "1 B")},
++			m: 1, want: []int{1},
++		},
++		{
++			// The same colours but three Plains: a Plains is now redundant
++			// (W 2/3) beside the lone Swamp (B 1/1).
++			name: "redundant colour goes first",
++			hand: []Card{plainsCard(), plainsCard(), swampCard(), plainsCard(),
++				spellCard(2, "1 W"), spellCard(3, "2 W"), spellCard(2, "1 B")},
++			m: 1, want: []int{0},
++		},
++		{
++			name: "three lands keep six: the highest mana value spell",
++			hand: []Card{plainsCard(), plainsCard(), plainsCard(),
++				spellCard(2, "1 W"), spellCard(5, "4 W"), spellCard(3, "2 W"), spellCard(1, "W")},
++			m: 1, want: []int{4},
++		},
++		{
++			name: "six lands keep five: two lands",
++			hand: []Card{plainsCard(), plainsCard(), plainsCard(), plainsCard(), plainsCard(), plainsCard(),
++				spellCard(4, "3 W")},
++			m: 2, want: []int{0, 1},
++		},
++		{
++			// 4 lands keeping 5: one land (cap 3), then the costliest spell.
++			name: "four lands keep five: a land then a spell",
++			hand: []Card{plainsCard(), plainsCard(), plainsCard(), plainsCard(),
++				spellCard(2, "1 W"), spellCard(6, "5 W"), spellCard(3, "2 W")},
++			m: 2, want: []int{0, 5},
++		},
++		{
++			name: "one land keep five: two spells, ties on the lower index",
++			hand: []Card{spellCard(3, "2 W"), plainsCard(), spellCard(4, "3 W"), spellCard(2, "1 W"),
++				spellCard(3, "2 W"), spellCard(1, "W"), spellCard(4, "3 W")},
++			m: 2, want: []int{2, 6},
++		},
++		{
++			// Keeping two of seven: the cap is max(ceil(2/2), 2) = 2, so both
++			// lands stay -- the rule never bottoms below two lands.
++			name: "never below two lands",
++			hand: []Card{spellCard(1, "W"), plainsCard(), spellCard(2, "1 W"), spellCard(3, "2 W"),
++				swampCard(), spellCard(1, "B"), spellCard(2, "1 B")},
++			m: 5, want: []int{0, 2, 3, 5, 6},
++		},
++		{
++			// Evolving Wilds (no recorded production) counts for every
++			// colour, so the redundant Plains goes before it.
++			name: "a fetch land is a fixer",
++			hand: []Card{plainsCard(), wildsCard(), plainsCard(), plainsCard(),
++				spellCard(2, "1 W"), spellCard(2, "1 B"), spellCard(3, "2 W")},
++			m: 1, want: []int{0},
++		},
++	} {
++		b := handBoard(MulliganLands, tc.hand...)
++		d := bottomDecision(len(tc.hand), tc.m)
++		r := rng(2)
++		in := Decide(b, &d, r)
++		if err := d.Validate(in); err != nil {
++			t.Fatalf("%s: invalid answer %+v: %v", tc.name, in, err)
++		}
++		if !slices.Equal(in.Choices, tc.want) {
++			t.Errorf("%s: bottomed %v, want %v", tc.name, in.Choices, tc.want)
++		}
++		if r.Uint64() != rng(2).Uint64() {
++			t.Errorf("%s: bottoming consumed the rng", tc.name)
++		}
++	}
++}
+diff --git a/botpolicy/policy.go b/botpolicy/policy.go
+index a04cd5a8..77a497cf 100644
+--- a/botpolicy/policy.go
++++ b/botpolicy/policy.go
+@@ -152,6 +152,11 @@ type Board struct {
+ 	// the pre-refactor arithmetic, byte for byte (cast.go's castWeights).
+ 	// A Board nobody configured plays the default bot.
+ 	Cast CastWeights
++	// Mulligan is the London-mulligan rule (mulligan.go): CONFIGURATION
++	// like Cast, never filled by the adapters. The zero value,
++	// MulliganCoin, is the historical 1/3 coin and chooseDiscard bottoming;
++	// seat.Bot.WithMulligan sets another rule on every Board it decides on.
++	Mulligan MulliganRule
+ 	// FirstMain reports whether the current main phase is the FIRST one
+ 	// (main1, not main2): the Precombat feature's board half. It is filled
+ 	// exactly like IsMain on both adapter halves -- the projected View's
+@@ -359,7 +364,9 @@ func (b Board) closesClock(p state.PlayerID, id state.ObjID, a Creature) bool {
+ //     mulligans with probability 1/3 off the bot's own rng when a
+ //     "mulligan" option is offered (the determinism mirror of
+ //     KTriggerOptional), otherwise keeps (the "keep" option at index 0). The
+-//     rng is consumed only where a real mulligan choice exists.
++//     rng is consumed only where a real mulligan choice exists. An opt-in
++//     Board.Mulligan rule (mulligan.go: the land-count heuristic, or
++//     always-keep) replaces both answers and consumes no rng.
+ //   - KModes: a modal announcement or mid-resolution pick -- choose the first Min options
+ //     in order (Choices [0, 1, …, Min-1]), the recorded mirror of the
+ //     engine-side first-mode stand-in, no rng. This also answers an
+@@ -1099,6 +1106,12 @@ func decide(b Board, d *decision.Decision, r *rand.Rand, lethalPressure, combine
+ 		return Clamp(d, in)
+ 
+ 	case decision.KMulligan:
++		// An opt-in rule (Board.Mulligan: the land-count heuristic or
++		// always-keep) answers both shapes without the rng (mulligan.go).
++		if c, ok := b.mulliganByRule(d); ok {
++			in.Choices = c
++			return Clamp(d, in)
++		}
+ 		// The London round, two shapes on one kind (rules/mulligan.go).
+ 		// Bottoming is a hand-retention decision, like discard.
+ 		if len(d.Options) > 0 && d.Options[0].Kind == "bottom" {
+diff --git a/internal/azmcts/mulligan_test.go b/internal/azmcts/mulligan_test.go
+new file mode 100644
+index 00000000..a213efac
+--- /dev/null
++++ b/internal/azmcts/mulligan_test.go
+@@ -0,0 +1,78 @@
++package azmcts
++
++import (
++	"testing"
++
++	"github.com/adams-shaun/gorge/botpolicy"
++	"github.com/adams-shaun/gorge/decision"
++	gbench "github.com/adams-shaun/gorge/internal/bench"
++	"github.com/adams-shaun/gorge/seat"
++)
++
++// SeatConfig.Mulligan reaches the seat's own bot, which answers the London
++// round (never a searched kind): with no simulations the seat is exactly
++// seat.NewBot(seed).WithMulligan(rule), chain head for chain head, in a game
++// that runs the round.
++func TestSeatMulliganRuleIsTheBots(t *testing.T) {
++	cfg := testConfig(t, "mono-red-prowess", "mono-blue-tempo", testSeed)
++	cfg.Mulligans = 2
++	for _, rule := range []botpolicy.MulliganRule{botpolicy.MulliganLands, botpolicy.MulliganNever} {
++		sc := DefaultSeatConfig()
++		sc.Search.Sims = 0
++		sc.Source = testSeatSource
++		sc.Mulligan = rule
++		az, err := NewSeat(cfg.Seed^1, nil, sc)
++		if err != nil {
++			t.Fatal(err)
++		}
++		azHead, err := playAZ(t, cfg, az, 400)
++		if err != nil {
++			t.Fatal(err)
++		}
++		botHead, err := playAZ(t, cfg, seat.NewBot(cfg.Seed^1).WithMulligan(rule), 400)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if azHead != botHead {
++			t.Fatalf("rule %d: az with 0 sims head %s, bot head %s", rule, azHead, botHead)
++		}
++	}
++}
++
++// An az seat configured never to mulligan keeps every opening hand, where
++// the default seat (the bot's 1/3 coin) mulligans some.
++func TestSeatNeverMulligans(t *testing.T) {
++	count := func(rule botpolicy.MulliganRule) (mulls int) {
++		for k := uint64(0); k < 20; k++ {
++			cfg := testConfig(t, "mono-red-prowess", "mono-blue-tempo", testSeed+k)
++			cfg.Mulligans = 2
++			sc := DefaultSeatConfig()
++			sc.Search.Sims = 0
++			sc.Source = testSeatSource
++			sc.Mulligan = rule
++			az, err := NewSeat(cfg.Seed^1, nil, sc)
++			if err != nil {
++				t.Fatal(err)
++			}
++			hooks := gbench.Hooks{Decision: func(seatIdx int, d *decision.Decision, in decision.Intent, _ *botpolicy.Board) error {
++				if seatIdx == 0 && d.Kind == decision.KMulligan {
++					if c := d.Chosen(in); len(c) == 1 && c[0].Kind == "mulligan" {
++						mulls++
++					}
++				}
++				return nil
++			}}
++			// A short cap: only the pregame round matters here.
++			if _, _, err := gbench.PlayGame(cfg, []seat.Seat{az, seat.NewBot(cfg.Seed ^ 2)}, 4, 40, hooks); err != nil {
++				t.Fatal(err)
++			}
++		}
++		return mulls
++	}
++	if n := count(botpolicy.MulliganNever); n != 0 {
++		t.Errorf("MulliganNever seat mulliganed %d times in 20 games", n)
++	}
++	if n := count(botpolicy.MulliganCoin); n == 0 {
++		t.Errorf("the default seat never mulliganed in 20 games: the comparison is vacuous")
++	}
++}
+diff --git a/internal/azmcts/seat.go b/internal/azmcts/seat.go
+index 04618441..1a0842cc 100644
+--- a/internal/azmcts/seat.go
++++ b/internal/azmcts/seat.go
+@@ -54,6 +54,10 @@ type SeatConfig struct {
+ 	// Worlds is the redeal source's K (RedealSource): 0 deals a fresh world
+ 	// per simulation. Ignored by the clairvoyant source.
+ 	Worlds int
++	// Mulligan is the London-mulligan rule of the seat's own bot (seat.Bot.
++	// WithMulligan), which answers every KMulligan ask (the round is never
++	// searched). The zero value is the default bot's 1/3 coin.
++	Mulligan botpolicy.MulliganRule
+ }
+ 
+ // DefaultSeatConfig is the eval seat with the spec's knobs.
+@@ -127,6 +131,17 @@ var (
+ // NewSeat builds one seat of one game. seed is the per-seat seed the bench
+ // derives; net nil is generation 0.
+ func NewSeat(seed uint64, net *policynet.Model, cfg SeatConfig) (*Seat, error) {
++	s, err := newSeat(seed, net, cfg)
++	if err == nil && cfg.Mulligan != botpolicy.MulliganCoin {
++		// Applied to the seat's own bot after newSeat builds it, so the
++		// default seat's construction (and the autopay bot) is untouched.
++		s.def = s.def.WithMulligan(cfg.Mulligan)
++	}
++	return s, err
++}
++
++// newSeat is NewSeat before the SeatConfig.Mulligan rule.
++func newSeat(seed uint64, net *policynet.Model, cfg SeatConfig) (*Seat, error) {
+ 	if err := cfg.Search.Validate(net); err != nil {
+ 		return nil, err
+ 	}
+diff --git a/seat/bot.go b/seat/bot.go
+index ac8dd24e..d430af56 100644
+--- a/seat/bot.go
++++ b/seat/bot.go
+@@ -57,6 +57,10 @@ type Bot struct {
+ 	// attackSim, when non-nil, answers KAttackers with the opt-in combat
+ 	// simulation (botpolicy.AttackSimDecide); set only by NewAttackSimBot.
+ 	attackSim *botpolicy.AttackSimParams
++	// mulligan is the London-mulligan rule (botpolicy.MulliganRule), copied
++	// onto every decision's Board like cast. The zero value is the default
++	// 1/3 coin; WithMulligan / EnableLandMulligan set another.
++	mulligan botpolicy.MulliganRule
+ }
+ 
+ // M4: a compile-time assertion that Bot keeps satisfying Seat, since
+@@ -98,6 +102,21 @@ func (b *Bot) EnableAutoPayMana() *Bot {
+ 	return b
+ }
+ 
++// WithMulligan configures the bot's London-mulligan rule (botpolicy.
++// MulliganRule): MulliganLands keeps or mulligans on the hand's land count
++// and bottoms toward a sensible land count, MulliganNever always keeps, and
++// MulliganCoin (the zero value) is the default 1/3 coin. A rule other than
++// the coin consumes no rng at the mulligan, so the bot's later draws shift
++// relative to the default bot's. It returns b, like EnableAutoPayMana.
++func (b *Bot) WithMulligan(rule botpolicy.MulliganRule) *Bot {
++	b.mulligan = rule
++	return b
++}
++
++// EnableLandMulligan is WithMulligan(botpolicy.MulliganLands): the opt-in
++// Limited land-count mulligan heuristic.
++func (b *Bot) EnableLandMulligan() *Bot { return b.WithMulligan(botpolicy.MulliganLands) }
++
+ // SkipLifePlans makes the bot treat an offered payment action whose plan pays
+ // life as having no plan, so its policy sees the ordinary options for that
+ // cast. Only the host's caretaker for a human seat sets it. It returns b.
+@@ -194,6 +213,9 @@ func (b *Bot) decide(brd botpolicy.Board, d *decision.Decision) decision.Intent
+ 	if b.castSet {
+ 		brd.Cast = b.cast
+ 	}
++	if b.mulligan != botpolicy.MulliganCoin {
++		brd.Mulligan = b.mulligan
++	}
+ 	if b.autoPayMana {
+ 		if in, ok := b.paymentIntent(brd, d); ok {
+ 			return in
+diff --git a/seat/mulligan_test.go b/seat/mulligan_test.go
+new file mode 100644
+index 00000000..8d0698e6
+--- /dev/null
++++ b/seat/mulligan_test.go
+@@ -0,0 +1,116 @@
++package seat
++
++import (
++	"context"
++	"slices"
++	"testing"
++
++	"github.com/adams-shaun/gorge/botpolicy"
++	"github.com/adams-shaun/gorge/decision"
++	"github.com/adams-shaun/gorge/internal/testutil"
++	"github.com/adams-shaun/gorge/rules"
++	"github.com/adams-shaun/gorge/state"
++	"github.com/adams-shaun/gorge/view"
++)
++
++// TestLandMulliganOnRealRound drives real London rounds (Config.Mulligans 2,
++// SampleDecks' 17-land 40-card decks) with EnableLandMulligan bots and checks
++// every KMulligan answer against the rule computed from the engine's own
++// hand and mulligan count: both adapter halves (the View half, Decide, and
++// the game half, DecideBoard over BoardFromGame) give the same answer, the
++// keep/mulligan answer is the land table's, and a bottoming of m cards keeps
++// lands - min(max(lands - cap, 0), m) lands, cap = max(ceil(K/2), min(2, K))
++// for K kept cards, and never fewer than min(2, lands). It also pins the prompt the
++// rule reads the mulligan count from (rules/mulligan.go's
++// keepMulliganPrompt), which is the policy's only source for it.
++func TestLandMulliganOnRealRound(t *testing.T) {
++	names, decks := testutil.SampleDecks(t, 2)
++	ctx := context.Background()
++	mulls, keeps, bottoms := 0, 0, 0
++	for seed := uint64(0); seed < 60; seed++ {
++		e := rules.New(rules.Config{Seed: seed, Names: names, Decks: decks, Mulligans: 2})
++		e.Advance()
++		bots := []*Bot{NewBot(seed).EnableLandMulligan(), NewBot(seed ^ 7).EnableLandMulligan()}
++		taken := map[state.PlayerID]int{}
++		for e.Pending() != nil && e.Pending().Kind == decision.KMulligan {
++			d := e.Pending()
++			b := bots[d.Player]
++			viewIn, err := b.Decide(ctx, view.Project(e.G, e, d.Player, d), *d)
++			if err != nil {
++				t.Fatal(err)
++			}
++			boardIn, err := b.DecideBoard(ctx, botpolicy.BoardFromGame(e.G, e, d.Player), *d)
++			if err != nil {
++				t.Fatal(err)
++			}
++			if !slices.Equal(viewIn.Choices, boardIn.Choices) {
++				t.Fatalf("seed %d seat %d: view half %v, game half %v", seed, d.Player, viewIn.Choices, boardIn.Choices)
++			}
++			hand := e.G.Zone(state.ZHand, d.Player)
++			lands := 0
++			for _, id := range hand {
++				if e.G.Obj(id).Face().IsLand() {
++					lands++
++				}
++			}
++			chosen := d.Chosen(viewIn)
++			if d.Options[0].Kind == "bottom" {
++				bottoms++
++				kept := lands
++				for _, o := range chosen {
++					if e.G.Obj(o.Obj).Face().IsLand() {
++						kept--
++					}
++				}
++				m := len(chosen)
++				maxLands := max((len(hand)-m+1)/2, min(2, len(hand)-m))
++				if want := lands - min(max(lands-maxLands, 0), m); kept != want || kept < min(2, lands) {
++					t.Errorf("seed %d seat %d: bottoming %d of %d (%d lands) kept %d lands, want %d",
++						seed, d.Player, m, len(hand), lands, kept, want)
++				}
++			} else {
++				canMull := len(d.Options) > 1
++				k := len(hand) - taken[d.Player] // two players: no free mulligan
++				wantKeep := true
++				switch {
++				case !canMull || k <= 4:
++				case k >= 6:
++					wantKeep = lands >= 2 && lands <= 5
++				default:
++					wantKeep = lands >= 1 && lands < len(hand)
++				}
++				if gotKeep := chosen[0].Kind == "keep"; gotKeep != wantKeep {
++					t.Errorf("seed %d seat %d: %d lands after %d mulligans: keep = %v, want %v (prompt %q)",
++						seed, d.Player, lands, taken[d.Player], gotKeep, wantKeep, d.Prompt)
++				}
++				if chosen[0].Kind == "mulligan" {
++					taken[d.Player]++
++					mulls++
++				} else {
++					keeps++
++				}
++			}
++			if err := e.Submit(viewIn); err != nil {
++				t.Fatal(err)
++			}
++		}
++	}
++	t.Logf("%d mulligans, %d keeps, %d bottomings", mulls, keeps, bottoms)
++	if mulls == 0 || keeps == 0 || bottoms == 0 {
++		t.Fatalf("vacuous: %d mulligans, %d keeps, %d bottomings", mulls, keeps, bottoms)
++	}
++}
++
++// The zero rule is the default bot: a WithMulligan(MulliganCoin) bot draws
++// the same coin as NewBot over a keep/mulligan ask.
++func TestWithMulliganCoinIsTheDefault(t *testing.T) {
++	d := decision.Decision{Seq: 5, Player: 0, Kind: decision.KMulligan, Min: 1, Max: 1,
++		Options: []decision.Option{{Index: 0, Kind: "keep"}, {Index: 1, Kind: "mulligan"}}}
++	for seed := uint64(0); seed < 30; seed++ {
++		a, _ := NewBot(seed).DecideBoard(context.Background(), botpolicy.Board{}, d)
++		b, _ := NewBot(seed).WithMulligan(botpolicy.MulliganCoin).DecideBoard(context.Background(), botpolicy.Board{}, d)
++		if !slices.Equal(a.Choices, b.Choices) {
++			t.Fatalf("seed %d: default %v, coin %v", seed, a.Choices, b.Choices)
++		}
++	}
++}

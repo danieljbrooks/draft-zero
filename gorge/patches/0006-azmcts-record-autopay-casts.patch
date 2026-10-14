@@ -1,0 +1,81 @@
+diff --git a/internal/azmcts/record.go b/internal/azmcts/record.go
+index fc427976..d44ff226 100644
+--- a/internal/azmcts/record.go
++++ b/internal/azmcts/record.go
+@@ -47,22 +47,57 @@ func visitRecord(e *rules.Engine, d *decision.Decision, res Result, fs policynet
+ 	for i := range d.Options {
+ 		posOf[d.Options[i].Index] = i
+ 	}
+-	used := make([]bool, len(d.Options))
+-	for _, c := range res.Candidates {
+-		for _, ch := range c.Choices {
++	// A payment cast (Options.AutoPayment) has no Choices: it is recorded as
++	// the cast option it stands for -- its base option when the decision has
++	// one, else a synthetic "cast X" option appended after d.Options, the one
++	// the prior scores (payCastOption) -- so its visits train the policy.
++	opts := d.Options
++	payChoice := make([]int, len(res.Candidates)) // the option position standing for a payment candidate, -1 none
++	for c, in := range res.Candidates {
++		payChoice[c] = -1
++		if in.Payment == nil || len(in.Choices) > 0 {
++			continue
++		}
++		for _, a := range e.EnsurePaymentActions() {
++			if a.ID != in.Payment.ActionID {
++				continue
++			}
++			if a.BaseOptionIndex != nil {
++				if p, ok := posOf[*a.BaseOptionIndex]; ok {
++					payChoice[c] = p
++				}
++				break
++			}
++			if len(opts) == len(d.Options) {
++				opts = append(make([]decision.Option, 0, len(d.Options)+len(res.Candidates)), d.Options...)
++			}
++			payChoice[c] = len(opts)
++			opts = append(opts, decision.Option{Kind: "cast", Obj: a.Cast.Object, Player: d.Player, Label: a.Label, Index: len(opts)})
++			break
++		}
++	}
++	used := make([]bool, len(opts))
++	for c, in := range res.Candidates {
++		for _, ch := range in.Choices {
+ 			if p, ok := posOf[ch]; ok {
+ 				used[p] = true
+ 			}
+ 		}
++		if payChoice[c] >= 0 {
++			used[payChoice[c]] = true
++		}
+ 	}
+ 	bot := res.Candidates[0]
+-	enc := make([]policynet.Option, len(d.Options))
+-	for i := range d.Options {
+-		enc[i] = policynet.EncodeOptionWith(fs, v, d.Player, d.Kind, d.Options[i], i, len(d.Options))
++	enc := make([]policynet.Option, len(opts))
++	for i := range opts {
++		enc[i] = policynet.EncodeOptionWith(fs, v, d.Player, d.Kind, opts[i], i, len(opts))
+ 	}
+-	seat.MarkBotPicks(d, enc, bot)
+-	stored := make([]int, len(d.Options))
+-	for i := range d.Options {
++	seat.MarkBotPicks(d, enc[:len(d.Options)], bot)
++	if payChoice[0] >= 0 {
++		enc[payChoice[0]].BotPick = true
++	}
++	stored := make([]int, len(opts))
++	for i := range opts {
+ 		stored[i] = -1
+ 		if used[i] {
+ 			stored[i] = len(rec.Options)
+@@ -77,6 +112,9 @@ func visitRecord(e *rules.Engine, d *decision.Decision, res Result, fs policynet
+ 				rec.Cands[c] = append(rec.Cands[c], stored[p])
+ 			}
+ 		}
++		if p := payChoice[c]; p >= 0 && stored[p] >= 0 {
++			rec.Cands[c] = append(rec.Cands[c], stored[p])
++		}
+ 	}
+ 	return rec
+ }

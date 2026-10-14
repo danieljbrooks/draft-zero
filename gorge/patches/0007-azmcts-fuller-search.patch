@@ -1,0 +1,1561 @@
+diff --git a/internal/azmcts/candidates.go b/internal/azmcts/candidates.go
+index 14a43dd2..d8075816 100644
+--- a/internal/azmcts/candidates.go
++++ b/internal/azmcts/candidates.go
+@@ -38,6 +38,19 @@ type cand struct {
+ 	// scoreSet marks score as set (a payment candidate); otherwise
+ 	// in.Choices is scored.
+ 	scoreSet bool
++	// set marks a fuller kind's candidate (Kinds.Modes and friends), a set
++	// of options: its key encodes its choices in decision order (keyIntent),
++	// whatever order c.in lists them in.
++	set bool
++}
++
++// keyIntent is the intent c's key encodes: c.in, with a set's choices
++// sorted (sortedChoices), so the same set has one key in every world.
++func (c cand) keyIntent() decision.Intent {
++	if c.set {
++		return sortedChoices(c.in)
++	}
++	return c.in
+ }
+ 
+ // scoreChoices is the option-index list a network prior scores c by.
+@@ -60,7 +73,9 @@ func (c cand) scoreChoices() ([]int, bool) {
+ //   - priority: searchprobe.Candidates over d's observed options -- the bot's
+ //     action, then pass, then the other cast/ability options. Land plays and
+ //     mana activations are never candidates, so a priority the bot answers
+-//     with one is not searched.
++//     with one is not searched;
++//   - multitarget, modes, optional, choose (the fuller kinds, Kinds.Modes and
++//     friends): subsetCandidates, every legal set of options.
+ //
+ // It does not reuse searchseat.Eligible/candidates: that gate's priority arm
+ // is ">= 2 distinct castable objects" (searchseat.go:250), not the spec's
+@@ -162,6 +177,14 @@ func enumerateLimit(obs *searchprobe.Collector, e *rules.Engine, d *decision.Dec
+ 		kind = "target"
+ 	case d.Kind == decision.KPriority && kinds.Priority:
+ 		kind = "priority"
++	case d.Kind == decision.KTarget && kinds.MultiTarget && multiTarget(d):
++		kind = "multitarget"
++	case d.Kind == decision.KModes && kinds.Modes:
++		kind = "modes"
++	case d.Kind == decision.KTriggerOptional && kinds.Optional:
++		kind = "optional"
++	case d.Kind == decision.KChoose && kinds.Choose && smallChoose(d, kinds.chooseLimit()):
++		kind = "choose"
+ 	default:
+ 		return nil, "", 0, false
+ 	}
+@@ -190,6 +213,8 @@ func enumerateLimit(obs *searchprobe.Collector, e *rules.Engine, d *decision.Dec
+ 		ins = searchprobe.BlockCandidates(d, bot, limit, legal)
+ 	case "target":
+ 		ins = searchprobe.TargetCandidates(d, bot, limit)
++	case "multitarget", "modes", "optional", "choose":
++		ins = subsetCandidates(d, bot, limit)
+ 	case "priority":
+ 		var one [1]searchprobe.Action
+ 		base, err := obs.AppendIntentActions(one[:0], d, bot)
+@@ -208,16 +233,143 @@ func enumerateLimit(obs *searchprobe.Collector, e *rules.Engine, d *decision.Dec
+ 		return nil, kind, SkipFewCandidates, false
+ 	}
+ 	out := make([]cand, 0, len(ins))
++	set := extraIndex(kind) >= 0
+ 	for _, in := range ins {
+-		key, err := obs.IntentKey(d, in)
++		// A set's key is its options in decision order, whatever order the
++		// bot listed them in: the same set has one key in every world.
++		c := cand{in: in, set: set}
++		key, err := obs.IntentKey(d, c.keyIntent())
+ 		if err != nil {
+ 			return nil, kind, SkipTranslate, false
+ 		}
+-		out = append(out, cand{key: Key(key), in: in})
++		c.key = Key(key)
++		out = append(out, c)
+ 	}
+ 	return out, kind, 0, true
+ }
+ 
++// multiTarget reports whether d is a KTarget shape the single-target
++// enumerator refuses (searchprobe.SingleTarget) that a set enumeration can
++// answer: up to N targets, an optional target (Min 0), a budgeted pick.
++func multiTarget(d *decision.Decision) bool {
++	return d.Kind == decision.KTarget && !searchprobe.SingleTarget(d) && d.Max >= 1 && len(d.Options) >= 1
++}
++
++// chooseLimit is the largest KChoose option list Choose searches.
++func (k Kinds) chooseLimit() int {
++	if k.chooseMax > 0 {
++		return k.chooseMax
++	}
++	return DefaultOptions().Limit
++}
++
++// smallChoose reports whether KChoose decision d is one Kinds.Choose
++// searches: one to max options, none of them a mana-payment window's
++// ("activate", "mana", "done": the manual payment of a cost, which the
++// priority vocabulary never searches either).
++func smallChoose(d *decision.Decision, max int) bool {
++	if len(d.Options) == 0 || len(d.Options) > max || d.ManaPayment != nil {
++		return false
++	}
++	for i := range d.Options {
++		switch d.Options[i].Kind {
++		case "activate", "mana", "done":
++			return false
++		}
++	}
++	return true
++}
++
++// subsetTries bounds the option sets subsetCandidates examines, so a long
++// option list with few legal sets cannot stall a walk.
++const subsetTries = 4096
++
++// subsetCandidates enumerates the answers of a pick-a-set decision (the
++// fuller kinds: modes, optional, choose, multitarget): the bot's own answer
++// first (index 0, the tie-winner), then every set of Min..Max options
++// (0..Max under AllowNone) that d.Validate accepts, in size order and, within
++// a size, lexicographic in option position, each listing its options in
++// decision order; the set the bot chose is not repeated. Capped at limit and
++// at subsetTries sets examined -- prefix-stable, as enumerateCut needs. nil
++// when d repeats options (Repeatable), the bot's answer is not a plain valid
++// choice list, or fewer than two candidates survive.
++func subsetCandidates(d *decision.Decision, bot decision.Intent, limit int) []decision.Intent {
++	if d == nil || d.Repeatable || limit < 2 || bot.Payment != nil || bot.Announce != nil || len(bot.Rest) > 0 {
++		return nil
++	}
++	first := decision.Intent{Seq: d.Seq, Player: d.Player, Choices: append([]int{}, bot.Choices...)}
++	if d.Validate(first) != nil {
++		return nil
++	}
++	botSet := sortedChoices(first).Choices
++	n := len(d.Options)
++	lo, hi := max(d.Min, 0), min(d.Max, n)
++	if d.AllowNone {
++		lo = 0
++	}
++	out := []decision.Intent{first}
++	comb := make([]int, 0, max(hi, 0))
++	tries := 0
++	for k := lo; k <= hi && len(out) < limit && tries < subsetTries; k++ {
++		comb = comb[:0]
++		for i := 0; i < k; i++ {
++			comb = append(comb, i)
++		}
++		for len(out) < limit && tries < subsetTries {
++			tries++
++			choices := make([]int, k)
++			for i, p := range comb {
++				choices[i] = d.Options[p].Index
++			}
++			if !sameInts(choices, botSet) {
++				in := decision.Intent{Seq: d.Seq, Player: d.Player, Choices: choices}
++				if d.Validate(in) == nil {
++					out = append(out, in)
++				}
++			}
++			// The next k-subset of n positions, lexicographic.
++			i := k - 1
++			for i >= 0 && comb[i] == n-k+i {
++				i--
++			}
++			if i < 0 {
++				break
++			}
++			comb[i]++
++			for j := i + 1; j < k; j++ {
++				comb[j] = comb[j-1] + 1
++			}
++		}
++	}
++	if len(out) < 2 {
++		return nil
++	}
++	return out
++}
++
++// sortedChoices is in with its Choices ascending (a copy when they were
++// not).
++func sortedChoices(in decision.Intent) decision.Intent {
++	if sort.IntsAreSorted(in.Choices) {
++		return in
++	}
++	in.Choices = append([]int(nil), in.Choices...)
++	sort.Ints(in.Choices)
++	return in
++}
++
++func sameInts(a, b []int) bool {
++	if len(a) != len(b) {
++		return false
++	}
++	for i := range a {
++		if a[i] != b[i] {
++			return false
++		}
++	}
++	return true
++}
++
+ // payKeyPrefix marks a payment candidate's key: "pay:" then the semantic
+ // key of a plain cast of the payment's object (paymentActs), so the same
+ // planned cast has the same key in every world however the engine numbered
+@@ -267,12 +419,15 @@ func nameKeys(obs *searchprobe.Collector, e *rules.Engine, d *decision.Decision,
+ 	out := cands[:0:0]
+ 	seen := make(map[Key]bool, len(cands)) // membership only -- never ranged.
+ 	for _, c := range cands {
++		// The intent c's key encodes: a set's choices in decision order
++		// (keyIntent), so its actions and their options line up as keyed.
++		in := c.keyIntent()
+ 		srcActs := c.acts
+-		if srcActs == nil && c.in.Payment == nil {
++		if srcActs == nil && in.Payment == nil {
+ 			// The ordinary path keyed this candidate without building its
+ 			// actions (Collector.IntentKey); rebuild them, exactly the
+ 			// actions its key encodes.
+-			if a, err := obs.Actions(d, c.in); err == nil {
++			if a, err := obs.Actions(d, in); err == nil {
+ 				srcActs = a
+ 			}
+ 		}
+@@ -281,14 +436,14 @@ func nameKeys(obs *searchprobe.Collector, e *rules.Engine, d *decision.Decision,
+ 		for k := range acts {
+ 			src, obj, atk := d.Source, state.ObjID(0), state.ObjID(0)
+ 			switch {
+-			case c.in.Payment != nil:
++			case in.Payment != nil:
+ 				for _, a := range d.PaymentActions {
+-					if a.ID == c.in.Payment.ActionID {
++					if a.ID == in.Payment.ActionID {
+ 						obj = a.Cast.Object
+ 					}
+ 				}
+-			case k < len(c.in.Choices) && c.in.Choices[k] >= 0 && c.in.Choices[k] < len(d.Options):
+-				o := d.Options[c.in.Choices[k]]
++			case k < len(in.Choices) && in.Choices[k] >= 0 && in.Choices[k] < len(d.Options):
++				o := d.Options[in.Choices[k]]
+ 				obj, atk = o.Obj, o.Attacker
+ 			}
+ 			a := &acts[k]
+@@ -671,7 +826,8 @@ func actionsKey(acts []searchprobe.Action) Key {
+ // otherwise a softmax, across candidates, of policynet.CandidateScore over
+ // the head's option scores on the deciding seat's redacted view -- the
+ // subset log-likelihood for attackers and blockers, the single option's
+-// score for priority and target. The bot's options are marked (BotPick) as a
++// score for priority and target, the sum of its options' scores for the
++// fuller kinds (Kinds.Modes and friends). The bot's options are marked (BotPick) as a
+ // residual checkpoint was trained. fellBack reports a network prior that
+ // could not be formed (every candidate -Inf or NaN) and fell back to uniform.
+ // The view is projected into pv (view.ProjectInto), a fresh one when nil.
+@@ -743,6 +899,9 @@ func priorsWith(net *policynet.Model, e *rules.Engine, d *decision.Decision, bot
+ 	}
+ 	scores := net.Score(st, enc)
+ 	subset := kind == "attackers" || kind == "blockers"
++	// A fuller kind's candidate is a set of options: its logit is the sum
++	// of their scores (0 for the empty set), the trainer's candidate logit.
++	sum := extraIndex(kind) >= 0
+ 	logits := make([]float64, len(cands))
+ 	for i, c := range cands {
+ 		choices, ok := c.scoreChoices()
+@@ -753,6 +912,10 @@ func priorsWith(net *policynet.Model, e *rules.Engine, d *decision.Decision, bot
+ 			// A payment cast with no legacy option has no option score.
+ 			return uniform(len(cands)), true
+ 		}
++		if sum {
++			logits[i] = sumScore(scores, choices)
++			continue
++		}
+ 		logits[i] = policynet.CandidateScore(subset, scores, choices)
+ 	}
+ 	p, ok := softmax(logits)
+@@ -762,6 +925,19 @@ func priorsWith(net *policynet.Model, e *rules.Engine, d *decision.Decision, bot
+ 	return p, false
+ }
+ 
++// sumScore is the sum of the chosen options' scores, -Inf when a choice is
++// out of range.
++func sumScore(scores []float32, choices []int) float64 {
++	s := 0.0
++	for _, c := range choices {
++		if c < 0 || c >= len(scores) {
++			return math.Inf(-1)
++		}
++		s += float64(scores[c])
++	}
++	return s
++}
++
+ // payCastOption is the option a network scores payment candidate c by when
+ // its action has no legacy cast option (score nil): the plain cast of its
+ // object, as paymentActs keys it. ok is false for any other candidate (a
+diff --git a/internal/azmcts/env.go b/internal/azmcts/env.go
+index 9af9833a..36218258 100644
+--- a/internal/azmcts/env.go
++++ b/internal/azmcts/env.go
+@@ -68,6 +68,13 @@ type walkConfig struct {
+ 	// the redeal source's forker does for the searching seat.
+ 	oppNodes bool
+ 	oppForks []*searchprobe.Forker
++	// oppAutoPay is OpponentMirror with AutoPayment: the other seats' walk
++	// bots pay automatically (engineEnv.oppBots) and their priority points
++	// enumerate the payment vocabulary, as the searching seat's do. oppTopK
++	// is the PriorTopK in effect at their points: priorTopK under
++	// OpponentMirror, 0 otherwise (oppEnumLimit).
++	oppAutoPay bool
++	oppTopK    int
+ }
+ 
+ // priorNet is the network in-walk priors read: nil under uniformPrior.
+@@ -130,6 +137,15 @@ func (c *walkConfig) enumLimit() int {
+ 	return c.limit
+ }
+ 
++// oppEnumLimit is enumLimit at an opponent's point (Options.OpponentNodes):
++// limit, or under oppTopK every candidate.
++func (c *walkConfig) oppEnumLimit() int {
++	if c.oppTopK > 0 {
++		return BenchCandidateLimit
++	}
++	return c.limit
++}
++
+ // candKeys is cands' keys, in order.
+ func candKeys(cands []cand) []Key {
+ 	keys := make([]Key, len(cands))
+@@ -197,6 +213,13 @@ type engineEnv struct {
+ 	// name nothing across worlds, and opponent keys name objects by card
+ 	// name instead (oppPoint). Nil until used.
+ 	oppObs []*searchprobe.Collector
++	// oppBots[p] answers seat p's decisions under oppAutoPay: the auto-pay
++	// bot, as actorBot is the searching seat's, seeded per seat identically
++	// for every simulation; oppPCGs[p] is its source, which the node cache
++	// saves and restores. Both nil without oppAutoPay, their searching
++	// seat's entry nil.
++	oppBots []*seat.Bot
++	oppPCGs []*rand.PCG
+ }
+ 
+ func newEngineEnv(w World, cfg *walkConfig) (*engineEnv, error) {
+@@ -231,6 +254,15 @@ func newEngineEnv(w World, cfg *walkConfig) (*engineEnv, error) {
+ 		env.actorPCG = seat.BotSource(splitmix(cfg.envSeed ^ 0x6163746f722d6270 ^ uint64(cfg.actor)))
+ 		env.actorBot = seat.NewBotOn(env.actorPCG).EnableAutoPayMana()
+ 	}
++	if cfg.oppAutoPay {
++		env.oppPCGs = make([]*rand.PCG, n)
++		for p := range env.oppPCGs {
++			if state.PlayerID(p) != cfg.actor {
++				env.oppPCGs[p] = seat.BotSource(splitmix(cfg.envSeed ^ 0x6f70702d61757470 ^ uint64(p)))
++			}
++		}
++		env.oppBots = oppBotsOn(env.oppPCGs)
++	}
+ 	if cfg.rootPerWorld {
+ 		if err := env.matchRoot(); err != nil {
+ 			return nil, err
+@@ -374,6 +406,13 @@ func (e *engineEnv) advance() (*Point, error) {
+ 				e.e.EnsurePaymentActions()
+ 			}
+ 			in, _ = e.actorBot.DecideBoard(context.Background(), b, *pd)
++		} else if ob := e.oppBot(pd.Player); ob != nil {
++			// OpponentMirror with AutoPayment: the opponent's own auto-pay bot.
++			b := botpolicy.BoardFromGameInto(g, e.e, pd.Player, e.board)
++			if pd.Kind == decision.KPriority {
++				e.e.EnsurePaymentActions()
++			}
++			in, _ = ob.DecideBoard(context.Background(), b, *pd)
+ 		} else {
+ 			// A decision whose bot answer reads no board (a priority window
+ 			// offering nothing but pass, or only mana activations outside a main
+@@ -403,13 +442,17 @@ func (e *engineEnv) advance() (*Point, error) {
+ 				}
+ 				if e.cfg.priorTopK > 0 {
+ 					countTopK(e.cfg.stats, true, before)
+-					return &Point{Keys: candKeys(cands), Prior: prior, cut: cut, fell: fell, ranked: true, before: before}, nil
++					pt := &Point{Keys: candKeys(cands), Prior: prior, cut: cut, fell: fell, ranked: true, before: before, extra: extraOf(kind)}
++					countPoint(e.cfg.stats, pt)
++					return pt, nil
+ 				}
+ 				keys := make([]Key, len(cands))
+ 				for i, c := range cands {
+ 					keys[i] = c.key
+ 				}
+-				return &Point{Keys: keys, Prior: prior, cut: cut, fell: fell}, nil
++				pt := &Point{Keys: keys, Prior: prior, cut: cut, fell: fell, extra: extraOf(kind)}
++				countPoint(e.cfg.stats, pt)
++				return pt, nil
+ 			}
+ 		} else if e.cfg.oppNodes {
+ 			if pt := e.oppPoint(pd, in); pt != nil {
+@@ -449,17 +492,24 @@ const oppKeyPrefix = "opp:"
+ // per-world collector (the bot's answer first, capped at the limit), in the
+ // manual-payment vocabulary: the walk bot that answers the opponent pays
+ // manually, so a cast is offered only once its mana floats and a tap is
+-// never a candidate. Every key names its objects by card name (nameKeys
+-// with nothing known at the root) behind oppKeyPrefix. The prior is the
+-// network's on the OPPONENT's redacted view (priors projects pd.Player's),
+-// uniform without one. Truncated and PriorFallbacks count here as at the
+-// searching seat's points.
++// never a candidate. Under oppAutoPay (OpponentMirror with AutoPayment) the
++// opponent's walk bot pays automatically instead and a priority point is
++// the payment vocabulary (paymentPriorityCands), as the searching seat's
++// is (Stats.OppPayPoints). Every key names its objects by card name
++// (nameKeys with nothing known at the root) behind oppKeyPrefix. The prior
++// is the network's on the OPPONENT's redacted view (priors projects
++// pd.Player's), uniform without one; under oppTopK (OpponentMirror with
++// PriorTopK) the point is enumerated in full and the ranking prior keeps
++// its best (rankedPrior), as at the searching seat's points. Truncated,
++// PriorFallbacks and the PriorTopK counters count here as at the searching
++// seat's points.
+ func (e *engineEnv) oppPoint(pd *decision.Decision, in decision.Intent) *Point {
+ 	obs := e.oppObserver(pd.Player)
+ 	if obs == nil {
+ 		return nil
+ 	}
+-	cands, kind, _, ok, cut := enumerateCutInto(obs, e.e, pd, in, e.cfg.kinds, e.cfg.limit, false, e.cfg.enumBoard)
++	autoPay, topK := e.cfg.oppAutoPay, e.cfg.oppTopK
++	cands, kind, _, ok, cut := enumerateCutInto(obs, e.e, pd, in, e.cfg.kinds, e.cfg.oppEnumLimit(), autoPay, e.cfg.enumBoard)
+ 	if !ok {
+ 		return nil
+ 	}
+@@ -469,17 +519,58 @@ func (e *engineEnv) oppPoint(pd *decision.Decision, in decision.Intent) *Point {
+ 	if cut {
+ 		e.cfg.stats.Truncated++
+ 	}
++	cands, prior, fell, before := rankedPrior(e.cfg.priorNet(), topK, e.e, pd, in, kind, cands, e.cfg.priorView())
+ 	keys := make([]Key, len(cands))
+ 	for i := range cands {
+ 		cands[i].key = Key(oppKeyPrefix + string(cands[i].key))
+ 		keys[i] = cands[i].key
+ 	}
+ 	e.cur, e.cands = pd, cands
+-	prior, fell := priors(e.cfg.priorNet(), e.e, pd, in, kind, cands, e.cfg.priorView())
+ 	if fell {
+ 		e.cfg.stats.PriorFallbacks++
+ 	}
+-	return &Point{Keys: keys, Prior: prior, cut: cut, fell: fell, Opp: true}
++	pt := &Point{Keys: keys, Prior: prior, cut: cut, fell: fell, Opp: true, extra: extraOf(kind), oppPay: autoPay && kind == "priority"}
++	if topK > 0 {
++		countTopK(e.cfg.stats, true, before)
++		pt.ranked, pt.before = true, before
++	}
++	countPoint(e.cfg.stats, pt)
++	return pt
++}
++
++// oppBot is seat p's auto-pay walk bot under oppAutoPay, nil otherwise.
++func (e *engineEnv) oppBot(p state.PlayerID) *seat.Bot {
++	if int(p) < len(e.oppBots) {
++		return e.oppBots[p]
++	}
++	return nil
++}
++
++// oppBotsOn is the auto-pay bot on each non-nil source.
++func oppBotsOn(pcgs []*rand.PCG) []*seat.Bot {
++	bots := make([]*seat.Bot, len(pcgs))
++	for p, src := range pcgs {
++		if src != nil {
++			bots[p] = seat.NewBotOn(src).EnableAutoPayMana()
++		}
++	}
++	return bots
++}
++
++// extraOf is a Point's record of a fuller kind (Point.extra).
++func extraOf(kind string) int8 { return int8(extraIndex(kind) + 1) }
++
++// countPoint counts what producing in-walk point pt counts beyond
++// Truncated, PriorFallbacks and PriorTopK: a fuller kind's point
++// (Stats.ExtraPoints) and an opponent's payment point (OppPayPoints). The
++// node cache counts a stored point it reaches again the same way.
++func countPoint(st *Stats, pt *Point) {
++	if pt.extra > 0 {
++		st.ExtraPoints[pt.extra-1]++
++	}
++	if pt.oppPay {
++		st.OppPayPoints++
++	}
+ }
+ 
+ // oppObserver is seat p's collector in this world, forked on first use; nil
+diff --git a/internal/azmcts/morekinds_test.go b/internal/azmcts/morekinds_test.go
+new file mode 100644
+index 00000000..aa5ababb
+--- /dev/null
++++ b/internal/azmcts/morekinds_test.go
+@@ -0,0 +1,707 @@
++package azmcts
++
++import (
++	"context"
++	"math"
++	"reflect"
++	"sort"
++	"strings"
++	"testing"
++
++	"github.com/adams-shaun/gorge/botpolicy"
++	"github.com/adams-shaun/gorge/decision"
++	"github.com/adams-shaun/gorge/internal/policynet"
++	"github.com/adams-shaun/gorge/internal/searchprobe"
++	"github.com/adams-shaun/gorge/rules"
++	"github.com/adams-shaun/gorge/seat"
++	"github.com/adams-shaun/gorge/state"
++	"github.com/adams-shaun/gorge/view"
++)
++
++// kindFixture is one real decision of a fuller kind: deck a in seat 0
++// against deck b, the game seed, the deciding seat, and the shape.
++type kindFixture struct {
++	name     string
++	a, b     string
++	seed     uint64
++	player   state.PlayerID
++	want     decision.Kind
++	optKind  string // the first option's Kind ("" any)
++	min, max int
++	n        int
++	kind     string // the searched kind's name
++}
++
++// kindFixtures are bot-vs-bot games of the repo decks reaching each fuller
++// kind's shapes (found by scanning the default bot's games).
++var kindFixtures = []kindFixture{
++	{"modes 2 of 3", "mono-red-prowess", "foundations-calling-all-angels", testSeed + 1, 0, decision.KModes, "", 2, 2, 3, "modes"},
++	{"modes 1 of 3", "foundations-keen-engineering", "death-n-taxes", testSeed + 1, 0, decision.KModes, "", 1, 1, 3, "modes"},
++	{"may trigger", "foundations-calling-all-angels", "foundations-keen-engineering", testSeed, 0, decision.KTriggerOptional, "", 1, 1, 2, "optional"},
++	{"choose X of 2", "foundations-keen-engineering", "mono-red-prowess", testSeed, 0, decision.KChoose, "x", 1, 1, 2, "choose"},
++	{"choose X of 5", "foundations-calling-all-angels", "foundations-tramplesaurus-rex", testSeed, 1, decision.KChoose, "x", 1, 1, 5, "choose"},
++	{"sacrifice 2 of 3", "foundations-keen-engineering", "foundations-tramplesaurus-rex", testSeed + 1, 0, decision.KChoose, "sacrifice", 2, 2, 3, "choose"},
++	{"exile up to 2 of 3", "foundations-tramplesaurus-rex", "foundations-wretched-ranks", testSeed, 1, decision.KChoose, "exile", 0, 2, 3, "choose"},
++	{"up to 2 targets of 3", "mono-red-prowess", "foundations-reign-of-dragons", testSeed + 1, 1, decision.KTarget, "", 1, 2, 3, "multitarget"},
++	{"optional target of 2", "foundations-calling-all-angels", "mono-blue-tempo", testSeed + 1, 0, decision.KTarget, "", 0, 1, 2, "multitarget"},
++	{"2 targets of 5", "foundations-wretched-ranks", "mono-red-prowess", testSeed + 1, 0, decision.KTarget, "", 2, 2, 5, "multitarget"},
++}
++
++func (f kindFixture) matches(d *decision.Decision) bool {
++	if d.Player != f.player || d.Kind != f.want || d.Min != f.min || d.Max != f.max || len(d.Options) != f.n {
++		return false
++	}
++	return f.optKind == "" || d.Options[0].Kind == f.optKind
++}
++
++// position plays the default bot for both seats from genesis until the
++// fixture's decision, and returns the engine there with the bot's answer,
++// unsubmitted.
++func (f kindFixture) position(t testing.TB) (*rules.Engine, *decision.Decision, decision.Intent) {
++	t.Helper()
++	e, d, in, ok := botDecision(testConfig(t, f.a, f.b, f.seed), 4000, f.matches)
++	if !ok {
++		t.Fatalf("%s: no such decision in %s vs %s seed %d", f.name, f.a, f.b, f.seed)
++	}
++	return e, d, in
++}
++
++// botDecision plays the default bot for both seats from genesis until a
++// decision pred accepts.
++func botDecision(cfg rules.Config, maxSteps int, pred func(*decision.Decision) bool) (*rules.Engine, *decision.Decision, decision.Intent, bool) {
++	e := rules.New(cfg)
++	e.Advance()
++	rngs := searchprobe.BotRandoms(cfg.Seed, 2)
++	board := botpolicy.NewBoard(2)
++	for steps := 0; steps < maxSteps && !e.G.Over; steps++ {
++		d := e.Pending()
++		if d == nil {
++			return nil, nil, decision.Intent{}, false
++		}
++		in := botpolicy.Decide(botpolicy.BoardFromGameInto(e.G, e, d.Player, &board), d, rngs[d.Player])
++		if pred(d) {
++			return e, d, in, true
++		}
++		if err := e.Submit(in); err != nil {
++			return nil, nil, decision.Intent{}, false
++		}
++	}
++	return nil, nil, decision.Intent{}, false
++}
++
++// onlyKind is the Kinds searching kind alone.
++func onlyKind(kind string) Kinds {
++	k, err := ParseKinds(kind)
++	if err != nil {
++		panic(err)
++	}
++	return k
++}
++
++// legalSets is every set of d's option positions with Min..Max members
++// (0..Max under AllowNone) d.Validate accepts, as sorted Index lists, in
++// size order then lexicographic.
++func legalSets(d *decision.Decision) [][]int {
++	n := len(d.Options)
++	var out [][]int
++	lo := d.Min
++	if d.AllowNone {
++		lo = 0
++	}
++	for k := lo; k <= min(d.Max, n); k++ {
++		var rec func(start int, cur []int)
++		rec = func(start int, cur []int) {
++			if len(cur) == k {
++				choices := make([]int, k)
++				for i, p := range cur {
++					choices[i] = d.Options[p].Index
++				}
++				if d.Validate(decision.Intent{Seq: d.Seq, Player: d.Player, Choices: choices}) == nil {
++					out = append(out, choices)
++				}
++				return
++			}
++			for p := start; p < n; p++ {
++				rec(p+1, append(cur, p))
++			}
++		}
++		rec(0, nil)
++	}
++	return out
++}
++
++func sortedCopy(xs []int) []int {
++	out := append([]int{}, xs...)
++	sort.Ints(out)
++	return out
++}
++
++// Each fuller kind enumerates its real decisions as the legal option sets:
++// the bot's answer first (its own intent, unchanged), then every other
++// legal set in size and lexicographic order, each once, capped at the
++// limit; the keys are distinct, and each maps back onto the decision
++// through a fresh collector (IntentForKey) as the same set. The kind is
++// not searched without its flag (AllKinds' behaviour is unchanged).
++func TestFullerKindsEnumerateRealDecisions(t *testing.T) {
++	for _, f := range kindFixtures {
++		e, d, bot := f.position(t)
++		if _, kind, ok := enumerate(searchprobe.NewCollector(d.Player), e, d, bot, AllKinds(), 6); kind != "" || ok {
++			t.Fatalf("%s: searched as %q under AllKinds", f.name, kind)
++		}
++		for _, limit := range []int{3, 6, 64} {
++			obs := searchprobe.NewCollector(d.Player)
++			cands, kind, ok := enumerate(obs, e, d, bot, onlyKind(f.kind), limit)
++			legal := legalSets(d)
++			if !ok || kind != f.kind {
++				t.Fatalf("%s: kind %q ok %v (%d legal sets, bot %v)", f.name, kind, ok, len(legal), bot.Choices)
++			}
++			if !reflect.DeepEqual(cands[0].in, bot) {
++				t.Fatalf("%s: candidate 0 %+v, want the bot's %+v", f.name, cands[0].in, bot)
++			}
++			want := [][]int{sortedCopy(bot.Choices)}
++			for _, s := range legal {
++				if !reflect.DeepEqual(s, want[0]) {
++					want = append(want, s)
++				}
++			}
++			want = want[:min(limit, len(want))]
++			if len(cands) != len(want) {
++				t.Fatalf("%s limit %d: %d candidates, want %d (legal %v)", f.name, limit, len(cands), len(want), legal)
++			}
++			keys := map[Key]bool{}
++			for i, c := range cands {
++				if err := d.Validate(c.in); err != nil {
++					t.Fatalf("%s: candidate %d invalid: %v", f.name, i, err)
++				}
++				if got := sortedCopy(c.in.Choices); !reflect.DeepEqual(got, want[i]) {
++					t.Fatalf("%s: candidate %d is %v, want %v", f.name, i, got, want[i])
++				}
++				if keys[c.key] {
++					t.Fatalf("%s: duplicate key at %d", f.name, i)
++				}
++				keys[c.key] = true
++				in, err := IntentForKey(searchprobe.NewCollector(d.Player), e, d, c.key)
++				if err != nil {
++					t.Fatalf("%s: candidate %d's key does not map back: %v", f.name, i, err)
++				}
++				if !reflect.DeepEqual(sortedCopy(in.Choices), want[i]) {
++					t.Fatalf("%s: candidate %d's key maps to %v, want %v", f.name, i, in.Choices, want[i])
++				}
++			}
++			if limit == 6 {
++				t.Logf("%s (%s, min %d max %d, %d options): bot %v, %d legal sets, candidates %v",
++					f.name, d.Kind, d.Min, d.Max, len(d.Options), bot.Choices, len(legal), choicesOf(cands))
++			}
++		}
++	}
++}
++
++// Choose skips a long list (more options than Options.Limit) and a mana
++// payment window, which stay the bot's.
++func TestChooseSkipsLongListsAndPaymentWindows(t *testing.T) {
++	for _, c := range []struct {
++		name, a, b string
++		seed       uint64
++		pred       func(*decision.Decision) bool
++	}{
++		{"name of 11", "death-n-taxes", "uw-tempo", testSeed, func(d *decision.Decision) bool {
++			return d.Kind == decision.KChoose && len(d.Options) > 6
++		}},
++		{"payment window", "foundations-tramplesaurus-rex", "dimir-tempo", testSeed, func(d *decision.Decision) bool {
++			return d.Kind == decision.KChoose && len(d.Options) >= 2 && len(d.Options) <= 6 && d.Options[0].Kind == "activate"
++		}},
++	} {
++		e, d, bot, ok := botDecision(testConfig(t, c.a, c.b, c.seed), 4000, c.pred)
++		if !ok {
++			t.Fatalf("%s: no such decision", c.name)
++		}
++		if _, kind, ok := enumerate(searchprobe.NewCollector(d.Player), e, d, bot, FullKinds(), 6); kind != "" || ok {
++			t.Fatalf("%s: searched as %q", c.name, kind)
++		}
++		// Under PriorTopK the enumeration cap is past every list, but the
++		// gate is still Options.Limit (Search sets chooseMax).
++		k := FullKinds()
++		k.chooseMax = 6
++		if _, kind, ok := enumerate(searchprobe.NewCollector(d.Player), e, d, bot, k, BenchCandidateLimit); kind != "" || ok {
++			t.Fatalf("%s: searched as %q under a large cap", c.name, kind)
++		}
++	}
++}
++
++// A fuller kind's prior is the softmax of each candidate's summed option
++// scores (the trainer's candidate logit), BotPick marking the bot's options.
++func TestFullerKindPriorSumsOptionScores(t *testing.T) {
++	net := hashNet()
++	checked := 0
++	for _, f := range kindFixtures {
++		e, d, bot := f.position(t)
++		cands, kind, ok := enumerate(searchprobe.NewCollector(d.Player), e, d, bot, onlyKind(f.kind), 64)
++		if !ok {
++			t.Fatalf("%s: not searched", f.name)
++		}
++		got, fell := priors(net, e, d, bot, kind, cands, nil)
++		if fell {
++			t.Fatalf("%s: the prior fell back", f.name)
++		}
++		v := view.Project(e.G, e, d.Player, d)
++		st := policynet.EncodeStateWith(net.Features, v, d.Player, nil)
++		enc := make([]policynet.Option, len(d.Options))
++		for i := range d.Options {
++			enc[i] = policynet.EncodeOptionWith(net.Features, v, d.Player, d.Kind, d.Options[i], i, len(d.Options))
++		}
++		seat.MarkBotPicks(d, enc, bot)
++		scores := net.Score(st, enc)
++		logits := make([]float64, len(cands))
++		for i, c := range cands {
++			for _, k := range c.in.Choices {
++				logits[i] += float64(scores[k])
++			}
++		}
++		want, _ := softmax(logits)
++		for i := range want {
++			if math.Abs(got[i]-want[i]) > 1e-12 {
++				t.Fatalf("%s: prior %v, want %v", f.name, got, want)
++			}
++		}
++		checked++
++	}
++	t.Logf("%d fuller-kind priors checked", checked)
++}
++
++// checkFullerSearch asserts a clean search of a fuller kind at its root.
++func checkFullerSearch(t *testing.T, name string, d *decision.Decision, bot decision.Intent, res Result, kind string, sims int) {
++	t.Helper()
++	st := res.Stats
++	if res.Kind != kind || st.Searched != 1 || st.Simulations != sims || st.Completed != sims || st.AllFailed != 0 {
++		t.Fatalf("%s: kind %q, stats %+v, want %s with %d completed simulations", name, res.Kind, st, kind, sims)
++	}
++	if st.Panics+st.SubmitErrors+st.BadWorlds+st.NoWorld+st.ChanceFailures != 0 {
++		t.Fatalf("%s: failures: panics %d, submit %d, bad world %d, no world %d, chance %d",
++			name, st.Panics, st.SubmitErrors, st.BadWorlds, st.NoWorld, st.ChanceFailures)
++	}
++	var want [NumExtraKinds]int
++	want[extraIndex(kind)] = 1
++	if st.ExtraSearched != want || st.KindSearched != ([NumKinds]int{}) || st.Skipped != 0 {
++		t.Fatalf("%s: searched by kind %v / %v, skipped %d", name, st.ExtraSearched, st.KindSearched, st.Skipped)
++	}
++	sum := 0
++	for _, v := range res.Visits {
++		sum += v
++	}
++	if sum != st.Completed || st.Terminal+st.StepCapped+st.Expanded != st.Completed {
++		t.Fatalf("%s: visits %v sum %d, terminal %d capped %d expanded %d, completed %d", name, res.Visits, sum, st.Terminal, st.StepCapped, st.Expanded, st.Completed)
++	}
++	if err := d.Validate(res.Intent); err != nil {
++		t.Fatalf("%s: chosen intent invalid: %v", name, err)
++	}
++	if res.Choice == 0 && !reflect.DeepEqual(res.Intent, bot) {
++		t.Fatalf("%s: choice 0 played %+v, want the bot's %+v", name, res.Intent, bot)
++	}
++}
++
++// Search over a fuller kind's real root, every fuller kind on, with no
++// network and with one, alone and with the opponent in the tree mirroring
++// the seat (OpponentMirror: paying automatically): every simulation
++// completes, the kind is counted, the answer is legal, and the result is
++// deterministic. The engine is never written.
++func TestSearchFullerKindsEndToEnd(t *testing.T) {
++	net := hashNet()
++	const sims = 48
++	for _, f := range kindFixtures {
++		e, d, bot := f.position(t)
++		head := e.L.Head()
++		for _, m := range []*policynet.Model{nil, net} {
++			for _, opp := range []bool{false, true} {
++				opts := DefaultOptions()
++				opts.Sims, opts.Seed, opts.Kinds = sims, 41, FullKinds()
++				opts.OpponentNodes, opts.OpponentMirror, opts.AutoPayment = opp, opp, opp
++				res := searchAt(t, e, d, bot, m, opts)
++				checkFullerSearch(t, f.name, d, bot, res, f.kind, sims)
++				if again := searchAt(t, e, d, bot, m, opts); sameResult(res, again) != "" || again.Stats != res.Stats {
++					t.Fatalf("%s: not deterministic: %s", f.name, sameResult(res, again))
++				}
++				if m != nil && !opp {
++					t.Logf("%s: labels %v visits %v prior %.3f choice %d", f.name, res.Labels, res.Visits, res.Prior, res.Choice)
++				}
++			}
++		}
++		if e.L.Head() != head {
++			t.Fatalf("%s: the search wrote the real engine", f.name)
++		}
++	}
++}
++
++// The fuller kinds are points inside the walk too, the searching seat's and
++// the opponent's, and the opponent's priority points under OpponentMirror
++// with AutoPayment are the payment vocabulary (its casts candidates,
++// "opp:pay:" keys); without AutoPayment, or without OpponentMirror, no
++// opponent payment candidate exists. The node cache stays exact with all of
++// it on (the stored states carry the opponents' auto-pay bot streams, and a
++// stored point recounts ExtraPoints and OppPayPoints).
++func TestFullerWalkAndOpponentPayment(t *testing.T) {
++	roots := autoPayRoots(t, 3)
++	var total Stats
++	for i, r := range roots {
++		for _, kind := range []string{"clairvoyant", "pimc"} {
++			runMirror := func(cache int, autoPay, mirror bool) Result {
++				opts := DefaultOptions()
++				opts.Sims, opts.Seed, opts.NodeCache = 160, uint64(i)*7+5, cache
++				opts.Kinds, opts.OpponentNodes, opts.OpponentMirror, opts.AutoPayment = FullKinds(), true, mirror, autoPay
++				bot := r.bot
++				if !autoPay {
++					bot = manualBot(t, r)
++				}
++				obs := searchprobe.NewCollector(r.d.Player)
++				res, err := Search(context.Background(), Root{Engine: r.e, Decision: r.d, Bot: bot, Observer: obs}, measureSource(kind, r.e, obs), nil, opts)
++				if err != nil {
++					t.Fatal(err)
++				}
++				return res
++			}
++			run := func(cache int, autoPay bool) Result { return runMirror(cache, autoPay, true) }
++			off := run(0, true)
++			checkOppSearch(t, off, 160)
++			total.Add(off.Stats)
++			for _, cache := range []int{1, 3, DefaultNodeCache} {
++				if d := sameResult(off, run(cache, true)); d != "" {
++					t.Fatalf("%s %s cache %d: the cached search differs: %s", r.name, kind, cache, d)
++				}
++			}
++			if manual := run(0, false); manual.Stats.OppPayPoints != 0 {
++				t.Fatalf("%s %s: %d opponent payment points without AutoPayment", r.name, kind, manual.Stats.OppPayPoints)
++			}
++			if plain := runMirror(0, true, false); plain.Stats.OppPayPoints != 0 || plain.Stats.OppPoints == 0 {
++				t.Fatalf("%s %s: %d opponent payment points (of %d opponent points) without OpponentMirror", r.name, kind, plain.Stats.OppPayPoints, plain.Stats.OppPoints)
++			}
++		}
++	}
++	t.Logf("opponent points %d (expanded %d), opponent payment points %d, fuller in-walk points %v",
++		total.OppPoints, total.OppExpanded, total.OppPayPoints, total.ExtraPoints)
++	if total.OppPayPoints == 0 {
++		t.Fatal("no opponent payment point")
++	}
++}
++
++// manualBot is the default (manual-payment) bot's answer at r's root.
++func manualBot(t *testing.T, r measureRoot) decision.Intent {
++	t.Helper()
++	in, err := seat.NewBot(7).Decide(context.Background(), view.Project(r.e.G, r.e, r.d.Player, r.d), *r.d)
++	if err != nil {
++		t.Fatal(err)
++	}
++	return in
++}
++
++// oppWalk walks one clairvoyant world from root r with the opponent in the
++// tree (mirroring the seat under mirror, OpponentMirror), always playing
++// each point's candidate 0, and returns the points.
++func oppWalk(t *testing.T, r measureRoot, net *policynet.Model, k int, autoPay, mirror bool, steps int) ([]*Point, Stats) {
++	t.Helper()
++	obs := searchprobe.NewCollector(r.d.Player)
++	full, kind, _, ok, _ := enumerateCut(obs, r.e, r.d, r.bot, FullKinds(), BenchCandidateLimit, autoPay)
++	if !ok {
++		t.Fatalf("%s: no candidates", r.name)
++	}
++	cands, prior, _, _ := rankedPrior(net, k, r.e, r.d, r.bot, kind, full, nil)
++	var st Stats
++	limit := DefaultOptions().Limit
++	cfg := &walkConfig{
++		net: net, kinds: FullKinds(), limit: limit, priorTopK: k, maxSteps: 2000,
++		envSeed: 0x70707, actor: r.d.Player, autoPayment: autoPay, rootRefs: obs.Introduced(),
++		root: &Point{Keys: keysOf(cands), Prior: prior}, rootCands: cands, rootDec: r.d, stats: &st,
++		oppNodes: true, oppForks: make([]*searchprobe.Forker, len(r.e.G.Players)),
++	}
++	if mirror {
++		cfg.oppAutoPay, cfg.oppTopK = autoPay, k
++	}
++	for p := range cfg.oppForks {
++		if pl := state.PlayerID(p); pl != r.d.Player {
++			cfg.oppForks[p] = searchprobe.NewCollector(pl).Forker()
++		}
++	}
++	src, err := newTestClairvoyant(r.e, obs)
++	if err != nil {
++		t.Fatal(err)
++	}
++	w, err := src.World(0)
++	if err != nil {
++		t.Fatal(err)
++	}
++	env, err := newEngineEnv(w, cfg)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var pts []*Point
++	pt := env.Root()
++	for i := 0; i < steps && pt != nil; i++ {
++		if pt, err = env.Play(pt.Keys[0]); err != nil {
++			t.Fatalf("%s: step %d: %v", r.name, i, err)
++		}
++		if pt != nil {
++			pts = append(pts, pt)
++		}
++	}
++	return pts, st
++}
++
++// Under PriorTopK with the opponent in the tree mirroring the seat
++// (OpponentMirror), the opponent's points are ranked and cut by the network
++// prior as the searching seat's are (at most PriorTopK candidates, counted
++// in PriorTopKPoints); its payment points carry "opp:pay:" keys under
++// AutoPayment. Without OpponentMirror they are neither: capped at Limit in
++// enumeration order, unranked, in the manual-payment vocabulary.
++func TestOpponentPointsMirrorTheSeatsTopKAndPayment(t *testing.T) {
++	const k = 2
++	net := hashNet()
++	oppRanked, oppPay := 0, 0
++	for _, r := range autoPayRoots(t, 3) {
++		checkUnmirrored(t, r, net, k)
++		pts, st := oppWalk(t, r, net, k, true, true, 60)
++		ranked := 0
++		for i, p := range pts {
++			if !p.ranked || len(p.Keys) > k {
++				t.Fatalf("%s point %d (opp %v): ranked %v with %d keys, want <= %d ranked", r.name, i, p.Opp, p.ranked, len(p.Keys), k)
++			}
++			ranked++
++			if !p.Opp {
++				continue
++			}
++			oppRanked++
++			for _, key := range p.Keys {
++				if !strings.HasPrefix(string(key), oppKeyPrefix) {
++					t.Fatalf("%s point %d: opponent key %q", r.name, i, key)
++				}
++				if strings.HasPrefix(string(key), oppKeyPrefix+payKeyPrefix) {
++					oppPay++
++				}
++			}
++		}
++		if st.PriorTopKPoints != ranked {
++			t.Fatalf("%s: %d PriorTopK points counted, %d ranked", r.name, st.PriorTopKPoints, ranked)
++		}
++	}
++	t.Logf("opponent points ranked %d, opponent payment candidates %d", oppRanked, oppPay)
++	if oppRanked == 0 || oppPay == 0 {
++		t.Fatalf("opponent points ranked %d, payment candidates %d; want some of each", oppRanked, oppPay)
++	}
++}
++
++// checkUnmirrored walks r with PriorTopK k and AutoPayment but without
++// OpponentMirror: the searching seat's points are ranked, the opponent's
++// are not (at most Limit candidates, no payment key, not counted in
++// PriorTopKPoints).
++func checkUnmirrored(t *testing.T, r measureRoot, net *policynet.Model, k int) {
++	t.Helper()
++	pts, st := oppWalk(t, r, net, k, true, false, 60)
++	own, opp := 0, 0
++	for i, p := range pts {
++		if !p.Opp {
++			if !p.ranked || len(p.Keys) > k {
++				t.Fatalf("%s point %d: ranked %v with %d keys, want <= %d ranked", r.name, i, p.ranked, len(p.Keys), k)
++			}
++			own++
++			continue
++		}
++		opp++
++		if p.ranked || len(p.Keys) > DefaultOptions().Limit {
++			t.Fatalf("%s opponent point %d: ranked %v with %d keys without OpponentMirror", r.name, i, p.ranked, len(p.Keys))
++		}
++		for _, key := range p.Keys {
++			if strings.HasPrefix(string(key), oppKeyPrefix+payKeyPrefix) {
++				t.Fatalf("%s opponent point %d: payment key %q without OpponentMirror", r.name, i, key)
++			}
++		}
++	}
++	if st.PriorTopKPoints != own || st.OppPayPoints != 0 {
++		t.Fatalf("%s: %d PriorTopK points counted (%d own points), %d opponent payment points", r.name, st.PriorTopKPoints, own, st.OppPayPoints)
++	}
++	if opp == 0 {
++		t.Fatalf("%s: no opponent point without OpponentMirror", r.name)
++	}
++}
++
++// visit records of the fuller kinds carry the decision's kind, every
++// candidate's options (a set candidate several, flagged Subset), and an
++// empty option list only for the empty set (a Min-0 choice the bot or the
++// enumeration offers).
++func TestFullerKindsVisitRecords(t *testing.T) {
++	for _, f := range kindFixtures {
++		e, d, bot := f.position(t)
++		opts := DefaultOptions()
++		opts.Sims, opts.Seed, opts.Kinds = 24, 9, FullKinds()
++		res := searchAt(t, e, d, bot, nil, opts)
++		rec := visitRecord(e, d, res, policynet.FeaturesMZ, WorldClairvoyant, 24)
++		if rec.Kind != d.Kind || len(rec.Cands) != len(res.Candidates) {
++			t.Fatalf("%s: record kind %q with %d candidates, want %q with %d", f.name, rec.Kind, len(rec.Cands), d.Kind, len(res.Candidates))
++		}
++		several := false
++		for c, in := range res.Candidates {
++			if len(rec.Cands[c]) != len(in.Choices) {
++				t.Fatalf("%s: candidate %d records %d options, chose %d", f.name, c, len(rec.Cands[c]), len(in.Choices))
++			}
++			several = several || len(in.Choices) > 1
++			for _, o := range rec.Cands[c] {
++				if o < 0 || o >= len(rec.Options) {
++					t.Fatalf("%s: candidate %d names option %d of %d", f.name, c, o, len(rec.Options))
++				}
++			}
++		}
++		if rec.Subset != several {
++			t.Fatalf("%s: subset %v, want %v", f.name, rec.Subset, several)
++		}
++	}
++}
++
++// ParseKinds names the fuller kinds; all is FullKinds, whose first four are
++// AllKinds; a Kinds with no kind is refused.
++func TestParseFullerKinds(t *testing.T) {
++	k, err := ParseKinds("all")
++	if err != nil || k != FullKinds() {
++		t.Fatalf("all: %+v %v", k, err)
++	}
++	k, err = ParseKinds("priority,modes,optional,choose,multitarget")
++	if err != nil || k != (Kinds{Priority: true, Modes: true, Optional: true, Choose: true, MultiTarget: true}) {
++		t.Fatalf("list: %+v %v", k, err)
++	}
++	f := FullKinds()
++	f.Modes, f.Optional, f.Choose, f.MultiTarget = false, false, false, false
++	if f != AllKinds() {
++		t.Fatal("FullKinds is not AllKinds plus the fuller kinds")
++	}
++	if _, err := ParseKinds("modes,bogus"); err == nil {
++		t.Fatal("an unknown kind parsed")
++	}
++	o := DefaultOptions()
++	o.Kinds = Kinds{chooseMax: 6}
++	if o.Validate(nil) == nil {
++		t.Fatal("a Kinds with no kind validated")
++	}
++}
++
++// OpponentMirror needs OpponentNodes: the opponent's points it mirrors.
++func TestOpponentMirrorNeedsOpponentNodes(t *testing.T) {
++	o := DefaultOptions()
++	o.OpponentMirror = true
++	if o.Validate(nil) == nil {
++		t.Fatal("OpponentMirror without OpponentNodes validated")
++	}
++	o.OpponentNodes = true
++	if err := o.Validate(nil); err != nil {
++		t.Fatalf("OpponentMirror with OpponentNodes: %v", err)
++	}
++}
++
++// A set's key is its options in decision order whatever order the bot
++// listed them in, named or not: a multi-target answer reversed ([1 0])
++// has the same keys as [0 1] -- before nameKeys and after it, which rebuilds
++// a key's actions (at every opponent point, and under Options.NameKeys) --
++// while the candidate still plays the bot's own intent.
++func TestNameKeysOfASetIgnoreTheBotsOrder(t *testing.T) {
++	var f kindFixture
++	for _, x := range kindFixtures {
++		if x.name == "2 targets of 5" {
++			f = x
++		}
++	}
++	e, d, _ := f.position(t)
++	var pair []int
++	for _, s := range legalSets(d) {
++		if len(s) == 2 {
++			pair = s
++			break
++		}
++	}
++	if pair == nil {
++		t.Fatalf("%s: no legal pair", f.name)
++	}
++	fwd := decision.Intent{Seq: d.Seq, Player: d.Player, Choices: pair}
++	rev := decision.Intent{Seq: d.Seq, Player: d.Player, Choices: []int{pair[1], pair[0]}}
++	if err := d.Validate(rev); err != nil {
++		t.Fatalf("%s: the reversed pair %v is invalid: %v", f.name, rev.Choices, err)
++	}
++	keys := func(bot decision.Intent) (raw, named []Key) {
++		obs := searchprobe.NewCollector(d.Player)
++		cands, kind, ok := enumerate(obs, e, d, bot, onlyKind("multitarget"), 64)
++		if !ok || kind != "multitarget" {
++			t.Fatalf("%s: bot %v: kind %q ok %v", f.name, bot.Choices, kind, ok)
++		}
++		if !reflect.DeepEqual(cands[0].in, bot) {
++			t.Fatalf("%s: candidate 0 plays %v, want the bot's %v", f.name, cands[0].in.Choices, bot.Choices)
++		}
++		got := nameKeys(obs, e, d, cands, 0)
++		if !reflect.DeepEqual(got[0].in, bot) {
++			t.Fatalf("%s: named candidate 0 plays %v, want the bot's %v", f.name, got[0].in.Choices, bot.Choices)
++		}
++		return candKeys(cands), candKeys(got)
++	}
++	rawF, namedF := keys(fwd)
++	rawR, namedR := keys(rev)
++	if !reflect.DeepEqual(rawF, rawR) {
++		t.Fatalf("%s: keys differ between %v and %v", f.name, fwd.Choices, rev.Choices)
++	}
++	if !reflect.DeepEqual(namedF, namedR) {
++		t.Fatalf("%s: named keys differ between %v and %v:\n%q\n%q", f.name, fwd.Choices, rev.Choices, namedF[0], namedR[0])
++	}
++	if namedF[0] == rawF[0] {
++		t.Fatalf("%s: nameKeys named nothing in %v's key", f.name, fwd.Choices)
++	}
++	t.Logf("%s: pair %v, %d candidates", f.name, pair, len(namedF))
++}
++
++// An az seat searching every fuller kind, the opponent in its tree mirroring
++// it (OpponentMirror: paying automatically), plays whole games on honest
++// redealt worlds with no failed simulation, replays exactly, searches fuller
++// kinds at its own decisions and records them.
++func TestSeatWithFullerKindsPlaysAndReplays(t *testing.T) {
++	cfg := testConfig(t, "foundations-calling-all-angels", "foundations-keen-engineering", testSeed)
++	sc := DefaultSeatConfig()
++	sc.Search.Sims, sc.World = 8, WorldRedeal
++	sc.Search.Kinds, sc.Search.OpponentNodes, sc.Search.OpponentMirror, sc.Search.AutoPayment = FullKinds(), true, true, true
++	var diags []Diag
++	prev := Watch
++	Watch = func(d Diag) { diags = append(diags, d) }
++	t.Cleanup(func() { Watch = prev })
++	heads := make([]string, 2)
++	var total Stats
++	kinds := map[decision.Kind]int{}
++	for i := range heads {
++		diags = diags[:0]
++		az, err := NewSeat(cfg.Seed^1, nil, sc)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if i == 0 {
++			az.SetRecorder(func(r policynet.VisitRecord) {
++				kinds[r.Kind]++
++				for c, opts := range r.Cands {
++					if len(opts) == 0 && r.Kind != decision.KAttackers && r.Kind != decision.KBlockers && r.Kind != decision.KChoose && r.Kind != decision.KTarget {
++						t.Errorf("%s record: candidate %d has no option", r.Kind, c)
++					}
++				}
++			})
++		}
++		if heads[i], err = playAZ(t, cfg, az, 600); err != nil {
++			t.Fatal(err)
++		}
++		if i == 0 {
++			for _, d := range diags {
++				total.Add(d.Stats)
++			}
++		}
++	}
++	if heads[0] != heads[1] {
++		t.Fatalf("replay diverged: %s vs %s", heads[0], heads[1])
++	}
++	t.Logf("%d searched (fuller %v), records by kind %v; completed %d/%d; opponent points %d, opponent payment points %d, fuller in-walk points %v",
++		total.Searched, total.ExtraSearched, kinds, total.Completed, total.Simulations, total.OppPoints, total.OppPayPoints, total.ExtraPoints)
++	extra := 0
++	for _, n := range total.ExtraSearched {
++		extra += n
++	}
++	if total.Searched == 0 || extra == 0 || total.OppPayPoints == 0 {
++		t.Fatal("the seat never searched a fuller kind or met an opponent payment point")
++	}
++	if total.Panics+total.SubmitErrors+total.BadWorlds+total.ChanceFailures != 0 {
++		t.Fatalf("failed simulations: panics %d, submit %d, bad world %d, chance %d", total.Panics, total.SubmitErrors, total.BadWorlds, total.ChanceFailures)
++	}
++}
+diff --git a/internal/azmcts/nodecache.go b/internal/azmcts/nodecache.go
+index 34fc95a6..74bab218 100644
+--- a/internal/azmcts/nodecache.go
++++ b/internal/azmcts/nodecache.go
+@@ -303,6 +303,7 @@ func skipped(nodes []*node, st *Stats) {
+ 			st.PriorFallbacks++
+ 		}
+ 		countTopK(st, n.pt.ranked, n.pt.before)
++		countPoint(st, n.pt)
+ 	}
+ }
+ 
+@@ -337,6 +338,9 @@ type envState struct {
+ 	// (engineEnv.oppObs, cloneObservers); nil without OpponentNodes or
+ 	// before the walk met an opponent's decision.
+ 	oppObs []*searchprobe.Collector
++	// opp are the opponents' auto-pay bot sources (engineEnv.oppPCGs); nil
++	// without oppAutoPay (OpponentMirror with AutoPayment).
++	opp []*rand.PCG
+ }
+ 
+ func (f *fixedEnvs) Save(env Env, final bool) (snap any, err error) {
+@@ -353,6 +357,7 @@ func (f *fixedEnvs) Save(env Env, final bool) (snap any, err error) {
+ 		a := *ee.actorPCG
+ 		s.actor = &a
+ 	}
++	s.opp = clonePCGs(ee.oppPCGs)
+ 	if final {
+ 		// The walk is over: the state is ee's own engine, kept as it stands.
+ 		ee.e, ee.obs, ee.cur, ee.cands = nil, nil, nil, nil
+@@ -417,6 +422,25 @@ func (f *fixedEnvs) Resume(snap any) (env Env, err error) {
+ 		ee.actorPCG = &a
+ 		ee.actorBot = seat.NewBotOn(ee.actorPCG).EnableAutoPayMana()
+ 	}
++	if s.opp != nil {
++		ee.oppPCGs = clonePCGs(s.opp)
++		ee.oppBots = oppBotsOn(ee.oppPCGs)
++	}
+ 	f.prev = ee
+ 	return ee, nil
+ }
++
++// clonePCGs is a deep copy of a list of bot sources (nil entries kept).
++func clonePCGs(pcgs []*rand.PCG) []*rand.PCG {
++	if pcgs == nil {
++		return nil
++	}
++	out := make([]*rand.PCG, len(pcgs))
++	for i, p := range pcgs {
++		if p != nil {
++			c := *p
++			out[i] = &c
++		}
++	}
++	return out
++}
+diff --git a/internal/azmcts/options.go b/internal/azmcts/options.go
+index 107d5cf1..5526d3c8 100644
+--- a/internal/azmcts/options.go
++++ b/internal/azmcts/options.go
+@@ -11,13 +11,49 @@ import (
+ // answered by the bot.
+ type Kinds struct {
+ 	Priority, Attackers, Blockers, Target bool
++	// Modes, Optional, Choose and MultiTarget are the fuller search's
++	// pick-a-set kinds, off in AllKinds (FullKinds turns them on). Each is
++	// enumerated by subsetCandidates -- the bot's answer first, then every
++	// legal set of options in size order -- and its candidate's prior logit
++	// is the sum of its options' scores:
++	//   - Modes: decision.KModes, a modal spell's or trigger's modes (and an
++	//     UnlessCost$ pay/decline, which shares the kind): every legal mode
++	//     set;
++	//   - Optional: decision.KTriggerOptional, a may trigger's yes or no;
++	//   - Choose: decision.KChoose with at most Options.Limit options (an X
++	//     value, a number, a name, the cards of a cost, a dig or a search),
++	//     never a mana-payment window (its "activate"/"mana"/"done" options,
++	//     the manual payment the priority vocabulary never searches either);
++	//   - MultiTarget: decision.KTarget shapes Target's single-target test
++	//     refuses -- up to N targets, an optional target (Min 0), a
++	//     budgeted pick -- every set d.Validate accepts.
++	Modes, Optional, Choose, MultiTarget bool
++	// chooseMax is the largest KChoose option list Choose searches: Search
++	// sets it to Options.Limit; 0 (a Kinds built by hand and passed to an
++	// enumerator directly) reads DefaultOptions' Limit.
++	chooseMax int
+ }
+ 
+ // AllKinds is the spec's searched set.
+ func AllKinds() Kinds { return Kinds{Priority: true, Attackers: true, Blockers: true, Target: true} }
+ 
+-// ParseKinds parses a comma list of priority, attackers, blockers, target
+-// (botbench's -az-kinds). An unknown or empty entry is an error.
++// FullKinds is AllKinds plus the fuller search's kinds: Modes, Optional,
++// Choose and MultiTarget.
++func FullKinds() Kinds {
++	k := AllKinds()
++	k.Modes, k.Optional, k.Choose, k.MultiTarget = true, true, true, true
++	return k
++}
++
++// any reports whether k searches any kind.
++func (k Kinds) any() bool {
++	k.chooseMax = 0
++	return k != Kinds{}
++}
++
++// ParseKinds parses a comma list of priority, attackers, blockers, target,
++// modes, optional, choose, multitarget, or all (FullKinds) (botbench's
++// -az-kinds). An unknown or empty entry is an error.
+ func ParseKinds(s string) (Kinds, error) {
+ 	var k Kinds
+ 	for _, part := range strings.Split(s, ",") {
+@@ -30,8 +66,20 @@ func ParseKinds(s string) (Kinds, error) {
+ 			k.Blockers = true
+ 		case "target":
+ 			k.Target = true
++		case "modes":
++			k.Modes = true
++		case "optional":
++			k.Optional = true
++		case "choose":
++			k.Choose = true
++		case "multitarget":
++			k.MultiTarget = true
++		case "all":
++			f := FullKinds()
++			k.Priority, k.Attackers, k.Blockers, k.Target = true, true, true, true
++			k.Modes, k.Optional, k.Choose, k.MultiTarget = f.Modes, f.Optional, f.Choose, f.MultiTarget
+ 		default:
+-			return Kinds{}, fmt.Errorf("unknown searched kind %q (want priority, attackers, blockers, target)", p)
++			return Kinds{}, fmt.Errorf("unknown searched kind %q (want priority, attackers, blockers, target, modes, optional, choose, multitarget, all)", p)
+ 		}
+ 	}
+ 	return k, nil
+@@ -166,8 +214,24 @@ type Options struct {
+ 	// enumerates the manual-payment vocabulary even under AutoPayment: its
+ 	// walk bot is the manual one, whose casts are offered only once mana
+ 	// floats (a tap is never a candidate, so such a priority stays the
+-	// bot's).
++	// bot's). Its points are capped at Limit in enumeration order even
++	// under PriorTopK. OpponentMirror changes both.
+ 	OpponentNodes bool
++	// OpponentMirror makes the opponent's points (OpponentNodes, which it
++	// requires) mirror the searching seat's settings: the auto-pay walk bot
++	// and payment vocabulary under AutoPayment, the PriorTopK ranking under
++	// PriorTopK. Off (the default), the opponent's points are OpponentNodes'
++	// alone whatever AutoPayment and PriorTopK say.
++	//
++	// With AutoPayment, the opponent's walk bot is the auto-pay bot (seeded
++	// per seat, like the searching seat's), and its priority points are the
++	// payment vocabulary (paymentPriorityCands), so its casts are searched
++	// candidates (Stats.OppPayPoints). With PriorTopK (and a network prior),
++	// its points are enumerated in full, ranked by the network prior on its
++	// own view and cut to PriorTopK, as the searching seat's are
++	// (Stats.PriorTopK* count them too). Neither changes either flag's effect
++	// on the searching seat's own decisions.
++	OpponentMirror bool
+ }
+ 
+ // DiscountUnit is what one step of the backup discount counts.
+@@ -300,6 +364,21 @@ type Stats struct {
+ 	PriorTopKPoints int
+ 	PriorTopKCuts   int
+ 	PriorTopKBefore int
++
++	// ExtraSearched and ExtraSkipped are KindSearched and KindSkipped for
++	// the fuller search's kinds (Kinds.Modes, Optional, Choose, MultiTarget;
++	// ExtraKindNames order), kept apart so the reports that range over
++	// KindNames read as before. ExtraPoints counts those kinds' in-walk
++	// points -- the searching seat's and, under OpponentNodes, the
++	// opponent's -- a discarded simulation's included. All stay 0 unless
++	// Kinds enables one.
++	ExtraSearched [NumExtraKinds]int
++	ExtraSkipped  [NumExtraKinds][NumSkipReasons]int
++	ExtraPoints   [NumExtraKinds]int
++	// OppPayPoints counts the opponent's in-walk priority points enumerated
++	// over the auto-payment vocabulary (OpponentMirror with AutoPayment), a
++	// discarded simulation's included.
++	OppPayPoints int
+ }
+ 
+ // The searched kinds, indexing Stats' per-kind breakdowns.
+@@ -325,6 +404,39 @@ func kindIndex(kind string) int {
+ 	return -1
+ }
+ 
++// The fuller search's kinds (Kinds.Modes, Optional, Choose, MultiTarget),
++// indexing Stats' Extra* breakdowns.
++const (
++	ExtraModes = iota
++	ExtraOptional
++	ExtraChoose
++	ExtraMultiTarget
++	NumExtraKinds
++)
++
++// ExtraKindNames are the fuller kinds' names in index order (their
++// Result.Kind and Diag.Kind strings).
++var ExtraKindNames = [NumExtraKinds]string{"modes", "optional", "choose", "multitarget"}
++
++// extraIndex is kind's index in ExtraKindNames, or -1.
++func extraIndex(kind string) int {
++	for i, n := range ExtraKindNames {
++		if n == kind {
++			return i
++		}
++	}
++	return -1
++}
++
++// countSearched counts one searched root of kind in st.
++func countSearched(st *Stats, kind string) {
++	if k := kindIndex(kind); k >= 0 {
++		st.KindSearched[k]++
++	} else if x := extraIndex(kind); x >= 0 {
++		st.ExtraSearched[x]++
++	}
++}
++
+ // SkipReason is why a decision of a searched kind was not searched.
+ type SkipReason int
+ 
+@@ -399,6 +511,14 @@ func (s *Stats) Add(o Stats) {
+ 	s.PriorTopKPoints += o.PriorTopKPoints
+ 	s.PriorTopKCuts += o.PriorTopKCuts
+ 	s.PriorTopKBefore += o.PriorTopKBefore
++	s.OppPayPoints += o.OppPayPoints
++	for x := range s.ExtraSearched {
++		s.ExtraSearched[x] += o.ExtraSearched[x]
++		s.ExtraPoints[x] += o.ExtraPoints[x]
++		for r := range s.ExtraSkipped[x] {
++			s.ExtraSkipped[x][r] += o.ExtraSkipped[x][r]
++		}
++	}
+ 	for k := range s.KindSearched {
+ 		s.KindSearched[k] += o.KindSearched[k]
+ 		for r := range s.KindSkipped[k] {
+diff --git a/internal/azmcts/record.go b/internal/azmcts/record.go
+index d44ff226..cad7af6d 100644
+--- a/internal/azmcts/record.go
++++ b/internal/azmcts/record.go
+@@ -27,7 +27,7 @@ func visitRecord(e *rules.Engine, d *decision.Decision, res Result, fs policynet
+ 		EncoderHash: fmt.Sprintf("%016x", policynet.EncoderHashFor(fs)),
+ 		World:       world, Sims: sims,
+ 		Seat: int(d.Player), Kind: d.Kind, Turn: e.G.Turn, Sequence: d.Seq,
+-		Subset: res.Kind == "attackers" || res.Kind == "blockers",
++		Subset: res.Kind == "attackers" || res.Kind == "blockers" || (extraIndex(res.Kind) >= 0 && severalChoices(res.Candidates)),
+ 		State:  policynet.EncodeOnPolicyState(st),
+ 		Visits: append([]int(nil), res.Visits...), Prior: append([]float64(nil), res.Prior...),
+ 		Q: append([]float64(nil), res.Q...), RootValue: res.RootValue, Choice: res.Choice,
+@@ -118,3 +118,16 @@ func visitRecord(e *rules.Engine, d *decision.Decision, res Result, fs policynet
+ 	}
+ 	return rec
+ }
++
++// severalChoices reports whether a candidate picks more than one option: a
++// fuller kind's record is a subset record (VisitRecord.Subset) only then, so
++// a one-option-per-candidate decision (a may trigger's yes or no, an X
++// value, one mode) records as a single choice, like a target.
++func severalChoices(cands []decision.Intent) bool {
++	for _, in := range cands {
++		if len(in.Choices) > 1 {
++			return true
++		}
++	}
++	return false
++}
+diff --git a/internal/azmcts/search.go b/internal/azmcts/search.go
+index fe4324b3..e5967668 100644
+--- a/internal/azmcts/search.go
++++ b/internal/azmcts/search.go
+@@ -117,8 +117,10 @@ func (o Options) Validate(net *policynet.Model) error {
+ 	case o.PriorTopK < 0 || o.PriorTopK == 1:
+ 		// One kept candidate is the bot's alone: nothing would be searched.
+ 		return fmt.Errorf("azmcts: prior top-k %d must be 0 (off) or >= 2", o.PriorTopK)
+-	case o.Kinds == (Kinds{}):
++	case !o.Kinds.any():
+ 		return errors.New("azmcts: no searched decision kinds")
++	case o.OpponentMirror && !o.OpponentNodes:
++		return errors.New("azmcts: OpponentMirror needs OpponentNodes (the opponent's points it mirrors)")
+ 	case o.Discount < 0 || o.Discount > 1 || o.Discount != o.Discount:
+ 		return fmt.Errorf("azmcts: discount %g must be in [0,1] (0 and 1 are off)", o.Discount)
+ 	case int(o.DiscountUnit) >= len(DiscountUnitNames):
+@@ -196,7 +198,13 @@ func Search(ctx context.Context, root Root, src WorldSource, net *policynet.Mode
+ 	if topK > 0 {
+ 		limit = BenchCandidateLimit
+ 	}
+-	cands, kind, why, ok, cut, botFound := rootCands(root.Observer, root, opts.Kinds, limit, opts.AutoPayment, &enumBoard)
++	// Choose searches a KChoose list of at most Options.Limit options, at
++	// the root and in the walk, whatever the enumeration cap.
++	kinds := opts.Kinds
++	if kinds.Choose {
++		kinds.chooseMax = opts.Limit
++	}
++	cands, kind, why, ok, cut, botFound := rootCands(root.Observer, root, kinds, limit, opts.AutoPayment, &enumBoard)
+ 	res.Kind = kind
+ 	if cut {
+ 		res.Stats.Truncated, res.Stats.RootTruncated = 1, 1
+@@ -208,6 +216,9 @@ func Search(ctx context.Context, root Root, src WorldSource, net *policynet.Mode
+ 			if k == KindPriority {
+ 				res.Stats.PrioritySkipped[priorityBase(root.Decision, root.Bot)][why]++
+ 			}
++		} else if x := extraIndex(kind); x >= 0 {
++			res.Stats.Skipped = 1
++			res.Stats.ExtraSkipped[x][why]++
+ 		}
+ 		return res, nil
+ 	}
+@@ -240,7 +251,7 @@ func Search(ctx context.Context, root Root, src WorldSource, net *policynet.Mode
+ 		return res, errors.New("azmcts: Search needs a world source")
+ 	}
+ 	res.Stats.Searched = 1
+-	res.Stats.KindSearched[kindIndex(kind)]++
++	countSearched(&res.Stats, kind)
+ 	rng := rand.New(rand.NewPCG(opts.Seed, opts.Seed^0x9e3779b97f4a7c15))
+ 	treePrior := prior
+ 	if opts.Noise {
+@@ -248,7 +259,7 @@ func Search(ctx context.Context, root Root, src WorldSource, net *policynet.Mode
+ 	}
+ 	rootPt := &Point{Keys: res.Keys, Prior: treePrior}
+ 	cfg := &walkConfig{
+-		net: net, heuristicLeaf: opts.HeuristicLeaf, kinds: opts.Kinds, limit: opts.Limit, priorTopK: topK, maxSteps: opts.MaxSteps,
++		net: net, heuristicLeaf: opts.HeuristicLeaf, kinds: kinds, limit: opts.Limit, priorTopK: topK, maxSteps: opts.MaxSteps,
+ 		envSeed: splitmix(opts.Seed ^ 0x656e762d73656564), actor: root.Decision.Player, autoPayment: opts.AutoPayment,
+ 		uniformPrior: opts.UniformPrior, rootPerWorld: opts.RootPerWorld,
+ 		nameKeys: opts.NameKeys, rootRefs: root.Observer.Introduced(),
+@@ -257,6 +268,9 @@ func Search(ctx context.Context, root Root, src WorldSource, net *policynet.Mode
+ 	}
+ 	if opts.OpponentNodes {
+ 		cfg.oppNodes = true
++		if opts.OpponentMirror {
++			cfg.oppAutoPay, cfg.oppTopK = opts.AutoPayment, topK
++		}
+ 		cfg.oppForks = make([]*searchprobe.Forker, len(root.Engine.G.Players))
+ 		for p := range cfg.oppForks {
+ 			if pl := state.PlayerID(p); pl != cfg.actor {
+diff --git a/internal/azmcts/seat.go b/internal/azmcts/seat.go
+index 1a0842cc..2530fdc3 100644
+--- a/internal/azmcts/seat.go
++++ b/internal/azmcts/seat.go
+@@ -68,7 +68,7 @@ func DefaultSeatConfig() SeatConfig {
+ // Diag is one decision of a searched kind as the cost report sees it.
+ type Diag struct {
+ 	Turn       int32
+-	Kind       string // priority, attackers, blockers, target; "" for a FeedStopped record
++	Kind       string // priority, attackers, blockers, target (or a fuller kind, ExtraKindNames); "" for a FeedStopped record
+ 	Searched   bool   // a tree was built
+ 	Candidates int
+ 	Choice     int
+diff --git a/internal/azmcts/tree.go b/internal/azmcts/tree.go
+index 3ea86359..528da00b 100644
+--- a/internal/azmcts/tree.go
++++ b/internal/azmcts/tree.go
+@@ -57,6 +57,11 @@ type Point struct {
+ 	// before PriorTopKBefore.
+ 	ranked bool
+ 	before int
++	// extra and oppPay are, likewise, countPoint's: extra is a fuller
++	// kind's ExtraKindNames index plus one (0 for any other kind), oppPay
++	// an opponent's payment-vocabulary point.
++	extra  int8
++	oppPay bool
+ }
+ 
+ // Leaf is the value of the position a walk stopped at, for the searching

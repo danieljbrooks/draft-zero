@@ -1,0 +1,730 @@
+diff --git a/internal/azmcts/env.go b/internal/azmcts/env.go
+index 9d1fce7c..67ae6a77 100644
+--- a/internal/azmcts/env.go
++++ b/internal/azmcts/env.go
+@@ -57,6 +57,13 @@ type walkConfig struct {
+ 	// and the prior's reusable views, refilled per leaf and per point.
+ 	// Nil (a hand-built config) projects into fresh views.
+ 	views *viewScratch
++	// oppNodes makes the other seats' searched decisions tree points
++	// (Options.OpponentNodes). oppForks[p] hands seat p's walk a fresh
++	// collector per world (nil for the searching seat): simulations run one
++	// at a time, so one forked collector, rolled back, serves them all, as
++	// the redeal source's forker does for the searching seat.
++	oppNodes bool
++	oppForks []*searchprobe.Forker
+ }
+ 
+ // priorNet is the network in-walk priors read: nil under uniformPrior.
+@@ -128,7 +135,8 @@ func (w *worldEnvs) Env(sim int) (Env, error) {
+ }
+ 
+ // engineEnv walks one world. The searching seat's searched decisions are
+-// the tree's points; botpolicy.Decide answers every other decision of both
++// the tree's points -- and under Options.OpponentNodes the opponent's too
++// (oppPoint); botpolicy.Decide answers every other decision of both
+ // seats (spec §1's env step), from bot streams seeded identically for every
+ // simulation of the decision, so a clairvoyant clone is deterministic along
+ // a path.
+@@ -159,6 +167,13 @@ type engineEnv struct {
+ 	// actorPCG is actorBot's source, which the node cache saves and
+ 	// restores with pcgs.
+ 	actorPCG *rand.PCG
++	// oppObs[p] is opponent p's collector in this world
++	// (Options.OpponentNodes), forked on p's first decision the walk
++	// enumerates and fed by every later one. It starts empty in every
++	// world: the opponent's hand is re-dealt per world, so its references
++	// name nothing across worlds, and opponent keys name objects by card
++	// name instead (oppPoint). Nil until used.
++	oppObs []*searchprobe.Collector
+ }
+ 
+ func newEngineEnv(w World, cfg *walkConfig) (*engineEnv, error) {
+@@ -310,7 +325,8 @@ func (e *engineEnv) Play(k Key) (pt *Point, err error) {
+ }
+ 
+ // advance answers decisions with the bot until the searching seat's next
+-// searched decision (a point), game over, or the step cap (nil). The cap
++// searched decision (a point) -- or, under Options.OpponentNodes, an
++// opponent's (oppPoint) -- game over, or the step cap (nil). The cap
+ // bounds the bot's submits only: a searched decision reached with the cap
+ // exactly spent is still a point, so it expands rather than being evaluated
+ // as capped.
+@@ -366,6 +382,10 @@ func (e *engineEnv) advance() (*Point, error) {
+ 				}
+ 				return &Point{Keys: keys, Prior: prior, cut: cut, fell: fell}, nil
+ 			}
++		} else if e.cfg.oppNodes {
++			if pt := e.oppPoint(pd, in); pt != nil {
++				return pt, nil
++			}
+ 		}
+ 		if e.steps >= e.cfg.maxSteps {
+ 			e.capped = true
+@@ -381,6 +401,90 @@ func (e *engineEnv) advance() (*Point, error) {
+ 	}
+ }
+ 
++// oppKeyPrefix marks an opponent's candidate key (Options.OpponentNodes).
++// Two worlds can reach one tree node with different seats to act (the
++// opponent has a block to choose in one, none in the other), so the node
++// holds both seats' children; the prefix keeps them apart, and each seat's
++// are unavailable while the other acts. No other key starts with it (a
++// semantic action key's first byte is 0 or 1; payKeyPrefix and
++// MacroKeyPrefix differ).
++const oppKeyPrefix = "opp:"
++
++// oppPoint is Options.OpponentNodes at opponent pd.Player's decision pd,
++// the walk bot's answer in: the tree point there, or nil when pd is not one
++// -- not a searched kind, fewer than two candidates (same-named candidates
++// counted once), a bot answer outside the vocabulary, a translation failure
++// -- and the bot's answer is played as before.
++//
++// The candidates are the searching seat's enumerators over the opponent's
++// per-world collector (the bot's answer first, capped at the limit), in the
++// manual-payment vocabulary: the walk bot that answers the opponent pays
++// manually, so a cast is offered only once its mana floats and a tap is
++// never a candidate. Every key names its objects by card name (nameKeys
++// with nothing known at the root) behind oppKeyPrefix. The prior is the
++// network's on the OPPONENT's redacted view (priors projects pd.Player's),
++// uniform without one. Truncated and PriorFallbacks count here as at the
++// searching seat's points.
++func (e *engineEnv) oppPoint(pd *decision.Decision, in decision.Intent) *Point {
++	obs := e.oppObserver(pd.Player)
++	if obs == nil {
++		return nil
++	}
++	cands, kind, _, ok, cut := enumerateCutInto(obs, e.e, pd, in, e.cfg.kinds, e.cfg.limit, false, e.cfg.enumBoard)
++	if !ok {
++		return nil
++	}
++	if cands = nameKeys(obs, e.e, pd, cands, 0); len(cands) < 2 {
++		return nil
++	}
++	if cut {
++		e.cfg.stats.Truncated++
++	}
++	keys := make([]Key, len(cands))
++	for i := range cands {
++		cands[i].key = Key(oppKeyPrefix + string(cands[i].key))
++		keys[i] = cands[i].key
++	}
++	e.cur, e.cands = pd, cands
++	prior, fell := priors(e.cfg.priorNet(), e.e, pd, in, kind, cands, e.cfg.priorView())
++	if fell {
++		e.cfg.stats.PriorFallbacks++
++	}
++	return &Point{Keys: keys, Prior: prior, cut: cut, fell: fell, Opp: true}
++}
++
++// oppObserver is seat p's collector in this world, forked on first use; nil
++// for a seat with no fork (the searching seat, or an out-of-range seat).
++func (e *engineEnv) oppObserver(p state.PlayerID) *searchprobe.Collector {
++	if int(p) >= len(e.cfg.oppForks) || e.cfg.oppForks[p] == nil {
++		return nil
++	}
++	if e.oppObs == nil {
++		e.oppObs = make([]*searchprobe.Collector, len(e.cfg.oppForks))
++	}
++	if e.oppObs[p] == nil {
++		e.oppObs[p] = e.cfg.oppForks[p].Fork()
++	}
++	return e.oppObs[p]
++}
++
++// cloneObservers is a deep copy of a walk's opponent collectors
++// (engineEnv.oppObs). The node cache stores and resumes copies: a forked
++// collector is rolled back by the next fork, and a stored state is never
++// written again.
++func cloneObservers(obs []*searchprobe.Collector) []*searchprobe.Collector {
++	if obs == nil {
++		return nil
++	}
++	out := make([]*searchprobe.Collector, len(obs))
++	for i, c := range obs {
++		if c != nil {
++			out[i] = c.Clone()
++		}
++	}
++	return out
++}
++
+ // submit plays in on the world, recovering any engine panic (the livelock
+ // watcher panics with *rules.LivelockError) into ErrPanic. A hypothetical
+ // world reports chance failures and ordinary rejections through one error,
+diff --git a/internal/azmcts/nodecache.go b/internal/azmcts/nodecache.go
+index 017fea98..77cff583 100644
+--- a/internal/azmcts/nodecache.go
++++ b/internal/azmcts/nodecache.go
+@@ -184,6 +184,9 @@ func (c *nodeCache) simulate(top *node, sim int, opts Options, st *Stats) error
+ 			}
+ 		}
+ 		sel := selectEdge(nd, pt, opts)
++		if pt.Opp {
++			st.OppPoints++
++		}
+ 		nodes, path = append(nodes, nd), append(path, sel)
+ 		if sel.next == nil {
+ 			break
+@@ -266,6 +269,9 @@ func (c *nodeCache) simulate(top *node, sim int, opts Options, st *Stats) error
+ 		sel.next.pt, sel.next.clk = next, clockOf(env, len(path))
+ 		sel.next.n, sel.next.w = 1, l.V
+ 		st.Expanded++
++		if next.Opp {
++			st.OppExpanded++
++		}
+ 		commit(nodes, path, marks, append(clock, sel.next.clk), l.V, opts, st)
+ 		st.Unavailable += unavail
+ 		c.offer(sel.next, env, true, st)
+@@ -326,6 +332,10 @@ type envState struct {
+ 	// actor is the auto-pay actor bot's source (engineEnv.actorPCG); nil
+ 	// without autoPayment.
+ 	actor *rand.PCG
++	// oppObs are copies of the walk's opponent collectors
++	// (engineEnv.oppObs, cloneObservers); nil without OpponentNodes or
++	// before the walk met an opponent's decision.
++	oppObs []*searchprobe.Collector
+ }
+ 
+ func (f *fixedEnvs) Save(env Env, final bool) (snap any, err error) {
+@@ -333,7 +343,8 @@ func (f *fixedEnvs) Save(env Env, final bool) (snap any, err error) {
+ 	if !ok || ee.e == nil || ee.cur == nil || ee.capped {
+ 		return nil, errors.New("azmcts: the node cache saves an engine env at a point")
+ 	}
+-	s := &envState{e: ee.e, obs: ee.obs, hyp: ee.hyp, cands: ee.cands, steps: ee.steps, plies: ee.plies, root: ee.root, pcgs: make([]rand.PCG, len(ee.pcgs))}
++	s := &envState{e: ee.e, obs: ee.obs, hyp: ee.hyp, cands: ee.cands, steps: ee.steps, plies: ee.plies, root: ee.root, pcgs: make([]rand.PCG, len(ee.pcgs)),
++		oppObs: cloneObservers(ee.oppObs)}
+ 	for i, p := range ee.pcgs {
+ 		s.pcgs[i] = *p
+ 	}
+@@ -398,6 +409,7 @@ func (f *fixedEnvs) Resume(snap any) (env Env, err error) {
+ 		e: e, obs: s.obs.Clone(), hyp: s.hyp, cfg: f.cfg,
+ 		rngs: rngs, pcgs: pcgs, board: board,
+ 		cur: e.Pending(), cands: s.cands, steps: s.steps, plies: s.plies, root: s.root,
++		oppObs: cloneObservers(s.oppObs),
+ 	}
+ 	if s.actor != nil {
+ 		a := *s.actor
+diff --git a/internal/azmcts/options.go b/internal/azmcts/options.go
+index 28926b00..1dfc9fab 100644
+--- a/internal/azmcts/options.go
++++ b/internal/azmcts/options.go
+@@ -124,6 +124,31 @@ type Options struct {
+ 	// cache off. It never changes the Result, only its cost counters, and a
+ 	// source whose worlds differ between simulations never uses it.
+ 	NodeCache int
++	// OpponentNodes puts the opponent in the tree. Off (the default), the
++	// walk's bot answers every decision of every other seat, so the search
++	// computes a best response to that bot. On, an in-walk decision of
++	// another seat that is a searched kind (Kinds) with at least two
++	// candidates -- built by the same enumerators, the walk bot's own
++	// answer for that seat first, capped at Limit -- is a tree point too.
++	// Every stored value stays the searching seat's win probability; at an
++	// opponent's point selection maximises the opponent's, 1 - Q, and
++	// first-play urgency reads the parent from that side. The prior there
++	// is the network's on the OPPONENT's redacted view of the world
++	// (uniform without one, or under UniformPrior). The leaf and the backup
++	// are unchanged.
++	//
++	// An opponent's candidate keys name every object by its card name (the
++	// NameKeys rule with nothing known at the root): its hand is re-dealt in
++	// every world, so an observer-local reference would not name the same
++	// card twice, and two same-named objects share one key (one candidate
++	// is kept). Its keys carry oppKeyPrefix, so they never meet the
++	// searching seat's at a node two worlds reach with different seats to
++	// act; the other seat's children are unavailable there. The opponent
++	// enumerates the manual-payment vocabulary even under AutoPayment: its
++	// walk bot is the manual one, whose casts are offered only once mana
++	// floats (a tap is never a candidate, so such a priority stays the
++	// bot's).
++	OpponentNodes bool
+ }
+ 
+ // DiscountUnit is what one step of the backup discount counts.
+@@ -136,7 +161,8 @@ const (
+ 	DiscountPly DiscountUnit = iota
+ 	// DiscountAction counts searched tree edges between the node and the
+ 	// leaf (upstream's "logical action": only edges out of the searching
+-	// seat's searched decisions).
++	// seat's searched decisions, and under OpponentNodes out of the
++	// opponent's points too: every tree edge).
+ 	DiscountAction
+ 	// DiscountTurn counts turn boundaries crossed between the node and the
+ 	// leaf.
+@@ -198,9 +224,10 @@ type Stats struct {
+ 	PriorFallbacks int // network priors that fell back to uniform, at the root and at in-walk points (a discarded simulation's included)
+ 	FeedStopped    int // decisions the driver routed around the search (its observation feed stopped): the bot's answer was played
+ 	RedealRefused  int // decisions whose honest (redeal) world source refused to prepare: no world, the bot's answer was played
+-	// Truncated counts searched points -- the root and in-walk decisions,
+-	// a discarded simulation's included -- whose candidate list the Limit
+-	// cut; RootTruncated is the root's share (0 or 1 per Search).
++	// Truncated counts searched points -- the root and in-walk decisions
++	// (an opponent's too, under OpponentNodes), a discarded simulation's
++	// included -- whose candidate list the Limit cut; RootTruncated is the
++	// root's share (0 or 1 per Search).
+ 	Truncated     int
+ 	RootTruncated int
+ 	// LeafPlies, LeafEdges and LeafTurns sum, over completed simulations,
+@@ -215,6 +242,13 @@ type Stats struct {
+ 	// or became done between simulations, the tree stopped where it was and
+ 	// the bot's answer was played. A live context never counts it.
+ 	DeadlineHits int
++	// OppPoints and OppExpanded are Options.OpponentNodes at work:
++	// OppPoints counts the selections simulations made at an opponent's
++	// point (one per visit, a discarded simulation's included), OppExpanded
++	// the new tree nodes that are an opponent's point (Expanded's share).
++	// Both stay 0 with the option off.
++	OppPoints   int
++	OppExpanded int
+ 
+ 	// The walk's cost counters. They count work, not outcomes: the node
+ 	// cache (Options.NodeCache) changes them, and EnvSteps above, and
+@@ -321,6 +355,8 @@ func (s *Stats) Add(o Stats) {
+ 	s.FeedStopped += o.FeedStopped
+ 	s.RedealRefused += o.RedealRefused
+ 	s.DeadlineHits += o.DeadlineHits
++	s.OppPoints += o.OppPoints
++	s.OppExpanded += o.OppExpanded
+ 	s.Truncated += o.Truncated
+ 	s.RootTruncated += o.RootTruncated
+ 	s.LeafPlies += o.LeafPlies
+diff --git a/internal/azmcts/search.go b/internal/azmcts/search.go
+index 8320ade5..31c206ac 100644
+--- a/internal/azmcts/search.go
++++ b/internal/azmcts/search.go
+@@ -10,6 +10,7 @@ import (
+ 	"github.com/adams-shaun/gorge/internal/policynet"
+ 	"github.com/adams-shaun/gorge/internal/searchprobe"
+ 	"github.com/adams-shaun/gorge/rules"
++	"github.com/adams-shaun/gorge/state"
+ )
+ 
+ // Root is the real decision being searched.
+@@ -221,6 +222,15 @@ func Search(ctx context.Context, root Root, src WorldSource, net *policynet.Mode
+ 		root: rootPt, rootCands: cands, rootDec: root.Decision, stats: &res.Stats,
+ 		envBoard: &envBoard, enumBoard: &enumBoard, views: views,
+ 	}
++	if opts.OpponentNodes {
++		cfg.oppNodes = true
++		cfg.oppForks = make([]*searchprobe.Forker, len(root.Engine.G.Players))
++		for p := range cfg.oppForks {
++			if pl := state.PlayerID(p); pl != cfg.actor {
++				cfg.oppForks[p] = searchprobe.NewCollector(pl).Forker()
++			}
++		}
++	}
+ 	var envs EnvSource = &worldEnvs{src: src, cfg: cfg}
+ 	if opts.NodeCache > 0 && isFixed(src) {
+ 		envs = &fixedEnvs{worldEnvs: envs.(*worldEnvs)}
+diff --git a/internal/azmcts/tree.go b/internal/azmcts/tree.go
+index a0421b27..a5e38366 100644
+--- a/internal/azmcts/tree.go
++++ b/internal/azmcts/tree.go
+@@ -3,7 +3,9 @@
+ // over ONE seat's searched decisions (single perspective: every value is
+ // that seat's win probability, no sign flips), whose leaf is a value -- the
+ // policynet value head, or the frozen heuristic searchprobe.LeafValue for
+-// generation 0 -- never a rollout.
++// generation 0 -- never a rollout. Options.OpponentNodes adds the opponent's
++// searched decisions as points too; the values stay the one seat's, and
++// selection at an opponent's point reads them as 1 - Q.
+ //
+ // The package is pure search. It reads no clock (internal/archtest), ranges
+ // no map whose order could reach a choice, and draws randomness only from
+@@ -34,12 +36,17 @@ import (
+ // in every world, which is what lets one tree be shared across worlds.
+ type Key string
+ 
+-// Point is one searched decision of the searching seat as the tree sees it.
++// Point is one searched decision of the searching seat -- or, under
++// Options.OpponentNodes, of an opponent -- as the tree sees it.
+ type Point struct {
+ 	// Keys are the candidates offered here; Keys[0] is the bot's answer.
+ 	Keys []Key
+ 	// Prior parallels Keys: non-negative, summing to 1.
+ 	Prior []float64
++	// Opp marks an opponent's decision (Options.OpponentNodes): selection
++	// here maximises the opponent's value, 1 - Q. Its keys carry
++	// oppKeyPrefix, so they never coincide with the searching seat's.
++	Opp bool
+ 	// cut and fell record what producing this point counted (an Env's
+ 	// Stats.Truncated and PriorFallbacks), so the node cache, which reaches
+ 	// a stored point without producing it again, counts them exactly as a
+@@ -193,8 +200,18 @@ func puctScore(q, prior float64, avail, n int, c float64) float64 {
+ // unvisited child's Q is the parent's Q minus FPU, or the constant
+ // opts.UnvisitedQ under opts.AbsoluteUnvisitedQ. Strict > keeps the lower
+ // index on a tie: candidate 0, the bot's answer, wins ties.
++//
++// At an opponent's point (pt.Opp) every Q is read from the opponent's side,
++// 1 - Q: the stored values are the searching seat's win probability, and
++// the opponent maximises its own. First-play urgency then starts from the
++// parent's value to the opponent, so an unvisited reply is assumed slightly
++// worse FOR THE OPPONENT than the position, as it is for the searching seat
++// at its own points; the absolute UnvisitedQ is taken as the opponent's.
+ func selectEdge(nd *node, pt *Point, opts Options) *edge {
+ 	parentQ := nd.q()
++	if pt.Opp {
++		parentQ = 1 - parentQ
++	}
+ 	var best *edge
+ 	bestScore := math.Inf(-1)
+ 	for _, kid := range nd.kids {
+@@ -207,6 +224,9 @@ func selectEdge(nd *node, pt *Point, opts Options) *edge {
+ 		}
+ 		if kid.n > 0 {
+ 			q = kid.w / float64(kid.n)
++			if pt.Opp {
++				q = 1 - q
++			}
+ 		}
+ 		if s := puctScore(q, kid.prior, kid.avail+1, kid.n, opts.CPUCT); best == nil || s > bestScore {
+ 			best, bestScore = kid, s
+@@ -336,6 +356,9 @@ func simulate(top *node, env Env, opts Options, st *Stats) error {
+ 			}
+ 		}
+ 		sel := selectEdge(nd, pt, opts)
++		if pt.Opp {
++			st.OppPoints++
++		}
+ 		clock = append(clock, now())
+ 		nodes, path = append(nodes, nd), append(path, sel)
+ 		replay, steps0 := sel.next != nil || sel.n > 0, st.EnvSteps
+@@ -371,6 +394,9 @@ func simulate(top *node, env Env, opts Options, st *Stats) error {
+ 			sel.next = newNode(next)
+ 			sel.next.n, sel.next.w = 1, l.V
+ 			st.Expanded++
++			if next.Opp {
++				st.OppExpanded++
++			}
+ 			commit(nodes, path, marks, append(clock, now()), l.V, opts, st)
+ 			st.Unavailable += unavail
+ 			return nil
+diff --git a/internal/azmcts/tree_test.go b/internal/azmcts/tree_test.go
+index b6c99c98..6aeb9d4d 100644
+--- a/internal/azmcts/tree_test.go
++++ b/internal/azmcts/tree_test.go
+@@ -19,12 +19,16 @@ type fakeNode struct {
+ 	terminal bool
+ 	capped   bool
+ 	err      error // Play into this path always fails with err
++	opp      bool  // an opponent's point (Options.OpponentNodes)
+ }
+ 
+ type fakeGame struct {
+ 	nodes    map[string]fakeNode
+ 	failOnce map[string]error     // Play into this path fails once, then plays normally
+ 	rootFor  func(sim int) *Point // per-world root offer (availability); nil = nodes[""]
++	// offerAt, when it returns keys, is a per-world offer at an in-walk
++	// point (availability below the root), with a uniform prior.
++	offerAt func(sim int, path string) []Key
+ }
+ 
+ type fakeEnv struct {
+@@ -57,7 +61,12 @@ func (f *fakeEnv) Play(k Key) (*Point, error) {
+ 	if n.terminal || n.capped {
+ 		return nil, nil
+ 	}
+-	return &Point{Keys: n.keys, Prior: n.prior}, nil
++	if f.g.offerAt != nil {
++		if keys := f.g.offerAt(f.sim, f.path); keys != nil {
++			return &Point{Keys: keys, Prior: uniform(len(keys)), Opp: n.opp}, nil
++		}
++	}
++	return &Point{Keys: n.keys, Prior: n.prior, Opp: n.opp}, nil
+ }
+ 
+ func (f *fakeEnv) Leaf() Leaf {
+diff --git a/internal/azmcts/oppnodes_test.go b/internal/azmcts/oppnodes_test.go
+new file mode 100644
+index 00000000..b37efbd2
+--- /dev/null
++++ b/internal/azmcts/oppnodes_test.go
+@@ -0,0 +1,288 @@
++package azmcts
++
++import (
++	"context"
++	"math/rand/v2"
++	"strings"
++	"testing"
++
++	"github.com/adams-shaun/gorge/internal/policynet"
++	"github.com/adams-shaun/gorge/internal/searchprobe"
++)
++
++// At an opponent's point selection reads every Q as 1 - Q: of two equally
++// visited, equally likely children it takes the one worse for the searching
++// seat, where the seat's own point takes the better.
++func TestSelectEdgeReadsTheOpponentsSide(t *testing.T) {
++	nd := &node{n: 3, w: 1.5, kids: []*edge{
++		{key: "x", prior: 0.5, n: 1, w: 0.9, avail: 1},
++		{key: "y", prior: 0.5, n: 1, w: 0.1, avail: 1},
++	}}
++	keys := []Key{"x", "y"}
++	if got := selectEdge(nd, &Point{Keys: keys}, DefaultOptions()).key; got != "x" {
++		t.Fatalf("the seat's own point selected %q, want x", got)
++	}
++	if got := selectEdge(nd, &Point{Keys: keys, Opp: true}, DefaultOptions()).key; got != "y" {
++		t.Fatalf("an opponent's point selected %q, want y", got)
++	}
++	// First-play urgency from the opponent's side: the parent is worth 0.8
++	// to the seat, 0.2 to the opponent, so an unvisited reply reads 0.1
++	// there and loses to a visited one the opponent values at 0.7; at the
++	// seat's own point it reads 0.7 and wins against a visited 0.3.
++	nd = &node{n: 2, w: 1.6, kids: []*edge{
++		{key: "x", prior: 0.5, n: 1, w: 0.3, avail: 1},
++		{key: "y", prior: 0.5, avail: 1},
++	}}
++	o := DefaultOptions()
++	o.CPUCT = 0.01 // Q decides
++	if got := selectEdge(nd, &Point{Keys: keys, Opp: true}, o).key; got != "x" {
++		t.Fatalf("an opponent's point selected %q, want the visited x", got)
++	}
++	if got := selectEdge(nd, &Point{Keys: keys}, o).key; got != "y" {
++		t.Fatalf("the seat's own point selected %q, want the unvisited y", got)
++	}
++}
++
++// The same two-level game, its second level the seat's own point or the
++// opponent's: the seat's own reply x wins (1), so a is worth taking; the
++// opponent replies y (the seat loses), so b's sure 0.6 is better.
++func TestOpponentPointMinimisesTheSeatsValue(t *testing.T) {
++	for _, opp := range []bool{false, true} {
++		g := &fakeGame{nodes: map[string]fakeNode{
++			"":     {keys: []Key{"a", "b"}, prior: []float64{0.5, 0.5}, value: 0.5},
++			"/a":   {keys: []Key{"x", "y"}, prior: []float64{0.5, 0.5}, value: 0.5, opp: opp},
++			"/a/x": {value: 1, terminal: true},
++			"/a/y": {value: 0, terminal: true},
++			"/b":   {value: 0.6, terminal: true},
++		}}
++		var st Stats
++		tr, err := RunTree(context.Background(), rootOf(g), &fakeSource{g: g}, treeOpts(200), &st)
++		if err != nil {
++			t.Fatal(err)
++		}
++		want := 0
++		if opp {
++			want = 1
++		}
++		if c := choose(tr.Visits, false, nil); c != want {
++			t.Fatalf("opp=%v: chose %d (visits %v, Q %v), want %d", opp, c, tr.Visits, tr.Q, want)
++		}
++		if opp && (st.OppExpanded != 1 || st.OppPoints != tr.Visits[0]-1) {
++			t.Fatalf("opp: expanded %d, opponent points %d, want 1 and a's visits past its expansion (%d)", st.OppExpanded, st.OppPoints, tr.Visits[0]-1)
++		}
++		if !opp && (st.OppExpanded != 0 || st.OppPoints != 0) {
++			t.Fatalf("own: opponent counters %d/%d", st.OppExpanded, st.OppPoints)
++		}
++		t.Logf("opp=%v: visits %v, Q %v", opp, tr.Visits, tr.Q)
++	}
++}
++
++// Availability at an opponent's point is the ISMCTS rule of the seat's own
++// points: the worlds alternate between offering the opponent {x, y} and
++// {x, z} (a re-dealt hand), each reply is available exactly in the worlds
++// that offer it, is only selected there, and the one missing per visit is
++// counted unavailable. The opponent prefers z (the seat's 0) where offered,
++// x (0.5) over y (1) elsewhere.
++func TestOpponentPointAvailability(t *testing.T) {
++	g := &fakeGame{
++		nodes: map[string]fakeNode{
++			"":     {keys: []Key{"a"}, prior: []float64{1}, value: 0.5},
++			"/a":   {value: 0.5, opp: true},
++			"/a/x": {value: 0.5, terminal: true},
++			"/a/y": {value: 1, terminal: true},
++			"/a/z": {value: 0, terminal: true},
++		},
++		offerAt: func(sim int, path string) []Key {
++			if path != "/a" {
++				return nil
++			}
++			if sim%2 == 1 {
++				return []Key{"x", "z"}
++			}
++			return []Key{"x", "y"}
++		},
++	}
++	top := newNode(rootOf(g))
++	src := &fakeSource{g: g}
++	var st Stats
++	const sims = 101
++	for i := 0; i < sims; i++ {
++		env, err := src.Env(i)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if err := simulate(top, env, treeOpts(sims), &st); err != nil {
++			t.Fatal(err)
++		}
++	}
++	opp := top.child("a").next
++	if opp == nil {
++		t.Fatal("the opponent's point was never expanded")
++	}
++	x, y, z := opp.child("x"), opp.child("y"), opp.child("z")
++	if x == nil || y == nil || z == nil {
++		t.Fatalf("children %v", opp.kids)
++	}
++	// Sim 0 expands the point; sims 1..100 select there, odd ones offered z.
++	if x.avail != 100 || y.avail != 50 || z.avail != 50 {
++		t.Fatalf("avail x %d y %d z %d, want 100 50 50", x.avail, y.avail, z.avail)
++	}
++	if x.n+y.n+z.n != 100 || y.n > y.avail || z.n > z.avail || z.n <= y.n {
++		t.Fatalf("visits x %d y %d z %d", x.n, y.n, z.n)
++	}
++	if st.Unavailable != 100 || st.OppPoints != 100 || st.OppExpanded != 1 {
++		t.Fatalf("unavailable %d, opponent points %d, expanded %d; want 100, 100, 1", st.Unavailable, st.OppPoints, st.OppExpanded)
++	}
++	t.Logf("visits x %d y %d z %d", x.n, y.n, z.n)
++}
++
++// checkOppSearch asserts a Search with OpponentNodes on built a tree with
++// no failure and with opponent points in it, and returns its counters.
++func checkOppSearch(t *testing.T, res Result, sims int) Stats {
++	t.Helper()
++	st := res.Stats
++	if st.Searched != 1 || st.Simulations != sims || st.Completed != sims || st.AllFailed != 0 {
++		t.Fatalf("stats %+v, want %d completed simulations", st, sims)
++	}
++	if st.Panics+st.SubmitErrors+st.BadWorlds+st.NoWorld+st.ChanceFailures != 0 {
++		t.Fatalf("failures: panics %d, submit %d, bad world %d, no world %d, chance %d",
++			st.Panics, st.SubmitErrors, st.BadWorlds, st.NoWorld, st.ChanceFailures)
++	}
++	if st.Terminal+st.StepCapped+st.Expanded != st.Completed {
++		t.Fatalf("terminal %d + capped %d + expanded %d != completed %d", st.Terminal, st.StepCapped, st.Expanded, st.Completed)
++	}
++	if st.OppExpanded > st.Expanded {
++		t.Fatalf("opponent points expanded %d of %d", st.OppExpanded, st.Expanded)
++	}
++	for _, k := range res.Keys {
++		if strings.HasPrefix(string(k), oppKeyPrefix) {
++			t.Fatalf("root key %q is an opponent's", k)
++		}
++	}
++	return st
++}
++
++// Search with the opponent in the tree runs over honest redealt worlds --
++// a different opponent hand in every simulation -- with no failure, expands
++// opponent points, and stays deterministic in its seed, with no network and
++// with one (the prior on the opponent's own view). With the option off the
++// opponent counters stay 0.
++func TestSearchWithOpponentNodesOnRedealtWorlds(t *testing.T) {
++	cfg := testConfig(t, "mono-red-prowess", "mono-blue-tempo", testSeed)
++	net := policynet.NewModel(policynet.TableRows, 4, 3, rand.New(rand.NewPCG(51, 52)))
++	net.InitValue(2, rand.New(rand.NewPCG(53, 54)))
++	const sims = 96
++	var oppTotal Stats
++	for _, minTurn := range []int32{3, 5, 7} {
++		p := feedPosition(t, cfg, minTurn, 2, nil)
++		for _, m := range []*policynet.Model{nil, net} {
++			run := func(opp bool) Result {
++				obs := searchprobe.NewCollector(0)
++				src, err := NewRedeal(p.input(t, p.e), obs, 23, 0)
++				if err != nil {
++					t.Fatal(err)
++				}
++				opts := DefaultOptions()
++				opts.Sims, opts.Seed, opts.OpponentNodes = sims, 23, opp
++				res, err := Search(context.Background(), Root{Engine: p.e, Decision: p.d, Bot: p.bot, Observer: obs}, src, m, opts)
++				if err != nil {
++					t.Fatal(err)
++				}
++				return res
++			}
++			off := run(false)
++			if off.Stats.OppPoints != 0 || off.Stats.OppExpanded != 0 {
++				t.Fatalf("turn %d: opponent counters %d/%d with the option off", minTurn, off.Stats.OppPoints, off.Stats.OppExpanded)
++			}
++			on := run(true)
++			st := checkOppSearch(t, on, sims)
++			if again := run(true); sameResult(on, again) != "" || again.Stats != on.Stats {
++				t.Fatalf("turn %d: not deterministic: %s", minTurn, sameResult(on, again))
++			}
++			oppTotal.Add(st)
++			t.Logf("turn %d net=%v kind %s: visits off %v on %v; expanded %d (opponent %d), opponent selections %d, prior fallbacks %d",
++				minTurn, m != nil, on.Kind, off.Visits, on.Visits, st.Expanded, st.OppExpanded, st.OppPoints, st.PriorFallbacks)
++		}
++	}
++	if oppTotal.OppExpanded == 0 {
++		t.Fatal("no search expanded an opponent's point")
++	}
++}
++
++// The node cache stays exact with opponent points in the tree: a cached
++// search over a fixed world -- the clairvoyant clone, the fixed-chance PIMC
++// world -- returns the uncached Result, its opponent counters included
++// (the stored states carry copies of the opponent's collectors).
++func TestNodeCacheIsExactWithOpponentNodes(t *testing.T) {
++	roots := measureRoots(t, 6)
++	if len(roots) < 4 {
++		t.Fatalf("only %d searchable roots", len(roots))
++	}
++	oppExpanded := 0
++	for i, r := range roots {
++		for _, kind := range []string{"clairvoyant", "pimc"} {
++			run := func(cache int) Result {
++				opts := DefaultOptions()
++				opts.Sims, opts.Seed, opts.NodeCache, opts.OpponentNodes = 120, uint64(i)*5+3, cache, true
++				obs := searchprobe.NewCollector(r.d.Player)
++				res, err := Search(context.Background(), Root{Engine: r.e, Decision: r.d, Bot: r.bot, Observer: obs}, measureSource(kind, r.e, obs), nil, opts)
++				if err != nil {
++					t.Fatal(err)
++				}
++				return res
++			}
++			off := run(0)
++			checkOppSearch(t, off, 120)
++			oppExpanded += off.Stats.OppExpanded
++			for _, cache := range []int{1, 3, DefaultNodeCache} {
++				on := run(cache)
++				if d := sameResult(off, on); d != "" {
++					t.Fatalf("%s %s cache %d: the cached search differs: %s", r.name, kind, cache, d)
++				}
++			}
++		}
++	}
++	if oppExpanded == 0 {
++		t.Fatal("no root expanded an opponent's point")
++	}
++}
++
++// An az seat with the opponent in its tree plays whole games on honest
++// redealt worlds with no failed simulation and replays exactly.
++func TestSeatWithOpponentNodesPlaysAndReplays(t *testing.T) {
++	cfg := testConfig(t, "mono-red-prowess", "mono-blue-tempo", testSeed)
++	sc := DefaultSeatConfig()
++	sc.Search.Sims, sc.World, sc.Search.OpponentNodes = 8, WorldRedeal, true
++	var diags []Diag
++	prev := Watch
++	Watch = func(d Diag) { diags = append(diags, d) }
++	t.Cleanup(func() { Watch = prev })
++	heads := make([]string, 2)
++	var total Stats
++	for i := range heads {
++		diags = diags[:0]
++		az, err := NewSeat(cfg.Seed^1, nil, sc)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if heads[i], err = playAZ(t, cfg, az, 400); err != nil {
++			t.Fatal(err)
++		}
++		if i == 0 {
++			for _, d := range diags {
++				total.Add(d.Stats)
++			}
++		}
++	}
++	if heads[0] != heads[1] {
++		t.Fatalf("replay diverged: %s vs %s", heads[0], heads[1])
++	}
++	t.Logf("%d searched; completed %d/%d; expanded %d (opponent %d), opponent selections %d; no-world %d, refused %d",
++		total.Searched, total.Completed, total.Simulations, total.Expanded, total.OppExpanded, total.OppPoints, total.NoWorld, total.RedealRefused)
++	if total.Searched == 0 || total.OppExpanded == 0 {
++		t.Fatal("the seat never expanded an opponent's point")
++	}
++	if total.Panics+total.SubmitErrors+total.BadWorlds+total.ChanceFailures != 0 {
++		t.Fatalf("failed simulations: panics %d, submit %d, bad world %d, chance %d", total.Panics, total.SubmitErrors, total.BadWorlds, total.ChanceFailures)
++	}
++}
