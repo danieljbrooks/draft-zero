@@ -463,6 +463,19 @@ def test_actor_spec_with_a_network_and_playout_caps(tmp_path):
         r.actors[0].ensure_version(2)
 
 
+def test_a_search_config_the_engine_refuses_fails_at_start(tmp_path):
+    """A config whose search settings make no PolicySpec stops an actor or evaluator when it starts, not after
+    the run is up (config.check refuses such search.keys at load; this is the backstop)."""
+    from draftzero.loop.actor import check_playable
+    cfg = make_cfg(tmp_path)
+    cfg.search.keys = ["autopay", "worlds=4"]
+    with pytest.raises(ValueError, match="worlds=4"):
+        check_playable(cfg)
+    for role in (Actor, Evaluator):
+        with pytest.raises(ValueError, match="worlds=4"):
+            role(LocalStore(tmp_path / "s"), cfg, "m1", tmp_path / "w", gorge=FakeGorge(), log=lambda *_: None)
+
+
 def test_actor_stop_pause_and_spooled_uploads(tmp_path):
     r = Run(tmp_path, make_cfg(tmp_path))
     r.controller.tick()

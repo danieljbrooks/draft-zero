@@ -61,10 +61,15 @@ def idle_sleep(poll_s: float, idle: int) -> float:
 
 
 def check_playable(cfg) -> None:
+    """ValueError for a config this loop cannot play, when a role starts (not once the run is up): an arch other
+    than mlp, or search and actor settings that make no PolicySpec."""
     arch = ctl.get(cfg, "player.arch", "mlp")
     if arch != "mlp":
         raise ValueError(f"player.arch {arch}: only an mlp runs inside gorge (.dzgw); a {arch} needs a network "
                          "server (dzg serve, remote=), which the v0.2.0 loop doesn't start")
+    play = ctl.as_dict(ctl.get(cfg, "actor"))
+    policy_spec(cfg, sims=int(play.get("sims") or 1), explore=bool(play.get("explore")), gonet=Path("check.dzgw"),
+                pcr=ctl.as_dict(play.get("pcr")))
 
 
 class Actor:

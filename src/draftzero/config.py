@@ -45,7 +45,7 @@ CONFIGS = REPO / "configs"
 MODES = ("async", "sync")
 ARCHS = ("mlp", "transformer", "gnn")             # only mlp runs inside the engine (.dzgw); see nets/
 POLICY_TARGETS = ("visits", "cq")
-SEARCH_KEYS = ("autopay", "oppnodes", "oppfull", "morekinds")      # draftzero.engine.specs.FULL
+SEARCH_KEYS = ("autopay", "oppnodes", "oppfull", "morekinds")      # draftzero.engine.specs.FULL; any of FLAG_KEYS
 # decision kinds the fork's playout-cap randomization takes a per-kind probability for (dzgorge kinds= names)
 PCR_KINDS = ("priority", "attackers", "blockers", "target", "modes", "optional", "choose", "multitarget")
 OPPONENT_RE = re.compile(r"^(prev|sbtactical|bot|nonet|v\d+|file:.+\.dzgw)$")
@@ -560,8 +560,9 @@ def check(cfg: RunConfig) -> None:
             ok = False
         need(ok, "player.init", f"hf://owner/repo[@rev]/file, not {init!r}")
     s = cfg.search
+    from draftzero.engine.specs import FLAG_KEYS        # what PolicySpec.keys takes (a light module)
     for i, k in enumerate(s.keys):
-        need(bool(k) and ":" not in k, f"search.keys[{i}]", f"an engine flag without ':' ({k!r})")
+        need(k in FLAG_KEYS, f"search.keys[{i}]", f"a bare engine flag, one of {', '.join(FLAG_KEYS)} (not {k!r})")
     need(s.topk is None or s.topk >= 1, "search.topk", "null or >= 1")
     need(s.cpuct is None or s.cpuct > 0, "search.cpuct", "null or > 0")
     a = cfg.actor

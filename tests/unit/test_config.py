@@ -128,6 +128,9 @@ def test_wrong_types_name_the_path(d, path):
     ({"store": "hf://danbrooks/repo"}, "store"),
     ({"store": "ssh://host"}, "store"),
     ({"search": {"keys": ["autopay:x"]}}, "search.keys[0]"),
+    ({"search": {"keys": ["autopay", "worlds=4"]}}, "search.keys[1]"),        # PolicySpec takes FLAG_KEYS only
+    ({"search": {"keys": ["explore"]}}, "search.keys[0]"),
+    ({"search": {"keys": ["autopay", "oppnodez"]}}, "search.keys[1]"),
     ({"engine": {"name": "xmage"}}, "engine.name"),
     ({"player": {"init": "hf://danbrooks/repo"}}, "player.init"),
     ({"player": {"init": "hf://buckets/danbrooks/dz-e1/x.pt"}}, "player.init"),
@@ -141,6 +144,13 @@ def test_checks_name_the_path(d, path):
 @pytest.mark.parametrize("init", [None, "runs/x/model.pt", "hf://danbrooks/draftzero-v0.1.0@v1/player/model.pt"])
 def test_player_init(init):
     assert C.from_dict({"run": "t", "player": {"init": init}}).player.init == init
+
+
+def test_search_keys_are_the_engines_bare_flags():
+    from draftzero.engine.specs import FLAG_KEYS
+    assert C.from_dict({"run": "t", "search": {"keys": list(FLAG_KEYS)}}).search.keys == list(FLAG_KEYS)
+    with pytest.raises(C.ConfigError, match="nonoise"):                   # the message lists them
+        C.from_dict({"run": "t", "search": {"keys": ["fpu=0.1"]}})
 
 
 def test_cheap_sims_above_sims_is_fine_while_pcr_is_off():
