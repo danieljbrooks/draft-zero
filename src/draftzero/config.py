@@ -11,9 +11,11 @@ converted to the field's type: YAML reads `1e-4` as text (a YAML float needs a d
 `base/player.yml`), else to the repo's configs/; it may be a list (merged in order) and may chain.
 
 `dump` writes the whole merged config (no `extends`), and `config_hash` fingerprints its canonical JSON, so the
-store's config.yml reloads to the same hash. `player.config` is the architecture's free-form override dict
-(draftzero.nets.models.full_config checks its keys); it merges like any dict, so a run that changes
-`player.arch` should restate the whole `player.config`.
+store's config.yml reloads to the same hash. `player.config` overrides the architecture's defaults for a network
+built from random init (a warm start keeps its checkpoint's config): its keys are checked at load against
+draftzero.nets.models.DEFAULTS[player.arch] and each value takes its default's type ("5e-2" is 0.05). It merges
+like any dict, and a key set to null is dropped (the arch's default), so a run that changes `player.arch` sets
+the old arch's other keys to null (`card_d: null` for a transformer that extends base/player.yml).
 
 Plan changes mid-run: only LIVE paths may change. `apply_change` validates one change, the controller records it
 in events.jsonl ({kind: "set", path, old, new, at_version, ...}), and `effective` replays the events onto the
@@ -23,14 +25,18 @@ launched config: the config in effect for version N is the launched one plus eve
 """
 from __future__ import annotations
 
+import ast
 import copy
 import dataclasses
 import difflib
+import functools
 import hashlib
+import importlib.util
 import json
 import math
 import os
 import re
+import sys
 import types
 import typing
 from dataclasses import dataclass, field, fields, is_dataclass
@@ -335,7 +341,44 @@ def _build(cls, d: Mapping, path: str):
             kw[f.name] = _coerce(d[f.name], hints[f.name], prefix + f.name)
         elif f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING:
             raise ConfigError(f"missing required key {prefix}{f.name}", prefix + f.name)
-    return cls(**kw)
+    obj = cls(**kw)
+    if cls is PlayerConfig:
+        obj.config = _player_config(obj.arch, obj.config, prefix + "config")
+    return obj
+
+
+@functools.lru_cache(maxsize=1)
+def _arch_defaults() -> dict[str, dict[str, Any]]:
+    """draftzero.nets.models.DEFAULTS (each arch's config keys and default values), read from the module's source
+    unless it is loaded: it imports torch, which loading a config (in every actor, say) should not."""
+    m = sys.modules.get("draftzero.nets.models")
+    if m is not None:
+        return m.DEFAULTS
+    spec = importlib.util.find_spec("draftzero.nets.models")
+    for node in ast.parse(Path(spec.origin).read_text()).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "DEFAULTS" for t in node.targets):
+            return ast.literal_eval(node.value)
+    from draftzero.nets import models
+    return models.DEFAULTS
+
+
+def _player_config(arch: str, config: dict, path: str) -> dict:
+    """player.config checked against the arch's keys, each value converted to its default's type ("5e-2" is
+    0.05); a key set to null is dropped (the arch's default). An unknown arch is left to check()."""
+    defaults = _arch_defaults().get(arch)
+    if defaults is None:
+        return config
+    out = {}
+    for k, v in config.items():
+        if v is None or (isinstance(v, str) and v.strip().lower() in _NONE_WORDS):
+            continue
+        if k not in defaults:
+            near = difflib.get_close_matches(k, list(defaults), n=1)
+            raise ConfigError(f"unknown key {path}.{k} for a {arch}"
+                              + (f" (did you mean {path}.{near[0]}?)" if near else "")
+                              + f"; its keys: {', '.join(defaults)}", f"{path}.{k}")
+        out[k] = _coerce(v, type(defaults[k]), f"{path}.{k}")
+    return out
 
 
 def _check_keys(raw: Mapping, cls, prefix: str, where: str) -> None:
@@ -550,6 +593,10 @@ def check(cfg: RunConfig) -> None:
     need(cfg.player.arch in ARCHS, "player.arch", f"one of {ARCHS}, not {cfg.player.arch!r}")
     for k, v in cfg.player.config.items():
         need(isinstance(v, (int, float, str, bool)) or v is None, f"player.config.{k}", "a scalar")
+    pc = {**_arch_defaults().get(cfg.player.arch, {}), **cfg.player.config}
+    if "heads" in pc:
+        need(pc["heads"] >= 1 and pc["d"] % pc["heads"] == 0, "player.config.heads",
+             f"divides player.config.d ({pc['d']})")
     init = cfg.player.init
     need(init is None or bool(init.strip()), "player.init", "null, a path or hf://owner/repo[@rev]/file")
     if init is not None and init.startswith("hf://"):
