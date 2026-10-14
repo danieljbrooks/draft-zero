@@ -18,6 +18,7 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 - Evaluation (`draftzero.eval`): paired-game scoring, SPRT, Bradley–Terry ratings; `sbtactical` and `nonet` as standard opponents. Standard figures in `draftzero.plots`.
 - `draftzero.oppdeck`: a belief corpus of the run's own decks for gorge's `:closedlist`, the version-0 opponent-deck model.
 - `draftzero.hub`: `hf://owner/repo[@rev]/path` model files.
+- Opt-in self-play options from KataGo, off by default and live: the decided-game cheap search (`actor.decided`, the fork's `decided=` keys) and forced playouts with policy target pruning (`actor.forced`, `forced=`). Decided-game records carry a training weight into the packs (`weight.npy`), and `nets.train` weights each position's losses by it (`--no-record-weights` ignores it). The evaluator never uses either option.
 - The `dz` commands `version`, `manifest` (alias `provenance`), `run`, `actor`, `learner`, `evaluator`, `controller`, `plan`, `status`, `stop`, `report`, `models pull`, `play`, `eval`, `engine build|version|coverage`, `pod up|down|list|balance|offers` (RunPod pods for relay actors; `up` requires `--max-price` and `--max-hours`) and `relay`.
 - `assets/sample/`: 80 FDN decks in gorge's format (40 train, 40 eval), which the smoke configs play.
 - CI: `.github/workflows/ci.yml` runs the unit and contract tests on Python 3.11 and 3.12.
@@ -27,7 +28,7 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 
 ### Changed
 
-- **The engine is gorge only,** pinned through the fork `danieljbrooks/gorge`, branch `draftzero`: gorge main `813dcf3b4` plus five DraftZero commits (0008 topk-max-options, 0009 sims-by-kind, the 0009 mayplay fix, the driver deltas, playout-cap randomization). v0.1.0 pinned `adams-shaun/gorge` at `c9a422b` and applied patches 0001–0009 at build time; 0001–0007 and the driver itself are now upstream.
+- **The engine is gorge only,** pinned through the fork `danieljbrooks/gorge`, branch `draftzero`: gorge main `813dcf3b4` plus seven DraftZero commits (0008 topk-max-options, 0009 sims-by-kind, the 0009 mayplay fix, the driver deltas, playout-cap randomization, the decided-game cheap search, forced playouts). v0.1.0 pinned `adams-shaun/gorge` at `c9a422b` and applied patches 0001–0009 at build time; 0001–0007 and the driver itself are now upstream.
 - gorge's paid-mana census is on by default, and the search hides the opponent's decklist (`:closedlist`). Results and networks from v0.1.0 are not comparable with 0.2.0's.
 - Packages moved: `gorge/dzg/` → `draftzero.nets`, `gorge/sealed/` → `draftzero.build`, `draftzero.selfplay` → `draftzero.loop`, `gorge/decks.py` → `draftzero.data`, `gorge/analyze.py`, `stats.py` and `reference.py` → `draftzero.eval`, figure scripts → `draftzero.plots`, `tools/compute_bench/pods.py` → `draftzero.workers.runpod`.
 - `tools/extract_decks.py` no longer needs an XMage jar.
@@ -45,14 +46,14 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 
 All ten rigid interfaces are named and versioned for the first time.
 
-1. **Engine pin:** `engine/gorge/GORGE_REF` = `5fd039efe87fc601773df51f615fe45bf66a47e1` on `danieljbrooks/gorge` (was `gorge/GORGE_REF` = `c9a422b703f40acec744cb8c947b724f057305b3` on `adams-shaun/gorge` plus patches).
+1. **Engine pin:** `engine/gorge/GORGE_REF` = `a7afdc1527ad32e96e089ca8baab1059fe70edf6` on `danieljbrooks/gorge` (was `gorge/GORGE_REF` = `c9a422b703f40acec744cb8c947b724f057305b3` on `adams-shaun/gorge` plus patches).
 2. **Card corpus pin:** gorge's `FORGE_REF` = `098b0553` on `adams-shaun/forge` (was `ab2a79bd`).
-3. **Driver CLI and policy strings:** upstream's `cmd/dzgorge` plus DraftZero's deltas. New: the `:closedlist` key with `-belief-decks`, `-belief-pool` and `-belief-split`; the `sbtactical` policy; `-no-paid-mana-census`, since the census is now on by default; playout-cap randomization (`pcr=`, `cheap=`, `pcrk=`). Kept from v0.1.0: `-deckfile`, `-pairs-file`, `ksims=`, `-topk-max-options`, `-audit-*`.
+3. **Driver CLI and policy strings:** upstream's `cmd/dzgorge` plus DraftZero's deltas. New: the `:closedlist` key with `-belief-decks`, `-belief-pool` and `-belief-split`; the `sbtactical` policy; `-no-paid-mana-census`, since the census is now on by default; playout-cap randomization (`pcr=`, `cheap=`, `pcrk=`); the decided-game cheap search (`decided[=H]`, `decidedn=`, `decidedsims=`, `decidedw=`) and forced playouts (`forced[=K]`), whose visit records gain an optional `weight` field. `PolicySpec` renders them after `pcrk=` and before `gonet=`; a spec without them renders as before. Kept from v0.1.0: `-deckfile`, `-pairs-file`, `ksims=`, `-topk-max-options`, `-audit-*`.
 4. **Scorer hook:** `policynet.External` unchanged, now upstream; the in-engine MLP moved to gorge's `internal/gonet`.
 5. **Position encoding:** gorge main's, which may differ from `c9a422b`'s. Check v0.1.0 networks with `dzgorge gonet-check` and retrain rather than reuse them.
-6. **Training data and socket format:** `dzg-pack-1` and `GZB1`/`GZR1`, unchanged; the spec moved to `src/draftzero/nets/SPEC.md`.
+6. **Training data and socket format:** `dzg-pack-1` and `GZB1`/`GZR1`; the spec moved to `src/draftzero/nets/SPEC.md`. Added, without a version bump: the optional training array `weight.npy` (f32 [B], default 1), which `dzgorge pack` writes only for a shard with a weighted record. Readers that predate it ignore the file.
 7. **Checkpoint formats:** `.pt` and `.dzgw` (`dzgw-1`), unchanged.
-8. **Run config schema:** new (`src/draftzero/config.py`). v0.1.0 configs do not load.
+8. **Run config schema:** new (`src/draftzero/config.py`). v0.1.0 configs do not load. `actor.decided` and `actor.forced` are live sections.
 9. **Run manifest and metrics schema:** new: `draftzero-manifest/1` and `draftzero-metrics/1`. The manifest's `belief` key records the `:closedlist` belief corpus (decks, pool, split and `corpus_hash`), or null without `:closedlist`.
 10. **Evaluation protocol and data splits:** paired games on the eval split at seed 3131 against `prev` and `sbtactical` by default; the splits in `assets/decks.tsv` and `assets/sealed/` are unchanged.
 

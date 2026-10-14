@@ -1,7 +1,7 @@
 """draftzero.engine.specs: PolicySpec renders the fork's spec strings in one order and parses them back."""
 import pytest
 
-from draftzero.engine.specs import FULL, KIND_NAMES, PolicySpec
+from draftzero.engine.specs import DECIDED_DEFAULT, FORCED_DEFAULT, FULL, KIND_NAMES, PolicySpec
 
 
 def test_render_contract_example():
@@ -37,6 +37,16 @@ ROUND_TRIP = [
     PolicySpec(kind="sbtactical", keys=("mull",)),
     PolicySpec(kind="random"),
     PolicySpec(cpuct=1e-5, topk=1, sims=1),
+    PolicySpec(decided=0.9),
+    PolicySpec(decided=0.6, decidedn=1),
+    PolicySpec(decided=0.95, decidedn=2, decidedsims=10, decidedw=0.0),
+    PolicySpec(decided=0.75, decidedw=1.0),
+    PolicySpec(decided=0.5000001, decidedsims=1, decidedw=1e-7),
+    PolicySpec(forced=2.0),
+    PolicySpec(forced=1e-3),
+    PolicySpec(sims=8, explore=True, closedlist=True, pcr=0.5, cheap=4, pcrk={"priority": 0.65}, decided=0.9,
+               decidedn=3, decidedsims=40, decidedw=0.1, forced=2.0, topk=6, gonet="/n.dzgw",
+               extra=("worlds=4", "nonoise")),
 ]
 
 
@@ -54,6 +64,9 @@ def test_parse_render_round_trip(spec):
     "az:sims=8:morekinds:pcr=0.5:pcrk=priority.0.65,attackers.0.5,optional.0.0",
     "prior:gonet=/x.dzgw",
     "bot", "sbtactical", "random", "bot:autopay",
+    "az:sims=8:explore:closedlist:decided=0.6:decidedn=1",
+    "az:sims=8:explore:pcr=0.5:cheap=4:decided=0.9:decidedn=3:decidedsims=40:decidedw=0.1:forced=2.0:gonet=/a.dzgw",
+    "az:sims=8:forced=0.5",
 ])
 def test_canonical_strings_render_back(s):
     assert PolicySpec.parse(s).render() == s
@@ -107,6 +120,62 @@ def test_pcr_rendering():
     assert PolicySpec.parse("az:pcr=0.4:cheap=10:pcrk=priority=0.65,blockers=1").pcrk == (("priority", 0.65),
                                                                                           ("blockers", 1.0))
     assert PolicySpec(pcr=0.5, pcrk={"priority": 1}).pcrk == (("priority", 1.0),)
+
+
+def test_decided_and_forced_rendering():
+    s = PolicySpec(decided=0.95, decidedn=2, decidedsims=10, decidedw=0.25, forced=1.5, pcr=0.5, topk=6,
+                   gonet="/n.dzgw", extra=("worlds=4",))
+    assert s.render() == ("az:sims=100:autopay:oppnodes:oppfull:morekinds:topk=6:pcr=0.5:decided=0.95:decidedn=2:"
+                          "decidedsims=10:decidedw=0.25:forced=1.5:gonet=/n.dzgw:worlds=4")
+    # None leaves the fork's default (decidedn 3, decidedsims 40, decidedw 0.1) unwritten
+    assert PolicySpec(decided=0.9).render() == "az:sims=100:autopay:oppnodes:oppfull:morekinds:decided=0.9"
+    # off: decided None or 0 keeps none of its keys; forced 0 is None
+    for d in (None, 0, 0.0):
+        off = PolicySpec(decided=d, decidedn=5, decidedsims=7, decidedw=0.5, forced=0)
+        assert (off.decided, off.decidedn, off.decidedsims, off.decidedw, off.forced) == (None,) * 5
+        assert off == PolicySpec() and "decided" not in off.render() and "forced" not in off.render()
+    # the fork's bare keys are its defaults, rendered explicitly; "key=" is bare too (floatOr)
+    p = PolicySpec.parse("az:sims=8:decided:forced")
+    assert (p.decided, p.forced) == (DECIDED_DEFAULT, FORCED_DEFAULT) == (0.9, 2.0)
+    assert p.render() == "az:sims=8:decided=0.9:forced=2.0" and PolicySpec.parse("az:decided=:forced=") == \
+        PolicySpec.parse("az:decided:forced")
+    assert PolicySpec.parse("az:decided=0:forced=0") == PolicySpec.parse("az")
+    assert PolicySpec.parse("az:decided=0.7:decided=0.8").decided == 0.8        # later wins, as in the fork
+    # integers and numeric strings are taken as numbers
+    q = PolicySpec(decided="0.8", decidedn=2.0, decidedsims="5", decidedw=1, forced=3)
+    assert (q.decided, q.decidedn, q.decidedsims, q.decidedw, q.forced) == (0.8, 2, 5, 1.0, 3.0)
+    # no-search kinds drop them (as they drop pcr); prior refuses them (az keys in the fork)
+    assert PolicySpec(kind="bot", decided=0.9, decidedn=2, forced=2).render() == "bot"
+    for kw in (dict(decided=0.9), dict(forced=2.0)):
+        with pytest.raises(ValueError, match="az keys"):
+            PolicySpec(kind="prior", gonet="/n.dzgw", **kw)
+    assert PolicySpec(kind="prior", gonet="/n.dzgw", decided=0, forced=0).render() == "prior:sims=100:autopay:" \
+        "oppnodes:oppfull:morekinds:gonet=/n.dzgw"
+
+
+@pytest.mark.parametrize("kw", [
+    dict(decided=0.5), dict(decided=1.0), dict(decided=1.5), dict(decided=-0.9), dict(decided=float("nan")),
+    dict(decided=float("inf")), dict(decided=True), dict(decided="high"),
+    dict(decided=0.9, decidedn=0), dict(decided=0.9, decidedn=1.5), dict(decided=0.9, decidedn=True),
+    dict(decided=0.9, decidedsims=0), dict(decided=0.9, decidedw=-0.1), dict(decided=0.9, decidedw=1.01),
+    dict(decided=0.9, decidedw=float("nan")),
+    dict(forced=-1.0), dict(forced=float("inf")), dict(forced=float("nan")), dict(forced=True),
+    dict(extra=("decided=0.9",)), dict(extra=("worlds=4", "forced")), dict(extra=("decidedw=0.1",)),
+])
+def test_invalid_decided_and_forced(kw):
+    with pytest.raises(ValueError):
+        PolicySpec(**kw)
+
+
+@pytest.mark.parametrize("s", [
+    "az:decidedn=3", "az:decidedsims=40", "az:decidedw=0.1",           # policy.go: they need decided=H
+    "az:decided=0:decidedn=3", "az:decided:decided=0:decidedw=0.5",
+    "az:decided=1", "az:decided=0.5", "az:decided=x", "az:decided:decidedn=x", "az:decided:decidedn",
+    "az:forced=-2", "az:forced=inf", "az:forced=x", "prior:gonet=/n.dzgw:forced", "prior:gonet=/n.dzgw:decided",
+])
+def test_parse_refuses_what_the_fork_refuses_of_decided_and_forced(s):
+    with pytest.raises(ValueError):
+        PolicySpec.parse(s)
 
 
 @pytest.mark.parametrize("kw", [

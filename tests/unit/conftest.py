@@ -15,7 +15,7 @@ FAKE = r'''#!{python}
 """A fake dzgorge: `play` writes instant games (one JSON line each, a gzip member each with -corpus), in game order,
 flushed per game; env FAKE_HANG=pairs hang (at leg FAKE_HANG_LEG), FAKE_HANG_BUSY=pairs hang unless played alone,
 FAKE_IGNORE_TERM ignores SIGTERM while hanging, FAKE_FAIL refuses like a bad spec, FAKE_PID gets its pid.
-`pack` writes synthetic shards."""
+`pack` writes synthetic shards (FAKE_WEIGHTED=F: that share of records at weight 0.1, with weight.npy)."""
 import gzip, json, os, signal, subprocess, sys, time
 
 args = sys.argv[1:]
@@ -32,7 +32,8 @@ while i < len(args):
         flags[args[i]] = args[i + 1]; i += 2
 if cmd == "pack":
     from draftzero.nets import packfmt
-    packfmt.write_synthetic(flags["-out"], 50, seed=1, shard_size=int(flags["-shard"]), game_len=10)
+    packfmt.write_synthetic(flags["-out"], 50, seed=1, shard_size=int(flags["-shard"]), game_len=10,
+                            weighted=float(os.environ.get("FAKE_WEIGHTED") or 0))
     sys.exit(0)
 if os.environ.get("FAKE_FAIL"):
     print("play: policy 'az:frob': unknown key", file=sys.stderr)

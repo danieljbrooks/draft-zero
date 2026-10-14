@@ -137,6 +137,27 @@ class PcrConfig:
 
 
 @dataclass
+class DecidedConfig:
+    """Decided-game cheap search (fork 67d2cd1, KataGo's reduced visits): once `n` searched root values in a row of
+    a seat are all above `high` (or all below 1 - high), its full searches use `sims`, no root noise and argmax, and
+    are recorded with the training weight `weight` (0 = not recorded, 1 = as a full search), until a value leaves
+    that band. high 0 = off. Self-play only. Renders as PolicySpec(decided=high, decidedn=n, decidedsims=sims,
+    decidedw=weight)."""
+    high: float = 0.0
+    n: int = 3
+    sims: int = 40
+    weight: float = 0.1
+
+
+@dataclass
+class ForcedConfig:
+    """Forced playouts with policy target pruning (fork a7afdc1, KataGo): at the root of a full search each candidate
+    gets at least sqrt(k * prior * root visits) visits, and the recorded visits are the pruned target. k 0 = off.
+    Self-play only (KataGo uses it only with root noise). Renders as PolicySpec(forced=k)."""
+    k: float = 0.0
+
+
+@dataclass
 class ActorConfig:
     sims: int = 100
     explore: bool = True
@@ -145,6 +166,8 @@ class ActorConfig:
     chunk_secs: int = 3600                       # a chunk's hard timeout
     workers: int = 2                             # dzgorge -workers per actor process
     pcr: PcrConfig = field(default_factory=PcrConfig)
+    decided: DecidedConfig = field(default_factory=DecidedConfig)
+    forced: ForcedConfig = field(default_factory=ForcedConfig)
 
 
 @dataclass
@@ -223,7 +246,8 @@ class RunConfig:
 # the dotted paths a plan change may set mid-run (a path below one of these is live too: actor.pcr.by_kind.target)
 LIVE: frozenset[str] = frozenset({
     "actor.sims", "actor.pcr.prob", "actor.pcr.cheap_sims", "actor.pcr.by_kind", "actor.record_every",
-    "actor.chunk_games",
+    "actor.chunk_games", "actor.decided.high", "actor.decided.n", "actor.decided.sims", "actor.decided.weight",
+    "actor.forced.k",
     "learner.lr", "learner.window_positions", "learner.min_new_positions", "learner.steps_per_position",
     "learner.epochs",
     "eval.every_versions", "eval.pairs", "eval.sims",
@@ -655,6 +679,14 @@ def check(cfg: RunConfig) -> None:
     need(not p.by_kind or p.prob > 0, "actor.pcr.by_kind",
          "needs actor.pcr.prob > 0 (the full-search share of the other kinds; 0 turns playout-cap randomization off)")
     need(p.prob == 0 or p.cheap_sims <= a.sims, "actor.pcr.cheap_sims", f"at most actor.sims ({a.sims})")
+    d = a.decided
+    need(d.high == 0 or 0.5 < d.high < 1.0, "actor.decided.high",
+         "a root-value threshold in (0.5, 1), or 0 (off)")
+    need(d.n >= 1, "actor.decided.n", ">= 1")
+    need(d.sims >= 1, "actor.decided.sims", ">= 1")
+    need(0.0 <= d.weight <= 1.0, "actor.decided.weight", "in [0, 1] (0: decided searches are not recorded)")
+    need(d.high == 0 or d.sims <= a.sims, "actor.decided.sims", f"at most actor.sims ({a.sims})")
+    need(math.isfinite(a.forced.k) and a.forced.k >= 0, "actor.forced.k", "a finite k >= 0 (0 = off)")
     lr = cfg.learner
     need(lr.min_new_positions >= 1, "learner.min_new_positions", ">= 1")
     need(lr.window_positions >= lr.min_new_positions, "learner.window_positions",

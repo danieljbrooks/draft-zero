@@ -36,7 +36,8 @@ def test_defaults_are_the_contract_values(cfg):
     assert d["search"] == {"keys": ["autopay", "oppnodes", "oppfull", "morekinds"], "topk": 6, "cpuct": 0.25,
                            "closedlist": True, "belief": {"decks": None, "pool": None, "split": "train"}}
     assert d["actor"] == {"sims": 100, "explore": True, "record_every": 1, "chunk_games": 50, "chunk_secs": 3600,
-                          "workers": 2, "pcr": {"prob": 0.0, "cheap_sims": 40, "by_kind": {}}}
+                          "workers": 2, "pcr": {"prob": 0.0, "cheap_sims": 40, "by_kind": {}},
+                          "decided": {"high": 0.0, "n": 3, "sims": 40, "weight": 0.1}, "forced": {"k": 0.0}}
     assert d["learner"] == {"device": "cpu", "min_new_positions": 20000, "window_positions": 300000, "epochs": 2.0,
                             "steps_per_position": None, "batch": 512, "lr": 1e-4, "warmup": 100,
                             "policy_target": "visits", "value_blend": 1.0, "warm_start": True, "threads": 4,
@@ -135,6 +136,17 @@ def test_wrong_types_name_the_path(d, path):
     ({"actor": {"pcr": {"prob": 0.5, "by_kind": {"priority": 2}}}}, "actor.pcr.by_kind.priority"),
     ({"actor": {"pcr": {"by_kind": {"priority": 0.5}}}}, "actor.pcr.by_kind"),
     ({"actor": {"sims": 30, "pcr": {"prob": 0.5, "cheap_sims": 40}}}, "actor.pcr.cheap_sims"),
+    ({"actor": {"decided": {"high": 0.5}}}, "actor.decided.high"),
+    ({"actor": {"decided": {"high": 1.0}}}, "actor.decided.high"),
+    ({"actor": {"decided": {"high": -0.9}}}, "actor.decided.high"),
+    ({"actor": {"decided": {"high": float("nan")}}}, "actor.decided.high"),
+    ({"actor": {"decided": {"n": 0}}}, "actor.decided.n"),
+    ({"actor": {"decided": {"sims": 0}}}, "actor.decided.sims"),
+    ({"actor": {"decided": {"weight": 1.5}}}, "actor.decided.weight"),
+    ({"actor": {"decided": {"weight": -0.1}}}, "actor.decided.weight"),
+    ({"actor": {"sims": 30, "decided": {"high": 0.9, "sims": 40}}}, "actor.decided.sims"),
+    ({"actor": {"forced": {"k": -1}}}, "actor.forced.k"),
+    ({"actor": {"forced": {"k": float("inf")}}}, "actor.forced.k"),
     ({"learner": {"window_positions": 10, "min_new_positions": 20}}, "learner.window_positions"),
     ({"learner": {"policy_target": "q"}}, "learner.policy_target"),
     ({"learner": {"value_blend": 1.5}}, "learner.value_blend"),
@@ -212,6 +224,18 @@ def test_search_keys_are_the_engines_bare_flags():
 def test_cheap_sims_above_sims_is_fine_while_pcr_is_off():
     c = C.from_dict({"run": "t", "actor": {"sims": 16}})
     assert c.actor.pcr.cheap_sims == 40 and c.actor.pcr.prob == 0
+    assert c.actor.decided.sims == 40 and c.actor.decided.high == 0     # the same for the decided-game search
+
+
+def test_decided_and_forced_sections():
+    c = C.from_dict({"run": "t", "actor": {"decided": {"high": "0.95", "n": 2, "sims": 20, "weight": 0},
+                                           "forced": {"k": 2}}})
+    assert (c.actor.decided.high, c.actor.decided.n, c.actor.decided.sims, c.actor.decided.weight) == (0.95, 2, 20, 0.0)
+    assert c.actor.forced.k == 2.0 and isinstance(c.actor.forced.k, float)
+    assert C.from_dict({"run": "t", "actor": {"decided": {"weight": 1}}}).actor.decided.weight == 1.0
+    with pytest.raises(C.ConfigError) as e:
+        C.from_dict({"run": "t", "actor": {"decided": {"threshold": 0.9}}})
+    assert e.value.path == "actor.decided.threshold"
 
 
 @pytest.mark.parametrize("opp", ["prev", "v0", "v12", "sbtactical", "bot", "nonet", "file:/x/v3.dzgw"])
@@ -337,12 +361,14 @@ def test_resolve_path(tmp_path):
 
 def test_live_set():
     assert {"actor.sims", "actor.pcr.prob", "actor.pcr.cheap_sims", "actor.pcr.by_kind", "actor.record_every",
-            "actor.chunk_games", "learner.lr", "learner.window_positions", "learner.min_new_positions",
+            "actor.chunk_games", "actor.decided.high", "actor.decided.n", "actor.decided.sims", "actor.decided.weight",
+            "actor.forced.k", "learner.lr", "learner.window_positions", "learner.min_new_positions",
             "learner.steps_per_position", "learner.epochs", "eval.every_versions", "eval.pairs", "eval.sims",
             "budget.max_versions", "budget.max_hours", "budget.max_games", "paused"} == C.LIVE
     flat = C.flatten(C.from_dict({"run": "t"}))
     assert C.LIVE <= set(flat)                            # every live path is a real field
     assert C.is_live("actor.pcr.by_kind.target") and C.is_live("budget") and C.is_live("actor.pcr")
+    assert C.is_live("actor.decided") and C.is_live("actor.forced") and C.is_live("actor.decided.weight")
     assert not C.is_live("actor") and not C.is_live("seed") and not C.is_live("actor.explore")
 
 
@@ -365,6 +391,13 @@ def test_apply_change_sections_and_dict_entries(cfg):
     assert c.actor.pcr.by_kind == {"priority": 0.65}
     c = C.apply_change(c, "budget", "{max_versions: 3}")
     assert c.budget.max_versions == 3
+    c = C.apply_change(c, "actor.decided", "{high: 0.9}")                       # live, like actor.pcr
+    assert (c.actor.decided.high, c.actor.decided.n, c.actor.decided.sims, c.actor.decided.weight) == (0.9, 3, 40, 0.1)
+    c = C.apply_change(c, "actor.decided.weight", "0.25")
+    c = C.apply_change(c, "actor.forced.k", 2)
+    assert c.actor.decided.weight == 0.25 and c.actor.forced.k == 2.0
+    with pytest.raises(C.ConfigError, match="actor.decided.high"):
+        C.apply_change(c, "actor.decided.high", 0.4)
 
 
 @pytest.mark.parametrize("path, value, match", [

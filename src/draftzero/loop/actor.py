@@ -13,8 +13,8 @@
      next one.
 
 A chunk's seed is int(sha256(f"{run_seed}|{machine}|{seq}")) % 2**31, seq the actor's shard number (1, 2, ...,
-continuing from the store after a restart). The live settings (sims, record_every, chunk_games, pcr, ...) come
-from control["play"], so a plan change reaches actors without a restart.
+continuing from the store after a restart). The live settings (sims, record_every, chunk_games, pcr, decided,
+forced, ...) come from control["play"], so a plan change reaches actors without a restart.
 
     python -m draftzero.loop.cli actor --config C --store S --machine pod1 [--work-dir DIR]
 """
@@ -29,14 +29,22 @@ from pathlib import Path
 from draftzero.loop import control as ctl
 
 
-def policy_spec(cfg, *, sims: int, explore: bool, gonet: Path | None, pcr: dict | None = None):
+def policy_spec(cfg, *, sims: int, explore: bool, gonet: Path | None, pcr: dict | None = None,
+                decided: dict | None = None, forced: dict | None = None):
     """The az PolicySpec of this run's search: keys, cpuct and :closedlist from `search`; topk and gonet only with
-    a network; playout-cap randomization when pcr["prob"] > 0."""
+    a network; playout-cap randomization when pcr["prob"] > 0, the decided-game search when decided["high"] > 0 and
+    forced playouts when forced["k"] > 0 (the actor's settings: self-play only, so the evaluator passes none)."""
     from draftzero.engine.specs import PolicySpec
     kw = {}
     if pcr and float(pcr.get("prob") or 0) > 0:
         kw = {"pcr": float(pcr["prob"]), "cheap": int(pcr.get("cheap_sims") or 40),
               "pcrk": tuple(sorted((str(k), float(v)) for k, v in (pcr.get("by_kind") or {}).items()))}
+    if decided and float(decided.get("high") or 0) > 0:
+        w = decided.get("weight")
+        kw.update(decided=float(decided["high"]), decidedn=int(decided.get("n") or 3),
+                  decidedsims=int(decided.get("sims") or 40), decidedw=0.1 if w is None else float(w))
+    if forced and float(forced.get("k") or 0) > 0:
+        kw["forced"] = float(forced["k"])
     return PolicySpec(kind="az", sims=int(sims), cpuct=ctl.get(cfg, "search.cpuct"),
                       topk=ctl.get(cfg, "search.topk") if gonet else None, explore=bool(explore),
                       closedlist=bool(ctl.get(cfg, "search.closedlist", False)),
@@ -69,7 +77,8 @@ def check_playable(cfg) -> None:
                          "server (dzg serve, remote=), which the v0.2.0 loop doesn't start")
     play = ctl.as_dict(ctl.get(cfg, "actor"))
     policy_spec(cfg, sims=int(play.get("sims") or 1), explore=bool(play.get("explore")), gonet=Path("check.dzgw"),
-                pcr=ctl.as_dict(play.get("pcr")))
+                pcr=ctl.as_dict(play.get("pcr")), decided=ctl.as_dict(play.get("decided")),
+                forced=ctl.as_dict(play.get("forced")))
 
 
 class Actor:
@@ -140,7 +149,8 @@ class Actor:
         except FileNotFoundError as e:              # e.g. a relay copied control.json before the version itself
             return self._idle("waiting", f"version {v} is not in this store yet ({e}); retrying at each poll")
         spec = policy_spec(self.cfg, sims=play["sims"], explore=play.get("explore", True), gonet=gonet,
-                           pcr=play.get("pcr"))
+                           pcr=play.get("pcr"), decided=ctl.as_dict(play.get("decided")),
+                           forced=ctl.as_dict(play.get("forced")))
         return "played" if self.play_chunk(v, spec, n, play) else "failed"
 
     def _idle(self, state: str, why: str, force: bool = False, ret: str = "wait") -> str:
@@ -208,6 +218,13 @@ class Actor:
                      n=summary.get("az_decisions_searched"))
         mlog.log("data.games", len(rows), version=version, step=seq)
         mlog.log("data.records", records, version=version, step=seq)
+        if getattr(spec, "decided", None) and summary.get("visit_records_weighted") is not None:
+            # the decided-game searches' records, at weight decidedw (weight.npy in the learner's packs)
+            mlog.log("data.records_weighted", int(summary["visit_records_weighted"]), version=version, step=seq,
+                     n=records)
+        if getattr(spec, "forced", None) and summary.get("az_pruned_visit_share") is not None:
+            mlog.log("search.pruned_visit_share", float(summary["az_pruned_visit_share"]), version=version,
+                     step=seq, n=summary.get("az_forced_searched"))
         files: dict[str, Path | bytes] = {}
         if rows:
             sd = ctl.shard_dir(self.machine, seq)
@@ -227,7 +244,9 @@ class Actor:
                     "records": records, "sims": int(play["sims"]), "spec": spec.render(), "time": ctl.now_iso(),
                     "wall_s": round(wall, 2), "results": dict(results), "skipped": list(res.skipped or []),
                     "record_every": int(play.get("record_every", 1)), "run": ctl.get(self.cfg, "run"),
-                    "pcr": (play.get("pcr") or {}).get("prob") or 0.0}
+                    "pcr": (play.get("pcr") or {}).get("prob") or 0.0,
+                    "decided": ctl.as_dict(play.get("decided")).get("high") or 0.0,
+                    "forced": ctl.as_dict(play.get("forced")).get("k") or 0.0}
             files[f"{ctl.shard_dir(self.machine, seq)}/meta.json"] = json.dumps(meta, indent=1, sort_keys=True).encode()
         self._upload(files, spool_as=seq)
         self.state, self.hb_time = "playing", time.time()

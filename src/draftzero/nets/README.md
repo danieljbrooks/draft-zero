@@ -56,6 +56,10 @@ at zero, so a new network has a uniform policy and a 50% value.
 - The policy loss is the cross-entropy against the candidate log-softmax, over states with at least 2 candidates
   and some visits. The value loss is the log loss of the value logit against the outcome (draws 0.5), optionally
   `(1 - x) outcome + x root_value` (`--value-blend x`), over states whose outcome is known (not -1).
+- A shard's optional `weight.npy` (SPEC.md §2: gorge's decided-game searches, recorded at weight `decidedw`)
+  weights each state's policy and value loss. A batch's loss is then the weighted mean, `sum(w x loss) / sum(w)`,
+  so a batch whose weights are all 1, such as any shard without the file, trains bit for bit as without weights.
+  `--no-record-weights` ignores the file.
 
 At each evaluation `curves.jsonl` gets, for the holdout and each `--val` set: the policy cross-entropy, the
 uniform-policy baseline, the targets' own entropy, top-1 agreement with the search's most-visited candidate and

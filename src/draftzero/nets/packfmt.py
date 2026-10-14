@@ -1,7 +1,9 @@
 """The packed columnar format (SPEC.md §2-3): shard directories, wire messages, synthetic data.
 
 A *pack* is a dict of numpy arrays named as in SPEC.md §2. Offsets are CSR and start at 0. A pack
-holds `B` states; a training pack also carries the per-state targets and the candidates.
+holds `B` states; a training pack also carries the per-state targets and the candidates. A shard may also hold the
+optional `weight.npy` (f32 [B], the record's training weight; SPEC.md §2): read_shard returns it, all ones when the
+file is absent, and write_shard writes it only when some weight is not 1, as `dzgorge pack` does.
 """
 from __future__ import annotations
 
@@ -45,10 +47,14 @@ TRAIN_ARRAYS = [
     ("cand_off", I32, "B+1", 1), ("cand_visits", F32, "ncand", 1), ("cand_prior", F32, "ncand", 1),
     ("cand_q", F32, "ncand", 1), ("co_off", I32, "ncand+1", 1), ("co_opt", I32, "nco", 1),
 ]
+# Optional training arrays: a shard may lack the file, which means this default value for every record.
+OPTIONAL_ARRAYS = [("weight", F32, "B", 1)]
+OPTIONAL_DEFAULT = {"weight": 1.0}
 ALL_ARRAYS = STATE_ARRAYS + TRAIN_ARRAYS
-SPECS = {name: (dt, ln, w) for name, dt, ln, w in ALL_ARRAYS}
+SPECS = {name: (dt, ln, w) for name, dt, ln, w in ALL_ARRAYS + OPTIONAL_ARRAYS}
 STATE_NAMES = [a[0] for a in STATE_ARRAYS]
 TRAIN_NAMES = [a[0] for a in TRAIN_ARRAYS]
+OPTIONAL_NAMES = [a[0] for a in OPTIONAL_ARRAYS]
 # CSR structure: offsets name -> (level it indexes, arrays it covers)
 CSR = {
     "sp_off": ("B", ("sp_row", "sp_val")),
@@ -90,11 +96,14 @@ def _length(sym: str, c: dict) -> int:
 
 def validate(pack: dict, train: bool | None = None) -> None:
     """Check names, dtypes, shapes, offsets, row ranges and ea/eb references; raise ValueError."""
-    names = STATE_NAMES + (TRAIN_NAMES if (train if train is not None else "cand_off" in pack) else [])
+    is_train = train if train is not None else "cand_off" in pack
+    names = STATE_NAMES + (TRAIN_NAMES if is_train else [])
     missing = [n for n in names if n not in pack]
     if missing:
         raise ValueError(f"missing arrays {missing}")
     c = counts(pack)
+    if is_train:
+        names = names + [n for n in OPTIONAL_NAMES if n in pack]
     for n in names:
         dt, ln, w = SPECS[n]
         a = pack[n]
@@ -114,6 +123,8 @@ def validate(pack: dict, train: bool | None = None) -> None:
             raise ValueError(f"{n}: row {int(pack[n].max())} >= {lim}")
     if len(pack["card_group"]) and int(pack["card_group"].max()) >= GROUPS:
         raise ValueError("card_group >= 4")
+    if is_train and "weight" in pack:
+        _check_weight(pack["weight"])
     ncards = np.diff(pack["card_off"])
     nopt = np.diff(pack["opt_off"])
     st = np.repeat(np.arange(c["B"]), nopt)
@@ -133,18 +144,30 @@ def validate(pack: dict, train: bool | None = None) -> None:
 # shards
 # ------------------------------------------------------------------------------------------------
 
+def _check_weight(w) -> None:
+    """A record weight array must be finite and >= 0 (dzgorge pack writes values in (0, 1])."""
+    w = np.asarray(w)
+    if len(w) and not (np.all(np.isfinite(w)) and float(w.min()) >= 0):
+        raise ValueError("weight: want finite values >= 0")
+
+
 def write_shard(dirpath, pack: dict, games: list[str], source: str = "synthetic") -> None:
-    """One shard directory: <name>.npy per array plus meta.json (SPEC §2)."""
+    """One shard directory: <name>.npy per array plus meta.json (SPEC §2). weight.npy only when the pack has a
+    weight other than 1 (as dzgorge pack writes it only for a shard that holds a weighted record)."""
     d = Path(dirpath)
     d.mkdir(parents=True, exist_ok=True)
     for n in STATE_NAMES + TRAIN_NAMES:
         np.save(d / f"{n}.npy", np.ascontiguousarray(pack[n], dtype=SPECS[n][0]))
+    for n in OPTIONAL_NAMES:
+        if n in pack and np.any(np.asarray(pack[n]) != OPTIONAL_DEFAULT[n]):
+            np.save(d / f"{n}.npy", np.ascontiguousarray(pack[n], dtype=SPECS[n][0]))
     meta = {"format": FORMAT, "n": int(len(pack["dense"])), "games": list(games), "source": source}
     (d / "meta.json").write_text(json.dumps(meta))
 
 
 def read_shard(dirpath, in_ram: bool = False) -> tuple[dict, dict]:
-    """(pack, meta) of one shard directory; memory-mapped unless in_ram."""
+    """(pack, meta) of one shard directory; memory-mapped unless in_ram. The optional arrays (weight) are always in
+    the pack: read from their file when the shard has one (checked: dtype, length, values), else their default."""
     d = Path(dirpath)
     meta = json.loads((d / "meta.json").read_text())
     if meta.get("format") != FORMAT:
@@ -158,6 +181,19 @@ def read_shard(dirpath, in_ram: bool = False) -> tuple[dict, dict]:
         pack[n] = a
     if len(pack["dense"]) != meta["n"]:
         raise ValueError(f"{d}: meta n={meta['n']} but dense has {len(pack['dense'])} rows")
+    for n in OPTIONAL_NAMES:
+        p = d / f"{n}.npy"
+        if not p.exists():
+            pack[n] = np.full(meta["n"], OPTIONAL_DEFAULT[n], SPECS[n][0])
+            continue
+        a = np.load(p, mmap_mode=None if in_ram else "r")
+        if a.dtype != SPECS[n][0] or a.shape != (meta["n"],):
+            raise ValueError(f"{d}: {n}.npy is {a.dtype} {a.shape}, want {SPECS[n][0]} ({meta['n']},)")
+        try:
+            _check_weight(a)
+        except ValueError as e:
+            raise ValueError(f"{d}: {e}") from None
+        pack[n] = a
     return pack, meta
 
 
@@ -281,6 +317,9 @@ def get_record(pack: dict, i: int) -> dict:
     if "cand_off" in pack:
         for n in ("outcome", "root_value", "turn", "seat", "subset", "kind", "sims", "choice", "game"):
             r[n] = pack[n][i].item()
+        for n in OPTIONAL_NAMES:
+            if n in pack:
+                r[n] = pack[n][i].item()
         k0, k1 = int(pack["cand_off"][i]), int(pack["cand_off"][i + 1])
         for n in ("cand_visits", "cand_prior", "cand_q"):
             r[n] = np.asarray(pack[n][k0:k1])
@@ -324,6 +363,9 @@ def pack_records(records: list[dict]) -> dict:
     if records and "cands" in records[0]:
         for n in ("outcome", "root_value", "turn", "seat", "subset", "kind", "sims", "choice", "game"):
             p[n] = np.array([r[n] for r in records], SPECS[n][0])
+        for n in OPTIONAL_NAMES:
+            if any(n in r for r in records):
+                p[n] = np.array([r.get(n, OPTIONAL_DEFAULT[n]) for r in records], SPECS[n][0])
         p["cand_off"] = csr([len(r["cands"]) for r in records])
         for n in ("cand_visits", "cand_prior", "cand_q"):
             p[n] = cat([r[n] for r in records], F32)
@@ -372,7 +414,7 @@ def _seg_softmax(x, seg, n):
 
 def synthetic(n: int, seed: int = 0, max_cards: int = 40, min_opts: int = 1, max_opts: int = 10,
               sparse_mean: int = 30, subset_frac: float = 0.3, game_len: int = 30,
-              game_prefix: str | None = None) -> tuple[dict, list[str]]:
+              game_prefix: str | None = None, weighted: float = 0.0) -> tuple[dict, list[str]]:
     """(pack, games): n random training records with a learnable structure.
 
     Value: the outcome is Bernoulli(sigmoid(2 dense[0] + 0.5 (sum of my battlefield cards' strength -
@@ -380,7 +422,9 @@ def synthetic(n: int, seed: int = 0, max_cards: int = 40, min_opts: int = 1, max
     is also visible as 0.25 x strength in raw[10] (power). Policy: an option's goodness is
     1.5 opt_dense[0] + its kind's value (first slot row = kind, last hashed row = the kind's row) + 0.5 x its ea
     card's strength; the visits follow softmax(candidate goodness), candidate goodness = the sum over
-    member options. Candidate 0 is the bot's answer (noisy goodness)."""
+    member options. Candidate 0 is the bot's answer (noisy goodness). With `weighted` > 0 that share of the records
+    gets the record weight 0.1 (a decided-game search's), the rest 1, drawn from a separate generator so the
+    other arrays are the same as without."""
     rng = np.random.default_rng(seed)
     L = _LATENTS
     B = n
@@ -518,6 +562,9 @@ def synthetic(n: int, seed: int = 0, max_cards: int = 40, min_opts: int = 1, max
         "cand_off": cand_off.astype(I32), "cand_visits": visits, "cand_prior": prior, "cand_q": q,
         "co_off": co_off.astype(I32), "co_opt": co_opt,
     }
+    if weighted > 0:
+        wr = np.random.default_rng([seed, 0x5767])
+        pack["weight"] = np.where(wr.random(B) < weighted, 0.1, 1.0).astype(F32)
     return pack, games
 
 

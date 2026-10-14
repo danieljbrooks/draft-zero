@@ -54,6 +54,9 @@ def take(pack: dict, sel, targets: bool = True) -> dict:
     if targets and "cand_off" in pack:
         for n in ("outcome", "root_value", "subset", "choice", "game", "kind", "turn", "seat", "sims"):
             out[n] = pack[n][sel]
+        for n in pf.OPTIONAL_NAMES:             # weight: read_shard always supplies it; a bare pack may not
+            if n in pack:
+                out[n] = pack[n][sel]
         out["cand_off"], kp = csr_take(pack["cand_off"], sel)
         for n in ("cand_visits", "cand_prior", "cand_q"):
             out[n] = pack[n][kp]
@@ -165,6 +168,7 @@ class Batch:
     root_value: torch.Tensor | None = None    # [B] f32
     outcome: torch.Tensor | None = None       # [B] f32 (-1 unknown)
     subset: torch.Tensor | None = None        # [B] u8
+    weight: torch.Tensor | None = None        # [B] f32 record training weight (SPEC §2 weight.npy); None = all 1
     want: torch.Tensor | None = None          # [B] bool (wire batches)
 
     @property
@@ -293,6 +297,8 @@ def to_batch(p: dict, targets: bool = True, want=None) -> Batch:
         b.root_value = _t(p["root_value"], f32)
         b.outcome = _t(p["outcome"], f32)
         b.subset = _t(p["subset"], np.uint8)
+        if "weight" in p:
+            b.weight = _t(p["weight"], f32)
     if want is not None:
         b.want = _t(np.asarray(want) != 0)
     return b

@@ -4,12 +4,20 @@ dzgorge names a seat's policy with one colon string (cmd/dzgorge/policy.go in th
 `az:sims=100:explore:autopay:oppnodes:oppfull:morekinds:closedlist:cpuct=0.25:topk=6:gonet=/x/v3.dzgw`.
 PolicySpec holds the parts DraftZero sets as typed fields and renders them in one fixed order:
 
-    kind [sims] [explore] [keys...] [closedlist] [cpuct] [topk] [pcr [cheap] [pcrk]] [gonet] [extra...]
+    kind [sims] [explore] [keys...] [closedlist] [cpuct] [topk] [pcr [cheap] [pcrk]]
+         [decided [decidedn] [decidedsims] [decidedw]] [forced] [gonet] [extra...]
 
 `parse` is its inverse: parse(render(x)) == x for every spec that constructs, so a spec can live in a config, a
 manifest or a game record as a string. Construction normalises what the string cannot tell apart: playout-cap
-randomization off (pcr None or 0) drops cheap and pcrk, and a no-search kind (bot, sbtactical, random) drops the
-search fields and the default keys, so PolicySpec(kind="sbtactical").render() == "sbtactical".
+randomization off (pcr None or 0) drops cheap and pcrk, the decided-game search off (decided None or 0) drops
+decidedn, decidedsims and decidedw, forced 0 is None, and a no-search kind (bot, sbtactical, random) drops the
+search fields and the default keys, so PolicySpec(kind="sbtactical").render() == "sbtactical". The fork's bare
+`:decided` and `:forced` mean decided=0.9 and forced=2 (DECIDED_DEFAULT, FORCED_DEFAULT) and render so.
+
+The fork's decided-game cheap search (67d2cd1) and forced playouts (a7afdc1) are az keys, as :closedlist and pcr=
+are: a prior spec with them is an error. parse refuses what the fork's policy.go refuses of them (decidedn=,
+decidedsims= or decidedw= without decided=H > 0); construction drops those when decided is off, as it drops
+cheap without pcr.
 
 Bare flags the fork knows (FLAG_KEYS) go in `keys`; anything else the fork accepts (kinds=..., worlds=4, fpu=0.1,
 ksims=..., skippass=2, net=..., remote=...) goes in `extra`, verbatim and in order. The fork reads a spec left to
@@ -33,7 +41,11 @@ KIND_NAMES = ("priority", "attackers", "blockers", "target", "modes", "optional"
 # Bare flags that parse into `keys` (the rest of the fork's bare flags are fields: explore, closedlist).
 FLAG_KEYS = ("autopay", "oppnodes", "oppfull", "morekinds", "nonoise", "skippass", "mull", "keep7")
 # Keys with a field of their own: never in keys or extra.
-FIELD_KEYS = ("sims", "explore", "closedlist", "cpuct", "topk", "gonet", "pcr", "cheap", "pcrk")
+FIELD_KEYS = ("sims", "explore", "closedlist", "cpuct", "topk", "gonet", "pcr", "cheap", "pcrk",
+              "decided", "decidedn", "decidedsims", "decidedw", "forced")
+# The fork's values for a bare :decided (the root-value threshold H) and a bare :forced (k), cmd/dzgorge/policy.go.
+DECIDED_DEFAULT = 0.9
+FORCED_DEFAULT = 2.0
 
 
 def _int(name: str, v, lo: int) -> int | None:
@@ -55,6 +67,30 @@ def _float(name: str, v, lo: float, hi: float) -> float | None:
     if not (math.isfinite(f) and lo <= f <= hi):
         raise ValueError(f"PolicySpec.{name}={v!r}: want a number in [{lo}, {hi}]")
     return f
+
+
+def _off_or(name: str, v, ok, want: str) -> float | None:
+    """A key the fork turns off with 0: None for None or 0, else float(v) if it is finite and ok(it)."""
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        raise ValueError(f"PolicySpec.{name}={v!r}: want a number")
+    f = float(v)
+    if f == 0:
+        return None
+    if not (math.isfinite(f) and ok(f)):
+        raise ValueError(f"PolicySpec.{name}={v!r}: want {want} (0 or None is off)")
+    return f
+
+
+def _decided(v) -> float | None:
+    """The decided-game threshold H: in (0.5, 1), as policy.go's checkDecided requires; None is off."""
+    return _off_or("decided", v, lambda h: 0.5 < h < 1.0, "a root-value threshold in (0.5, 1)")
+
+
+def _forced(v) -> float | None:
+    """The forced-playout k: finite and > 0, as policy.go's checkForced requires; None is off."""
+    return _off_or("forced", v, lambda k: k > 0, "a finite k > 0")
 
 
 def _num(x: float) -> str:
@@ -91,7 +127,7 @@ def _parse_pcrk(v: str) -> tuple[tuple[str, float], ...]:
 @dataclass(frozen=True)
 class PolicySpec:
     """One seat's policy (see the module docstring). Fields left None are not rendered (the fork's defaults:
-    sims 100, cpuct 1.5, no topk, cheap 40)."""
+    sims 100, cpuct 1.5, no topk, cheap 40, decidedn 3, decidedsims 40, decidedw 0.1)."""
     kind: str = "az"            # az | prior | bot | sbtactical | random
     sims: int | None = 100
     cpuct: float | None = None
@@ -102,6 +138,11 @@ class PolicySpec:
     pcr: float | None = None    # playout-cap randomization: P(full search, recorded); None/0 = off
     cheap: int | None = None    # cheap-search sims (only rendered when pcr > 0; fork default 40)
     pcrk: tuple[tuple[str, float], ...] = ()  # per-kind full-search probs (KIND_NAMES); a Mapping is accepted
+    decided: float | None = None  # decided-game cheap search: root-value threshold H in (0.5, 1); None/0 = off
+    decidedn: int | None = None   # with decided: the run of decided root values that starts it (fork default 3)
+    decidedsims: int | None = None  # with decided: a decided search's sims (fork default 40)
+    decidedw: float | None = None   # with decided: a decided search's record weight in [0, 1] (fork default 0.1)
+    forced: float | None = None   # forced playouts and policy target pruning: k > 0; None/0 = off
     keys: tuple[str, ...] = FULL  # bare flags (FLAG_KEYS) rendered in order
     extra: tuple[str, ...] = ()   # raw "k=v" or "flag" the fields do not cover, rendered last in order
 
@@ -123,6 +164,17 @@ class PolicySpec:
             put("pcr", pcr)
             put("cheap", _int("cheap", self.cheap, 1))
             put("pcrk", _pcrk(self.pcrk))
+        dec = _decided(self.decided)
+        put("decided", dec)
+        if dec is None:  # off: as with pcr, nothing of the decided-game search is kept
+            put("decidedn", None)
+            put("decidedsims", None)
+            put("decidedw", None)
+        else:
+            put("decidedn", _int("decidedn", self.decidedn, 1))
+            put("decidedsims", _int("decidedsims", self.decidedsims, 1))
+            put("decidedw", _float("decidedw", self.decidedw, 0.0, 1.0))
+        put("forced", _forced(self.forced))
         if self.gonet is not None:
             g = os.fspath(self.gonet)
             if not g or ":" in g:
@@ -147,12 +199,14 @@ class PolicySpec:
             # bot, sbtactical and random search nothing: clear the search fields and the default keys
             # (bot:autopay, bot:mull and the like stay expressible through explicit keys).
             for k, v in (("sims", None), ("explore", False), ("closedlist", False), ("cpuct", None), ("topk", None),
-                         ("gonet", None), ("pcr", None), ("cheap", None), ("pcrk", ())):
+                         ("gonet", None), ("pcr", None), ("cheap", None), ("pcrk", ()), ("decided", None),
+                         ("decidedn", None), ("decidedsims", None), ("decidedw", None), ("forced", None)):
                 put(k, v)
             if keys == FULL:
                 put("keys", ())
-        elif self.kind == "prior" and (self.closedlist or self.pcr):
-            raise ValueError("PolicySpec: closedlist and pcr are az keys (the fork refuses them on prior)")
+        elif self.kind == "prior" and (self.closedlist or self.pcr or self.decided or self.forced):
+            raise ValueError("PolicySpec: closedlist, pcr, decided and forced are az keys (the fork refuses them "
+                             "on prior)")
 
     def render(self) -> str:
         """The dzgorge spec string, e.g. "az:sims=100:explore:autopay:oppnodes:oppfull:morekinds:closedlist:
@@ -175,6 +229,16 @@ class PolicySpec:
                 parts.append(f"cheap={self.cheap}")
             if self.pcrk:
                 parts.append("pcrk=" + ",".join(f"{k}.{_num(p)}" for k, p in self.pcrk))
+        if self.decided:
+            parts.append(f"decided={_num(self.decided)}")
+            if self.decidedn is not None:
+                parts.append(f"decidedn={self.decidedn}")
+            if self.decidedsims is not None:
+                parts.append(f"decidedsims={self.decidedsims}")
+            if self.decidedw is not None:
+                parts.append(f"decidedw={_num(self.decidedw)}")
+        if self.forced:
+            parts.append(f"forced={_num(self.forced)}")
         if self.gonet is not None:
             parts.append(f"gonet={self.gonet}")
         parts.extend(self.extra)
@@ -211,6 +275,12 @@ class PolicySpec:
                     f["gonet"] = v
                 elif eq and k == "pcrk":
                     f["pcrk"] = _parse_pcrk(v)
+                elif k in ("decided", "forced"):        # bare (or "k=") is the fork's default
+                    f[k] = float(v) if v else (DECIDED_DEFAULT if k == "decided" else FORCED_DEFAULT)
+                elif eq and k in ("decidedn", "decidedsims"):
+                    f[k] = int(v)
+                elif eq and k == "decidedw":
+                    f[k] = float(v)
                 elif not eq and t in FLAG_KEYS and not f["extra"]:
                     f["keys"].append(t)
                 else:                                   # a bare key after an extra entry stays in its place
@@ -219,4 +289,7 @@ class PolicySpec:
                 raise ValueError(f"policy spec {s!r}: {t!r}: {e}") from None
         if rest:
             f["extra"].append(rest)
+        orphans = [k for k in ("decidedn", "decidedsims", "decidedw") if k in f]
+        if orphans and not f.get("decided"):            # policy.go checkDecided
+            raise ValueError(f"policy spec {s!r}: {', '.join(orphans)} without decided=H > 0 (the fork refuses it)")
         return PolicySpec(**f)
