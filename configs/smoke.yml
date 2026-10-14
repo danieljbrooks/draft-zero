@@ -1,0 +1,10 @@
+# The smallest run that exercises every role on one machine: `dz run configs/smoke.yml` (store runs/smoke).
+# Two versions from scratch (version 0 = the search without a net), 16-simulation games, 4 games a shard, a learner
+# that trains on its first 200 positions, and a 4-pair evaluation against the previous version. Minutes, not hours.
+extends: base/player.yml
+run: smoke
+actor: {sims: 16, chunk_games: 4, chunk_secs: 600, workers: 2}
+learner: {min_new_positions: 200, window_positions: 5000, epochs: 1, threads: 2}
+eval: {pairs: 4, sims: 16, opponents: [prev]}
+budget: {max_versions: 2}
+store: runs/smoke

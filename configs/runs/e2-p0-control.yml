@@ -1,0 +1,16 @@
+# E2, actor and learner budgets (docs/runs.md): the loop-F control arm. 200 simulations on every decision, every
+# decision recorded, no playout-cap randomization.
+#
+# Equal compute: the E2 arms (e2-p0-control, e2-p1-pcr-200-40, e2-p3-pcr-500-100) differ only in actor.* and are
+# compared at equal actor CPU-hours, not at equal versions: launch every arm on the same machines with the same
+# budget.max_hours (`--max-hours H`). Mean simulations a decision: P0 200; P3 0.25*500 + 0.75*100 = 200 (the same
+# search budget, spent unevenly); P1 0.5*200 + 0.5*40 = 120 at the default share, 88-144 by decision kind, so P1
+# plays more games in the same hours. Success: an arm beats the control head to head by >= 20 Elo at equal
+# CPU-hours (1,000 paired games at 100 and at 25 simulations, interval above 0).
+# Launch with the run's bucket: --store hf://buckets/danbrooks/dz-e2-p0-control
+extends: base/player.yml
+run: e2-p0-control
+actor:
+  sims: 200
+  pcr: {prob: 0.0}              # off: every decision gets the full search and is recorded
+store: runs/e2-p0-control

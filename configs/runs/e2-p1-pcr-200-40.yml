@@ -1,0 +1,18 @@
+# E2 arm P1: playout-cap randomization at the control's full search. A decision gets the full 200-simulation search
+# (with root noise, recorded) with probability 0.5, or by its kind's probability below; otherwise a cheap
+# 40-simulation search (no noise, argmax, not recorded). Priority decisions, the most common and most consequential,
+# get the full search more often; blocks and targets less.
+#
+# Equal compute: compared with e2-p0-control at equal actor CPU-hours (same machines, same budget.max_hours), not at
+# equal versions; only actor.* differs. Mean simulations a decision: 0.5*200 + 0.5*40 = 120 at the default share,
+# 88-144 by kind (control: 200), so this arm plays more games, and records fewer decisions a game, in the same hours.
+# Launch with the run's bucket: --store hf://buckets/danbrooks/dz-e2-p1-pcr-200-40
+extends: base/player.yml
+run: e2-p1-pcr-200-40
+actor:
+  sims: 200
+  pcr:
+    prob: 0.5
+    cheap_sims: 40
+    by_kind: {priority: 0.65, attackers: 0.5, blockers: 0.3, target: 0.3}
+store: runs/e2-p1-pcr-200-40

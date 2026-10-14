@@ -1,0 +1,17 @@
+# E1, baseline self-play (docs/runs.md, experiment register): does the 0.2.0 actor-learner, with decklists hidden
+# (:closedlist), train a width-128 MLP player from scratch that keeps improving, as docs/031's loop F did?
+# Success: within 10 versions of loop F's size (1,200 games at 200 simulations each) the newest version beats
+# `nonet` at 100 simulations by >= 100 Elo (about 64%, 1,000 paired games), and strength is still rising.
+# The settings below are base/player.yml's, restated so the experiment reads here; `nonet` joins the opponents
+# because the criterion is measured against it.
+# Launch with the run's bucket: --store hf://buckets/danbrooks/dz-e1-baseline-mlp
+extends: base/player.yml
+run: e1-baseline-mlp
+code: v0.2.0
+player: {init: null}            # from scratch: version 0 is the search without a net
+search: {closedlist: true}
+actor:
+  sims: 200
+  pcr: {prob: 0.0}              # playout-cap randomization off
+eval: {opponents: [prev, nonet, sbtactical]}
+store: runs/e1-baseline-mlp

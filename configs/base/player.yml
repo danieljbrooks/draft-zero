@@ -1,0 +1,71 @@
+# The player's base config: every key of the run-config schema (src/draftzero/config.py, interface 8), set to
+# docs/031 loop F's recipe: a width-128 MLP, 200-simulation self-play with every decision recorded, decklists hidden
+# (:closedlist), two epochs on the newest 300k positions, value target = the search's root value.
+# Run configs extend it (`extends: base/player.yml`) and set only their run id, store and what their experiment varies.
+# Live fields (draftzero.config.LIVE) can change mid-run: `dz plan STORE set actor.sims=100`.
+
+run: player-base                # run id <experiment>-<variant>: every run config sets its own
+code: dev                       # the release the run is launched from (v0.2.0, ...) or dev (not publishable)
+seed: 1
+mode: async                     # async (actors never wait) | sync (fixed games a version; replays exactly)
+budget: {max_versions: null, max_hours: null, max_games: null}   # live; null = no limit; the first limit reached stops
+
+engine:
+  name: gorge
+  root: /work/gorge-fork        # gorge checkout with bin/dzgorge (engine/gorge/build.sh) and .cards
+  census: true                  # gorge's paid-mana census (its default since eddaba289); false = -no-paid-mana-census
+  max_turns: 100
+  max_intents: 20000
+  mulligans: 2
+  mull_heuristic: true
+  topk_max_options: 64
+
+data: {decks: data/gorge/decks, pool: data/gorge/pool.tsv, train_split: train, eval_split: eval}
+
+player:
+  arch: mlp                     # mlp | transformer | gnn (only mlp runs inside the engine, as .dzgw)
+  config: {d: 128, ff: 256, layers: 1, d_emb: 32, card_d: 64, head_hidden: 128}   # loop F's width-128 MLP
+  init: null                    # null: version 0 is the search without a net | path/to/model.pt | hf://owner/repo/file
+
+search:
+  keys: [autopay, oppnodes, oppfull, morekinds]
+  topk: 6
+  cpuct: 0.25
+  closedlist: true              # hide the opponent's decklist: sample worlds from the belief corpus
+  belief: {decks: null, pool: null, split: train}   # null: the run's own data.decks / data.pool
+
+actor:
+  sims: 200                     # live; loop F: 200
+  explore: true
+  record_every: 1               # live
+  chunk_games: 50               # live; games a shard
+  chunk_secs: 3600              # a chunk's hard timeout
+  workers: 2                    # dzgorge -workers per actor process
+  pcr: {prob: 0.0, cheap_sims: 40, by_kind: {}}   # live; playout-cap randomization, 0 = off (see configs/runs/e2-*)
+
+learner:
+  device: cpu
+  min_new_positions: 20000      # live; train once this many new recorded positions arrived (async) ...
+  window_positions: 300000      # live; ... on the newest this-many positions
+  epochs: 2                     # live
+  steps_per_position: null      # live; if set, max_steps = ceil(steps_per_position * new positions / batch)
+  batch: 512
+  lr: 1.0e-4                    # live
+  warmup: 100
+  policy_target: visits         # visits | cq
+  value_blend: 1.0              # value target (1-x) game outcome + x root value (E7: root value)
+  warm_start: true              # continue from the current version's weights
+  threads: 4
+
+eval:
+  every_versions: 1             # live
+  sims: 100                     # live
+  pairs: 100                    # live; paired games, 2 games a pair
+  seed: 3131
+  workers: 2
+  opponents: [prev, sbtactical] # prev | v<N> | sbtactical | bot | nonet | file:/path.dzgw
+
+store: runs/player-base         # local path | hf://buckets/<owner>/<bucket> | ssh://host/path; `--store` overrides
+tracking: {trackio: false, project: draftzero}
+sync: {games_per_version: 200}  # sync mode only
+paused: false                   # live; actors idle while true
