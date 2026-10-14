@@ -899,6 +899,43 @@ def test_controller_writes_config_and_manifest_once(tmp_path):
         Controller(s, make_cfg(tmp_path, run="other"), log=lambda *_: None, write_manifest=lambda *a: None).tick()
 
 
+def test_a_restart_with_an_edited_config_is_refused_unless_allowed(tmp_path):
+    """The store's config.yml plus events.jsonl is the run's config. A controller restarted with a file that changes
+    it (a fixed field, or a live one other than by `plan set`) refuses to start, unless allowed to, which records
+    the changes in events.jsonl; machine paths (config.MACHINE) may differ, and the launch file stays fine after
+    plan changes."""
+    from draftzero import config
+    s = LocalStore(tmp_path / "st")
+    new = lambda c, **kw: Controller(s, c, log=lambda *_: None, write_manifest=lambda *a: None, **kw)  # noqa: E731
+    cfg = make_cfg(tmp_path)
+    new(cfg).tick()
+    ctl.request_change(s, "paused", True, "dan")
+    new(cfg).tick()                                            # a plan change
+    assert new(cfg).tick()["paused"] is True                   # the launch file again: the plan change stays
+    moved = make_cfg(tmp_path, engine={"root": "/elsewhere/gorge"}, data={"decks": "/x/decks", "pool": "/x/p.tsv"},
+                     store="/x/store", player={"init": "/x/init.pt"})
+    c = new(moved)
+    c.tick()
+    assert c.cfg.engine.root == "/elsewhere/gorge" and c.cfg.data.pool == "/x/p.tsv" and c.cfg.paused is True
+    edited = make_cfg(tmp_path, actor={"explore": False, "workers": 6}, learner={"batch": 32}, search={"cpuct": 1.0})
+    with pytest.raises(ValueError, match="actor.explore") as e:
+        new(edited).tick()
+    assert all(p in str(e.value) for p in ("actor.workers", "learner.batch", "search.cpuct"))
+    with pytest.raises(ValueError, match="actor.sims"):
+        new(make_cfg(tmp_path, actor={"sims": 16})).tick()     # live: `dz plan set` changes it
+    play = ctl.read(s)["play"]
+    assert play["explore"] is True and play["workers"] == 1 and not s.exists(ctl.STOP)
+    c = new(edited, allow_config_change=True)
+    play = c.tick()["play"]
+    assert play["explore"] is False and play["workers"] == 6 and c.cfg.learner.batch == 32
+    ev = ctl.read_events(s)
+    assert {e["path"] for e in ev if e["path"] != "paused"} == {"actor.explore", "actor.workers", "learner.batch",
+                                                                 "search.cpuct"}
+    stored = config.loads(s.read_bytes(ctl.CONFIG).decode())
+    assert config.diff(config.effective(stored, ev), edited) == {"paused": (True, False)}
+    assert new(edited).tick()["play"]["workers"] == 6          # now the record: no change, no refusal
+
+
 def test_controller_opens_an_eval_for_every_version_passed(tmp_path):
     for every, want in ((1, [1, 2, 3]), (2, [2])):
         cfg = make_cfg(tmp_path, eval={"every_versions": every, "opponents": ["prev"]})

@@ -21,6 +21,7 @@ the old arch's other keys to null (`card_d: null` for a transformer that extends
 Plan changes mid-run: only LIVE paths may change. `apply_change` validates one change, the controller records it
 in events.jsonl ({kind: "set", path, old, new, at_version, ...}), and `effective` replays the events onto the
 launched config: the config in effect for version N is the launched one plus every event with at_version <= N.
+The MACHINE paths (checkouts, data, the store) may differ between a run's machines and are not part of that record.
 
     python -m draftzero.config configs/smoke.yml     prints the merged config and its hash
 """
@@ -212,6 +213,14 @@ LIVE: frozenset[str] = frozenset({
     "eval.every_versions", "eval.pairs", "eval.sims",
     "budget.max_versions", "budget.max_hours", "budget.max_games",
     "paused",
+})
+
+
+# the paths that name things on one machine (a checkout, data, the init checkpoint, the store, the tracker): a run's
+# machines may differ in them, so each role's own config file supplies them; every other field is the run's
+MACHINE: frozenset[str] = frozenset({
+    "engine.root", "data.decks", "data.pool", "search.belief.decks", "search.belief.pool", "player.init", "store",
+    "tracking.trackio", "tracking.project",
 })
 
 

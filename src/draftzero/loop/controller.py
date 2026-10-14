@@ -24,10 +24,8 @@ from __future__ import annotations
 
 import copy
 import json
-import tempfile
 import time
 from datetime import datetime
-from pathlib import Path
 
 from draftzero.loop import control as ctl
 from draftzero.loop import evaluator as ev
@@ -53,11 +51,13 @@ def _ts(iso: str | None) -> float | None:
 
 class Controller:
     def __init__(self, store, cfg, *, log=print, status_every_s: float = 60.0, live_s: float | None = None,
-                 hb_cache_s: float = 120.0, write_manifest=None, tracker=None):
+                 hb_cache_s: float = 120.0, write_manifest=None, tracker=None, allow_config_change: bool = False):
         """status_every_s: status page interval; live_s: a heartbeat older than this is a dead machine (default
         actor.chunk_secs + 15 min; roles heartbeat every 5 minutes, while they play too); hb_cache_s: heartbeats
-        are re-read at most this often (each is a Hub call or two on a bucket)."""
+        are re-read at most this often (each is a Hub call or two on a bucket); allow_config_change: on a store
+        that has a run, `cfg` may change the run's config (see _rebase), recorded in events.jsonl."""
         self.store, self.base, self.cfg, self.log = store, cfg, cfg, log
+        self.allow_config_change = allow_config_change
         self.status_every_s, self.hb_cache_s = status_every_s, hb_cache_s
         chunk = float(ctl.get(cfg, "actor.chunk_secs") or 3600)
         self.live_s = live_s if live_s is not None else chunk + 900
@@ -79,7 +79,7 @@ class Controller:
         if stored is None:
             self.store.put(ctl.CONFIG, config.dump(self.base).encode(), "config.yml")
         else:
-            self._check_same_run(stored)
+            self._rebase(stored)
         if not self.store.exists(ctl.MANIFEST):
             self.write_manifest(self.store, self.base)
         self.cfg = ctl.effective(self.base, self.store)
@@ -99,21 +99,43 @@ class Controller:
         self.started = True
         return c
 
-    def _check_same_run(self, stored: bytes) -> None:
+    def _rebase(self, stored: bytes) -> None:
+        """A restart: the run's config is the store's config.yml (plus events.jsonl); this controller's config
+        supplies only the machine paths (config.MACHINE). A field it changes otherwise (a fixed one, or a live one
+        other than by `plan set`) is refused (ValueError), unless allow_config_change, which records the changes
+        in events.jsonl ("set" events at the current version), so the record stays the config in effect."""
         from draftzero import config
-        with tempfile.TemporaryDirectory() as d:
-            p = Path(d) / "config.yml"
-            p.write_bytes(stored)
-            try:
-                old = config.load(p)
-            except Exception as e:                       # noqa: BLE001
-                self.log(f"controller: the store's config.yml doesn't load here ({e}); keeping it")
-                return
-        if ctl.get(old, "run") != ctl.get(self.base, "run"):
-            raise ValueError(f"the store holds run {ctl.get(old, 'run')!r}, not {ctl.get(self.base, 'run')!r}")
-        if config.config_hash(old) != config.config_hash(self.base):
-            self.log("controller: this config differs from the store's config.yml (machine paths?); the store's "
-                     "copy stays the record")
+        try:
+            old = config.loads(stored.decode())
+        except Exception as e:                           # noqa: BLE001
+            self.log(f"controller: the store's config.yml doesn't load here ({e}); running on this config")
+            return
+        given = self.base
+        if ctl.get(old, "run") != ctl.get(given, "run"):
+            raise ValueError(f"the store holds run {ctl.get(old, 'run')!r}, not {ctl.get(given, 'run')!r}")
+        d = config.to_dict(old)
+        for path in config.MACHINE:
+            *head, last = path.split(".")
+            node = d
+            for k in head:
+                node = node[k]
+            node[last] = config.get(given, path)
+        self.base = config.from_dict(d)
+        launch = config.flatten(self.base)
+        changes = {p: (a, b) for p, (a, b) in config.diff(ctl.effective(self.base, self.store), given).items()
+                   if p not in config.MACHINE and b != launch[p]}       # the launch value: a plan change stays
+        if not changes:
+            return
+        what = "; ".join(f"{p} {a!r} -> {b!r}" for p, (a, b) in sorted(changes.items()))
+        if not self.allow_config_change:
+            raise ValueError(f"this config changes the run's config (the store's config.yml and events.jsonl): "
+                             f"{what}. Change live fields with `dz plan set`; to change these anyway, start the "
+                             "controller allowing config changes (they are recorded in events.jsonl)")
+        at = ctl.player_version(ctl.read(self.store)) or 0
+        ctl.append_events(self.store, [{"time": ctl.now_iso(), "kind": "set", "path": p, "old": ctl.plain(a),
+                                        "new": ctl.plain(b), "by": "controller restart", "at_version": at}
+                                       for p, (a, b) in sorted(changes.items())])
+        self.log(f"controller: config changed at restart, from version {at}: {what}")
 
     # ---------------------------------------------------------------------------- a tick
     def tick(self, now: float | None = None) -> dict:
