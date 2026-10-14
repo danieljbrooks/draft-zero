@@ -51,7 +51,7 @@ All ten rigid interfaces are named and versioned for the first time.
 6. **Training data and socket format:** `dzg-pack-1` and `GZB1`/`GZR1`, unchanged; the spec moved to `src/draftzero/nets/SPEC.md`.
 7. **Checkpoint formats:** `.pt` and `.dzgw` (`dzgw-1`), unchanged.
 8. **Run config schema:** new (`src/draftzero/config.py`). v0.1.0 configs do not load.
-9. **Run manifest and metrics schema:** new: `draftzero-manifest/1` and `draftzero-metrics/1`.
+9. **Run manifest and metrics schema:** new: `draftzero-manifest/1` and `draftzero-metrics/1`. The manifest's `belief` key records the `:closedlist` belief corpus (decks, pool, split and `corpus_hash`), or null without `:closedlist`.
 10. **Evaluation protocol and data splits:** paired games on the eval split at seed 3131 against `prev` and `sbtactical` by default; the splits in `assets/decks.tsv` and `assets/sealed/` are unchanged.
 
 ## [0.1.0] - 2026-10-14

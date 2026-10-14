@@ -12,6 +12,9 @@ at the time. collect(cfg) gathers them:
     engine        Gorge.version() when a Gorge is given, else the same record read from <engine.root>:
                   {repo, ref, dirty, binary_sha256 (of bin/dzgorge as it is now), build (bin/dzgorge.build.json),
                    cards_lock (.cards/cards.lock), census}
+    belief        with search.closedlist: the corpus the search deals the opponent's hidden list from,
+                  {decks, pool, split, corpus_hash} (draftzero.oppdeck.belief.corpus_hash; corpus_hash None and an
+                  "error" when the pool can't be read here); None without closedlist
     python, torch, numpy, platform
     machine       {host, cpu_quota (cgroup cores, None if uncapped), cpus (visible), mem_gb (cgroup cap, else RAM)}
 
@@ -172,6 +175,23 @@ def _engine(cfg, gorge) -> dict:
     return engine_version(e.root, census=e.census)
 
 
+def belief(cfg) -> dict | None:
+    """The :closedlist belief corpus of a run: {decks, pool, split, corpus_hash}, the paths resolved as the engine
+    resolves them (search.belief, else the run's data decks and pool); None when search.closedlist is off."""
+    if cfg is None or not cfg.search.closedlist:
+        return None
+    from draftzero.engine.gorge import resolve_path
+    b = cfg.search.belief
+    decks, pool = resolve_path(b.decks or cfg.data.decks), resolve_path(b.pool or cfg.data.pool)
+    rec: dict = {"decks": str(decks), "pool": str(pool), "split": b.split or "train", "corpus_hash": None}
+    try:
+        from draftzero.oppdeck.belief import corpus_hash
+        rec["corpus_hash"] = corpus_hash(decks=decks, pool=pool, split=rec["split"])
+    except Exception as e:                               # noqa: BLE001 - a manifest never fails for a missing file
+        rec["error"] = f"{type(e).__name__}: {e}"
+    return rec
+
+
 # ------------------------------------------------------------------------------------------------ machine
 
 def _dist_version(name: str) -> str | None:
@@ -216,8 +236,9 @@ def machine() -> dict:
 
 def collect(cfg, *, gorge=None, repo: Path | None = None) -> dict:
     """The manifest for a run of `cfg` (a draftzero.config.RunConfig; None gives the code/engine/machine part
-    only, as `dz provenance` prints). `gorge`: a draftzero.engine.Gorge whose version() is the engine record;
-    without one the record is read from cfg.engine.root. `repo`: the DraftZero checkout (default: this one)."""
+    only, as `dz manifest` prints). `gorge`: a draftzero.engine.Gorge whose version() is the engine record (the
+    controller passes one when the engine is built on its machine); without one the record is read from
+    cfg.engine.root. `repo`: the DraftZero checkout (default: this one)."""
     from draftzero import __version__
     repo = Path(repo) if repo is not None else _checkout()
     config = config_hash = None
@@ -234,6 +255,7 @@ def collect(cfg, *, gorge=None, repo: Path | None = None) -> dict:
         "config": config,
         "config_hash": config_hash,
         "engine": _engine(cfg, gorge),
+        "belief": belief(cfg),
         "python": platform.python_version(),
         "torch": _dist_version("torch"),
         "numpy": _dist_version("numpy"),

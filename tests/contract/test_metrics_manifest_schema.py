@@ -8,8 +8,9 @@ from draftzero import manifest as MF
 from draftzero import metrics as M
 
 METRIC_FIELDS = ("schema", "time", "run", "component", "machine", "name", "value", "version", "step", "n", "lo", "hi")
-MANIFEST_KEYS = {"format", "run", "created", "draftzero", "engine_pin", "config", "config_hash", "engine", "python",
-                 "torch", "numpy", "platform", "machine", "seed"}
+MANIFEST_KEYS = {"format", "run", "created", "draftzero", "engine_pin", "config", "config_hash", "engine", "belief",
+                 "python", "torch", "numpy", "platform", "machine", "seed"}
+BELIEF_KEYS = {"decks", "pool", "split", "corpus_hash"}
 ENGINE_KEYS = {"repo", "ref", "dirty", "binary_sha256", "build", "cards_lock", "census"}
 
 
@@ -29,10 +30,12 @@ def test_metric_names():
 
 
 def test_manifest(tmp_path):
-    cfg = C.from_dict({"run": "c", "engine": {"root": str(tmp_path)}})
+    cfg = C.from_dict({"run": "c", "engine": {"root": str(tmp_path)},
+                       "data": {"decks": "assets/sample/decks", "pool": "assets/sample/pool.tsv"}})
     m = MF.collect(cfg)
     assert MF.FORMAT == "draftzero-manifest/1" and m["format"] == MF.FORMAT
     assert set(m) == MANIFEST_KEYS and set(m["engine"]) == ENGINE_KEYS
+    assert set(m["belief"]) == BELIEF_KEYS and len(m["belief"]["corpus_hash"]) == 16   # search.closedlist is on
     assert set(m["draftzero"]) == {"version", "commit", "branch", "dirty"}
     assert set(m["machine"]) >= {"host", "cpu_quota", "mem_gb"}
     assert MF.PATH == "manifest.json"

@@ -13,8 +13,9 @@ from draftzero import __version__
 from draftzero import config as C
 from draftzero import manifest as MF
 
-KEYS = {"format", "run", "created", "draftzero", "engine_pin", "config", "config_hash", "engine", "python", "torch",
-        "numpy", "platform", "machine", "seed"}
+KEYS = {"format", "run", "created", "draftzero", "engine_pin", "config", "config_hash", "engine", "belief", "python",
+        "torch", "numpy", "platform", "machine", "seed"}
+SAMPLE = {"decks": "assets/sample/decks", "pool": "assets/sample/pool.tsv"}
 
 
 def fake_engine_root(tmp_path, lock: bool = True):
@@ -40,7 +41,7 @@ class FakeGorge:
 @pytest.fixture
 def cfg(tmp_path):
     root, _ = fake_engine_root(tmp_path)
-    return C.from_dict({"run": "m1", "seed": 7, "engine": {"root": str(root), "census": False}})
+    return C.from_dict({"run": "m1", "seed": 7, "engine": {"root": str(root), "census": False}, "data": SAMPLE})
 
 
 def test_collect_has_every_key(cfg):
@@ -75,6 +76,18 @@ def test_engine_record_degrades(tmp_path):
                  "census": True}
 
 
+def test_belief_corpus_is_recorded(cfg, tmp_path):
+    from draftzero.oppdeck.belief import corpus_hash
+    b = MF.collect(cfg, gorge=FakeGorge())["belief"]
+    assert set(b) == {"decks", "pool", "split", "corpus_hash"} and b["split"] == "train"
+    assert b["corpus_hash"] == corpus_hash(decks="assets/sample/decks", pool="assets/sample/pool.tsv", split="train")
+    off = C.from_dict({**C.to_dict(cfg), "search": {"closedlist": False}})
+    assert MF.collect(off, gorge=FakeGorge())["belief"] is None
+    gone = C.from_dict({**C.to_dict(cfg), "search": {"belief": {"pool": str(tmp_path / "none.tsv")}}})
+    b = MF.collect(gone, gorge=FakeGorge())["belief"]
+    assert b["corpus_hash"] is None and "FileNotFoundError" in b["error"]
+
+
 def test_a_failing_gorge_is_recorded_not_raised(cfg):
     class Broken:
         def version(self):
@@ -85,7 +98,7 @@ def test_a_failing_gorge_is_recorded_not_raised(cfg):
 def test_without_a_config_it_is_the_code_and_machine_part():
     m = MF.collect(None)
     assert set(m) == KEYS and m["run"] is None and m["config"] is None and m["config_hash"] is None
-    assert m["engine"]["census"] is True
+    assert m["engine"]["census"] is True and m["belief"] is None
 
 
 def test_no_git_falls_back_to_the_git_files(tmp_path, monkeypatch, cfg):
