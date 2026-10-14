@@ -765,6 +765,35 @@ def test_plan_changes_apply_at_version_boundaries(tmp_path):
     assert argv2[argv2.index("--lr") + 1] == "0.0001" and argv3[argv3.index("--lr") + 1] == "0.0003"
 
 
+def test_whole_section_plan_changes_are_stored_as_json_and_replay(tmp_path):
+    """A change of a whole section (budget, actor.pcr) goes into events.jsonl as a plain mapping, not a dataclass's
+    repr, so every role (and a restarted controller) can replay it; budget applies at once, like budget.*."""
+    from draftzero import config
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    r.controller.tick()
+    ctl.request_change(r.store, "budget", {"max_versions": 10}, "dan")
+    ctl.request_change(r.store, "actor.pcr", "{prob: 0.5, cheap_sims: 4}", "dan")
+    r.controller.tick()                                        # no new version: only budget applies
+    assert [e["path"] for e in ctl.read_events(r.store)] == ["budget"]
+    for _ in range(2):
+        r.actors[0].step()
+    assert r.learner.step() == "published"                     # v1: actor.pcr applies
+    r.controller.tick()
+    ev = ctl.read_events(r.store)
+    assert [e["path"] for e in ev] == ["budget", "actor.pcr"]
+    assert ev[0]["new"] == {"max_versions": 10, "max_hours": None, "max_games": None}
+    assert ev[1]["old"] == {"prob": 0.0, "cheap_sims": 40, "by_kind": {}}
+    assert ev[1]["new"] == {"prob": 0.5, "cheap_sims": 4, "by_kind": {}}
+    eff = config.effective(r.cfg, ev)
+    assert eff.actor.pcr.prob == 0.5 and eff.actor.pcr.cheap_sims == 4 and eff.budget.max_versions == 10
+    again = Controller(r.store, r.cfg, log=lambda *_: None, write_manifest=lambda *a: None)
+    assert again.tick()["play"]["pcr"]["prob"] == 0.5          # a restarted controller replays them
+    assert r.evaluator.step() in ("wait", "played") and r.learner.step() == "wait"
+    assert r.actors[0].step() == "played" and r.gorge.plays[-1]["a"].pcr == 0.5
+
+
 def test_budget_drains_then_stops_and_stop_request(tmp_path):
     r = Run(tmp_path, make_cfg(tmp_path, budget={"max_versions": 1}, eval={"opponents": ["prev"], "pairs": 2}))
     r.controller.tick()

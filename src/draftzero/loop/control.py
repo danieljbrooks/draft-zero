@@ -4,6 +4,7 @@
     control.json                                  {"format": "dz-control/1", "version": {"player": N}, "play": {...},
                                                    "evals": [jobs], "stop": bool, "paused": bool, "updated": iso}
     events.jsonl                                  plan changes {time, kind: "set", path, old, new, by, at_version}
+                                                  (old/new as JSON: a whole section is a mapping)
     plan/requests/<uuid>.json                     a requested change {path, value, by, time} (`plan set`)
     plan/rejected/<uuid>.json                     ...one the controller refused, with the reason
     versions/player/v0001/                        model.pt, model.dzgw, meta.json
@@ -55,7 +56,7 @@ INGESTED = "learner/ingested.json"
 LEARNER_STATUS = "learner/status.json"
 
 # changes the controller applies as soon as it sees them; any other live field waits for the next version
-IMMEDIATE = ("paused", "budget.")
+IMMEDIATE = ("paused", "budget", "budget.")
 
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
@@ -153,6 +154,12 @@ def as_dict(x: Any) -> dict:
     if dataclasses.is_dataclass(x):
         return dataclasses.asdict(x)
     return dict(vars(x))
+
+
+def plain(x: Any) -> Any:
+    """A config value as JSON data: a section (dataclass) becomes a dict, anything else stays as it is."""
+    import dataclasses
+    return dataclasses.asdict(x) if dataclasses.is_dataclass(x) and not isinstance(x, type) else x
 
 
 def parse_value(s: str) -> Any:

@@ -6,8 +6,9 @@ At the start it writes config.yml and manifest.json (once per store; a restart k
      v % eval.every_versions == 0 gets one evaluation job per opponent in eval.opponents (evaluator.make_job);
   2. applies plan requests (plan/requests/*.json): each is checked at once with config.apply_change (a bad one
      moves to plan/rejected/ with the reason); a valid one applies at the next version boundary, except `paused`
-     and budget.* which apply at once; each applied change appends {time, kind: "set", path, old, new, by,
-     at_version} to events.jsonl, so config.effective(launch config, events) is the config at any version;
+     and budget (budget.*) which apply at once; each applied change appends {time, kind: "set", path, old, new,
+     by, at_version} to events.jsonl (values as JSON: a whole section is a mapping), so
+     config.effective(launch config, events) is the config at any version;
   3. keeps control["play"] (the actors' live settings) and control["paused"] current;
   4. tracks evaluation jobs: marks shards whose games are in, assigns the others to live evaluators (a heartbeat
      newer than live_s; a shard whose evaluator went quiet, or that is very late, moves to another), and closes a
@@ -165,9 +166,9 @@ class Controller:
                 continue
             if not (boundary or ctl.immediate(key)):
                 continue                                 # waits for the next version
-            events.append({"time": ctl.now_iso(), "kind": "set", "path": key, "old": ctl.get(self.cfg, key),
-                           "new": ctl.get(new_cfg, key), "by": r.get("by"), "at_version": at_version,
-                           "requested": r.get("time")})
+            events.append({"time": ctl.now_iso(), "kind": "set", "path": key, "old": ctl.plain(ctl.get(self.cfg, key)),
+                           "new": ctl.plain(ctl.get(new_cfg, key)), "by": r.get("by"), "at_version": at_version,
+                           "requested": r.get("time")})       # a section as a mapping, so config.effective replays it
             self.cfg = new_cfg
             applied.append(path)
             self.log(f"controller: plan change {key}: {events[-1]['old']!r} -> {events[-1]['new']!r} "
