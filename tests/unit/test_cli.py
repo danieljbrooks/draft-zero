@@ -352,3 +352,15 @@ def test_relay_wraps_relay_main(tmp_path, monkeypatch, capsys):
     assert main(["relay", str(bucket), "--store", str(tmp_path / "mirror"), "--hosts", "h.yml"]) == 0
     assert calls[-1] == ["--store", str(tmp_path / "mirror"), "--interval", "60", "--hosts", "h.yml",
                          "--upstream", "hf://buckets/o/b"]
+
+
+def test_run_warns_when_code_names_a_release_this_checkout_is_not_at(monkeypatch, tmp_path):
+    from draftzero import manifest
+    cfg = C.from_dict({"run": "w", "code": "v0.2.0"})
+    monkeypatch.setattr(manifest, "_checkout", lambda: tmp_path)
+    monkeypatch.setattr(manifest, "git_state", lambda repo: {"commit": "a" * 40, "branch": "x", "dirty": False})
+    monkeypatch.setattr(manifest, "_git", lambda repo, *args: "v0.2.0")
+    assert cli._code_warning(cfg) is None
+    monkeypatch.setattr(manifest, "_git", lambda repo, *args: None)
+    assert "aaaaaaaaa" in cli._code_warning(cfg) and "not publishable" in cli._code_warning(cfg)
+    assert cli._code_warning(C.from_dict({"run": "w"})) is None                       # code: dev
