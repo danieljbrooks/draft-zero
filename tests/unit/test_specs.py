@@ -28,6 +28,8 @@ ROUND_TRIP = [
     PolicySpec(keys=("autopay", "nonoise", "skippass")),
     PolicySpec(extra=("kinds=priority,attackers", "worlds=4", "fpu=0.1")),
     PolicySpec(extra=("skippass=2", "remote=unix:/tmp/dzg.sock")),
+    PolicySpec(keys=(), extra=("kinds=priority", "morekinds")),
+    PolicySpec(keys=("autopay",), extra=("worlds=4", "nonoise", "skippass=2", "skippass")),
     PolicySpec(kind="prior", sims=None, gonet="/n.dzgw"),
     PolicySpec(kind="prior", gonet="/n.dzgw"),
     PolicySpec(kind="bot"),
@@ -68,6 +70,27 @@ def test_parse_fields():
     assert q == p and q.render() == p.render()
     assert PolicySpec.parse("az").sims is None          # the fork's default (100) is not written
     assert PolicySpec.parse("az:kinds=all:worlds=4").extra == ("kinds=all", "worlds=4")
+
+
+@pytest.mark.parametrize("s", [
+    "az:sims=10:kinds=priority:morekinds",              # the fork reads left to right: full kinds win
+    "az:sims=10:skippass=3:skippass",                   # SkipPass 1, not 3
+    "az:sims=10:autopay:worlds=4:oppnodes",
+])
+def test_parse_keeps_bare_keys_after_an_extra_in_place(s):
+    """A bare key after an extra entry may override it in the fork (morekinds after kinds=, skippass after
+    skippass=N): parse keeps it in extra, in its place, so a re-render (dz play --sims) means the same."""
+    import dataclasses
+    p = PolicySpec.parse(s)
+    assert p.render() == s and PolicySpec.parse(p.render()) == p
+    assert dataclasses.replace(p, sims=100).render() == s.replace("sims=10", "sims=100")
+    q = PolicySpec.parse("az:sims=10:kinds=priority:morekinds")
+    assert (q.keys, q.extra) == ((), ("kinds=priority", "morekinds"))
+    assert PolicySpec.parse("az:morekinds:kinds=priority").keys == ("morekinds",)
+
+
+def test_parse_topk_0_is_off():
+    assert PolicySpec.parse("az:sims=10:topk=0").topk is None              # the fork: 0 = no top-k cut
 
 
 def test_pcr_rendering():
