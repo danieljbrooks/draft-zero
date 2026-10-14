@@ -26,6 +26,7 @@ player:
   arch: mlp                     # mlp | transformer | gnn (only mlp runs inside the engine, as .dzgw)
   config: {d: 128, ff: 256, layers: 1, d_emb: 32, card_d: 64, head_hidden: 128}   # loop F's width-128 MLP
   init: null                    # null: version 0 is the search without a net | path/to/model.pt | hf://owner/repo/file
+  learn: true                   # false: no player actors or learner (a builder-only run, configs/smoke-sealed.yml)
 
 search:
   keys: [autopay, oppnodes, oppfull, morekinds]
@@ -81,3 +82,29 @@ store: runs/player-base         # local path | hf://buckets/<owner>/<bucket> | s
 tracking: {trackio: false, project: draftzero}
 sync: {games_per_version: 200}  # sync mode only
 paused: false                   # live; actors idle while true
+
+builder:                        # the sealed deck builder on the loop (docs/032, draftzero.loop.builder); off here
+  learn: false                  # true: builder actors, learner and evaluators run too (dz run starts them)
+  kinds: btplr                  # decks per pool: b best, t Thompson, p perturbed, l land-shifted, r random (else t)
+  random_share: 0.15
+  members: 5                    # ensemble members, each on a bootstrap resample
+  pools_per_chunk: 50
+  games_per_chunk: 400          # cross-pool deck pairs, each dealt twice with the seats swapped
+  games_per_version: 10000      # decided games of a version before the next one (docs/032: 10k-40k a generation)
+  sims: null                    # the pilot's simulations; null = actor.sims; 0 = gorge's heuristic bot
+  pilot: null                   # a fixed pilot .dzgw; null = the current player version, or no network
+  closedlist: false             # docs/032's pilot saw both decklists
+  workers: 2
+  chunk_secs: 3600
+  init: null                    # null: version 0 is untrained (random deck-shaped builds) | path/to/ens.pt
+  window: {kind: versions, size: 4}   # the newest 4 versions' games (docs/032) | {kind: games, size: N}
+  warm_start: true
+  epochs: 40
+  lr: 3.0e-3
+  warm_lr: 1.0e-3
+  draws: false
+  castable: false
+  land_support: 0.02            # the land counts the window's decks support bound the builder; 0 = none
+  threads: 4                    # torch threads of each builder role (building decks, training)
+  pools: {kind: draftlab, set: FDN, seed: 1, packs: 6, collation: arena, count: 5000}   # dzgorge sealed-pools
+  eval: {every_versions: 1, pools: 200, pairs: 1, seed: 2, sims: 100, opponent: best23, workers: 2}

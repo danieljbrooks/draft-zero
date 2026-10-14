@@ -107,6 +107,7 @@ class PlayerConfig:
     arch: str = "mlp"
     config: dict[str, Any] = field(default_factory=lambda: dict(PLAYER_MLP))
     init: str | None = None                      # None: version 0 is the search without a net; or a .pt path / hf://
+    learn: bool = True                           # False: no player actors or learner (a builder-only run)
 
 
 @dataclass
@@ -213,6 +214,76 @@ class EvalConfig:
 
 
 @dataclass
+class BuilderPoolsConfig:
+    """The builder's train pools: draftlab sealed pools (`dzgorge sealed-pools`), indices 0..count-1 of base seed
+    `seed`, generated once per machine and cached; each chunk draws pools_per_chunk of them."""
+    kind: str = "draftlab"
+    set: str = "FDN"                             # the deck network's card table is FDN's
+    seed: int = 1
+    packs: int = 6
+    collation: str = "arena"                     # arena (MTG Arena Play Booster) | play (paper)
+    count: int = 5000
+
+
+@dataclass
+class BuilderWindowConfig:
+    """The builder learner's window: the games of the newest `size` builder versions (versions), or the newest
+    shards holding `size` games (games)."""
+    kind: str = "versions"
+    size: int = 4
+
+
+@dataclass
+class BuilderEvalConfig:
+    """Builder version v's best decks against `opponent`'s decks on held-out pools (draftlab pools of base seed
+    `seed`, never the train seed): pools i, i+1 crossed (v's deck from i against the opponent's from i+1 and the
+    other way round), each crossing dealt `pairs` times with the seats swapped: 2 x pools x pairs games."""
+    every_versions: int = 1
+    pools: int = 200
+    pairs: int = 1
+    seed: int = 2
+    sims: int = 100                              # the pilot's simulations; 0 = gorge's heuristic bot
+    opponent: str = "best23"                     # gorge's best23@1 (17lands GIH ratings: an opponent, not data)
+    workers: int = 2
+
+
+@dataclass
+class BuilderConfig:
+    """The sealed deck builder on the loop (docs/032's deck value ensemble, draftzero.build; draftzero.loop.builder):
+    builder actors build decks from train pools with the current builder version and play them against decks from
+    other pools; the builder learner fits the ensemble to the results (Bradley-Terry) on a window of versions and
+    publishes versions/builder/vNNNN/ens.pt; builder evaluators play each version's decks against best23's on
+    held-out pools. Off by default: with learn false nothing of the builder runs."""
+    learn: bool = False
+    kinds: str = "btplr"                         # per pool: b best, t Thompson, p perturbed, l land-shifted,
+                                                 # r random (random_share, else t); c cautious, k random colour pair
+    random_share: float = 0.15
+    members: int = 5                             # ensemble members (bootstrap resamples)
+    pools_per_chunk: int = 50
+    games_per_chunk: int = 400                   # even: cross-pool deck pairs, each dealt twice with the seats swapped
+    games_per_version: int = 10000               # decided games of a version before the next (docs/032's generation)
+    sims: int | None = None                      # the pilot's simulations; null = actor.sims; 0 = the heuristic bot
+    pilot: str | None = None                     # a fixed pilot network (.dzgw); null = the current player version
+                                                 # (player.learn), else the search without a network
+    closedlist: bool = False                     # the pilot hides decklists (search.belief's corpus); docs/032: open
+    workers: int = 2                             # dzgorge -workers per builder actor and evaluator
+    chunk_secs: int = 3600                       # a chunk's hard timeout
+    init: str | None = None                      # an ens.pt for version 0; null = untrained (random builds)
+    window: BuilderWindowConfig = field(default_factory=BuilderWindowConfig)
+    warm_start: bool = True                      # members start from the previous version's (at warm_lr)
+    epochs: int = 40
+    lr: float = 3.0e-3
+    warm_lr: float = 1.0e-3
+    draws: bool = False                          # the games-in-hand draw term (build.model.loss_fn)
+    castable: bool = False                       # weight spells by castability (build.model.DeckNet.castability)
+    land_support: float = 0.02                   # land counts with this share of the window's decks bound the
+                                                 # builder (build.model.land_support); 0 = no range
+    threads: int = 4                             # torch threads of each builder role (building and training)
+    pools: BuilderPoolsConfig = field(default_factory=BuilderPoolsConfig)
+    eval: BuilderEvalConfig = field(default_factory=BuilderEvalConfig)
+
+
+@dataclass
 class TrackingConfig:
     trackio: bool = False                        # mirror metrics into Trackio (draftzero.tracking); optional extra
     project: str = "draftzero"
@@ -241,6 +312,7 @@ class RunConfig:
     tracking: TrackingConfig = field(default_factory=TrackingConfig)
     sync: SyncConfig = field(default_factory=SyncConfig)
     paused: bool = False                         # live: actors idle while true
+    builder: BuilderConfig = field(default_factory=BuilderConfig)
 
 
 # the dotted paths a plan change may set mid-run (a path below one of these is live too: actor.pcr.by_kind.target)
@@ -260,7 +332,7 @@ LIVE: frozenset[str] = frozenset({
 # machines may differ in them, so each role's own config file supplies them; every other field is the run's
 MACHINE: frozenset[str] = frozenset({
     "engine.root", "data.decks", "data.pool", "search.belief.decks", "search.belief.pool", "player.init", "store",
-    "tracking.trackio", "tracking.project",
+    "tracking.trackio", "tracking.project", "builder.pilot", "builder.init",
 })
 
 
@@ -721,6 +793,47 @@ def check(cfg: RunConfig) -> None:
         need(bool(re.match(r"^ssh://[^/\s]+/.+", st)), "store", f"ssh://host/path, not {st!r}")
     need(bool(cfg.tracking.project.strip()), "tracking.project", "a project name")
     need(cfg.sync.games_per_version >= 1, "sync.games_per_version", ">= 1")
+    need(cfg.player.learn or cfg.builder.learn, "player.learn", "true unless builder.learn (a run learns something)")
+    _check_builder(cfg.builder, need)
+
+
+BUILDER_KINDS = "btplrck"                        # draftzero.build.kinds.KINDS
+BUILDER_SETS = ("FDN",)                          # the sets the deck network's card table holds
+BUILDER_OPPONENTS = ("best23",)
+
+
+def _check_builder(b: BuilderConfig, need) -> None:
+    need(bool(b.kinds) and all(k in BUILDER_KINDS for k in b.kinds), "builder.kinds",
+         f"letters of {BUILDER_KINDS} (b best, t Thompson, p perturbed, l land-shifted, r random, c cautious, "
+         f"k colour pair), not {b.kinds!r}")
+    need(0.0 <= b.random_share <= 1.0, "builder.random_share", "in [0, 1]")
+    for k in ("members", "games_per_version", "workers", "chunk_secs", "epochs", "threads"):
+        need(getattr(b, k) >= 1, f"builder.{k}", ">= 1")
+    need(b.pools_per_chunk >= 2, "builder.pools_per_chunk", ">= 2 (decks meet decks of other pools)")
+    need(b.games_per_chunk >= 2 and b.games_per_chunk % 2 == 0, "builder.games_per_chunk",
+         "even and >= 2 (each deck pair is dealt twice, the seats swapped)")
+    need(b.sims is None or b.sims >= 0, "builder.sims", "null (actor.sims), 0 (gorge's bot) or more")
+    need(b.pilot is None or (b.pilot.endswith(".dzgw") and ":" not in b.pilot), "builder.pilot",
+         "null or a .dzgw path without ':' (it goes into a gorge policy string)")
+    need(b.init is None or bool(b.init.strip()), "builder.init", "null or an ens.pt path")
+    need(b.window.kind in ("versions", "games"), "builder.window.kind", f"versions or games, not {b.window.kind!r}")
+    need(b.window.size >= 1, "builder.window.size", ">= 1")
+    need(b.lr > 0, "builder.lr", "> 0")
+    need(b.warm_lr > 0, "builder.warm_lr", "> 0")
+    need(0.0 <= b.land_support < 0.5, "builder.land_support", "in [0, 0.5) (0 = no land range)")
+    p = b.pools
+    need(p.kind == "draftlab", "builder.pools.kind", f"draftlab (dzgorge sealed-pools), not {p.kind!r}")
+    need(p.set in BUILDER_SETS, "builder.pools.set", f"one of {BUILDER_SETS} (the deck network's cards)")
+    need(1 <= p.packs <= 12, "builder.pools.packs", "1 to 12")
+    need(p.collation in ("arena", "play"), "builder.pools.collation", f"arena or play, not {p.collation!r}")
+    need(p.count >= b.pools_per_chunk, "builder.pools.count", f"at least builder.pools_per_chunk ({b.pools_per_chunk})")
+    e = b.eval
+    for k in ("every_versions", "pairs", "workers"):
+        need(getattr(e, k) >= 1, f"builder.eval.{k}", ">= 1")
+    need(e.pools >= 2 and e.pools % 2 == 0, "builder.eval.pools", "even and >= 2 (pools are crossed in pairs)")
+    need(e.sims >= 0, "builder.eval.sims", ">= 0 (0 = gorge's bot)")
+    need(e.seed != p.seed, "builder.eval.seed", f"a held-out pool seed, not builder.pools.seed ({p.seed})")
+    need(e.opponent in BUILDER_OPPONENTS, "builder.eval.opponent", f"one of {BUILDER_OPPONENTS}")
 
 
 # ------------------------------------------------------------------------------------------------ plan changes

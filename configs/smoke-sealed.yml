@@ -1,0 +1,31 @@
+# The smallest deck-builder run (draftzero.loop.builder, docs/033 work plan step 6): `dz run configs/smoke-sealed.yml`
+# (store runs/smoke-sealed). No player learns: the pilot is the 16-simulation search without a network. Builder
+# version 0 is untrained (four random deck-shaped decks a pool); each version plays 16 decided games between decks of
+# 6 draftlab pools (64 train pools, seed 1), the learner fits a 2-member ensemble on the newest 2 versions' games, and
+# each trained version plays its best decks against best23's on 4 held-out pools (seed 2, 8 games). Two trained
+# versions, then it stops. Minutes, not hours.
+# It needs a dzgorge with the sealed-pools command (the gorge fork's draftzero-sealed branch, 8aa1f37dc): until
+# engine/gorge/GORGE_REF includes it, point engine.root at such a build (--set engine.root=DIR, DIR holding bin/dzgorge
+# and .cards). The sample decks only fill data.decks/data.pool, which every game command names.
+extends: base/player.yml
+run: smoke-sealed
+data: {decks: assets/sample/decks, pool: assets/sample/pool.tsv}
+player: {learn: false}
+actor: {sims: 16}
+eval: {opponents: []}
+budget: {max_versions: 2}
+store: runs/smoke-sealed
+builder:
+  learn: true
+  members: 2
+  pools_per_chunk: 6
+  games_per_chunk: 16
+  games_per_version: 16
+  sims: 16
+  workers: 2
+  chunk_secs: 900
+  window: {kind: versions, size: 2}
+  epochs: 10
+  threads: 2
+  pools: {count: 64}
+  eval: {pools: 4, pairs: 1, sims: 16, workers: 2}

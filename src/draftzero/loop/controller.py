@@ -18,6 +18,13 @@ At the start it writes config.yml and manifest.json (once per store; a restart k
      budget.max_games it first pauses the actors and stops once every evaluation job is closed;
   6. writes status.md and status.json at most every status_every_s (and whenever control.json changes).
 
+With builder.learn (draftzero.loop.builder) it also moves control["version"]["builder"] to each new
+versions/builder/latest.json, opens a builder evaluation job (control["builder_evals"]) for every builder version
+v >= 1 with v % builder.eval.every_versions == 0 and assigns its shards to live builder evaluators, and counts
+builder versions against budget.max_versions (the run drains once every learning component has reached it). In a
+run where only the builder learns (player.learn false) its versions are the boundaries plan changes wait for.
+With builder.learn off none of this happens and control.json has no builder fields.
+
     python -m draftzero.loop.cli controller --config C --store S [--once]
 """
 from __future__ import annotations
@@ -27,6 +34,7 @@ import json
 import time
 from datetime import datetime
 
+from draftzero.loop import builder as bld
 from draftzero.loop import control as ctl
 from draftzero.loop import evaluator as ev
 
@@ -87,8 +95,11 @@ class Controller:
         if c is None:
             c = ctl.new_control(self.cfg)
             c["started"] = ctl.now_iso()
+            self._builder_fields(c)
             ctl.write(self.store, c, "control: the run starts")
             self.log(f"controller: run {ctl.get(self.cfg, 'run')} started on {self.store.describe()}")
+        elif self._builder_fields(c):
+            ctl.write(self.store, c, "control: the builder joins the run")
         elif c.get("stop"):
             # starting a controller on a stopped run resumes it (a stop requested while it ran still stops it)
             c["stop"] = False
@@ -98,6 +109,15 @@ class Controller:
             self.log(f"controller: run {ctl.get(self.cfg, 'run')} resumes at version {ctl.player_version(c)}")
         self.started = True
         return c
+
+    def _builder_fields(self, c: dict) -> bool:
+        """With builder.learn: control["version"]["builder"] and control["builder_evals"], added if missing (True
+        when it added them)."""
+        if not bld.enabled(self.cfg) or (bld.COMPONENT in c.get("version", {}) and bld.EVALS in c):
+            return False
+        c.setdefault("version", {}).setdefault(bld.COMPONENT, None)
+        c.setdefault(bld.EVALS, [])
+        return True
 
     def _rebase(self, stored: bytes) -> None:
         """A restart: the run's config is the store's config.yml (plus events.jsonl); this controller's config
@@ -150,15 +170,26 @@ class Controller:
         v_old = ctl.player_version(c)
         v_new = None if latest is None else int(latest["version"])
         boundary = v_new is not None and (v_old is None or v_new > v_old)
-        self.apply_requests(boundary, at_version=v_new if boundary else (v_old or 0))
+        builder = bld.enabled(self.cfg)
+        blatest = self.store.read_json(ctl.latest_path(bld.COMPONENT)) if builder else None
+        if builder and not bld.player_learns(self.cfg):     # a builder-only run: plan changes wait for its versions
+            b_old, b_new = ctl.player_version(c, bld.COMPONENT), None if blatest is None else int(blatest["version"])
+            b_boundary = b_new is not None and (b_old is None or b_new > b_old)
+            self.apply_requests(b_boundary, at_version=b_new if b_boundary else (b_old or 0))
+        else:
+            self.apply_requests(boundary, at_version=v_new if boundary else (v_old or 0))
         if boundary:
             for v in range(0 if v_old is None else v_old + 1, v_new + 1):
                 self.open_evals(c, v, now)
             c["version"][ctl.COMPONENT] = v_new
             self.log(f"controller: actors now play version {v_new}")
+        if builder:
+            self.builder_versions(c, blatest, now)
         c["play"] = ctl.play_fields(self.cfg)
         self.update_evals(c, now)
-        draining, why = self.budget(c, latest, now)
+        if builder:
+            self.update_evals(c, now, key=bld.EVALS, role=bld.BuilderEvaluator.ROLE)
+        draining, why = self.budget(c, latest, now, blatest)
         c["paused"] = bool(ctl.get(self.cfg, "paused", False)) or draining
         if why and not c.get("stop"):
             self.log(f"controller: stopping the run ({why})")
@@ -224,13 +255,46 @@ class Controller:
             c["evals"].append(job)
             self.log(f"controller: evaluation {job['job']} opened ({job['pairs']} pairs, {len(job['shards'])} shards)")
 
-    def evaluators(self, now: float) -> list[str]:
-        return sorted(hb["machine"] for hb in self.heartbeats(now) if hb.get("role") == "evaluator"
+    def builder_versions(self, c: dict, blatest: dict | None, now: float) -> None:
+        """A new builder version: an evaluation job for each version passed (see open_builder_evals), then
+        control["version"]["builder"] moves to it."""
+        self._builder_fields(c)
+        if blatest is None:
+            return
+        old, new = ctl.player_version(c, bld.COMPONENT), int(blatest["version"])
+        if old is not None and new <= old:
+            return
+        for v in range(0 if old is None else old + 1, new + 1):
+            self.open_builder_evals(c, v, now)
+        c["version"][bld.COMPONENT] = new
+        self.log(f"controller: builder actors now build with builder version {new}")
+
+    def open_builder_evals(self, c: dict, version: int, now: float) -> None:
+        """Builder version `version` (>= 1, a multiple of builder.eval.every_versions) against builder.eval's
+        opponent, piloted by the player version actors play now when the pilot follows the player."""
+        every = int(ctl.get(self.cfg, "builder.eval.every_versions") or 0)
+        if version < 1 or not every or version % every:
+            return
+        pv = None
+        if bld.player_learns(self.cfg) and not ctl.get(self.cfg, "builder.pilot"):
+            pv = ctl.player_version(c)
+        job = bld.make_job(version, self.cfg, player_version=pv, now=now)
+        if any(j["job"] == job["job"] for j in c[bld.EVALS]) or self.store.exists(ctl.eval_summary_path(job["job"])):
+            return
+        c[bld.EVALS].append(job)
+        self.log(f"controller: builder evaluation {job['job']} opened ({job['pools']} pools, {len(job['shards'])} "
+                 "shards)")
+
+    def evaluators(self, now: float, role: str = "evaluator") -> list[str]:
+        return sorted(hb["machine"] for hb in self.heartbeats(now) if hb.get("role") == role
                       and hb.get("state") != "stopped" and now - float(hb.get("time", 0)) < self.live_s)
 
-    def update_evals(self, c: dict, now: float) -> None:
+    def update_evals(self, c: dict, now: float, key: str = "evals", role: str = "evaluator") -> None:
+        """Close the jobs in c[key] whose summary.json exists; mark shards done; assign the others to live
+        evaluators of `role` (the player's jobs: evals and evaluator; the builder's: builder_evals and
+        builder-evaluator)."""
         still, live = [], None
-        for job in c["evals"]:
+        for job in c[key]:
             files = set(self.store.list(f"evals/{job['job']}/"))
             if ctl.eval_summary_path(job["job"]) in files:
                 s = self.store.read_json(ctl.eval_summary_path(job["job"])) or {}
@@ -241,10 +305,10 @@ class Controller:
             for sh in job["shards"]:
                 sh["done"] = ctl.eval_games_path(job["job"], sh["id"]) in files
             if any(not sh["done"] for sh in job["shards"]):
-                live = self.evaluators(now) if live is None else live
+                live = self.evaluators(now, role) if live is None else live
                 self.assign(job, live, now)
             still.append(job)
-        c["evals"] = still
+        c[key] = still
 
     def assign(self, job: dict, live: list[str], now: float) -> None:
         """Give each shard without a live, timely evaluator to the least-loaded live one (another, if possible)."""
@@ -266,8 +330,10 @@ class Controller:
                 load[m] += 1
 
     # ---------------------------------------------------------------------------- budget and stopping
-    def budget(self, c: dict, latest: dict | None, now: float) -> tuple[bool, str | None]:
-        """(drain: pause the actors, stop: the reason or None)."""
+    def budget(self, c: dict, latest: dict | None, now: float, blatest: dict | None = None
+               ) -> tuple[bool, str | None]:
+        """(drain: pause the actors, stop: the reason or None). budget.max_versions drains once every learning
+        component (the player unless player.learn is false; the builder with builder.learn) has reached it."""
         if self.store.exists(ctl.STOP):
             return True, "stop.request"
         b = ctl.as_dict(ctl.get(self.cfg, "budget"))
@@ -276,13 +342,16 @@ class Controller:
             return True, f"budget.max_hours {b['max_hours']}"
         drain = None
         mv = b.get("max_versions")
-        if mv is not None and latest is not None and int(latest["version"]) >= int(mv):
-            drain = f"budget.max_versions {b['max_versions']}"
+        if mv is not None:
+            heads = [latest] if bld.player_learns(self.cfg) or not bld.enabled(self.cfg) else []
+            heads += [blatest] if bld.enabled(self.cfg) else []
+            if heads and all(h is not None and int(h["version"]) >= int(mv) for h in heads):
+                drain = f"budget.max_versions {b['max_versions']}"
         if b.get("max_games") is not None:
             self.index.refresh()
             if self.index.games() >= int(b["max_games"]):
                 drain = drain or f"budget.max_games {b['max_games']}"
-        if drain and not c["evals"]:
+        if drain and not c["evals"] and not c.get(bld.EVALS):
             return True, drain
         return bool(drain), None
 
@@ -327,9 +396,22 @@ class Controller:
                              for s in self.closed_evals()],
               "pending_requests": [r for _, r in ctl.pending_requests(self.store)],
               "events": ctl.read_events(self.store)[-10:]}
+        if bld.enabled(self.cfg):
+            st["builder"] = self.builder_status(c)
+            st["open_evals"] += [{**{k: j[k] for k in ("job", "version", "opponent")}, "pairs": j["pools"] * j["pairs"],
+                                  "shards_done": sum(s["done"] for s in j["shards"]), "shards": len(j["shards"])}
+                                 for j in c.get(bld.EVALS) or []]
         self.store.put_many({ctl.STATUS: json.dumps(st, indent=1, sort_keys=True, default=str).encode(),
                              ctl.STATUS_MD: status_md(st).encode()}, "status")
         return st
+
+    def builder_status(self, c: dict) -> dict:
+        bl = self.store.read_json(ctl.latest_path(bld.COMPONENT))
+        meta = self.store.read_json(ctl.version_file(bl["version"], "meta.json", bld.COMPONENT)) if bl else None
+        return {"version": ctl.player_version(c, bld.COMPONENT),
+                "latest": meta and {k: meta.get(k) for k in ("version", "parent", "net", "games", "decided", "decks",
+                                                             "lands", "metrics", "time", "train_s")},
+                "learner": self.store.read_json(bld.LEARNER_STATUS) or {}}
 
     def mirror(self) -> None:
         """New metrics files to the tracker (when there is one)."""
@@ -379,6 +461,16 @@ def status_md(st: dict) -> str:
         out.append(f"- **Learner:** {lr.get('state')}; {lr.get('shards', 0)} shards, {lr.get('games', 0)} games, "
                    f"{lr.get('positions', 0)} positions ingested; {lr.get('new_positions', 0)} new since the last "
                    "version")
+    bs = st.get("builder")
+    if bs:
+        lb, bl = bs.get("latest") or {}, bs.get("learner") or {}
+        m = lb.get("metrics") or {}
+        out.append(f"- **Builder:** builds with version {_fmt(bs.get('version'))}"
+                   + (f"; newest v{lb.get('version')} ({'trained' if lb.get('net') else 'untrained'}, "
+                      f"{lb.get('decided', 0)} decided games in its window, lands {lb.get('lands')})" if lb else "")
+                   + ("; held-out " + ", ".join(f"{k} {_fmt(v, 4)}" for k, v in m.items() if v is not None)
+                      if any(v is not None for v in m.values()) else "")
+                   + (f"; learner {bl.get('state')}, {bl.get('decided', 0)} decided games ingested" if bl else ""))
     lm = st.get("latest") or {}
     if lm:
         m = lm.get("metrics") or {}

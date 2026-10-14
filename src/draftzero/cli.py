@@ -7,6 +7,8 @@
                                                 every role of a run on this machine (local mode)
     dz actor|learner|evaluator|controller --config C [--store S] [--machine M]
                                                 one role, for runs over several machines (draftzero.loop.cli)
+    dz builder-actor|builder-learner|builder-evaluator --config C [--store S] [--machine M]
+                                                a deck-builder role (builder.learn; draftzero.loop.builder)
     dz plan STORE set PATH=VALUE ... | list     a live config change, applied by the controller
     dz status STORE [--json]                    the controller's status page
     dz stop STORE                               ask the controller to stop the run
@@ -35,7 +37,8 @@ import tempfile
 import time
 from pathlib import Path
 
-LOOP_COMMANDS = ("actor", "learner", "evaluator", "controller", "status", "stop", "plan")
+LOOP_COMMANDS = ("actor", "learner", "evaluator", "controller", "status", "stop", "plan", "builder-actor",
+                 "builder-learner", "builder-evaluator")
 LOCAL_POLL_S = 10.0     # dz run on a folder: looking costs nothing, and an idle role backs off to 4x this
 SAMPLE_DATA = "--set data.decks=assets/sample/decks --set data.pool=assets/sample/pool.tsv"
 
@@ -181,6 +184,8 @@ def cmd_run(a) -> int:
         cfg_path.write_text(config.dump(cfg))
     argv = ["local", "--config", str(cfg_path), "--store", str(store), "--actors", str(a.actors),
             "--work-dir", str(wd)]
+    if cfg.builder.learn:
+        argv += ["--builder-actors", str(a.builder_actors)]
     if a.max_hours is not None:
         argv += ["--max-hours", str(a.max_hours)]
     if a.machine:
@@ -190,7 +195,9 @@ def cmd_run(a) -> int:
     poll = a.poll if a.poll is not None else (None if _is_remote(store) else LOCAL_POLL_S)
     if poll is not None:
         argv += ["--poll", str(poll)]
-    print(f"dz run: {cfg.run} ({config.config_hash(cfg)}), store {store}, {a.actors} actor(s), logs in {wd}/logs; "
+    who = (f"{a.actors} actor(s)" if cfg.player.learn else "no player actors") + (
+        f", {a.builder_actors} builder actor(s)" if cfg.builder.learn else "")
+    print(f"dz run: {cfg.run} ({config.config_hash(cfg)}), store {store}, {who}, logs in {wd}/logs; "
           f"watch with `dz status {store}`, end with `dz stop {store}`", flush=True)
     rc = loop_cli.main(argv)
     why = {0: "the run stopped", 1: "a role failed (see its log)", 2: f"--max-hours {a.max_hours} reached",
@@ -658,7 +665,8 @@ def parser() -> argparse.ArgumentParser:
 
     p = add("run", "start every role of a run on this machine (local mode)",
             description="Start the controller, the learner, one evaluator and N actors on this machine against one "
-                        "store (python -m draftzero.loop.cli local). Returns when the run stops: 0 at its budget or "
+                        "store (python -m draftzero.loop.cli local); with builder.learn also the builder learner, "
+                        "one builder evaluator and M builder actors (with player.learn false, only those). Returns when the run stops: 0 at its budget or "
                         "`dz stop`, 1 when a role failed, 2 at --max-hours, 130 on Ctrl-C, 143 on SIGTERM, 129 on "
                         "SIGHUP (the roles are stopped either way). Starting it again on the same store resumes the "
                         "run, on the store's config.yml plus events.jsonl: CONFIG (with --set) may then differ from "
@@ -666,6 +674,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("config", metavar="CONFIG")
     p.add_argument("--store", default=None, help="a folder or hf://buckets/<owner>/<bucket> (default: the config's)")
     p.add_argument("--actors", type=int, default=1, help="actor processes (default 1)")
+    p.add_argument("--builder-actors", type=int, default=1,
+                   help="builder actor processes when the config's builder.learn is on (default 1)")
     p.add_argument("--max-hours", type=float, default=None, help="stop the run after this many hours")
     p.add_argument("--work-dir", default=None, help="local caches and role logs (default runs/<run>/work)")
     p.add_argument("--machine", default=None, help="prefix of this machine's role names (default local)")

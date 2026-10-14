@@ -162,8 +162,9 @@ def ratings_from_metrics(lines: Iterable[dict], *, anchor: str = "sbtactical") -
     """{player: (elo, se)}: the latest eval.elo line per player when there are any (player = its "player" tag, else
     v{version}; se = its "se" tag, else from lo/hi), else one Bradley-Terry fit over every eval.score line
     (player v{version} against its opponent tag, "prev" = the version before, weighted by the games: the
-    "n_games" tag, else 2 x "n_pairs", else n, else 1)."""
-    lines = list(lines)
+    "n_games" tag, else 2 x "n_pairs", else n, else 1). Lines of another model (a "model" tag other than player:
+    the deck builder's evaluations, draftzero.loop.builder) are left out: their versions are not the player's."""
+    lines = [x for x in lines if x.get("model", "player") == "player"]
     elo = [x for x in lines if x["name"] == "eval.elo"]
     if elo:
         out = {}
