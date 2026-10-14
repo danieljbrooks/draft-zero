@@ -1,0 +1,111 @@
+{
+"name": "FDN_top_21511_WUR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck ae6bc099cd9443bb9854126bea119a3f:2, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Aegis Turtle",
+"count": 1
+},
+{
+"name": "Brineborn Cutthroat",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 2
+},
+{
+"name": "Cat Collector",
+"count": 1
+},
+{
+"name": "Cathar Commando",
+"count": 1
+},
+{
+"name": "Day of Judgment",
+"count": 1
+},
+{
+"name": "Dazzling Angel",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Lightshell Duo",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Meteor Golem",
+"count": 2
+},
+{
+"name": "Mountain",
+"count": 2
+},
+{
+"name": "Plains",
+"count": 6
+},
+{
+"name": "Run Away Together",
+"count": 2
+},
+{
+"name": "Scrawling Crawler",
+"count": 1
+},
+{
+"name": "Self-Reflection",
+"count": 1
+},
+{
+"name": "Skyship Buccaneer",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 3
+},
+{
+"name": "Swiftwater Cliffs",
+"count": 2
+},
+{
+"name": "Think Twice",
+"count": 2
+},
+{
+"name": "Thousand-Year Storm",
+"count": 2
+},
+{
+"name": "Tolarian Terror",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 3
+},
+{
+"name": "Wind-Scarred Crag",
+"count": 1
+}
+]
+}

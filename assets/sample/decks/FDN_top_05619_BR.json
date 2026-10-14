@@ -1,0 +1,87 @@
+{
+"name": "FDN_top_05619_BR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 4f9c098bb93b40229458e691c9f99dfc:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Alesha, Who Laughs at Fate",
+"count": 1
+},
+{
+"name": "Bake into a Pie",
+"count": 1
+},
+{
+"name": "Battlesong Berserker",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 3
+},
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 3
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Heartfire Immolator",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 1
+},
+{
+"name": "Infernal Vessel",
+"count": 1
+},
+{
+"name": "Involuntary Employment",
+"count": 2
+},
+{
+"name": "Liliana, Dreadhorde General",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 7
+},
+{
+"name": "Perforating Artist",
+"count": 1
+},
+{
+"name": "Reassembling Skeleton",
+"count": 1
+},
+{
+"name": "Sanguine Syphoner",
+"count": 2
+},
+{
+"name": "Swamp",
+"count": 9
+},
+{
+"name": "Tragic Banshee",
+"count": 1
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+},
+{
+"name": "Vampire Soulcaller",
+"count": 1
+}
+]
+}

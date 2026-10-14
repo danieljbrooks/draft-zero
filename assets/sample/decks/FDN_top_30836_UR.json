@@ -1,0 +1,99 @@
+{
+"name": "FDN_top_30836_UR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck c8595b4d11994879a0e0f0d81b99d704:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Archmage of Runes",
+"count": 1
+},
+{
+"name": "Balmor, Battlemage Captain",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Cephalid Inkmage",
+"count": 1
+},
+{
+"name": "Dragon Trainer",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Fiery Annihilation",
+"count": 1
+},
+{
+"name": "Firespitter Whelp",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 1
+},
+{
+"name": "Incinerating Blast",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Kellan, Planar Trailblazer",
+"count": 1
+},
+{
+"name": "Lightshell Duo",
+"count": 1
+},
+{
+"name": "Meteor Golem",
+"count": 1
+},
+{
+"name": "Mischievous Mystic",
+"count": 3
+},
+{
+"name": "Mountain",
+"count": 7
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Swiftwater Cliffs",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 1
+},
+{
+"name": "Thrill of Possibility",
+"count": 2
+},
+{
+"name": "Tolarian Terror",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 2
+},
+{
+"name": "Witness Protection",
+"count": 1
+}
+]
+}

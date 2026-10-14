@@ -1,0 +1,87 @@
+{
+"name": "FDN_top_10624_UB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 36bc9bec14fe4d05ab1f75779ca75e37:0, player win-rate bucket 0.82 (CC BY 4.0)",
+"cards": [
+{
+"name": "Arcane Epiphany",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 2
+},
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Clinquant Skymage",
+"count": 3
+},
+{
+"name": "Dismal Backwater",
+"count": 1
+},
+{
+"name": "Drake Hatcher",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 3
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 1
+},
+{
+"name": "Goldvein Pick",
+"count": 1
+},
+{
+"name": "Grappling Kraken",
+"count": 2
+},
+{
+"name": "Infernal Vessel",
+"count": 1
+},
+{
+"name": "Infestation Sage",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Meteor Golem",
+"count": 1
+},
+{
+"name": "Reassembling Skeleton",
+"count": 1
+},
+{
+"name": "Rune-Scarred Demon",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 7
+},
+{
+"name": "Think Twice",
+"count": 2
+},
+{
+"name": "Tolarian Terror",
+"count": 1
+}
+]
+}

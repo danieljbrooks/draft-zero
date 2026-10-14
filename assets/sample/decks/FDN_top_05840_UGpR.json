@@ -1,0 +1,115 @@
+{
+"name": "FDN_top_05840_UGpR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck b3235f10caaa49d0aab922765ec5190c:0, player win-rate bucket 0.76 (CC BY 4.0)",
+"cards": [
+{
+"name": "Ambush Wolf",
+"count": 1
+},
+{
+"name": "Apothecary Stomper",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Bulk Up",
+"count": 1
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Dwynen's Elite",
+"count": 1
+},
+{
+"name": "Eager Trufflesnout",
+"count": 1
+},
+{
+"name": "Elvish Archdruid",
+"count": 1
+},
+{
+"name": "Elvish Regrower",
+"count": 1
+},
+{
+"name": "Firespitter Whelp",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 6
+},
+{
+"name": "Ghalta, Primal Hunger",
+"count": 1
+},
+{
+"name": "Giant Growth",
+"count": 1
+},
+{
+"name": "Grow from the Ashes",
+"count": 1
+},
+{
+"name": "Imprisoned in the Moon",
+"count": 1
+},
+{
+"name": "Island",
+"count": 5
+},
+{
+"name": "Kellan, Planar Trailblazer",
+"count": 1
+},
+{
+"name": "Loot, Exuberant Explorer",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 3
+},
+{
+"name": "Rugged Highlands",
+"count": 1
+},
+{
+"name": "Scavenging Ooze",
+"count": 1
+},
+{
+"name": "Swiftwater Cliffs",
+"count": 1
+},
+{
+"name": "Tatyova, Benthic Druid",
+"count": 1
+},
+{
+"name": "Thornwood Falls",
+"count": 1
+},
+{
+"name": "Wary Thespian",
+"count": 1
+},
+{
+"name": "Witness Protection",
+"count": 3
+},
+{
+"name": "Zimone, Paradox Sculptor",
+"count": 1
+}
+]
+}

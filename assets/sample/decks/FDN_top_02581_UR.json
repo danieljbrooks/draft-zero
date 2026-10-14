@@ -1,0 +1,107 @@
+{
+"name": "FDN_top_02581_UR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck f0398afae2d245078168606dd12f6ea1:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Brineborn Cutthroat",
+"count": 1
+},
+{
+"name": "Drakuseth, Maw of Flames",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 3
+},
+{
+"name": "Erudite Wizard",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Faebloom Trick",
+"count": 1
+},
+{
+"name": "Fiery Annihilation",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 1
+},
+{
+"name": "Goblin Surprise",
+"count": 1
+},
+{
+"name": "Heartfire Immolator",
+"count": 1
+},
+{
+"name": "Icewind Elemental",
+"count": 1
+},
+{
+"name": "Imprisoned in the Moon",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Kiora, the Rising Tide",
+"count": 1
+},
+{
+"name": "Mischievous Mystic",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 7
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 1
+},
+{
+"name": "Swiftwater Cliffs",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 1
+},
+{
+"name": "Tolarian Terror",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+}
+]
+}

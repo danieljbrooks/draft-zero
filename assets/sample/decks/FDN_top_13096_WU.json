@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_13096_WU",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck aed7580e03e0437a917ceef6f83fbbfe:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Archmage of Runes",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 2
+},
+{
+"name": "Brineborn Cutthroat",
+"count": 1
+},
+{
+"name": "Curator of Destinies",
+"count": 1
+},
+{
+"name": "Drake Hatcher",
+"count": 2
+},
+{
+"name": "Felidar Savior",
+"count": 2
+},
+{
+"name": "Fleeting Distraction",
+"count": 1
+},
+{
+"name": "Fleeting Flight",
+"count": 1
+},
+{
+"name": "Goldvein Pick",
+"count": 1
+},
+{
+"name": "Healer's Hawk",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 1
+},
+{
+"name": "Homunculus Horde",
+"count": 1
+},
+{
+"name": "Inspiration from Beyond",
+"count": 1
+},
+{
+"name": "Inspiring Paladin",
+"count": 1
+},
+{
+"name": "Island",
+"count": 9
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Mischievous Mystic",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 8
+},
+{
+"name": "Skyship Buccaneer",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 2
+}
+]
+}

@@ -1,0 +1,99 @@
+{
+"name": "FDN_top_18977_UB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 418aae4244ee4e9db8342dbf92dbb522:1, player win-rate bucket 0.64 (CC BY 4.0)",
+"cards": [
+{
+"name": "Archmage of Runes",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Billowing Shriekmass",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 2
+},
+{
+"name": "Hungry Ghoul",
+"count": 1
+},
+{
+"name": "Island",
+"count": 9
+},
+{
+"name": "Kiora, the Rising Tide",
+"count": 1
+},
+{
+"name": "Liliana, Dreadhorde General",
+"count": 1
+},
+{
+"name": "Mischievous Mystic",
+"count": 1
+},
+{
+"name": "Pilfer",
+"count": 1
+},
+{
+"name": "Refute",
+"count": 2
+},
+{
+"name": "Rune-Scarred Demon",
+"count": 1
+},
+{
+"name": "Solemn Simulacrum",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Think Twice",
+"count": 1
+},
+{
+"name": "Tolarian Terror",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+},
+{
+"name": "Vampire Nighthawk",
+"count": 1
+}
+]
+}

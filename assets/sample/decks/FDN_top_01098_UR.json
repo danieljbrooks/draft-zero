@@ -1,0 +1,95 @@
+{
+"name": "FDN_top_01098_UR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 03741243efa14103a77b417e0f7944d7:1, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Curator of Destinies",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 1
+},
+{
+"name": "Embercleave",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 2
+},
+{
+"name": "Firespitter Whelp",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 2
+},
+{
+"name": "Frenzied Goblin",
+"count": 1
+},
+{
+"name": "Goblin Boarders",
+"count": 1
+},
+{
+"name": "Heartfire Immolator",
+"count": 1
+},
+{
+"name": "Imprisoned in the Moon",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Kiora, the Rising Tide",
+"count": 1
+},
+{
+"name": "Krenko, Mob Boss",
+"count": 1
+},
+{
+"name": "Lightshell Duo",
+"count": 1
+},
+{
+"name": "Micromancer",
+"count": 3
+},
+{
+"name": "Mountain",
+"count": 7
+},
+{
+"name": "Scrawling Crawler",
+"count": 1
+},
+{
+"name": "Searslicer Goblin",
+"count": 1
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 2
+}
+]
+}

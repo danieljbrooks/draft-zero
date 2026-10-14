@@ -1,0 +1,87 @@
+{
+"name": "FDN_top_09764_WG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 4786adc035474dd8aaaa3f1239ef568c:0, player win-rate bucket 0.72 (CC BY 4.0)",
+"cards": [
+{
+"name": "Affectionate Indrik",
+"count": 1
+},
+{
+"name": "Apothecary Stomper",
+"count": 1
+},
+{
+"name": "Banishing Light",
+"count": 2
+},
+{
+"name": "Beast-Kin Ranger",
+"count": 1
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Cackling Prowler",
+"count": 1
+},
+{
+"name": "Cathar Commando",
+"count": 1
+},
+{
+"name": "Exemplar of Light",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 2
+},
+{
+"name": "Felling Blow",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 9
+},
+{
+"name": "Garruk's Uprising",
+"count": 1
+},
+{
+"name": "Giant Growth",
+"count": 3
+},
+{
+"name": "Gnarlid Colony",
+"count": 3
+},
+{
+"name": "Good-Fortune Unicorn",
+"count": 1
+},
+{
+"name": "Mischievous Pup",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 7
+},
+{
+"name": "Reclamation Sage",
+"count": 1
+},
+{
+"name": "Scavenging Ooze",
+"count": 1
+},
+{
+"name": "Wary Thespian",
+"count": 1
+}
+]
+}

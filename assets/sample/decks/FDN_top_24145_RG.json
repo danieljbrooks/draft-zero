@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_24145_RG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 7b4ff85087524421b663e13a867d0be8:1, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Ambush Wolf",
+"count": 3
+},
+{
+"name": "Apothecary Stomper",
+"count": 1
+},
+{
+"name": "Ashroot Animist",
+"count": 1
+},
+{
+"name": "Axgard Cavalry",
+"count": 2
+},
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Courageous Goblin",
+"count": 1
+},
+{
+"name": "Elfsworn Giant",
+"count": 2
+},
+{
+"name": "Fanatical Firebrand",
+"count": 1
+},
+{
+"name": "Felling Blow",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 7
+},
+{
+"name": "Garruk's Uprising",
+"count": 1
+},
+{
+"name": "Ghalta, Primal Hunger",
+"count": 1
+},
+{
+"name": "Heartfire Immolator",
+"count": 1
+},
+{
+"name": "Krenko, Mob Boss",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 8
+},
+{
+"name": "Needletooth Pack",
+"count": 1
+},
+{
+"name": "Rogue's Passage",
+"count": 1
+},
+{
+"name": "Ruby, Daring Tracker",
+"count": 1
+},
+{
+"name": "Rugged Highlands",
+"count": 1
+},
+{
+"name": "Strongbox Raider",
+"count": 3
+}
+]
+}

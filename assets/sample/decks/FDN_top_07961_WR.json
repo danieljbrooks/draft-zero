@@ -1,0 +1,95 @@
+{
+"name": "FDN_top_07961_WR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 747588a69cf243efbee25d35425aec41:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Abrade",
+"count": 1
+},
+{
+"name": "Axgard Cavalry",
+"count": 2
+},
+{
+"name": "Banishing Light",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 2
+},
+{
+"name": "Courageous Goblin",
+"count": 1
+},
+{
+"name": "Dragon Trainer",
+"count": 2
+},
+{
+"name": "Fanatical Firebrand",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 1
+},
+{
+"name": "Firebrand Archer",
+"count": 1
+},
+{
+"name": "Firespitter Whelp",
+"count": 1
+},
+{
+"name": "Fleeting Flight",
+"count": 1
+},
+{
+"name": "Goblin Boarders",
+"count": 1
+},
+{
+"name": "Goblin Negotiation",
+"count": 1
+},
+{
+"name": "Gorehorn Raider",
+"count": 1
+},
+{
+"name": "Inspiring Paladin",
+"count": 2
+},
+{
+"name": "Leyline Axe",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Mischievous Pup",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 8
+},
+{
+"name": "Plains",
+"count": 8
+},
+{
+"name": "Sun-Blessed Healer",
+"count": 1
+},
+{
+"name": "Wind-Scarred Crag",
+"count": 1
+}
+]
+}

@@ -1,0 +1,79 @@
+{
+"name": "FDN_top_03718_UR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 3027c35f1d6c49b59d383224a707d43a:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Drake Hatcher",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 1
+},
+{
+"name": "Gleaming Barrier",
+"count": 1
+},
+{
+"name": "Incinerating Blast",
+"count": 1
+},
+{
+"name": "Inspiration from Beyond",
+"count": 2
+},
+{
+"name": "Island",
+"count": 9
+},
+{
+"name": "Lightshell Duo",
+"count": 3
+},
+{
+"name": "Mountain",
+"count": 8
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Rite of the Dragoncaller",
+"count": 1
+},
+{
+"name": "Rune-Sealed Wall",
+"count": 1
+},
+{
+"name": "Slumbering Cerberus",
+"count": 2
+},
+{
+"name": "Sure Strike",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 3
+},
+{
+"name": "Tolarian Terror",
+"count": 2
+},
+{
+"name": "Uncharted Voyage",
+"count": 2
+}
+]
+}

@@ -1,0 +1,75 @@
+{
+"name": "FDN_top_03286_WR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 839c3e1051274b428eb45eea03443e41:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Axgard Cavalry",
+"count": 1
+},
+{
+"name": "Banishing Light",
+"count": 1
+},
+{
+"name": "Brazen Scourge",
+"count": 1
+},
+{
+"name": "Cathar Commando",
+"count": 1
+},
+{
+"name": "Dazzling Angel",
+"count": 3
+},
+{
+"name": "Fleeting Flight",
+"count": 2
+},
+{
+"name": "Goblin Surprise",
+"count": 2
+},
+{
+"name": "Heroic Reinforcements",
+"count": 3
+},
+{
+"name": "Incinerating Blast",
+"count": 1
+},
+{
+"name": "Inspiring Paladin",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Mischievous Pup",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 8
+},
+{
+"name": "Plains",
+"count": 9
+},
+{
+"name": "Searslicer Goblin",
+"count": 2
+},
+{
+"name": "Sun-Blessed Healer",
+"count": 2
+},
+{
+"name": "Vanguard Seraph",
+"count": 1
+}
+]
+}

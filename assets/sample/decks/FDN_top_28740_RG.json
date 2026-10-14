@@ -1,0 +1,87 @@
+{
+"name": "FDN_top_28740_RG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck a7fc096046c44dbe9704c26b0b28110d:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Abrade",
+"count": 1
+},
+{
+"name": "Bite Down",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Cackling Prowler",
+"count": 2
+},
+{
+"name": "Courageous Goblin",
+"count": 3
+},
+{
+"name": "Eager Trufflesnout",
+"count": 2
+},
+{
+"name": "Felling Blow",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 9
+},
+{
+"name": "Gnarlid Colony",
+"count": 1
+},
+{
+"name": "Heartfire Immolator",
+"count": 1
+},
+{
+"name": "Kellan, Planar Trailblazer",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 8
+},
+{
+"name": "Needletooth Pack",
+"count": 2
+},
+{
+"name": "Nessian Hornbeetle",
+"count": 1
+},
+{
+"name": "Searslicer Goblin",
+"count": 1
+},
+{
+"name": "Slumbering Cerberus",
+"count": 1
+},
+{
+"name": "Snakeskin Veil",
+"count": 1
+},
+{
+"name": "Sower of Chaos",
+"count": 1
+},
+{
+"name": "Strongbox Raider",
+"count": 1
+}
+]
+}

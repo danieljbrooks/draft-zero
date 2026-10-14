@@ -1,0 +1,95 @@
+{
+"name": "FDN_top_29283_B",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 7690c34ea1c440999ed9cef56618cad3:0, player win-rate bucket 0.68 (CC BY 4.0)",
+"cards": [
+{
+"name": "Billowing Shriekmass",
+"count": 1
+},
+{
+"name": "Blasphemous Edict",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Chandra, Flameshaper",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 2
+},
+{
+"name": "Gutless Plunderer",
+"count": 1
+},
+{
+"name": "Hero's Downfall",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 1
+},
+{
+"name": "Infestation Sage",
+"count": 2
+},
+{
+"name": "Involuntary Employment",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 7
+},
+{
+"name": "Pilfer",
+"count": 1
+},
+{
+"name": "Reassembling Skeleton",
+"count": 1
+},
+{
+"name": "Sanguine Syphoner",
+"count": 1
+},
+{
+"name": "Seeker's Folly",
+"count": 2
+},
+{
+"name": "Soul-Shackled Zombie",
+"count": 1
+},
+{
+"name": "Stromkirk Bloodthief",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 10
+},
+{
+"name": "Tinybones, Bauble Burglar",
+"count": 1
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+},
+{
+"name": "Vampire Soulcaller",
+"count": 1
+},
+{
+"name": "Zul Ashur, Lich Lord",
+"count": 1
+}
+]
+}

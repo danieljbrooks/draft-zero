@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_02871_WG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 9116f272c10c430bb12d836e77eba6ae:1, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Ajani's Pridemate",
+"count": 1
+},
+{
+"name": "Ambush Wolf",
+"count": 1
+},
+{
+"name": "Apothecary Stomper",
+"count": 1
+},
+{
+"name": "Beast-Kin Ranger",
+"count": 1
+},
+{
+"name": "Blossoming Sands",
+"count": 1
+},
+{
+"name": "Cathar Commando",
+"count": 1
+},
+{
+"name": "Dauntless Veteran",
+"count": 1
+},
+{
+"name": "Dazzling Angel",
+"count": 2
+},
+{
+"name": "Elfsworn Giant",
+"count": 2
+},
+{
+"name": "Exemplar of Light",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 8
+},
+{
+"name": "Helpful Hunter",
+"count": 1
+},
+{
+"name": "Llanowar Elves",
+"count": 3
+},
+{
+"name": "Overrun",
+"count": 2
+},
+{
+"name": "Plains",
+"count": 8
+},
+{
+"name": "Preposterous Proportions",
+"count": 1
+},
+{
+"name": "Prideful Parent",
+"count": 1
+},
+{
+"name": "Quakestrider Ceratops",
+"count": 1
+},
+{
+"name": "Serra Angel",
+"count": 1
+},
+{
+"name": "Solemn Simulacrum",
+"count": 1
+},
+{
+"name": "Treetop Snarespinner",
+"count": 1
+}
+]
+}

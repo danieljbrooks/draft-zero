@@ -1,0 +1,103 @@
+{
+"name": "FDN_top_08981_URpW",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck a5210155750041ed873c462278da272a:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Aetherize",
+"count": 1
+},
+{
+"name": "Arcane Epiphany",
+"count": 1
+},
+{
+"name": "Brineborn Cutthroat",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Curator of Destinies",
+"count": 1
+},
+{
+"name": "Dragon Trainer",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 1
+},
+{
+"name": "Island",
+"count": 6
+},
+{
+"name": "Joust Through",
+"count": 1
+},
+{
+"name": "Kykar, Zephyr Awakener",
+"count": 1
+},
+{
+"name": "Lightshell Duo",
+"count": 1
+},
+{
+"name": "Mischievous Mystic",
+"count": 3
+},
+{
+"name": "Mountain",
+"count": 6
+},
+{
+"name": "Plains",
+"count": 1
+},
+{
+"name": "Refute",
+"count": 3
+},
+{
+"name": "Rite of the Dragoncaller",
+"count": 1
+},
+{
+"name": "Run Away Together",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 1
+},
+{
+"name": "Strongbox Raider",
+"count": 1
+},
+{
+"name": "Swiftwater Cliffs",
+"count": 1
+},
+{
+"name": "Thrill of Possibility",
+"count": 2
+},
+{
+"name": "Tolarian Terror",
+"count": 1
+},
+{
+"name": "Tranquil Cove",
+"count": 2
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+}
+]
+}

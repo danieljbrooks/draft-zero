@@ -1,0 +1,87 @@
+{
+"name": "FDN_top_20065_BR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 0b69be42e01d4e649745b0b5f44c072a:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Abrade",
+"count": 2
+},
+{
+"name": "Axgard Cavalry",
+"count": 1
+},
+{
+"name": "Bake into a Pie",
+"count": 1
+},
+{
+"name": "Bloodfell Caves",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 2
+},
+{
+"name": "Courageous Goblin",
+"count": 1
+},
+{
+"name": "Dragon Trainer",
+"count": 1
+},
+{
+"name": "Gorehorn Raider",
+"count": 2
+},
+{
+"name": "Heartfire Immolator",
+"count": 1
+},
+{
+"name": "Hero's Downfall",
+"count": 1
+},
+{
+"name": "Infestation Sage",
+"count": 3
+},
+{
+"name": "Involuntary Employment",
+"count": 1
+},
+{
+"name": "Krenko, Mob Boss",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 8
+},
+{
+"name": "Reassembling Skeleton",
+"count": 1
+},
+{
+"name": "Searslicer Goblin",
+"count": 1
+},
+{
+"name": "Soul-Shackled Zombie",
+"count": 1
+},
+{
+"name": "Spitfire Lagac",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Vampire Gourmand",
+"count": 2
+}
+]
+}

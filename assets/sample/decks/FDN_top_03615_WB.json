@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_03615_WB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 00858e3cc502490dbc38d9f509bdb16e:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Ajani's Pridemate",
+"count": 2
+},
+{
+"name": "Arbiter of Woe",
+"count": 1
+},
+{
+"name": "Bake into a Pie",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Dazzling Angel",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 1
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 1
+},
+{
+"name": "Healer's Hawk",
+"count": 3
+},
+{
+"name": "Helpful Hunter",
+"count": 2
+},
+{
+"name": "Hungry Ghoul",
+"count": 1
+},
+{
+"name": "Inspiring Paladin",
+"count": 1
+},
+{
+"name": "Joust Through",
+"count": 1
+},
+{
+"name": "Macabre Waltz",
+"count": 1
+},
+{
+"name": "Make Your Move",
+"count": 1
+},
+{
+"name": "Mischievous Pup",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 9
+},
+{
+"name": "Prideful Parent",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Vampire Soulcaller",
+"count": 1
+},
+{
+"name": "Vanguard Seraph",
+"count": 1
+}
+]
+}

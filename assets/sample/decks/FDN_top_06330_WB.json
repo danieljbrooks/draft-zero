@@ -1,0 +1,79 @@
+{
+"name": "FDN_top_06330_WB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck c47024c4b6b94e05a733c41688b48cb8:2, player win-rate bucket 0.64 (CC BY 4.0)",
+"cards": [
+{
+"name": "Banishing Light",
+"count": 3
+},
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 1
+},
+{
+"name": "Fleeting Flight",
+"count": 1
+},
+{
+"name": "Gutless Plunderer",
+"count": 2
+},
+{
+"name": "Healer's Hawk",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 2
+},
+{
+"name": "Hungry Ghoul",
+"count": 2
+},
+{
+"name": "Infestation Sage",
+"count": 1
+},
+{
+"name": "Mischievous Pup",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 8
+},
+{
+"name": "Resolute Reinforcements",
+"count": 1
+},
+{
+"name": "Skyknight Squire",
+"count": 1
+},
+{
+"name": "Solemn Simulacrum",
+"count": 1
+},
+{
+"name": "Soul-Shackled Zombie",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 2
+},
+{
+"name": "Swamp",
+"count": 9
+},
+{
+"name": "Vampire Soulcaller",
+"count": 2
+}
+]
+}

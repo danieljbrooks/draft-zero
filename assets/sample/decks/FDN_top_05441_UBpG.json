@@ -1,0 +1,99 @@
+{
+"name": "FDN_top_05441_UBpG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck eeef8ef595a04b0598a022275c389662:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Aegis Turtle",
+"count": 1
+},
+{
+"name": "Arbiter of Woe",
+"count": 1
+},
+{
+"name": "Billowing Shriekmass",
+"count": 1
+},
+{
+"name": "Consuming Aberration",
+"count": 1
+},
+{
+"name": "Dismal Backwater",
+"count": 1
+},
+{
+"name": "Dreadwing Scavenger",
+"count": 3
+},
+{
+"name": "Erudite Wizard",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 2
+},
+{
+"name": "Gleaming Barrier",
+"count": 1
+},
+{
+"name": "Gutless Plunderer",
+"count": 1
+},
+{
+"name": "Island",
+"count": 5
+},
+{
+"name": "Lathril, Blade of the Elves",
+"count": 1
+},
+{
+"name": "Muldrotha, the Gravetide",
+"count": 1
+},
+{
+"name": "Phyrexian Arena",
+"count": 1
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Revenge of the Rats",
+"count": 2
+},
+{
+"name": "Self-Reflection",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 2
+},
+{
+"name": "Swamp",
+"count": 7
+},
+{
+"name": "Tatyova, Benthic Druid",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 2
+},
+{
+"name": "Thornwood Falls",
+"count": 2
+},
+{
+"name": "Vampire Soulcaller",
+"count": 1
+}
+]
+}
