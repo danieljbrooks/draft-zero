@@ -32,8 +32,9 @@ relay host needs a direct public IP and port.
 
 **Upstream.** When the run's store is not a local folder (`hf://buckets/...`: the relay is then the only process with
 the token), pass it as `upstream=` (CLI `--upstream SPEC`) and give the relay a folder of its own as the local
-store: each sync first mirrors config.yml, control.json and the latest + previous versions down from the upstream
-store into the folder, and after the pulls uploads every newly pulled complete shard (one put_many each, meta.json
+store: each sync first mirrors the latest + previous versions (and the one control.json names), then config.yml and
+control.json, down from the upstream store into the folder (when a version fails to come down, the folder keeps
+its previous control.json, so hosts are never pointed at it), and after the pulls uploads every newly pulled complete shard (one put_many each, meta.json
 last) and the heartbeat and metrics files that changed. Only the Store API is used (read_bytes, list, get, put_many).
 
 Notes: give every actor machine a unique --machine name (shards/<actor>/ and heartbeats/<machine>.json are merged
@@ -216,20 +217,21 @@ class Relay:
 
     # ── upstream: the run's real store when this folder is only the relay's mirror (hf://buckets/...) ──
     def mirror_down(self) -> dict:
-        """config.yml, control.json and the versions hosts get (latest + previous of each kind) from the upstream
-        store into this folder: a version's files before its meta.json, latest.json after the version."""
+        """config.yml, control.json and the versions hosts get (latest + previous of each kind, and the one
+        control.json names) from the upstream store into this folder: a version's files before its meta.json,
+        latest.json after the version, config.yml and control.json last. control.json is read first (so latest.json,
+        read after it, is at least as new) but written only once every version it names is here: a failed download
+        raises and leaves the previous control.json, which the hosts then keep getting."""
         up, got = self.upstream, []
-        for f in PUSH_FILES:
-            b = up.read_bytes(f)
-            if b is not None and _differs(self.root / f, b):
-                _atomic_write(self.root / f, b)
-                got.append(f)
+        pointers = {f: up.read_bytes(f) for f in PUSH_FILES}
+        named = _named_versions(pointers["control.json"])
         for kind in self.kinds:
             latest = up.read_bytes(f"versions/{kind}/latest.json")
             if latest is None:
                 continue
             top = int(json.loads(latest)["version"])
-            for v in range(top, max(top - self.keep_versions, -1), -1):
+            want = set(range(top, max(top - self.keep_versions, -1), -1)) | ({named[kind]} if kind in named else set())
+            for v in sorted(want, reverse=True):
                 name = f"v{v:04d}"
                 if (self.root / "versions" / kind / name / "meta.json").exists():
                     continue
@@ -239,6 +241,16 @@ class Relay:
                 got += [f"{kind}/{name}"] if files else []
             if _differs(self.root / "versions" / kind / "latest.json", latest):
                 _atomic_write(self.root / "versions" / kind / "latest.json", latest)
+        lacking = [f"{k}/v{v:04d}" for k, v in named.items()
+                   if k in self.kinds and not (self.root / "versions" / k / f"v{v:04d}" / "meta.json").exists()]
+        if lacking:
+            raise RuntimeError(f"control.json names {', '.join(lacking)}, which the upstream store did not give: "
+                               "keeping the previous control.json")
+        for f in PUSH_FILES:
+            b = pointers[f]
+            if b is not None and _differs(self.root / f, b):
+                _atomic_write(self.root / f, b)
+                got.append(f)
         return {"got": got}
 
     def mirror_up(self) -> dict:

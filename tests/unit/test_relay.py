@@ -314,7 +314,8 @@ def test_upstream_store_mirrors_down_and_uploads_what_came_in(world, tmp_path):
     mirror = tmp_path / "relay-mirror"
     r = Relay(mirror, [Host("pod1", str(root))], upstream=up, log=lambda m: None)
     st = r.sync_once()["pod1"]
-    assert r.upstream_status["ok"] and r.upstream_status["down"]["got"][:2] == ["config.yml", "control.json"]
+    assert r.upstream_status["ok"] and r.upstream_status["down"]["got"] == ["player/v0003", "player/v0002",
+                                                                            "config.yml", "control.json"]
     assert st["versions"] == ["player/v0003", "player/v0002"]
     vp = root / "store" / "versions" / "player"
     assert sorted(p.name for p in vp.iterdir()) == ["latest.json", "v0002", "v0003"]
@@ -354,6 +355,45 @@ def test_an_unreachable_upstream_does_not_stop_the_hosts(world, tmp_path):
     r.upstream = FolderStore(run)
     r.sync_once()
     assert r.upstream_status["ok"] and r.upstream_status["up"]["shards"] == 2
+
+
+def test_a_failed_version_download_keeps_the_previous_control_json(world, tmp_path):
+    """The upstream publishes v4 and names it in control.json, but its download fails: the mirror and the hosts keep
+    the control.json naming v3 (a version they have) until a later sync brings v4."""
+    run, root = world
+
+    class Flaky(FolderStore):
+        broken = True
+
+        def get(self, path, dest):
+            if self.broken and path.startswith("versions/player/v0004/"):
+                raise RuntimeError("xet download failed")
+            return super().get(path, dest)
+    up = Flaky(run)
+    mirror = tmp_path / "m"
+    r = Relay(mirror, [Host("pod1", str(root))], upstream=up, log=lambda m: None)
+    r.sync_once()
+    _version(run, 4)
+    (run / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": {"player": 4}}))
+    res = r.sync_once()
+    assert not r.upstream_status["down"]["ok"] and "xet" in r.upstream_status["down"]["error"]
+    assert json.loads((mirror / "control.json").read_text())["version"]["player"] == 3
+    assert json.loads((mirror / "versions/player/latest.json").read_text())["version"] == 3
+    assert res["pod1"]["ok"] and json.loads((root / "store/control.json").read_text())["version"]["player"] == 3
+    up.broken = False
+    r.sync_once()
+    assert json.loads((root / "store/control.json").read_text())["version"]["player"] == 4
+    assert (root / "store/versions/player/v0004/meta.json").exists()
+
+
+def test_mirror_down_fetches_the_version_control_json_names(world, tmp_path):
+    run, root = world
+    (run / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": {"player": 1}}))
+    r = Relay(tmp_path / "m", [Host("pod1", str(root))], upstream=FolderStore(run), log=lambda m: None)
+    r.sync_once()
+    assert r.upstream_status["ok"] and (tmp_path / "m/versions/player/v0001/meta.json").exists()
+    assert (root / "store/versions/player/v0001/meta.json").exists()
+    assert json.loads((root / "store/control.json").read_text())["version"]["player"] == 1
 
 
 def test_cli_once(world, capsys):
