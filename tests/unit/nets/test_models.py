@@ -47,7 +47,9 @@ def test_wire_equals_collate(arch, syn):
         s2, v2 = m(D.batch_from_wire(wp, want))
     assert s1.dtype == torch.float32 and v1.dtype == torch.float32
     assert s1.shape == (int(sub["opt_off"][-1]),) and v1.shape == (len(sel),)
-    assert torch.equal(s1, s2) and torch.equal(v1, v2)
+    # equal up to float32 summation order: BLAS may pick a different thread split per call on a loaded machine
+    torch.testing.assert_close(s1, s2, rtol=1e-5, atol=1e-6)
+    torch.testing.assert_close(v1, v2, rtol=1e-5, atol=1e-6)
     assert s1.std() > 0
 
 

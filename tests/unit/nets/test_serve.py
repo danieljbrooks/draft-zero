@@ -278,9 +278,10 @@ def test_a_bad_request_fails_alone(syn):
 @pytest.mark.parametrize("merge", [True, False])
 def test_forward_ms_excludes_waiting(syn, merge):
     """forward_ms is the time of a forward, not of a forward plus the wait for the device: with 4
-    connections queueing on a 40 ms model it stays near 40 ms, and the queueing shows in wait_ms."""
+    connections queueing on a 100 ms model it stays near 100 ms, and the queueing shows in wait_ms. (100 ms, not
+    less, so the bound holds on a machine whose other jobs add tens of ms of scheduling jitter.)"""
     pack, _ = syn
-    delay = 0.04
+    delay = 0.1
     g = _Gated(_tiny_model(), delay=delay)
     g.gate.set()
     srv, path = _start(g, merge=merge)
