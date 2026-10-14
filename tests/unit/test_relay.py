@@ -128,8 +128,52 @@ def test_meta_json_is_copied_after_the_rest(world):
     assert Path(next(x for x in pulls[1] if x.startswith("--files-from="))[13:]).name == "meta"
     # and the pushes: versions, latest.json, then config + control
     pushes = [a for a in calls if a[-1].endswith("/store/") and "--list-only" not in a]
-    assert "--delete-excluded" in pushes[0] and pushes[1][-2].endswith("latest.json")
-    assert pushes[2][-3:-1] == [str(local.resolve() / "config.yml"), str(local.resolve() / "control.json")]
+    assert "--delete-excluded" in pushes[0] and pushes[1][-2].endswith("/./versions/player/latest.json")
+    assert [Path(p).name for p in pushes[2][-3:-1]] == ["config.yml", "control.json"]
+
+
+def test_push_sends_the_pointers_as_they_were_before_the_versions(world):
+    """The learner publishes v4 and the controller names it in control.json while the versions are in flight: the
+    host must get the latest.json and control.json read before the push (v3), never a pointer to a version it
+    lacks; the next sync brings v4."""
+    local, root = world
+    remote = root / "store"
+    bumped = []
+
+    def runner(argv, **kw):
+        r = local_run(argv, **kw)
+        if "--delete-excluded" in argv and not bumped:          # right after the first versions rsync
+            _version(local, 4)
+            (local / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": {"player": 4}}))
+            bumped.append(1)
+        return r
+    r = Relay(local, [Host("pod1", str(root))], transport=lambda h: Transport(runner=runner), log=lambda m: None)
+    st = r.sync_once()["pod1"]
+    assert st["ok"] and st["versions"] == ["player/v0003", "player/v0002"]
+    vp = remote / "versions" / "player"
+    named = json.loads((remote / "control.json").read_text())["version"]["player"]
+    assert named == 3 and json.loads((vp / "latest.json").read_text())["version"] == 3
+    assert (vp / f"v{named:04d}" / "meta.json").exists()
+    assert not list((local / rl.TMP).rglob("*"))
+    r.sync_once()
+    assert json.loads((remote / "control.json").read_text())["version"]["player"] == 4
+    assert (vp / "v0004" / "meta.json").exists()
+
+
+def test_push_keeps_the_version_control_json_names(world):
+    """The controller lags the learner: control.json names v1 while latest.json is v3. A host keeps v1 too."""
+    local, root = world
+    (local / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": {"player": 1}}))
+    st = Relay(local, [Host("pod1", str(root))], log=lambda m: None).sync_once()["pod1"]
+    assert st["versions"] == ["player/v0003", "player/v0002", "player/v0001"]
+    vp = root / "store" / "versions" / "player"
+    assert sorted(p.name for p in vp.iterdir()) == ["latest.json", "v0001", "v0002", "v0003"]
+    assert json.loads((root / "store" / "control.json").read_text())["version"]["player"] == 1
+    # a control.json naming a version this store lacks stays here; the host keeps the one it has
+    (local / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": {"player": 7}}))
+    st = Relay(local, [Host("pod1", str(root))], log=lambda m: None).sync_once()["pod1"]
+    assert st["ok"] and st["pushed"] == ["config.yml"]
+    assert json.loads((root / "store" / "control.json").read_text())["version"]["player"] == 1
 
 
 def test_a_new_host_gets_its_store_and_an_empty_one_pulls_nothing(tmp_path):
