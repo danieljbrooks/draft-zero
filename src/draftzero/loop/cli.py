@@ -1,69 +1,218 @@
-"""`python -m draftzero.loop.cli <role>`: the loop's command line (docs/021 §3; the actor and learner roles
-come with the v0.2.0 loop).
+"""`python -m draftzero.loop.cli <role>`: the loop's command line (contracts §4, §7; `dz` maps onto it).
 
-    python -m draftzero.loop.cli controller  --config C --store S [--once]
-    python -m draftzero.loop.cli local       --config C --store S [--work-dir DIR] [--max-hours H]   every role here
-    python -m draftzero.loop.cli status      --store S                                                print status.md
-    python -m draftzero.loop.cli stop        --store S                    ask the controller to stop the run
+    actor       --config C [--store S] [--machine M] [--work-dir DIR] [--max-chunks N]   play self-play chunks
+    learner     --config C [--store S] [--machine M] [--work-dir DIR]                    train and publish versions
+    evaluator   --config C [--store S] [--machine M] [--work-dir DIR]                    play evaluation shards
+    controller  --config C [--store S] [--once] [--status-every SECS]                    control.json, plan, status
+    local       --config C [--store S] [--actors N] [--work-dir DIR] [--max-hours H]     every role on this machine
+    status      [STORE] [--json]                                                         print status.md
+    stop        [STORE]                                                                  ask the controller to stop
+    plan        [STORE] set PATH=VALUE [PATH=VALUE ...]                                  a live config change
+    plan        [STORE] list                                                             pending, rejected, applied
 
-S is a local folder (one machine) or hf://<dataset>[?weights=<private repo>] (many machines; docs/021 §3.2).
+S is a folder or hf://buckets/<owner>/<name>; it defaults to the config's `store`. --machine names this process in
+the store (heartbeats/<machine>.json, shards/<machine>/): it must be unique per actor; the default is the host
+name (with the role appended for the other roles). --work-dir defaults to runs/<run>/work/<role>-<machine>.
+Roles poll the store every --poll seconds (default 30 on a folder, 60 on a bucket; local mode passes it on); the
+controller writes its status page every --status-every seconds (default 60 on a folder, 300 on a bucket).
 """
 from __future__ import annotations
 
 import argparse
+import re
+import signal
+import socket
 import sys
 import time
 from pathlib import Path
+
+ROLES = ("actor", "learner", "evaluator", "controller", "local")
 
 
 def _log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m draftzero.loop.cli", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+def _host() -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", socket.gethostname().split(".")[0]) or "host"
+
+
+def _parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="python -m draftzero.loop.cli", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="role", required=True)
-    for role in ("controller", "local"):
+    for role in ROLES:
         p = sub.add_parser(role)
         p.add_argument("--config", required=True)
-        p.add_argument("--store", required=True)
-        if role == "local":
-            p.add_argument("--work-dir", type=Path, default=None)
+        p.add_argument("--store", default=None, help="default: the config's store")
+        p.add_argument("--poll", type=float, default=None, help="seconds between looks at the store (default 30; 60 on a bucket)")
+        if role != "controller":
             p.add_argument("--machine", default=None)
+            p.add_argument("--work-dir", type=Path, default=None)
+        if role == "actor":
+            p.add_argument("--max-chunks", type=int, default=None, help="exit after this many chunks")
         if role == "controller":
             p.add_argument("--once", action="store_true", help="one tick, then exit")
+            p.add_argument("--status-every", type=float, default=None, help="seconds between status pages")
         if role == "local":
-            p.add_argument("--max-hours", type=float, default=None, help="a hard stop for everything")
+            p.add_argument("--actors", type=int, default=1)
+            p.add_argument("--max-hours", type=float, default=None, help="stop the run after this long")
     for role in ("status", "stop"):
-        sub.add_parser(role).add_argument("--store", required=True)
-    a = ap.parse_args(argv)
+        p = sub.add_parser(role)
+        p.add_argument("store_pos", nargs="?", metavar="STORE")
+        p.add_argument("--store", default=None)
+        if role == "status":
+            p.add_argument("--json", action="store_true", help="status.json instead of status.md")
+    p = sub.add_parser("plan")
+    p.add_argument("words", nargs="+", metavar="[STORE] set PATH=VALUE... | [STORE] list")
+    p.add_argument("--store", default=None)
+    p.add_argument("--by", default=None, help="who asks (default user@host)")
+    return ap
 
+
+def _sigterm_exits() -> None:
+    """SIGTERM raises SystemExit, so a role's cleanup (and gorge's child kill) runs."""
+    def handler(signum, frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, handler)
+
+
+def main(argv=None) -> int:
+    a = _parser().parse_args(argv)
+    from draftzero.loop import control as ctl
     from draftzero.loop.store import open_store
-    store = open_store(a.store)
-    if a.role == "status":
-        b = store.read_bytes("status.md")
-        print(b.decode() if b else "no status yet")
-        return 0
-    if a.role == "stop":
-        store.put("stop.request", f"stop requested {time.ctime()}\n".encode(), "stop requested")
-        print("stop requested: the controller stops the run at its next tick")
-        return 0
 
-    from draftzero.loop import settings as sc
-    cfg = sc.load(a.config)
+    if a.role in ("status", "stop", "plan"):
+        return _store_command(a, ctl, open_store)
+
+    from draftzero import config
+    cfg = config.load(a.config)
+    store_spec = a.store or str(ctl.get(cfg, "store"))
+    run = ctl.get(cfg, "run")
+    if a.role == "local":
+        from draftzero.loop import local
+        wd = a.work_dir or Path("runs") / run / "work"
+        return local.run(a.config, store_spec, wd, machine=a.machine or "local", actors=a.actors,
+                         max_hours=a.max_hours, poll_s=a.poll, log=_log)
+
+    _sigterm_exits()
+    store = open_store(store_spec)
+    from draftzero.loop.store import HFBucketStore
+    remote = isinstance(store, HFBucketStore)
+    poll = a.poll if a.poll is not None else (60.0 if remote else 30.0)
     if a.role == "controller":
         from draftzero.loop.controller import Controller
-        c = Controller(store, cfg, log=_log)
-        while True:
-            ctl = c.tick()
-            if a.once or (ctl and ctl.get("stop")):
-                break
-            time.sleep(cfg["controller"]["poll_s"])
-    elif a.role == "local":
-        from draftzero.loop import local
-        wd = a.work_dir or sc.path(f"runs/selfplay/{cfg['run']}")
-        return local.run(a.config, a.store, wd, machine=a.machine or "local", max_hours=a.max_hours, log=_log)
+        every = a.status_every if a.status_every is not None else (300.0 if remote else 60.0)
+        return Controller(store, cfg, log=_log, status_every_s=every, tracker=_tracker(cfg)).run(poll_s=poll,
+                                                                                                once=a.once)
+    machine = ctl.check_name(a.machine or (_host() if a.role == "actor" else f"{_host()}-{a.role}"))
+    wd = a.work_dir or Path("runs") / run / "work" / f"{a.role}-{machine}"
+    if a.role == "actor":
+        from draftzero.loop.actor import Actor
+        return Actor(store, cfg, machine, wd, log=_log, poll_s=poll).run(max_chunks=a.max_chunks)
+    if a.role == "evaluator":
+        from draftzero.loop.evaluator import Evaluator
+        return Evaluator(store, cfg, machine, wd, log=_log, poll_s=poll).run()
+    from draftzero.loop.learner import LeaseHeld, Learner
+    learner = Learner(store, cfg, machine, wd, log=_log, poll_s=poll)
+    while True:
+        try:
+            return learner.run()
+        except LeaseHeld as e:
+            _log(f"learner: {e}; waiting")
+            c = ctl.read(store)
+            if c and c.get("stop"):
+                return 0
+            time.sleep(poll)
+
+
+def _tracker(cfg):
+    """draftzero.tracking.Tracker when tracking.trackio is on (None otherwise, or if it can't start)."""
+    from draftzero.loop import control as ctl
+    if not ctl.get(cfg, "tracking.trackio", False):
+        return None
+    try:
+        from draftzero.tracking import Tracker
+        return Tracker(cfg)
+    except Exception as e:                               # noqa: BLE001 - tracking is a view; the run goes on
+        _log(f"controller: no tracker ({type(e).__name__}: {e})")
+        return None
+
+
+def _store_command(a, ctl, open_store) -> int:
+    words = list(getattr(a, "words", []) or [])
+    pos = getattr(a, "store_pos", None)
+    if a.role == "plan" and words and words[0] not in ("set", "list"):
+        pos, words = words[0], words[1:]
+    spec = a.store or pos
+    if not spec:
+        print(f"{a.role}: which store? (STORE or --store)", file=sys.stderr)
+        return 2
+    store = open_store(spec)
+    if a.role == "status":
+        b = store.read_bytes(ctl.STATUS if a.json else ctl.STATUS_MD)
+        print(b.decode() if b else "no status yet (is the controller running?)")
+        return 0
+    if a.role == "stop":
+        store.put(ctl.STOP, f"stop requested {ctl.now_iso()}\n".encode(), "stop requested")
+        print("stop requested: the controller stops the run at its next tick")
+        return 0
+    if not words or words[0] not in ("set", "list"):
+        print("plan: want `set PATH=VALUE ...` or `list`", file=sys.stderr)
+        return 2
+    if words[0] == "list":
+        for _, r in ctl.pending_requests(store):
+            print(f"pending   {r['path']} = {r['value']!r}  (by {r.get('by')}, {r.get('time')})")
+        for p in store.list(ctl.REJECTED):
+            r = store.read_json(p) or {}
+            print(f"rejected  {r.get('path')} = {r.get('value')!r}: {r.get('error')}")
+        for e in ctl.read_events(store):
+            print(f"applied   {e['path']}: {e.get('old')!r} -> {e.get('new')!r} from version {e.get('at_version')} "
+                  f"({e.get('time')}, by {e.get('by')})")
+        return 0
+    changes = []
+    for w in words[1:]:
+        if "=" not in w:
+            print(f"plan set: {w!r} is not PATH=VALUE", file=sys.stderr)
+            return 2
+        k, _, v = w.partition("=")
+        changes.append((k.strip(), ctl.parse_value(v)))
+    if not changes:
+        print("plan set: nothing to set", file=sys.stderr)
+        return 2
+    err = _check_changes(store, ctl, changes)
+    if err:
+        print(f"plan set: {err}", file=sys.stderr)
+        return 2
+    import getpass
+    by = a.by or f"{getpass.getuser()}@{_host()}"
+    for k, v in changes:
+        name = ctl.request_change(store, k, v, by)
+        print(f"requested {k} = {v!r} ({name}); the controller applies it "
+              + ("now" if ctl.immediate(k) else "at the next version"))
     return 0
+
+
+def _check_changes(store, ctl, changes) -> str | None:
+    """Validate against the store's config.yml when it loads here (the controller checks again either way)."""
+    raw = store.read_bytes(ctl.CONFIG)
+    if raw is None:
+        return None
+    try:
+        import tempfile
+        from draftzero import config
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "config.yml"
+            p.write_bytes(raw)
+            cfg = config.load(p)
+    except Exception:                                    # noqa: BLE001 - e.g. data paths of another machine
+        return None
+    for k, v in changes:
+        try:
+            cfg = config.apply_change(cfg, k, v)
+        except Exception as e:                           # noqa: BLE001
+            return f"{k}={v!r}: {e}"
+    return None
 
 
 if __name__ == "__main__":
