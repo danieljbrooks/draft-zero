@@ -149,6 +149,32 @@ def test_bucket_store_retries_transient_errors(tmp_path):
         s.put("b.json", b"2")
 
 
+def test_only_network_trouble_429_and_5xx_are_retried():
+    """HfHubHTTPError subclasses OSError (through httpx2.HTTPError): its status must decide, so a 401/403/404/400/422
+    fails at once instead of four times with 12 s of pauses."""
+    httpx2 = pytest.importorskip("httpx2")
+    from huggingface_hub.errors import HfHubHTTPError
+
+    def http(code):
+        return HfHubHTTPError(f"HTTP {code}", response=httpx2.Response(code, request=httpx2.Request("POST", "https://x")))
+    for code in (400, 401, 403, 404, 422):
+        assert not S._transient(http(code)), code
+    for code in (408, 429, 500, 502, 503, 504):
+        assert S._transient(http(code)), code
+    assert S._transient(httpx2.ConnectError("refused")) and S._transient(httpx2.ReadTimeout("slow"))
+    assert S._transient(ConnectionError("reset")) and S._transient(TimeoutError()) and S._transient(OSError("net"))
+    assert not S._transient(FileNotFoundError("x")) and not S._transient(ValueError("bad path"))
+
+    class Api(FakeApi):
+        def batch_bucket_files(self, bucket_id, **kw):
+            self.calls.append(("batch",))
+            raise http(403)
+    api = Api()
+    with pytest.raises(HfHubHTTPError):
+        HFBucketStore("dan/b", api=api, backoff_s=0).put("a.json", b"1")
+    assert len(api.calls) == 1
+
+
 def test_open_store_specs(monkeypatch, tmp_path):
     made = {}
 

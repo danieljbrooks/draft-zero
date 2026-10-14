@@ -238,17 +238,22 @@ def _missing(e: Exception) -> bool:
 
 
 def _transient(e: Exception) -> bool:
-    """Network trouble and the Hub's 429/5xx are worth a retry; anything else (auth, a bad path) is not."""
-    if isinstance(e, (ConnectionError, TimeoutError, OSError)) and not isinstance(e, FileNotFoundError):
-        return True
-    try:
-        import httpx                                     # huggingface_hub's HTTP client
-        if isinstance(e, httpx.TransportError):
-            return True
-    except ImportError:
-        pass
+    """Network trouble and the Hub's 408/429/5xx are worth a retry; any other HTTP error (401, 403, a missing bucket,
+    400, 422) is not. The status decides first: the Hub's HfHubHTTPError subclasses OSError (through
+    httpx2.HTTPError), so an OSError check alone would retry every HTTP error."""
     status = getattr(getattr(e, "response", None), "status_code", None)
-    return status in (408, 429, 500, 502, 503, 504)
+    if status is not None:
+        return status in (408, 429, 500, 502, 503, 504)
+    for name in ("httpx2", "httpx"):                     # huggingface_hub's HTTP client (httpx2 from 2.x)
+        try:
+            client = __import__(name)
+        except ImportError:
+            continue
+        if isinstance(e, client.TransportError):         # connect, read, write and pool errors and timeouts
+            return True
+        if isinstance(e, client.HTTPError):              # any other HTTP-level error without a status
+            return False
+    return isinstance(e, (ConnectionError, TimeoutError, OSError)) and not isinstance(e, FileNotFoundError)
 
 
 def open_store(spec: str | Path, *, token: str | None = None) -> Store:
