@@ -1,7 +1,7 @@
-"""DraftZero — one agent that plays a whole limited format with any deck.
+"""DraftZero: agents that play Magic: The Gathering limited tournaments end to end.
 
-Built on MageZero (the RL framework and XMage bridge), which is a pinned dependency.
-DraftZero owns the format-level concerns: deck pools, the generalist training loop,
-17lands-style statistics, and the workers that run it all.
+Games run in gorge (the pinned engine fork, engine/gorge). DraftZero owns the format-level concerns: the networks
+and their training loop (nets, loop), deck pools (data), deck building (build), evaluation (eval) and the machines
+that run it all (workers).
 """
 __version__ = "0.1.0"

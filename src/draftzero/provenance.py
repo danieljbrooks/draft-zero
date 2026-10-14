@@ -1,8 +1,9 @@
 """provenance.py — record exactly which code produced a run.
 
-Three moving parts decide what a run does: DraftZero, the pinned MageZero, and the XMage
-build. Two runs that disagree are unexplainable unless all three are written down at the
-time, so this goes into run.json before the first game.
+Two moving parts decide what a run does: DraftZero and the gorge engine it pins
+(engine/gorge/GORGE_REPO and GORGE_REF, built by engine/gorge/build.sh). Two runs that disagree
+are unexplainable unless both are written down at the time. draftzero.manifest (contracts §3)
+replaces this module with the run manifest, which adds the built binary and its card corpus.
 """
 import os
 import platform
@@ -57,23 +58,13 @@ def _package(name: str) -> dict:
     return info
 
 
-def _xmage(root: Path) -> dict:
-    """Identify the XMage build: an explicit VERSION file if present, else the jar set."""
-    xmage = root / "xmage"
-    if not xmage.exists():
-        return {}
-    out: dict = {"path": str(xmage.resolve())}
-    for marker in ("VERSION", "BUILD", "build.txt"):
-        f = xmage / marker
+def _engine_pin(repo: Path) -> dict:
+    """The gorge pin this checkout builds against (engine/gorge/GORGE_REPO and GORGE_REF)."""
+    out: dict = {}
+    for key, name in (("repo", "GORGE_REPO"), ("ref", "GORGE_REF")):
+        f = repo / "engine" / "gorge" / name
         if f.exists():
-            out["version"] = f.read_text().strip()[:200]
-            break
-    lib = xmage / "lib"
-    if lib.exists():
-        jars = sorted(p.name for p in lib.glob("mage-magezero*.jar"))
-        if jars:
-            out["magezero_jar"] = jars[0]
-        out["jar_count"] = len(list(lib.glob("*.jar")))
+            out[key] = f.read_text().strip()
     return out
 
 
@@ -82,8 +73,7 @@ def collect(root: Optional[Path] = None) -> dict:
     here = Path(__file__).resolve().parent
     return {
         "draftzero": {**_package("draftzero"), **_repo_state(here.parents[1])},
-        "magezero": _package("magezero"),
-        "xmage": _xmage(root),
+        "gorge": _engine_pin(here.parents[1]),
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "torch": _package("torch").get("version"),

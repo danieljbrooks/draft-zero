@@ -3,7 +3,7 @@ Write DraftZero's FDN deck pool as gorge deck files.
 
 gorge reads a deck as bare {name, count} JSON (its `deck` package). This converts the decks that
 `tools/extract_decks.py` pulls from 17lands into that format, one file per deck, under the same
-stems the XMage pool uses (`FDN_top_00001_WB`), so the train/eval split in `assets/decks.tsv`
+stems the v0.1.0 XMage pool used (`FDN_top_00001_WB`), so the train/eval split in `assets/decks.tsv`
 applies unchanged.
 
   python tools/extract_decks.py --set FDN --format PremierDraft --min-winrate 0.60
@@ -21,8 +21,8 @@ from draftzero.data.paths import REPO
 
 
 def stem(i: int, d: dict, set_code: str) -> str:
-    # The same stem tools/extract_decks.py gives the .dck file (write_dck): the deck's 1-based
-    # position in the sorted decks.jsonl, then main+splash colours.
+    # The stem v0.1.0's XMage .dck files had (assets/decks.tsv): the deck's 1-based position in the
+    # sorted decks.jsonl (tools/extract_decks.py), then main+splash colours.
     colors = d["main_colors"] + (f"+{d['splash_colors']}" if d["splash_colors"] else "")
     return f"{set_code}_top_{i:05d}_{(colors or 'C').replace('+', 'p')}"
 
