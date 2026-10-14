@@ -1,5 +1,7 @@
 # Scaling up self-play on gorge: DraftZero's networks, games per dollar, and what limits learning
 
+*Started 2026-10-07 · Applies to v0.1.0 · Report*
+
 *Status: finished on 7 October 2026; the code is on the
 [`claude/gorge-fdn-selfplay`](https://github.com/danieljbrooks/draft-zero/tree/claude/gorge-fdn-selfplay) branch, not on main.*
 

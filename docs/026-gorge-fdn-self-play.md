@@ -1,5 +1,7 @@
 # Self-play on gorge: FDN games, search, a first network, and 17lands statistics
 
+*Started 2026-10-06 · Applies to v0.1.0 · Report*
+
 *6 October 2026. Dan asked how far DraftZero can train on [gorge](https://github.com/adams-shaun/gorge), the
 fast Go rules engine compared in [docs/015](015-rules-engine-comparison.md): play FDN Limited games, measure games
 an hour, port a DraftZero model or train a new one, and evaluate it against baselines and 17lands, as in

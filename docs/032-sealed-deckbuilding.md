@@ -1,5 +1,7 @@
 # Building sealed decks from self-play: FDN on gorge
 
+*Started 2026-10-11 · Applies to v0.1.0 · Report*
+
 *Status (Wednesday 14 October 2026): finished. A deck builder trained only on its own games builds simple, white-based
 creature decks that its pilot can play well, and with them beats the human decks from the same pools 64% of the time
 on fresh test pools; more search in its training games makes its decks steadily more human. Phase C's later

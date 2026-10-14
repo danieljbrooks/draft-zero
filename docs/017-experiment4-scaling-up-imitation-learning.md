@@ -1,5 +1,7 @@
 # Experiment #4: Scaling up imitation learning
 
+*Started 2026-09-30 · Applies to v0.1.0 · Plan*
+
 *September–October 2026. The plan, and the results as the stages run (§8). It follows experiment
 #3 ([docs/016](016-search-benchmark-results.md)) and builds on its §9, "A potential plan for
 bootstrapping limited agents with imitation learning".*

@@ -1,5 +1,7 @@
 # AlphaZero-style distributed training
 
+*Started 2026-09-25 · Applies to v0.1.0 · Reference*
+
 The goal of this document is to explore how other RL self-play implementations scale compute,
 and to turn what they do into a plan for DraftZero.
 - **Part 1** surveys the systems: KataGo first, then ELF OpenGo, AlphaGo Zero and AlphaZero, the

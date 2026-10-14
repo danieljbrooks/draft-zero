@@ -1,5 +1,7 @@
 # MageZero's graph network: the run log
 
+*Started 2026-10-04 · Applies to v0.1.0 · Run log*
+
 *The stages of [docs/022](022-gnn-imitation-test-plan.md), as they run. Started 4 October 2026, 6:20 PM PT, when
 Dan approved the plan ("push to main, use r1 if available, budget is okay"). All times are Pacific.*
 

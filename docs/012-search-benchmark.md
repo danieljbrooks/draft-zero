@@ -1,5 +1,7 @@
 # Search benchmark: decision quality, hidden information and compute
 
+*Started 2026-09-27 · Applies to v0.1.0 · Plan*
+
 A proposal for comment, written 2026-09-27. **Nothing here has been built or run.**
 
 **What we'd like feedback on: the first experiment (§2).** It compares four search methods from

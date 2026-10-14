@@ -1,5 +1,7 @@
 # Rules engines for a fast Limited agent: speed and MCTS support
 
+*Started 2026-09-28 · Applies to v0.1.0 · Report*
+
 Which rules engine should a high-level Limited agent train on? This compares six candidates on
 speed, FDN cards, and support for MCTS-style learning:
 

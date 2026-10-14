@@ -1,5 +1,7 @@
 # From imitation to self-play: results
 
+*Started 2026-10-08 · Applies to v0.1.0 · Report*
+
 *Status (final, Friday 9 October 2026, 1:30 PM PT): every stage planned in docs/028 ran except the plain-AlphaZero
 loop's second generation (dropped for compute, §6). The plan is [docs/028](028-imitation-to-self-play-plan.md); the code is on the
 [`selfplay-transition`](https://github.com/danieljbrooks/draft-zero/tree/selfplay-transition) branch.*

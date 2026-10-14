@@ -1,5 +1,7 @@
 # Self-play on mtg-kernel with FDN limited decks
 
+*Started 2026-10-06 · Applies to v0.1.0 · Report*
+
 *Started Tuesday 6 October 2026, 10:05 AM PT, at Dan's request, after mtg-kernel's maintainer reported that our two
 FDN fixture decks play complete games
 ([mtg-kernel#110](https://github.com/jackmaiorino/mtg-kernel/issues/110#issuecomment-6017220636)). Follows

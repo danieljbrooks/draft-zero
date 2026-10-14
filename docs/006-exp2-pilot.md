@@ -1,5 +1,7 @@
 # Experiment #2 pilot: settings, single-JVM tuning, parallel JVMs
 
+*Started 2026-09-25 · Applies to v0.1.0 · Report*
+
 Run 2026-09-26 (UTC) on two RunPod pods. Both were RTX 3090, Secure Cloud, $0.50/hr, with a real quota of 31.1 cores and 116 GB. The pods report 256 cores and 1,007 GB from the host; see [005-runpod-tips.md](005-runpod-tips.md).
 
 - **Pod A** ran the settings pilot (experiment 1).
