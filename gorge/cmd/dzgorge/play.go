@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -82,6 +83,9 @@ func runPlay(args []string) int {
 	poolPath := fs.String("pool", "", "pool.tsv (gorge/decks.py)")
 	split := fs.String("split", "eval", "pool split the decks come from: train, eval or all")
 	onlyPath := fs.String("only", "", "optional list of allowed decks (dzgorge coverage -out)")
+	deckFile := fs.String("deckfile", "", "JSONL of gorge deck files (one {name, cards} object a line), looked up before -decks")
+	pairsFile := fs.String("pairs-file", "", "TSV of explicit deck pairs (deckA, deckB[, seed]) instead of random pairs from -pool; "+
+		"-first-pair/-pairs select a range of its lines (-pairs 0: all)")
 	aSpec := fs.String("a", "bot", "policy A (see policy.go)")
 	bSpec := fs.String("b", "bot", "policy B")
 	pairs := fs.Int("pairs", 100, "deck pairs; each is played twice (policies swapped) unless -a == -b or -single")
@@ -154,10 +158,22 @@ func runPlay(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	pool, err := readPool(*poolPath, *split)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+	var explicit [][3]string
+	if *pairsFile != "" {
+		if explicit, err = readPairs(*pairsFile); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if *pairs <= 0 || *firstPair+*pairs > len(explicit) {
+			*pairs = len(explicit) - *firstPair
+		}
+	}
+	var pool []poolDeck
+	if *pairsFile == "" {
+		if pool, err = readPool(*poolPath, *split); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
 	}
 	if *onlyPath != "" {
 		raw, err := os.ReadFile(*onlyPath)
@@ -177,7 +193,7 @@ func runPlay(args []string) int {
 		}
 		pool = kept
 	}
-	if len(pool) < 2 {
+	if *pairsFile == "" && len(pool) < 2 {
 		fmt.Fprintf(os.Stderr, "play: %d decks in split %q\n", len(pool), *split)
 		return 1
 	}
@@ -189,14 +205,28 @@ func runPlay(args []string) int {
 	var jobs []job
 	for p := *firstPair; p < *firstPair+*pairs; p++ {
 		r := rand.New(rand.NewPCG(*seed, uint64(p)))
-		i := r.IntN(len(pool))
-		j := r.IntN(len(pool) - 1)
-		if j >= i {
-			j++
+		var dk [2]string
+		var ps uint64
+		if explicit != nil {
+			dk = [2]string{explicit[p][0], explicit[p][1]}
+			ps = r.Uint64()
+			if explicit[p][2] != "" {
+				if ps, err = strconv.ParseUint(explicit[p][2], 10, 64); err != nil {
+					fmt.Fprintf(os.Stderr, "play: -pairs-file line %d: seed %q: %v\n", p+1, explicit[p][2], err)
+					return 2
+				}
+			}
+		} else {
+			i := r.IntN(len(pool))
+			j := r.IntN(len(pool) - 1)
+			if j >= i {
+				j++
+			}
+			dk = [2]string{pool[i].Name, pool[j].Name}
+			ps = r.Uint64()
 		}
-		ps := r.Uint64()
 		for leg := 0; leg < legs; leg++ {
-			jb := job{game: len(jobs), pair: p, leg: leg, seed: ps, decks: [2]string{pool[i].Name, pool[j].Name}, sides: [2]int{0, 1}}
+			jb := job{game: len(jobs), pair: p, leg: leg, seed: ps, decks: dk, sides: [2]int{0, 1}}
 			if leg == 1 {
 				jb.sides = [2]int{1, 0}
 			}
@@ -204,6 +234,12 @@ func runPlay(args []string) int {
 		}
 	}
 	dc := &deckCache{reg: reg, dir: *decksDir, m: map[string][]*cards.Card{}, names: map[*cards.Card]string{}}
+	if *deckFile != "" {
+		if dc.files, err = readDeckFile(*deckFile); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	}
 	for _, jb := range jobs {
 		for _, d := range jb.decks {
 			if _, err := dc.get(d); err != nil {
@@ -295,6 +331,9 @@ func runPlay(args []string) int {
 					next++
 					w.Write(f.line)
 					w.WriteByte('\n')
+					// Flush each game: a run killed for a hung game keeps every game finished before it, so the
+					// caller can find the hung one (the first missing) instead of losing a buffer's worth.
+					w.Flush()
 					if f.member != nil {
 						if _, err := corpusF.Write(f.member); err != nil {
 							panic(err)
