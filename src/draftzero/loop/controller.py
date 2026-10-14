@@ -4,7 +4,8 @@ At the start it writes config.yml and manifest.json (once per store; a restart k
   1. reads versions/player/latest.json; a newer version is a version boundary: control["version"]["player"]
      moves to it, and every version passed (none is skipped when several land between ticks) with
      v % eval.every_versions == 0 gets one evaluation job per opponent in eval.opponents (evaluator.make_job);
-  2. applies plan requests (plan/requests/*.json): each is checked at once with config.apply_change (a bad one
+  2. applies plan requests (plan/requests/*.json, in the order made): each is checked at once with
+     config.apply_change on the config with the earlier requests applied, waiting ones too (a bad one
      moves to plan/rejected/ with the reason); a valid one applies at the next version boundary, except `paused`
      and budget (budget.*) which apply at once; each applied change appends {time, kind: "set", path, old, new,
      by, at_version} to events.jsonl (values as JSON: a whole section is a mapping), so
@@ -148,14 +149,19 @@ class Controller:
 
     # ---------------------------------------------------------------------------- plan changes
     def apply_requests(self, boundary: bool, at_version: int) -> list[dict]:
+        """Each request is checked against the config with the requests before it applied, waiting ones too (as
+        `plan set` checks a multi-field change), and applied now if it is due."""
         from draftzero import config
         events, applied = [], []
+        pending = self.cfg                               # self.cfg plus the requests accepted so far in this pass
         for path, r in ctl.pending_requests(self.store):
             key, value = r.get("path"), r.get("value")
             try:
                 if not isinstance(key, str):
                     raise ValueError("a request needs a dotted config path")
-                new_cfg = config.apply_change(self.cfg, key, value)
+                chained = config.apply_change(pending, key, value)
+                due = boundary or ctl.immediate(key)
+                new_cfg = config.apply_change(self.cfg, key, value) if due and pending is not self.cfg else chained
             except Exception as e:                       # noqa: BLE001 - ConfigError, bad JSON shapes...
                 reason = f"{type(e).__name__}: {e}"
                 self.log(f"controller: plan request {key}={value!r} rejected: {reason}")
@@ -164,7 +170,8 @@ class Controller:
                                     "plan: rejected")
                 self.store.delete([path], "plan: rejected")
                 continue
-            if not (boundary or ctl.immediate(key)):
+            pending = chained
+            if not due:
                 continue                                 # waits for the next version
             events.append({"time": ctl.now_iso(), "kind": "set", "path": key, "old": ctl.plain(ctl.get(self.cfg, key)),
                            "new": ctl.plain(ctl.get(new_cfg, key)), "by": r.get("by"), "at_version": at_version,

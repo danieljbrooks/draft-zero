@@ -765,6 +765,36 @@ def test_plan_changes_apply_at_version_boundaries(tmp_path):
     assert argv2[argv2.index("--lr") + 1] == "0.0001" and argv3[argv3.index("--lr") + 1] == "0.0003"
 
 
+def test_deferred_plan_requests_are_checked_in_a_chain(tmp_path):
+    """Requests waiting for the next version are checked against the config with the earlier waiting ones applied,
+    as `plan set` checks them, so a change that is valid only together is not half rejected."""
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    r.controller.tick()
+    ctl.request_change(r.store, "actor.pcr.cheap_sims", 4, "dan")
+    ctl.request_change(r.store, "actor.pcr.prob", 0.25, "dan")                 # needs cheap_sims <= sims (8)
+    ctl.request_change(r.store, "actor.pcr.by_kind.target", 1.0, "dan")        # needs prob > 0
+    ctl.request_change(r.store, "learner.window_positions", 5000, "dan")
+    ctl.request_change(r.store, "learner.min_new_positions", 2000, "dan")      # needs window >= it
+    ctl.request_change(r.store, "paused", True, "dan")                         # at once, alone
+    c = r.controller.tick()                                    # between versions
+    assert not r.store.list(ctl.REJECTED) and c["paused"] and c["play"]["pcr"]["prob"] == 0.0
+    assert [x["path"] for _, x in ctl.pending_requests(r.store)] == [
+        "actor.pcr.cheap_sims", "actor.pcr.prob", "actor.pcr.by_kind.target", "learner.window_positions",
+        "learner.min_new_positions"]
+    assert r.controller.cfg.learner.window_positions == 1000   # nothing deferred applies before the version
+    ctl.request_change(r.store, "paused", False, "dan")
+    r.controller.tick()
+    for _ in range(2):
+        r.actors[0].step()
+    r.learner.step()                                           # v1
+    c = r.controller.tick()
+    assert not r.store.list(ctl.REJECTED) and not ctl.pending_requests(r.store)
+    assert c["play"]["pcr"]["prob"] == 0.25 and c["play"]["pcr"]["by_kind"] == {"target": 1.0}
+    assert (r.controller.cfg.learner.window_positions, r.controller.cfg.learner.min_new_positions) == (5000, 2000)
+
+
 def test_whole_section_plan_changes_are_stored_as_json_and_replay(tmp_path):
     """A change of a whole section (budget, actor.pcr) goes into events.jsonl as a plain mapping, not a dataclass's
     repr, so every role (and a restarted controller) can replay it; budget applies at once, like budget.*."""
