@@ -39,10 +39,14 @@ def gorge():
 FAKE = r'''#!{python}
 """A fake dzgorge: `play` writes instant games (one JSON line each, a gzip member each with -corpus), in game order,
 flushed per game; env FAKE_HANG=pairs hang (at leg FAKE_HANG_LEG), FAKE_HANG_BUSY=pairs hang unless played alone,
-FAKE_IGNORE_TERM ignores SIGTERM while hanging, FAKE_FAIL refuses like a bad spec. `pack` writes synthetic shards."""
+FAKE_IGNORE_TERM ignores SIGTERM while hanging, FAKE_FAIL refuses like a bad spec, FAKE_PID gets its pid.
+`pack` writes synthetic shards."""
 import gzip, json, os, signal, subprocess, sys, time
 
 args = sys.argv[1:]
+if os.environ.get("FAKE_PID"):
+    with open(os.environ["FAKE_PID"], "w") as f:
+        f.write(str(os.getpid()))
 with open(os.environ["FAKE_LOG"], "a") as f:
     f.write(json.dumps(args) + "\n")
 cmd, flags, bools, i = args[0], {{}}, set(), 1

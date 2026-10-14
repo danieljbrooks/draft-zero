@@ -23,6 +23,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import time
 import zlib
 from collections.abc import Mapping, Sequence
@@ -87,12 +88,27 @@ def _kill_group(proc: subprocess.Popen, grace: float) -> None:
     _signal_group(proc.pid, signal.SIGKILL)     # anything of the group that outlived its leader
 
 
+# Linux: the driver gets SIGKILL when the Python process that started it dies, even by SIGKILL (prctl
+# PR_SET_PDEATHSIG, set by a fresh single-threaded interpreter that then execs it; ~20 ms). In its own session the
+# driver would otherwise outlive a killed actor and play on for up to a chunk's hour.
+PDEATHSIG = sys.platform.startswith("linux") and bool(sys.executable)
+_TRAMPOLINE = ("import ctypes, os, signal, sys\n"
+               "ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL)\n"   # 1 = PR_SET_PDEATHSIG
+               "if os.getppid() != int(sys.argv[1]): os._exit(137)\n"           # the parent died before prctl
+               "os.execv(sys.argv[2], sys.argv[2:])\n")
+
+
 def run_killable(argv: Sequence[str], *, timeout_s: float | None, stdout=subprocess.DEVNULL,
                  stderr=subprocess.DEVNULL) -> tuple[int, bool, float]:
-    """(returncode, killed, wall_s) of argv run in its own process group, hard-killed after timeout_s."""
+    """(returncode, killed, wall_s) of argv run in its own process group, hard-killed after timeout_s
+    (and, on Linux, when this process dies)."""
+    argv = [str(a) for a in argv]
+    if not Path(argv[0]).is_file():
+        raise GorgeError(f"no {argv[0]}: build the engine with engine/gorge/build.sh")
+    if PDEATHSIG:
+        argv = [sys.executable, "-I", "-c", _TRAMPOLINE, str(os.getpid()), *argv]
     t0 = time.monotonic()
-    proc = subprocess.Popen([str(a) for a in argv], stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
-                            start_new_session=True)
+    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, start_new_session=True)
     killed = False
     try:
         proc.wait(timeout=timeout_s)

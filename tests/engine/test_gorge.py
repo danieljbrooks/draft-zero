@@ -8,6 +8,9 @@ import gzip
 import json
 import os
 import re
+import signal
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -104,6 +107,40 @@ def test_fake_sigterm_ignored_gets_sigkill(fake_dzgorge, tmp_path, monkeypatch):
     assert r.skipped == [0] and [x["pair"] for x in r.games] == [1]
     assert r.runs[0]["returncode"] == -9 and r.runs[0]["killed"]
     assert _dead(int(fake_dzgorge.child.read_text()))
+
+
+def test_fake_driver_dies_with_its_parent(fake_dzgorge, tmp_path):
+    if not gorge_mod.PDEATHSIG:
+        pytest.skip("PR_SET_PDEATHSIG is Linux only")
+    pidf = tmp_path / "fake.pid"
+    fake_dzgorge.env(FAKE_HANG="0", FAKE_PID=pidf)
+    code = (f"from draftzero.engine import Gorge; Gorge({str(fake_dzgorge.root)!r}, '/d', '/p')"
+            f".play('bot', 'bot', pairs=1, seed=1, out_dir={str(tmp_path / 'o')!r})")
+    parent = subprocess.Popen([sys.executable, "-c", code])
+    try:
+        deadline = time.monotonic() + 30
+        while not (pidf.exists() and pidf.read_text()) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        pid = int(pidf.read_text())
+        assert not _dead(pid)
+        parent.kill()           # SIGKILL: no finally, no handler runs in the parent
+        parent.wait()
+        while not _dead(pid) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert _dead(pid)
+    finally:
+        parent.kill()
+        if pidf.exists() and pidf.read_text():
+            try:
+                os.killpg(int(pidf.read_text()), signal.SIGKILL)     # the fake's sleeping child
+            except (ProcessLookupError, PermissionError):
+                pass
+
+
+def test_missing_binary(tmp_path):
+    g = Gorge(tmp_path / "nowhere", tmp_path / "d", tmp_path / "p")
+    with pytest.raises(GorgeError, match="build.sh"):
+        g.play(SP, SP, pairs=1, seed=1, out_dir=tmp_path / "o")
 
 
 def test_fake_refusal_raises(fake_dzgorge, tmp_path):
