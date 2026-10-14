@@ -317,3 +317,13 @@ def test_cli_once(world, capsys):
     assert rl.main(["--store", str(local), "--host", "pod1", str(root), "--once"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["pod1"]["pulled"] == 2
+
+
+def test_missing_remote_dir_over_ssh_is_not_an_error():
+    # A pod before its actor's first shard: the sender cannot cd into shards/ and the receiver sees a broken pipe.
+    err = ('rsync: [sender] change_dir "/root/dz/run/store/shards" failed: No such file or directory (2)\n'
+           "rsync error: some files/attrs were not transferred (see previous errors) (code 23) at main.c(1874)\n"
+           "rsync: [Receiver] write error: Broken pipe (32)\n")
+    assert rl._missing_only(Result(23, "", err))
+    assert not rl._missing_only(Result(23, "", err + "rsync: [sender] read errors mapping \"x\": Input/output error (5)\n"))
+    assert not rl._missing_only(Result(12, "", err))

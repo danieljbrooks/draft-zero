@@ -126,9 +126,14 @@ def default_transport(host: Host, *, multiplex: bool = True) -> Transport:
 
 
 def _missing_only(r: Result) -> bool:
-    """rsync exit 23 because a source does not exist (yet): nothing to copy, not an error."""
+    """rsync exit 23 because a source does not exist (yet): nothing to copy, not an error.
+
+    Over SSH the receiver also reports "write error: Broken pipe" when the sender quits on the missing directory
+    (seen on a RunPod pod before its actor wrote its first shard), so that line does not count against it."""
     errs = [l for l in r.err.splitlines() if l.startswith("rsync:")]
-    return r.code == 23 and bool(errs) and all("No such file or directory" in l for l in errs)
+    missing = [l for l in errs if "No such file or directory" in l]
+    other = [l for l in errs if l not in missing and "Broken pipe" not in l]
+    return r.code == 23 and bool(missing) and not other
 
 
 def _check(r: Result, what: str) -> Result:
