@@ -18,6 +18,7 @@ import json
 import math
 import random
 import sys
+import threading
 import time
 import types
 from pathlib import Path
@@ -573,6 +574,55 @@ def test_learner_lease(tmp_path):
     assert s.read_json(ctl.LEASE)["expires"] <= time.time()
     other = Learner(s, cfg, "l2", tmp_path / "w2", gorge=FakeGorge(), log=lambda *_: None)
     other.lease()                                              # a released lease is free at once
+
+
+def test_a_learner_that_lost_its_lease_does_not_publish_and_forgets_its_state(tmp_path):
+    """While learner A trains, its lease runs out and B takes it and publishes version 1: A does not publish over
+    it; it forgets what it knew of the store, so once it holds the lease again it starts from B's ingested.json
+    and does not train again on the data B used."""
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    r.controller.tick()
+    r.actors[0].step()
+    r.actors[0].step()                                         # 40 new positions: due
+    a = r.learner
+    b = Learner(r.store, r.cfg, "l2", tmp_path / "work" / "l2", gorge=r.gorge, train=fake_train(r.trains),
+                export=fake_export, log=r.log.append)
+    inner = a._train
+
+    def overtaken(argv):
+        r.store.write_json(ctl.LEASE, {**r.store.read_json(ctl.LEASE), "expires": time.time() - 1})
+        assert b.step() == "published"                         # B takes the lapsed lease and publishes v1
+        return inner(argv)
+    a._train = overtaken
+    with pytest.raises(LeaseHeld):
+        a.step()
+    assert sum(ctl.version_file(1, "model.pt") in p for p in r.store.puts) == 1
+    assert r.store.read_bytes(ctl.version_file(1, "model.pt")) == b"weights 1"      # B's (A trained second)
+    assert a.index is None and a.ingested == [] and a.local == {}
+    with pytest.raises(LeaseHeld):
+        a.step()                                               # B holds the lease
+    b.release()
+    trained = len(r.trains)
+    assert a.step() == "wait" and len(r.trains) == trained     # nothing new since B's v1
+    assert all(e["used"] == 1 for e in r.store.read_json(ctl.INGESTED))
+
+
+def test_a_learner_renews_its_lease_while_it_ingests(tmp_path):
+    """Ingesting a backlog and re-packing the window can take longer than the lease: the step renews it from a
+    thread throughout, not only while training."""
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()
+    r.controller.tick()
+    r.actors[0].step()
+    renewing = []
+    pack = r.gorge.pack
+    r.gorge.pack = lambda *a, **k: renewing.append(any(
+        t.name == "learner-lease" and t.is_alive() for t in threading.enumerate())) or pack(*a, **k)
+    r.learner.step()
+    assert renewing == [True]
 
 
 def test_learner_sync_mode_trains_once_per_version(tmp_path):
