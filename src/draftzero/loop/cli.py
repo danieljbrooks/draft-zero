@@ -45,7 +45,8 @@ def _parser() -> argparse.ArgumentParser:
         p = sub.add_parser(role)
         p.add_argument("--config", required=True)
         p.add_argument("--store", default=None, help="default: the config's store")
-        p.add_argument("--poll", type=float, default=None, help="seconds between looks at the store (default 30; 60 on a bucket)")
+        p.add_argument("--poll", type=float, default=None,
+                       help="seconds between looks at the store (default 30; 60 on a bucket)")
         if role != "controller":
             p.add_argument("--machine", default=None)
             p.add_argument("--work-dir", type=Path, default=None)
@@ -103,8 +104,8 @@ def main(argv=None) -> int:
     if a.role == "controller":
         from draftzero.loop.controller import Controller
         every = a.status_every if a.status_every is not None else (300.0 if remote else 60.0)
-        return Controller(store, cfg, log=_log, status_every_s=every, tracker=_tracker(cfg)).run(poll_s=poll,
-                                                                                                once=a.once)
+        return Controller(store, cfg, log=_log, status_every_s=every, hb_cache_s=120.0 if remote else 0.0,
+                          tracker=_tracker(cfg)).run(poll_s=poll, once=a.once)
     machine = ctl.check_name(a.machine or (_host() if a.role == "actor" else f"{_host()}-{a.role}"))
     wd = a.work_dir or Path("runs") / run / "work" / f"{a.role}-{machine}"
     if a.role == "actor":

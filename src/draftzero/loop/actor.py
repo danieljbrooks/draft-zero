@@ -174,7 +174,8 @@ class Actor:
         shutil.rmtree(out, ignore_errors=True)
         out.mkdir(parents=True)
         t0 = time.time()
-        res = self.gorge.play(spec, spec, pairs=games, seed=seed, out_dir=out, split=ctl.get(self.cfg, "data.train_split", "train"),
+        res = self.gorge.play(spec, spec, pairs=games, seed=seed, out_dir=out,
+                              split=ctl.get(self.cfg, "data.train_split", "train"),
                               workers=int(play.get("workers", 2)), record=True,
                               record_every=int(play.get("record_every", 1)), belief=belief(self.cfg),
                               timeout_s=float(play["chunk_secs"]) if play.get("chunk_secs") else None)
@@ -187,7 +188,8 @@ class Actor:
                      "games_per_hour": round(len(rows) / max(wall, 1e-9) * 3600, 1)}
         mlog_path = out / "metrics.jsonl"
         mlog = ctl.metrics_log(mlog_path, self.cfg, "actor", self.machine)
-        mlog.log("throughput.games_per_hour", len(rows) / max(wall, 1e-9) * 3600, version=version, step=seq, n=len(rows))
+        mlog.log("throughput.games_per_hour", len(rows) / max(wall, 1e-9) * 3600, version=version, step=seq,
+                 n=len(rows))
         mlog.log("throughput.positions_per_hour", records / max(wall, 1e-9) * 3600, version=version, step=seq,
                  n=records)
         if summary.get("az_ms_per_searched") is not None:

@@ -220,7 +220,8 @@ class Controller:
             return
         load = {m: 0 for m in live}
         for sh in job["shards"]:
-            if not sh["done"] and sh.get("machine") in load and sh.get("assigned") and now - sh["assigned"] < self.late_s:
+            timely = sh.get("assigned") and now - sh["assigned"] < self.late_s
+            if not sh["done"] and sh.get("machine") in load and timely:
                 load[sh["machine"]] += 1
         for sh in job["shards"]:
             if sh["done"]:
@@ -242,7 +243,8 @@ class Controller:
         if b.get("max_hours") is not None and started is not None and now - started >= float(b["max_hours"]) * 3600:
             return True, f"budget.max_hours {b['max_hours']}"
         drain = None
-        if b.get("max_versions") is not None and latest is not None and int(latest["version"]) >= int(b["max_versions"]):
+        mv = b.get("max_versions")
+        if mv is not None and latest is not None and int(latest["version"]) >= int(mv):
             drain = f"budget.max_versions {b['max_versions']}"
         if b.get("max_games") is not None:
             self.index.refresh()
@@ -289,7 +291,8 @@ class Controller:
                               "shards_done": sum(s["done"] for s in j["shards"]), "shards": len(j["shards"])}
                              for j in c["evals"]],
               "closed_evals": [{k: s.get(k) for k in ("job", "version", "opponent", "score", "se", "lo", "hi",
-                                                      "n_pairs", "n_games", "sprt", "time")} for s in self.closed_evals()],
+                                                      "n_pairs", "n_games", "sprt", "time")}
+                             for s in self.closed_evals()],
               "pending_requests": [r for _, r in ctl.pending_requests(self.store)],
               "events": ctl.read_events(self.store)[-10:]}
         self.store.put_many({ctl.STATUS: json.dumps(st, indent=1, sort_keys=True, default=str).encode(),
@@ -315,6 +318,8 @@ class Controller:
             if once:
                 return 0
             if c.get("stop"):
+                time.sleep(min(poll_s, 30.0))            # the roles see the stop and say so in their heartbeats
+                self._hbs = None
                 self.status(c, self.store.read_json(ctl.latest_path()), time.time(), force=True)
                 return 0
             time.sleep(poll_s)
@@ -331,7 +336,7 @@ def _fmt(x, nd: int = 3) -> str:
 def status_md(st: dict) -> str:
     """status.json as a short page (plain markdown)."""
     out = [f"# Run {st['run']}", "", f"*Updated {st['iso']}.* {st['mode']} mode, {st['store']}.", ""]
-    state = " (stopping: " + str(st.get("stop_reason")) + ")" if st.get("stop") else (" (paused)" if st.get("paused") else "")
+    state = f" (stopping: {st.get('stop_reason')})" if st.get("stop") else (" (paused)" if st.get("paused") else "")
     out.append(f"- **Version played:** {_fmt(st['version'])}{state}")
     b = st.get("budget") or {}
     if any(v is not None for v in b.values()):
@@ -340,7 +345,8 @@ def status_md(st: dict) -> str:
     lr = st.get("learner") or {}
     if lr:
         out.append(f"- **Learner:** {lr.get('state')}; {lr.get('shards', 0)} shards, {lr.get('games', 0)} games, "
-                   f"{lr.get('positions', 0)} positions ingested; {lr.get('new_positions', 0)} new since the last version")
+                   f"{lr.get('positions', 0)} positions ingested; {lr.get('new_positions', 0)} new since the last "
+                   "version")
     lm = st.get("latest") or {}
     if lm:
         m = lm.get("metrics") or {}
@@ -358,7 +364,8 @@ def status_md(st: dict) -> str:
         out.append(f"| {j['job']} | {j['opponent']} | {j['pairs']} | | | | {j['shards_done']}/{j['shards']} shards |")
     for s in reversed(st["closed_evals"]):
         ci = f"{_fmt(s.get('lo'))}–{_fmt(s.get('hi'))}" if s.get("lo") is not None else ""
-        out.append(f"| {s.get('job')} | {s.get('opponent')} | {_fmt(s.get('n_pairs'))} | {_fmt(s.get('score'))} | {ci} | "
+        out.append(f"| {s.get('job')} | {s.get('opponent')} | {_fmt(s.get('n_pairs'))} | {_fmt(s.get('score'))} | "
+                   f"{ci} | "
                    f"{s.get('sprt') or 'undecided'} | done |")
     if st.get("pending_requests") or st.get("events"):
         out += ["", "## Plan", ""]

@@ -222,8 +222,11 @@ def append_events(store, events: list[dict]) -> None:
 
 
 def request_change(store, path: str, value: Any, by: str) -> str:
-    """Ask the controller to change a live config field: plan/requests/<time>-<uuid>.json."""
-    name = f"{REQUESTS}{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}-{uuid.uuid4().hex[:8]}.json"
+    """Ask the controller to change a live config field: plan/requests/<UTC time to the ns>-<uuid>.json (names sort
+    in the order the requests were made, which is the order they are applied)."""
+    ns = time.time_ns()
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(ns // 10**9)) + f".{ns % 10**9:09d}"
+    name = f"{REQUESTS}{stamp}-{uuid.uuid4().hex[:8]}.json"
     store.write_json(name, {"path": path, "value": value, "by": by, "time": now_iso()}, f"plan: {path}={value!r}")
     return name
 
@@ -236,7 +239,7 @@ def pending_requests(store) -> list[tuple[str, dict]]:
             r = store.read_json(p)
             if r is not None:
                 out.append((p, r))
-    return sorted(out, key=lambda x: (str(x[1].get("time", "")), x[0]))
+    return out                                           # store.list is sorted: by name, i.e. by time
 
 
 def immediate(path: str) -> bool:
@@ -338,4 +341,5 @@ class ShardIndex:
         return sorted(new, key=lambda m: (m.get("version") or 0, m.get("seq", 0), m.get("actor", "")))
 
     def games(self, version: int | None = None) -> int:
-        return sum(int(m.get("games", 0)) for m in self.metas.values() if version is None or m.get("version") == version)
+        return sum(int(m.get("games", 0)) for m in self.metas.values()
+                   if version is None or m.get("version") == version)

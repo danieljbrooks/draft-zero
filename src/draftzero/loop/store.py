@@ -217,7 +217,8 @@ class HFBucketStore(Store):
             return None if p is None else p.read_bytes()
 
     def exists(self, path):
-        return any(i.path == path for i in self._call(lambda: list(self.api.get_bucket_paths_info(self.bucket, [path]))))
+        infos = self._call(lambda: list(self.api.get_bucket_paths_info(self.bucket, [path])))
+        return any(i.path == path for i in infos)
 
     def ensure(self):
         self._call(self.api.create_bucket, self.bucket, private=True, exist_ok=True)

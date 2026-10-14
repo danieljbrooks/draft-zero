@@ -28,8 +28,8 @@ def _alive(pid: int) -> bool:
 def test_role_commands(tmp_path):
     cmds = local.role_commands("c.yml", "runs/x", tmp_path, "box", 2, poll_s=5)
     assert list(cmds) == ["controller", "learner", "evaluator", "actor-0", "actor-1"]
-    assert cmds["controller"][1:] == ["-m", "draftzero.loop.cli", "controller", "--config", "c.yml", "--store", "runs/x",
-                                      "--poll", "5"]
+    assert cmds["controller"][1:] == ["-m", "draftzero.loop.cli", "controller", "--config", "c.yml",
+                                      "--store", "runs/x", "--poll", "5"]
     a1 = cmds["actor-1"]
     assert a1[a1.index("--machine") + 1] == "box-1" and a1[a1.index("--work-dir") + 1] == str(tmp_path / "actor-box-1")
     assert cmds["learner"][cmds["learner"].index("--machine") + 1] == "box-learner"

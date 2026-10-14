@@ -276,7 +276,8 @@ class Learner:
         if self.c("mode", "async") == "sync":
             key = lambda e: (e.get("version") or 0, e["seq"], e.get("actor") or "")          # noqa: E731
         else:
-            key = lambda e: (e.get("version") or 0, str(e.get("time") or ""), e["seq"], e.get("actor") or "")  # noqa: E731
+            key = lambda e: (e.get("version") or 0, str(e.get("time") or ""), e["seq"],    # noqa: E731
+                             e.get("actor") or "")
         out, n, cap = [], 0, int(self.c("learner.window_positions"))
         for e in sorted((e for e in self.ingested if e["positions"] > 0), key=key, reverse=True):
             out.append(e)
@@ -286,9 +287,11 @@ class Learner:
         return out[::-1]
 
     # ---------------------------------------------------------------------------- train and publish
-    def train_args(self, out: Path, packs: list[Path], init: Path | None, version: int, new_positions: int) -> list[str]:
+    def train_args(self, out: Path, packs: list[Path], init: Path | None, version: int,
+                   new_positions: int) -> list[str]:
         batch = int(self.c("learner.batch"))
-        argv = ["--arch", str(self.c("player.arch", "mlp")), "--config", json.dumps(ctl.as_dict(self.c("player.config"))),
+        argv = ["--arch", str(self.c("player.arch", "mlp")),
+                "--config", json.dumps(ctl.as_dict(self.c("player.config"))),
                 "--train", *[str(p) for p in packs], "--out", str(out), "--batch", str(batch),
                 "--lr", repr(float(self.c("learner.lr"))), "--warmup", str(int(self.c("learner.warmup"))),
                 "--policy-target", str(self.c("learner.policy_target", "visits")),
@@ -352,7 +355,8 @@ class Learner:
         meta = {"version": v, "parent": parent, "net": True, "arch": arch, "sha256": sha,
                 "shards": [e["shard"] for e in win], "positions": sum(e["positions"] for e in win),
                 "games": sum(e["games"] for e in win), "new_positions": new_pos, "new_shards": len(new),
-                "metrics": metrics, "time": ctl.now_iso(), "train_s": round(train_s, 1), "init": f"v{parent:04d}" if init else None,
+                "metrics": metrics, "time": ctl.now_iso(), "train_s": round(train_s, 1),
+                "init": f"v{parent:04d}" if init else None,
                 "steps": summary.get("steps"), "argv": [a if not a.startswith(str(self.wd)) else
                                                         os.path.relpath(a, self.wd) for a in argv]}
         mpath = out / "metrics.jsonl"

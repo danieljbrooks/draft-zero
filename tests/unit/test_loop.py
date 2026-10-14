@@ -41,7 +41,8 @@ DEFAULTS = {
     "engine": {"name": "gorge", "root": "/work/gorge-fork", "census": True, "max_turns": 100, "max_intents": 20000,
                "mulligans": 2, "mull_heuristic": True, "topk_max_options": 64},
     "data": {"decks": "data/gorge/decks", "pool": "data/gorge/pool.tsv", "train_split": "train", "eval_split": "eval"},
-    "player": {"arch": "mlp", "config": {"d": 128, "ff": 256, "layers": 1, "d_emb": 32, "card_d": 64, "head_hidden": 128},
+    "player": {"arch": "mlp",
+               "config": {"d": 128, "ff": 256, "layers": 1, "d_emb": 32, "card_d": 64, "head_hidden": 128},
                "init": None},
     "search": {"keys": ["autopay", "oppnodes", "oppfull", "morekinds"], "topk": 6, "cpuct": 0.25, "closedlist": True,
                "belief": {"decks": None, "pool": None, "split": "train"}},
@@ -114,7 +115,8 @@ def _fake_config():
                 cfg = apply_change(cfg, e["path"], e["new"])
         return cfg
 
-    m.ConfigError, m.LIVE, m.load, m.to_dict, m.apply_change, m.effective = ConfigError, LIVE, load, to_dict, apply_change, effective
+    m.ConfigError, m.LIVE, m.load, m.to_dict = ConfigError, LIVE, load, to_dict
+    m.apply_change, m.effective = apply_change, effective
     m.dump = lambda cfg: yaml.safe_dump(to_dict(cfg), sort_keys=False)
     m.config_hash = lambda cfg: hashlib.sha256(json.dumps(to_dict(cfg), sort_keys=True).encode()).hexdigest()[:16]
     return m
@@ -344,8 +346,9 @@ class Run:
         self.gorge = FakeGorge(records=records, p_a=p_a)
         say = self.log.append
         self.trains = []
-        self.controller = Controller(self.store, cfg, log=say, status_every_s=0, hb_cache_s=0, write_manifest=lambda s, c: s.write_json(
-            ctl.MANIFEST, {"format": "draftzero-manifest/1", "run": ctl.get(c, "run")}))
+        def manifest(s, c):
+            s.write_json(ctl.MANIFEST, {"format": "draftzero-manifest/1", "run": ctl.get(c, "run")})
+        self.controller = Controller(self.store, cfg, log=say, status_every_s=0, hb_cache_s=0, write_manifest=manifest)
         self.learner = Learner(self.store, cfg, "l1", tmp_path / "work" / "learner", gorge=self.gorge,
                                train=fake_train(self.trains), export=fake_export, log=say)
         self.actors = [Actor(self.store, cfg, a, tmp_path / "work" / f"actor-{a}", gorge=self.gorge, log=say)
@@ -435,7 +438,8 @@ def test_actor_plays_version_0_without_a_net_and_uploads_one_batch(tmp_path):
 
 
 def test_actor_spec_with_a_network_and_playout_caps(tmp_path):
-    cfg = make_cfg(tmp_path, actor={"pcr": {"prob": 0.5, "by_kind": {"priority": 0.65, "attackers": 0.5}}})
+    pcr = {"prob": 0.5, "cheap_sims": 4, "by_kind": {"priority": 0.65, "attackers": 0.5}}
+    cfg = make_cfg(tmp_path, actor={"pcr": pcr})
     r = Run(tmp_path, cfg)
     r.controller.tick()
     r.learner.step()
@@ -448,10 +452,11 @@ def test_actor_spec_with_a_network_and_playout_caps(tmp_path):
     assert r.actors[0].step() == "played"
     spec = r.gorge.plays[-1]["a"]
     assert spec.gonet and Path(spec.gonet).read_bytes() == b"DZGW0001net" and ":" not in spec.gonet
-    assert spec.topk == 6 and spec.pcr == 0.5 and spec.cheap == 40
+    assert spec.topk == 6 and spec.pcr == 0.5 and spec.cheap == 4
     assert spec.pcrk == (("attackers", 0.5), ("priority", 0.65))
     # a corrupted download is refused
-    r.store.put(ctl.version_file(2, "meta.json"), json.dumps({"version": 2, "net": True, "sha256": {"dzgw": "0" * 64}}).encode())
+    bad = {"version": 2, "net": True, "sha256": {"dzgw": "0" * 64}}
+    r.store.put(ctl.version_file(2, "meta.json"), json.dumps(bad).encode())
     r.store.put(ctl.version_file(2, "model.dzgw"), b"tampered")
     with pytest.raises(ValueError, match="SHA-256"):
         r.actors[0].ensure_version(2)
@@ -645,7 +650,7 @@ def test_evaluator_plays_assigned_shards_and_scores_them(tmp_path):
     plays = [p for p in r.gorge.plays if not p["record"]]
     assert len(plays) == 6 and {p["split"] for p in plays} == {"eval"} and {p["seed"] for p in plays} == {3131}
     assert [p["first_pair"] for p in plays[:2]] == [0, 10]
-    vs_prev = [p for p in plays if isinstance(p["b"], FakeSpec)]
+    vs_prev = [p for p in plays if not isinstance(p["b"], str)]
     assert len(vs_prev) == 2
     hero, opp = vs_prev[0]["a"], vs_prev[0]["b"]
     assert hero.gonet and hero.topk == 6 and not hero.explore and hero.sims == 8 and hero.pcr is None
@@ -656,7 +661,8 @@ def test_evaluator_plays_assigned_shards_and_scores_them(tmp_path):
     assert s["version"] == 1 and s["opponent"] == "prev"
     games = r.store.read_bytes(ctl.eval_games_path("v0001-vs-prev", 1)).decode().splitlines()
     assert len(games) == 4 and json.loads(games[0])["job"] == "v0001-vs-prev"
-    metrics = [json.loads(x) for p in r.store.list("metrics/evaluator/") for x in r.store.read_bytes(p).decode().splitlines()]
+    metrics = [json.loads(x) for p in r.store.list("metrics/evaluator/")
+               for x in r.store.read_bytes(p).decode().splitlines()]
     assert {(m["name"], m["version"], m["opponent"]) for m in metrics} == \
         {("eval.score", 0, "sbtactical"), ("eval.score", 1, "prev"), ("eval.score", 1, "sbtactical")}
     c = r.controller.tick()
@@ -725,7 +731,8 @@ def test_plan_changes_apply_at_version_boundaries(tmp_path):
     rejected = [r.store.read_json(p) for p in r.store.list(ctl.REJECTED)]
     assert sorted(x["path"] for x in rejected) == ["actor.simz", "player.arch"] and all(x["error"] for x in rejected)
     ev = ctl.read_events(r.store)
-    assert [(e["path"], e["old"], e["new"], e["at_version"], e["kind"]) for e in ev] == [("paused", False, True, 0, "set")]
+    assert [(e["path"], e["old"], e["new"], e["at_version"], e["kind"]) for e in ev] == \
+        [("paused", False, True, 0, "set")]
     assert r.actors[0].step() == "paused"
     ctl.request_change(r.store, "paused", False, "dan")
     r.controller.tick()
@@ -735,7 +742,8 @@ def test_plan_changes_apply_at_version_boundaries(tmp_path):
     c = r.controller.tick()
     assert c["version"]["player"] == 1 and c["play"]["sims"] == 16 and not ctl.pending_requests(r.store)
     ev = ctl.read_events(r.store)
-    assert (ev[-1]["path"], ev[-1]["old"], ev[-1]["new"], ev[-1]["at_version"], ev[-1]["by"]) == ("actor.sims", 8, 16, 1, "dan")
+    e = ev[-1]
+    assert (e["path"], e["old"], e["new"], e["at_version"], e["by"]) == ("actor.sims", 8, 16, 1, "dan")
     from draftzero import config
     assert ctl.get(config.effective(r.cfg, ev), "actor.sims") == 16
     r.actors[0].step()
@@ -797,7 +805,7 @@ def test_a_new_controller_resumes_a_stopped_run(tmp_path):
 
 
 def test_max_games_budget(tmp_path):
-    r = Run(tmp_path, make_cfg(tmp_path, budget={"max_games": 8}, eval={"every_versions": 0}))
+    r = Run(tmp_path, make_cfg(tmp_path, budget={"max_games": 8}, eval={"opponents": ["prev"]}))
     r.controller.tick()
     r.learner.step()
     r.controller.tick()
