@@ -115,12 +115,21 @@ def test_roles_delegate_to_the_loop_cli(monkeypatch):
 
 def test_plan_status_stop_on_a_store(tmp_path, capsys):
     store = tmp_path / "store"
-    assert main(["status", str(store)]) == 0 and "no status yet" in capsys.readouterr().out
-    assert main(["plan", str(store), "set", "learner.lr=3e-4", "paused=true", "--by", "t"]) == 0
+    # a mistyped store path is refused (`dz stop` must not report success while the real run goes on), and no
+    # folder is created
+    for words in (["status", str(store)], ["stop", str(store)], ["plan", str(store), "list"],
+                  ["plan", "--store", str(store), "set", "paused=true"]):
+        assert main(words) == 2, words
+        assert "not a run's store" in capsys.readouterr().err
+    assert not store.exists()
+    # changes can be queued before the run starts, on purpose
+    assert main(["plan", str(store), "set", "learner.lr=3e-4", "paused=true", "--by", "t", "--before-start"]) == 0
     reqs = [LocalStore(store).read_json(p) for p in LocalStore(store).list(ctl.REQUESTS)]
     assert sorted((r["path"], r["value"]) for r in reqs) == [("learner.lr", 3e-4), ("paused", True)]
     out = capsys.readouterr().out
     assert "at the next version" in out and "now" in out
+    LocalStore(store).put(ctl.CONTROL, json.dumps({"format": "dz-control/1", "stop": False}).encode())  # it started
+    assert main(["status", str(store)]) == 0 and "no status yet" in capsys.readouterr().out
     assert main(["plan", str(store), "list"]) == 0 and capsys.readouterr().out.count("pending") == 2
     assert main(["stop", str(store)]) == 0 and (store / ctl.STOP).exists()
 
