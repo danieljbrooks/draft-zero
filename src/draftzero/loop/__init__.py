@@ -1,13 +1,12 @@
-"""The actor-learner loop: roles that share nothing but a store (a local folder, or Hugging Face).
+"""The actor-learner loop (contracts §4, docs/architecture.md): roles that share nothing but a store.
 
-v0.2.0 is rewriting this package around gorge (docs/033): the actor and learner replace the XMage-era worker and
-trainer, which are gone. What is here so far carries over from docs/021:
-
-    store       the shared store: LocalStore (a folder) and HFStore (Hugging Face)
-    control     control.json's schema
-    controller  the only writer of control.json: versions, evaluation jobs and their sequential tests, status.md
-    evals       evaluation jobs, shards, scoring and the sequential test
-    settings    the docs/021 run settings (one YAML for every role); draftzero.config replaces it
+    store       the shared store: LocalStore (a folder) and HFBucketStore (a Hugging Face Storage Bucket)
+    control     the store's layout, control.json, plan requests and events, shard and version helpers
+    actor       plays self-play chunks with the current version and uploads shards (many, any machine)
+    learner     ingests and packs shards, trains on the newest window, publishes versions (one, holding a lease)
+    evaluator   plays each new version against eval.opponents in paired games (a few)
+    controller  the only writer of control.json: versions, plan changes, evaluation jobs, budget, status.md
+    relay       moves shards and versions between a token-less machine's folder and the bucket, over ssh
     local       every role on one machine, as separate processes sharing a store
     cli         python -m draftzero.loop.cli <role>
 """
