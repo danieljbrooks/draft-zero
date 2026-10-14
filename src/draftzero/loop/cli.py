@@ -54,10 +54,10 @@ PLAN_EPILOG = """examples:
   plan runs/smoke list
   plan runs/new set learner.lr=3e-4 --before-start   queued before `dz run` starts the run
 
-Only live fields change (draftzero.config.LIVE: actor.sims, actor.pcr.*, actor.record_every, actor.chunk_games,
-learner.lr, learner.window_positions, learner.min_new_positions, learner.steps_per_position, learner.epochs,
-eval.every_versions, eval.pairs, eval.sims, budget.*, paused). A request the controller rejects moves to
-plan/rejected/ with the reason; an applied one is a line of events.jsonl."""
+Only live fields change (draftzero.config.LIVE: actor.sims, actor.pcr.*, actor.decided.*, actor.forced.*,
+actor.record_every, actor.chunk_games, learner.lr, learner.window_positions, learner.min_new_positions,
+learner.steps_per_position, learner.epochs, eval.every_versions, eval.pairs, eval.sims, budget.*, paused). A request
+the controller rejects moves to plan/rejected/ with the reason; an applied one is a line of events.jsonl."""
 
 
 def _log(msg: str) -> None:

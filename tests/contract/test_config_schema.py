@@ -23,7 +23,8 @@ SCHEMA_KEYS = [
     "search.keys", "search.topk", "search.cpuct", "search.closedlist", "search.belief.decks", "search.belief.pool",
     "search.belief.split",
     "actor.sims", "actor.explore", "actor.record_every", "actor.chunk_games", "actor.chunk_secs", "actor.workers",
-    "actor.pcr.prob", "actor.pcr.cheap_sims", "actor.pcr.by_kind",
+    "actor.pcr.prob", "actor.pcr.cheap_sims", "actor.pcr.by_kind", "actor.decided.high", "actor.decided.n",
+    "actor.decided.sims", "actor.decided.weight", "actor.forced.k",
     "learner.device", "learner.min_new_positions", "learner.window_positions", "learner.epochs",
     "learner.steps_per_position", "learner.batch", "learner.lr", "learner.warmup", "learner.policy_target",
     "learner.value_blend", "learner.warm_start", "learner.threads", "learner.surprise_weight",
@@ -34,7 +35,8 @@ SCHEMA_KEYS = [
 ]
 LIVE = {
     "actor.sims", "actor.pcr.prob", "actor.pcr.cheap_sims", "actor.pcr.by_kind", "actor.record_every",
-    "actor.chunk_games", "learner.lr", "learner.window_positions", "learner.min_new_positions",
+    "actor.chunk_games", "actor.decided.high", "actor.decided.n", "actor.decided.sims", "actor.decided.weight",
+    "actor.forced.k", "learner.lr", "learner.window_positions", "learner.min_new_positions",
     "learner.steps_per_position", "learner.epochs", "eval.every_versions", "eval.pairs", "eval.sims",
     "budget.max_versions", "budget.max_hours", "budget.max_games", "paused",
 }
@@ -90,6 +92,7 @@ def test_base_is_loop_f():
     assert (c.learner.lr, c.learner.epochs, c.learner.value_blend, c.learner.warm_start) == (1e-4, 2.0, 1.0, True)
     assert (c.eval.sims, c.eval.pairs, c.eval.opponents) == (100, 100, ["prev", "sbtactical"])
     assert c.actor.pcr.prob == 0 and c.search.closedlist
+    assert c.actor.decided.high == 0 and c.actor.forced.k == 0         # self-play extras off by default
 
 
 def test_run_ids_are_unique_and_match_file_names():

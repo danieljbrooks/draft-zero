@@ -121,3 +121,61 @@ def test_engine_bad_spec_raises(gorge, tmp_path):
     with pytest.raises(GorgeError, match="unknown key"):
         gorge.play("az:sims=4:frobnicate", "bot", pairs=1, seed=1, out_dir=tmp_path, timeout_s=120)
     assert os.path.exists(tmp_path / "play.log")
+
+
+# ------------------------------------------------------------------------------------------------
+# the fork's decided-game cheap search and forced playouts (a7afdc1): record weights end to end
+# ------------------------------------------------------------------------------------------------
+
+# decided=0.6 with decidedn=1, so that one root value outside (0.4, 0.6) starts it even in a tiny game
+DECIDED = PolicySpec(sims=8, explore=True, closedlist=True, decided=0.6, decidedn=1, decidedsims=4, decidedw=0.25,
+                     forced=2.0)
+
+
+@pytest.fixture(scope="module")
+def decided_selfplay(gorge, tmp_path_factory):
+    out = tmp_path_factory.mktemp("decided")
+    return gorge.play(DECIDED, DECIDED, pairs=2, seed=11, out_dir=out, workers=2, record=True, timeout_s=600)
+
+
+@pytest.mark.engine
+def test_engine_decided_and_forced_selfplay(decided_selfplay):
+    r = decided_selfplay
+    assert len(r.games) == 2 and r.skipped == []
+    assert all(g["pols"] == [DECIDED.render()] * 2 for g in r.games)          # the fork took the rendered keys
+    s = r.summary
+    assert s["a_decided"] + s.get("b_decided", 0) > 0 and s["visit_records_weighted"] > 0
+    assert s["az_forced_searched"] > 0
+    with gzip.open(r.corpus_path, "rt") as f:
+        weights = [json.loads(line).get("weight") for line in f if line.strip()]
+    assert len(weights) == s["visit_records"] and set(weights) == {None, 0.25}
+    assert weights.count(0.25) == s["visit_records_weighted"]
+
+
+@pytest.mark.engine
+def test_engine_decided_pack_has_weights_and_trains(gorge, decided_selfplay, tmp_path):
+    import torch
+    from draftzero.nets import train
+    from draftzero.nets.data import ShardSet
+    s = decided_selfplay.summary
+    shards = gorge.pack([decided_selfplay.corpus_path], tmp_path / "pack", game_prefix="a1-000001-")
+    assert [p.name for p in shards] == ["00000"]
+    w = np.load(shards[0] / "weight.npy")
+    assert w.dtype == np.float32 and w.shape == (s["visit_records"],)
+    assert set(np.unique(w).tolist()) == {0.25, 1.0} and int((w == 0.25).sum()) == s["visit_records_weighted"]
+    assert np.load(shards[0] / "card_raw.npy", mmap_mode="r").dtype == np.float16     # shrunk; weight.npy kept
+    ds = ShardSet(tmp_path / "pack")
+    assert np.array_equal(ds.array("weight"), w)
+    b = ds.collate(np.arange(len(ds)))
+    assert torch.equal(b.weight, torch.from_numpy(w))
+    tiny = json.dumps({"d": 32, "ff": 64, "layers": 1, "d_emb": 16, "card_d": 24, "head_hidden": 32})
+    runs = {}
+    for name, extra in (("weighted", []), ("unweighted", ["--no-record-weights"])):
+        runs[name] = train.main(["--arch", "mlp", "--config", tiny, "--train", str(tmp_path / "pack"),
+                                 "--out", str(tmp_path / name), "--max-steps", "4", "--batch", "32", "--warmup", "1",
+                                 "--device", "cpu", "--workers", "1", "--eval-every", "4", "--seed", "1", *extra])
+        assert runs[name]["steps"] == 4
+    a = torch.load(tmp_path / "weighted" / "last.pt", weights_only=True)["state_dict"]
+    u = torch.load(tmp_path / "unweighted" / "last.pt", weights_only=True)["state_dict"]
+    assert all(torch.isfinite(v).all() for v in a.values() if v.is_floating_point())
+    assert any(not torch.equal(a[k], u[k]) for k in a)                         # the weights changed training

@@ -48,7 +48,8 @@ DEFAULTS = {
     "search": {"keys": ["autopay", "oppnodes", "oppfull", "morekinds"], "topk": 6, "cpuct": 0.25, "closedlist": True,
                "belief": {"decks": None, "pool": None, "split": "train"}},
     "actor": {"sims": 100, "explore": True, "record_every": 1, "chunk_games": 50, "chunk_secs": 3600, "workers": 2,
-              "pcr": {"prob": 0.0, "cheap_sims": 40, "by_kind": {}}},
+              "pcr": {"prob": 0.0, "cheap_sims": 40, "by_kind": {}},
+              "decided": {"high": 0.0, "n": 3, "sims": 40, "weight": 0.1}, "forced": {"k": 0.0}},
     "learner": {"device": "cpu", "min_new_positions": 20000, "window_positions": 300000, "epochs": 2,
                 "steps_per_position": None, "batch": 512, "lr": 1.0e-4, "warmup": 100, "policy_target": "visits",
                 "value_blend": 1.0, "warm_start": True, "threads": 4, "surprise_weight": 0.0, "value_surprise": 0.0,
@@ -58,8 +59,8 @@ DEFAULTS = {
     "store": "runs/smoke", "tracking": {"trackio": False, "project": "draftzero"},
     "sync": {"games_per_version": 200},
 }
-LIVE = frozenset({"actor.sims", "actor.pcr.*", "actor.record_every", "actor.chunk_games", "learner.lr",
-                  "learner.window_positions", "learner.min_new_positions", "learner.steps_per_position",
+LIVE = frozenset({"actor.sims", "actor.pcr.*", "actor.decided.*", "actor.forced.*", "actor.record_every",
+                  "actor.chunk_games", "learner.lr", "learner.window_positions", "learner.min_new_positions", "learner.steps_per_position",
                   "learner.epochs", "eval.every_versions", "eval.pairs", "eval.sims", "budget.*", "paused"})
 LEAF_DICTS = {"player.config", "actor.pcr.by_kind"}
 
@@ -136,6 +137,11 @@ class FakeSpec:
     pcr: float | None = None
     cheap: int | None = None
     pcrk: tuple = ()
+    decided: float | None = None
+    decidedn: int | None = None
+    decidedsims: int | None = None
+    decidedw: float | None = None
+    forced: float | None = None
     keys: tuple = ("autopay", "oppnodes", "oppfull", "morekinds")
     extra: tuple = ()
 
@@ -143,7 +149,10 @@ class FakeSpec:
         parts = [self.kind] + ([f"sims={self.sims}"] if self.sims else []) + (["explore"] if self.explore else [])
         parts += list(self.keys) + (["closedlist"] if self.closedlist else [])
         parts += [f"{k}={v}" for k, v in (("cpuct", self.cpuct), ("topk", self.topk), ("pcr", self.pcr),
-                                          ("cheap", self.cheap), ("gonet", self.gonet)) if v is not None]
+                                          ("cheap", self.cheap), ("decided", self.decided),
+                                          ("decidedn", self.decidedn), ("decidedsims", self.decidedsims),
+                                          ("decidedw", self.decidedw), ("forced", self.forced),
+                                          ("gonet", self.gonet)) if v is not None]
         return ":".join(parts)
 
 
@@ -271,8 +280,12 @@ class FakeGorge:
                     for k in range(g["visits"]):
                         f.write(json.dumps({"game": f"p{g['pair']:07d}g{g['leg']}", "k": k}) + "\n")
         n = sum(g["visits"] for g in games)
-        return SimpleNamespace(games=games, summary={"az_ms_per_searched": 12.5, "az_decisions_searched": n},
-                               games_path=gp, corpus_path=corpus, skipped=[])
+        summary = {"az_ms_per_searched": 12.5, "az_decisions_searched": n}
+        if getattr(a, "decided", None):         # the fork's summary keys under :decided= and :forced=
+            summary["visit_records_weighted"] = n // 2
+        if getattr(a, "forced", None):
+            summary.update(az_forced_searched=n, az_pruned_visit_share=0.05)
+        return SimpleNamespace(games=games, summary=summary, games_path=gp, corpus_path=corpus, skipped=[])
 
     def pack(self, corpus, out_dir, *, shard=200_000, game_prefix=None, shrink=True):
         from draftzero.nets import packfmt
@@ -462,6 +475,62 @@ def test_actor_spec_with_a_network_and_playout_caps(tmp_path):
     r.store.put(ctl.version_file(2, "model.dzgw"), b"tampered")
     with pytest.raises(ValueError, match="SHA-256"):
         r.actors[0].ensure_version(2)
+
+
+def test_actor_spec_with_decided_and_forced_and_the_evaluator_without(tmp_path):
+    """actor.decided and actor.forced reach the actor's self-play spec (and its shard meta); the evaluator's specs,
+    the network's own and every opponent's, never carry them (KataGo: forced playouts in self-play only)."""
+    cfg = make_cfg(tmp_path, actor={"decided": {"high": 0.95, "n": 2, "sims": 4, "weight": 0.25},
+                                    "forced": {"k": 2}})
+    r = Run(tmp_path, cfg)
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    r.controller.tick()
+    assert r.actors[0].step() == "played"
+    spec = r.gorge.plays[-1]["a"]
+    assert (spec.decided, spec.decidedn, spec.decidedsims, spec.decidedw, spec.forced) == (0.95, 2, 4, 0.25, 2.0)
+    assert spec.render().endswith(":decided=0.95:decidedn=2:decidedsims=4:decidedw=0.25:forced=2.0")
+    meta = r.store.read_json("shards/a1/000001/meta.json")
+    assert (meta["decided"], meta["forced"], meta["pcr"]) == (0.95, 2.0, 0.0) and meta["spec"] == spec.render()
+    lines = {x["name"]: x for x in map(json.loads, r.store.read_bytes("metrics/actor/a1/000001.jsonl").splitlines())}
+    assert (lines["data.records_weighted"]["value"], lines["data.records_weighted"]["n"]) == (10, 20)
+    assert lines["search.pruned_visit_share"]["value"] == 0.05
+    for s in (r.evaluator.spec(0, 8), r.evaluator.opponent_spec(1, "prev", 8),
+              r.evaluator.opponent_spec(1, "nonet", 8)):
+        assert s.decided is None and s.forced is None and s.pcr is None and not s.explore
+        assert "decided" not in s.render() and "forced" not in s.render()
+    # off (the default) renders nothing of them, and a weight of 0 (decided searches not recorded) is kept
+    from draftzero.loop.actor import policy_spec
+    off = policy_spec(make_cfg(tmp_path), sims=8, explore=True, gonet=None,
+                      decided={"high": 0.0, "n": 3, "sims": 40, "weight": 0.1}, forced={"k": 0.0})
+    assert off.decided is None and off.forced is None and "decided" not in off.render()
+    w0 = policy_spec(make_cfg(tmp_path), sims=8, explore=True, gonet=None,
+                     decided={"high": 0.9, "n": 3, "sims": 4, "weight": 0.0})
+    assert w0.decidedw == 0.0 and ":decidedw=0.0" in w0.render()
+
+
+def test_decided_and_forced_are_live(tmp_path):
+    """A plan change of actor.decided / actor.forced reaches the actors at the next version, as actor.pcr does."""
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    r.controller.tick()
+    ctl.request_change(r.store, "actor.decided", "{high: 0.9, sims: 4}", "dan")
+    ctl.request_change(r.store, "actor.forced.k", 2, "dan")
+    r.controller.tick()
+    for _ in range(2):
+        assert r.actors[0].step() == "played"
+    assert r.gorge.plays[-1]["a"].decided is None and r.gorge.plays[-1]["a"].forced is None
+    assert r.learner.step() == "published"                     # v1: the changes apply
+    c = r.controller.tick()
+    assert not r.store.list(ctl.REJECTED)
+    assert c["play"]["decided"] == {"high": 0.9, "n": 3, "sims": 4, "weight": 0.1} and c["play"]["forced"] == {"k": 2.0}
+    assert r.actors[0].step() == "played"
+    spec = r.gorge.plays[-1]["a"]
+    assert (spec.decided, spec.decidedn, spec.decidedsims, spec.decidedw, spec.forced) == (0.9, 3, 4, 0.1, 2.0)
+    ctl.request_change(r.store, "actor.decided.sims", 40, "dan")              # more than actor.sims (8)
+    r.controller.tick()
+    assert len(r.store.list(ctl.REJECTED)) == 1
 
 
 def test_a_search_config_the_engine_refuses_fails_at_start(tmp_path):

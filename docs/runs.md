@@ -70,6 +70,23 @@ since no version arrives while actors are paused); every other live change waits
 `budget.max_hours` and `dz stop` stop the run at once; `max_versions` and `max_games` first pause the actors, then
 stop once every evaluation job is closed.
 
+### Actor options from KataGo (opt-in)
+
+Each is off by default, and off leaves the games, corpus and packs byte-identical to the fork without them (`5fd039e`).
+Both are live, like `actor.pcr`: `dz plan STORE set actor.decided.high=0.9` reaches the actors at the next version.
+They are self-play only: the evaluator's specs never carry them, so evaluation games are unchanged.
+
+| Field | Default | What it does |
+| --- | --- | --- |
+| `actor.decided` | `{high: 0.0, n: 3, sims: 40, weight: 0.1}` | Decided-game cheap search (fork keys `:decided=H:decidedn=N:decidedsims=S:decidedw=W`). Once `n` searched root values in a row of a seat are all above `high` (or all below 1 − `high`), its full searches use `sims` simulations, no root noise and the most-visited move, until a value leaves that band. Those searches are recorded at training weight `weight`: 0 does not record them, 1 records them as full searches. `high` is in (0.5, 1); 0 is off. `sims` is at most `actor.sims`. KataGo uses 0.9, 3 and 0.1. |
+| `actor.forced` | `{k: 0.0}` | Forced playouts with policy target pruning (fork key `:forced=K`). At the root of a full search, each candidate gets at least √(k · prior · root visits) visits, and the recorded visits are the pruned target. Under `:explore` the sampled move comes from the pruned visits too. 0 is off; KataGo uses 2. |
+
+A decided search's record carries its weight into the learner's packs as `weight.npy` (`src/draftzero/nets/SPEC.md`
+§2). `nets.train` then weights each position's policy and value loss by it, so a batch's loss is the weighted mean
+(`--no-record-weights` ignores the weights). Shards without weighted records train exactly as before. The shard
+`meta.json` records `decided` and `forced`. The actor logs `data.records_weighted` and `search.pruned_visit_share`
+when they are on.
+
 ### Learner options from KataGo (opt-in)
 
 Each is off by default, and off leaves training bit-identical (the tests in `tests/unit/nets/test_train.py` check

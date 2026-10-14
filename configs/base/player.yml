@@ -42,6 +42,11 @@ actor:
   chunk_secs: 3600              # a chunk's hard timeout
   workers: 2                    # dzgorge -workers per actor process
   pcr: {prob: 0.0, cheap_sims: 40, by_kind: {}}   # live; playout-cap randomization, 0 = off (see configs/runs/e2-*)
+  decided: {high: 0.0, n: 3, sims: 40, weight: 0.1}   # live; decided-game cheap search (KataGo), 0 = off: after
+                                # n root values in a row above high (or below 1 - high), full searches use sims, no
+                                # noise, argmax, and are recorded at training weight `weight` (0: not recorded)
+  forced: {k: 0.0}              # live; forced playouts and policy target pruning (KataGo, k = 2); 0 = off. Both are
+                                # self-play only: the evaluator never uses them
 
 learner:
   device: cpu
