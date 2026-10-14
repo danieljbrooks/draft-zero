@@ -9,7 +9,8 @@
   4. trains when due: async, once min_new_positions recorded positions arrived since the last version; sync, once
      the store holds sync.games_per_version games of the newest version (exactly once per version). Training is
      draftzero.nets.train on the newest window_positions positions, warm-started from the newest version's model.pt
-     when learner.warm_start (else from random init with player.arch/config), for learner.epochs passes or, with
+     with its own arch and config when learner.warm_start (else from random init with player.arch/config; so a
+     player.init of another shape than player.config keeps its shape), for learner.epochs passes or, with
      steps_per_position, ceil(steps_per_position x new positions / batch) steps;
   5. exports model.dzgw (mlp), publishes versions/player/v{N+1} (model.pt, model.dzgw, meta.json) and latest.json
      last, with learn.* metrics from the run's final holdout evaluation (curves.jsonl);
@@ -289,10 +290,12 @@ class Learner:
     # ---------------------------------------------------------------------------- train and publish
     def train_args(self, out: Path, packs: list[Path], init: Path | None, version: int,
                    new_positions: int) -> list[str]:
+        """nets.train's argv: player.arch and player.config only for a random init; a warm start keeps the
+        checkpoint's own arch and config (a player.init of another width than player.config included)."""
         batch = int(self.c("learner.batch"))
-        argv = ["--arch", str(self.c("player.arch", "mlp")),
-                "--config", json.dumps(ctl.as_dict(self.c("player.config"))),
-                "--train", *[str(p) for p in packs], "--out", str(out), "--batch", str(batch),
+        argv = [] if init is not None else ["--arch", str(self.c("player.arch", "mlp")),
+                                            "--config", json.dumps(ctl.as_dict(self.c("player.config")))]
+        argv += ["--train", *[str(p) for p in packs], "--out", str(out), "--batch", str(batch),
                 "--lr", repr(float(self.c("learner.lr"))), "--warmup", str(int(self.c("learner.warmup"))),
                 "--policy-target", str(self.c("learner.policy_target", "visits")),
                 "--value-blend", repr(float(self.c("learner.value_blend"))),

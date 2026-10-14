@@ -613,6 +613,29 @@ def test_learner_with_the_real_trainer_and_exporter(tmp_path):
     assert header["arch"] == "mlp" and header["config"]["d"] == 32
 
 
+def test_warm_start_keeps_the_checkpoints_own_config(tmp_path):
+    """A player.init of another width than player.config: version 1 warm-starts from it with its own arch and
+    config (player.arch/config are for a random init) instead of failing to load its weights."""
+    from draftzero.loop.learner import default_export
+    from draftzero.nets import models as M
+    init = tmp_path / "init.pt"
+    M.save(M.build("mlp", {"d": 48, "ff": 64, "layers": 1, "d_emb": 16, "card_d": 24, "head_hidden": 32}), init)
+    cfg = make_cfg(tmp_path, player={"init": str(init)}, learner={"min_new_positions": 200, "batch": 32, "warmup": 2})
+    r = Run(tmp_path, cfg, records=25)
+    r.learner._train, r.learner._export = None, default_export
+    r.controller.tick()
+    r.learner.step()                                           # v0: the init checkpoint
+    r.controller.tick()
+    r.actors[0].step()
+    r.actors[0].step()
+    assert r.learner.step() == "published"
+    argv = r.learner.train_args(tmp_path / "o", [], tmp_path / "init.pt", 2, 1)
+    assert "--init" in argv and "--config" not in argv and "--arch" not in argv
+    from draftzero.nets import export
+    header, _ = export.read(r.store.get(ctl.version_file(1, "model.dzgw"), tmp_path / "m.dzgw"))
+    assert header["config"]["d"] == 48
+
+
 # ------------------------------------------------------------------------------------------------ evaluator
 
 def test_eval_jobs_and_opponents(tmp_path):
