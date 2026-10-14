@@ -33,9 +33,10 @@ relay host needs a direct public IP and port.
 **Upstream.** When the run's store is not a local folder (`hf://buckets/...`: the relay is then the only process with
 the token), pass it as `upstream=` (CLI `--upstream SPEC`) and give the relay a folder of its own as the local
 store: each sync first mirrors the latest + previous versions (and the one control.json names), then config.yml and
-control.json, down from the upstream store into the folder (when a version fails to come down, the folder keeps
-its previous control.json, so hosts are never pointed at it), and after the pulls uploads every newly pulled complete shard (one put_many each, meta.json
-last) and the heartbeat and metrics files that changed. Only the Store API is used (read_bytes, list, get, put_many).
+control.json, down from the upstream store into the folder (when a version fails to come down, the folder keeps its
+previous control.json, so hosts are never pointed at it), and after the pulls uploads every newly pulled complete
+shard (one put_many each, meta.json last) and the heartbeat and metrics files that changed. Only the Store API is
+used (read_bytes, list, get, put_many).
 
 Notes: give every actor machine a unique --machine name (shards/<actor>/ and heartbeats/<machine>.json are merged
 from all hosts into one store). rsync stages pulled files in `<store>/.relay-tmp/`. In sync mode an actor behind the

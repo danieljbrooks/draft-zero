@@ -761,10 +761,10 @@ def parser() -> argparse.ArgumentParser:
                         "/root/.runpod/env or ~/.runpod/env (RUNPOD_API_KEY). Pods bill until `dz pod down`.")
     psub = p.add_subparsers(dest="pod_cmd", required=True, metavar="up|down|list|balance|offers")
     q = psub.add_parser("up", help="rent a pod, arm its self-destruct, copy the engine, decks and repo, bootstrap it",
-                        description="Create a pod, wait for SSH, arm it to terminate itself --max-hours after its create, "
-                                    "then (unless --no-bundle) copy dzgorge, the card corpus, the deck pool and the "
-                                    "repo and bootstrap a venv. Any failure after the create removes the pod. Prints "
-                                    "the cost guard and asks before renting (--yes skips the question).")
+                        description="Create a pod, wait for SSH, arm it to terminate itself --max-hours after its "
+                                    "create, then (unless --no-bundle) copy dzgorge, the card corpus, the deck pool "
+                                    "and the repo and bootstrap a venv. Any failure after the create removes the pod. "
+                                    "Prints the cost guard and asks before renting (--yes skips the question).")
     q.add_argument("--name", required=True, help="pod name (unique: an existing name is refused)")
     g = q.add_mutually_exclusive_group(required=True)
     g.add_argument("--gpu", default=None, help="GPU type id from `dz pod offers` (bought for its vCPUs)")

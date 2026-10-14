@@ -156,7 +156,8 @@ def test_only_network_trouble_429_and_5xx_are_retried():
     from huggingface_hub.errors import HfHubHTTPError
 
     def http(code):
-        return HfHubHTTPError(f"HTTP {code}", response=httpx2.Response(code, request=httpx2.Request("POST", "https://x")))
+        request = httpx2.Request("POST", "https://x")
+        return HfHubHTTPError(f"HTTP {code}", response=httpx2.Response(code, request=request))
     for code in (400, 401, 403, 404, 422):
         assert not S._transient(http(code)), code
     for code in (408, 429, 500, 502, 503, 504):

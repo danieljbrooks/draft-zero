@@ -6,11 +6,11 @@ The same programs as on many machines; only the store differs.
 Starts the controller, the learner, one evaluator and N actors (`python -m draftzero.loop.cli <role>`), each in its
 own session with its log in <work-dir>/logs/<role>.log and its cache in <work-dir>/<role>-<machine>. It returns
 once the controller has stopped the run (budget, `stop`) and the others have followed. If a role dies, or at
---max-hours, it asks the run to stop (stop.request) and waits up to `grace_s` for the roles to exit. If the controller
-itself fails, nothing would act on a stop.request, so it stops the others at once and leaves none in the store (a
-stop.request it wrote that no controller acted on is withdrawn at the end): the next `dz run` resumes the run. On Ctrl-C,
-SIGTERM or SIGHUP (kill, a harness timeout, a closed terminal) it stops them at once. Whatever is left gets SIGTERM,
-then SIGKILL, including gorge processes they started; a second signal does not cut that short.
+--max-hours, it asks the run to stop (stop.request) and waits up to `grace_s` for the roles to exit. If the
+controller itself fails, nothing would act on a stop.request, so it stops the others at once and leaves none in the
+store (a stop.request it wrote that no controller acted on is withdrawn at the end): the next `dz run` resumes the
+run. On Ctrl-C, SIGTERM or SIGHUP (kill, a harness timeout, a closed terminal) it stops them at once. Whatever is
+left gets SIGTERM, then SIGKILL, including gorge processes they started; a second signal does not cut that short.
 
 Return code: 0 the run stopped normally, 1 a role failed, 2 --max-hours, 130 Ctrl-C, 143 SIGTERM, 129 SIGHUP.
 """
