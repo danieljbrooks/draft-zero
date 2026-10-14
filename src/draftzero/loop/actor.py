@@ -68,7 +68,7 @@ def check_playable(cfg) -> None:
 
 
 class Actor:
-    HEARTBEAT_EVERY_S = 300.0        # while idle; a played chunk always carries one
+    HEARTBEAT_EVERY_S = 300.0        # while idle or playing; a played chunk always carries one
 
     def __init__(self, store, cfg, machine: str, work_dir: Path, *, gorge=None, log=print, poll_s: float = 30.0):
         self.store, self.cfg, self.log, self.poll_s = store, cfg, log, poll_s
@@ -179,11 +179,12 @@ class Actor:
         shutil.rmtree(out, ignore_errors=True)
         out.mkdir(parents=True)
         t0 = time.time()
-        res = self.gorge.play(spec, spec, pairs=games, seed=seed, out_dir=out,
-                              split=ctl.get(self.cfg, "data.train_split", "train"),
-                              workers=int(play.get("workers", 2)), record=True,
-                              record_every=int(play.get("record_every", 1)), belief=belief(self.cfg),
-                              timeout_s=float(play["chunk_secs"]) if play.get("chunk_secs") else None)
+        with ctl.heartbeating(self.store, lambda: self._heartbeat("playing"), self.HEARTBEAT_EVERY_S, self.log):
+            res = self.gorge.play(spec, spec, pairs=games, seed=seed, out_dir=out,
+                                  split=ctl.get(self.cfg, "data.train_split", "train"),
+                                  workers=int(play.get("workers", 2)), record=True,
+                                  record_every=int(play.get("record_every", 1)), belief=belief(self.cfg),
+                                  timeout_s=float(play["chunk_secs"]) if play.get("chunk_secs") else None)
         wall = time.time() - t0
         rows = list(res.games)
         records = sum(int(g.get("visits") or 0) for g in rows)

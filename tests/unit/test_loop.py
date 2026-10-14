@@ -826,6 +826,33 @@ def test_evaluator_plays_assigned_shards_and_scores_them(tmp_path):
     assert "v0001-vs-prev" in md and "| e1 | evaluator |" in md and "| a1 | actor |" in md
 
 
+def test_playing_roles_heartbeat_so_a_hung_game_does_not_look_dead(tmp_path):
+    """One hung game keeps Gorge.play busy past timeout_s (its pair's replay adds a probe), longer than the
+    controller's liveness window: a playing evaluator (and actor) heartbeats every HEARTBEAT_EVERY_S, so the
+    controller does not declare it dead and move its shard to another evaluator."""
+    r = Run(tmp_path, make_cfg(tmp_path, eval={"opponents": ["sbtactical"], "pairs": 2}))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    assert r.evaluator.step() == "wait"
+    r.controller.tick()                                        # the job's shard goes to e1
+    r.controller.live_s, r.controller.late_s = 0.4, 60.0
+    r.evaluator.HEARTBEAT_EVERY_S = r.actors[0].HEARTBEAT_EVERY_S = 0.05
+    play, seen = r.gorge.play, []
+
+    def hung(a, b, **kw):                                      # longer than the liveness window
+        t0 = time.time()
+        time.sleep(0.8)
+        if kw["record"]:
+            seen.append(r.store.read_json("heartbeats/a1.json")["time"] > t0)
+        else:
+            r.store.write_json("heartbeats/e2.json", {"machine": "e2", "role": "evaluator", "time": time.time()})
+            seen.append(r.controller.tick()["evals"][0]["shards"][0]["machine"])
+        return play(a, b, **kw)
+    r.gorge.play = hung
+    assert r.evaluator.step() == "played" and seen == ["e1"]
+    assert r.actors[0].step() == "played" and seen == ["e1", True]
+
+
 def test_controller_reassigns_shards_of_a_quiet_evaluator(tmp_path):
     cfg = make_cfg(tmp_path, eval={"opponents": ["sbtactical"], "pairs": 10})
     s = LocalStore(tmp_path / "st")

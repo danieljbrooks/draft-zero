@@ -55,8 +55,8 @@ class Controller:
     def __init__(self, store, cfg, *, log=print, status_every_s: float = 60.0, live_s: float | None = None,
                  hb_cache_s: float = 120.0, write_manifest=None, tracker=None):
         """status_every_s: status page interval; live_s: a heartbeat older than this is a dead machine (default
-        actor.chunk_secs + 15 min, as an evaluator is silent while it plays a shard); hb_cache_s: heartbeats are
-        re-read at most this often (each is a Hub call or two on a bucket)."""
+        actor.chunk_secs + 15 min; roles heartbeat every 5 minutes, while they play too); hb_cache_s: heartbeats
+        are re-read at most this often (each is a Hub call or two on a bucket)."""
         self.store, self.base, self.cfg, self.log = store, cfg, cfg, log
         self.status_every_s, self.hb_cache_s = status_every_s, hb_cache_s
         chunk = float(ctl.get(cfg, "actor.chunk_secs") or 3600)

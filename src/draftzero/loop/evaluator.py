@@ -6,7 +6,8 @@ and assigns the shards to live evaluators (control["evals"]). Each loop an evalu
      store yet;
   2. plays it: Gorge.play(version v's spec, the opponent's spec, pairs, first_pair, seed=eval.seed,
      split=data.eval_split, record=False), no exploration, both at eval.sims, :closedlist as in self-play;
-  3. uploads evals/<job>/<shard>.games.jsonl with its heartbeat in one put_many;
+  3. uploads evals/<job>/<shard>.games.jsonl with its heartbeat in one put_many (and heartbeats every
+     HEARTBEAT_EVERY_S while it plays, so a shard slowed by a hung game does not look like a dead evaluator);
   4. once every shard of the job is in, scores the pairs (draftzero.eval.paired.score_pairs, side A = version v),
      runs the sequential test against 50% (informational: jobs always play every pair), and writes
      evals/<job>/summary.json and the eval.score metric. The controller then closes the job.
@@ -194,10 +195,12 @@ class Evaluator:
         out.mkdir(parents=True)
         from draftzero.loop.actor import belief
         t0 = time.time()
-        res = self.gorge.play(a, b, pairs=int(sh["pairs"]), seed=int(job["seed"]), out_dir=out,
-                              split=ctl.get(self.cfg, "data.eval_split", "eval"), first_pair=int(sh["first_pair"]),
-                              workers=int(ctl.get(self.cfg, "eval.workers", 2)), record=False, belief=belief(self.cfg),
-                              timeout_s=float(ctl.get(self.cfg, "actor.chunk_secs") or 3600))
+        with ctl.heartbeating(self.store, lambda: self._heartbeat("playing"), self.HEARTBEAT_EVERY_S, self.log):
+            res = self.gorge.play(a, b, pairs=int(sh["pairs"]), seed=int(job["seed"]), out_dir=out,
+                                  split=ctl.get(self.cfg, "data.eval_split", "eval"), first_pair=int(sh["first_pair"]),
+                                  workers=int(ctl.get(self.cfg, "eval.workers", 2)), record=False,
+                                  belief=belief(self.cfg),
+                                  timeout_s=float(ctl.get(self.cfg, "actor.chunk_secs") or 3600))
         wall = time.time() - t0
         rows = [{**g, "job": job["job"], "shard": sh["id"]} for g in res.games]
         self.shards_played += 1
