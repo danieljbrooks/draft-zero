@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_00265_UG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck d26d7edfaa194a3db7f830f5e2e0bfc3:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Affectionate Indrik",
+"count": 1
+},
+{
+"name": "Ambush Wolf",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 2
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Cackling Prowler",
+"count": 1
+},
+{
+"name": "Elvish Regrower",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 8
+},
+{
+"name": "Grow from the Ashes",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Kiora, the Rising Tide",
+"count": 1
+},
+{
+"name": "Koma, World-Eater",
+"count": 1
+},
+{
+"name": "Llanowar Elves",
+"count": 2
+},
+{
+"name": "Loot, Exuberant Explorer",
+"count": 1
+},
+{
+"name": "Mild-Mannered Librarian",
+"count": 1
+},
+{
+"name": "Mischievous Mystic",
+"count": 2
+},
+{
+"name": "Refute",
+"count": 2
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Tatyova, Benthic Druid",
+"count": 1
+},
+{
+"name": "Thornwood Falls",
+"count": 1
+},
+{
+"name": "Witness Protection",
+"count": 2
+}
+]
+}

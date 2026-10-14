@@ -1,10 +1,15 @@
-"""paths.py — keep machine-specific paths out of versioned data.
+"""paths.py — where the package finds its data, and keeping machine-specific paths out of versioned data.
 
-Pool files list decks by stem (``FDN_top_00001_WB``), never by path. The XMage JVM needs
-real paths, so a pool is *resolved* against ``deck_root`` into the run's tmp dir just
-before launch. Storing absolute paths in the pool files instead is what broke every game
-on the first RunPod run, twice: once because the paths were the laptop's, and again when
-an rsync from the laptop restored them.
+Decks are named by stem (``FDN_top_00001_WB``), never by path, in every versioned file: gorge reads
+``<decks dir>/<stem>.json`` (``draftzero.data.pools``), so a pool moves between machines unchanged. Absolute paths
+in pool files broke every game on the first RunPod run, twice: once because the paths were the laptop's, and again
+when an rsync from the laptop restored them.
+
+    GORGE_DECKS, GORGE_POOL    the full FDN pool in gorge format (data/gorge/, gitignored; python -m draftzero.data.decks)
+    SAMPLE_DECKS, SAMPLE_POOL  the 80-deck sample shipped in assets/sample (a fresh clone's smoke runs)
+
+The ``.dck`` helpers below (``read_pool`` with legacy full paths, ``resolve_pool``, ``build_pools``) are the XMage
+era's stem lists (``assets/sample/train.txt``); gorge does not need them.
 
 ``REPO`` is the checkout whose ``assets/`` and ``data/`` the package reads: ``$DZ_REPO`` if set (a frozen copy of
 the code running against another checkout), else this source tree (``src/draftzero/data`` -> the repo root).
@@ -15,7 +20,17 @@ from typing import Iterable
 
 REPO = Path(os.environ.get("DZ_REPO") or Path(__file__).resolve().parents[3])
 ASSETS = REPO / "assets"
-SUFFIX = ".dck"
+GORGE_DECKS = REPO / "data" / "gorge" / "decks"
+GORGE_POOL = REPO / "data" / "gorge" / "pool.tsv"
+SAMPLE_DECKS = ASSETS / "sample" / "decks"
+SAMPLE_POOL = ASSETS / "sample" / "pool.tsv"
+DECK_SUFFIX = ".json"      # a gorge deck file
+SUFFIX = ".dck"            # an XMage deck file (legacy pool files)
+
+
+def gorge_deck_path(stem: str, decks_dir: Path = GORGE_DECKS) -> Path:
+    """Where gorge looks for a deck: ``<decks_dir>/<stem>.json`` (a legacy path or ``.dck`` name is reduced to its stem)."""
+    return Path(decks_dir) / f"{Path(stem).stem if stem.endswith((SUFFIX, DECK_SUFFIX)) or '/' in stem else stem}{DECK_SUFFIX}"
 
 
 def read_pool(pool_file: Path) -> list[str]:

@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_08183_UB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 5cb2146fc1fd4189924533b3bcdbf350:1, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Arcane Epiphany",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Blasphemous Edict",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Cephalid Inkmage",
+"count": 1
+},
+{
+"name": "Consuming Aberration",
+"count": 1
+},
+{
+"name": "Dismal Backwater",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 2
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 1
+},
+{
+"name": "Gutless Plunderer",
+"count": 2
+},
+{
+"name": "High-Society Hunter",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 2
+},
+{
+"name": "Imprisoned in the Moon",
+"count": 2
+},
+{
+"name": "Infernal Vessel",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Micromancer",
+"count": 2
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Sanguine Syphoner",
+"count": 1
+},
+{
+"name": "Sire of Seven Deaths",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+}
+]
+}

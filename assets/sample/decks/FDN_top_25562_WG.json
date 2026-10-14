@@ -1,0 +1,95 @@
+{
+"name": "FDN_top_25562_WG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 0a56b54251ea4c28b91129db87f3a101:2, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Authority of the Consuls",
+"count": 1
+},
+{
+"name": "Bite Down",
+"count": 1
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Cackling Prowler",
+"count": 1
+},
+{
+"name": "Cathar Commando",
+"count": 1
+},
+{
+"name": "Divine Resilience",
+"count": 1
+},
+{
+"name": "Dwynen's Elite",
+"count": 2
+},
+{
+"name": "Eager Trufflesnout",
+"count": 1
+},
+{
+"name": "Felling Blow",
+"count": 1
+},
+{
+"name": "Fleeting Flight",
+"count": 2
+},
+{
+"name": "Forest",
+"count": 7
+},
+{
+"name": "Giant Growth",
+"count": 2
+},
+{
+"name": "Good-Fortune Unicorn",
+"count": 1
+},
+{
+"name": "Hare Apparent",
+"count": 1
+},
+{
+"name": "Mild-Mannered Librarian",
+"count": 2
+},
+{
+"name": "Mischievous Pup",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 7
+},
+{
+"name": "Prideful Parent",
+"count": 2
+},
+{
+"name": "Savannah Lions",
+"count": 1
+},
+{
+"name": "Scavenging Ooze",
+"count": 1
+},
+{
+"name": "Snakeskin Veil",
+"count": 2
+},
+{
+"name": "Wildwood Scourge",
+"count": 1
+}
+]
+}

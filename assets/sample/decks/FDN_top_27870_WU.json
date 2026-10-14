@@ -1,0 +1,83 @@
+{
+"name": "FDN_top_27870_WU",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck af8411e91bca4676806b5862a77850e1:0, player win-rate bucket 0.66 (CC BY 4.0)",
+"cards": [
+{
+"name": "Banishing Light",
+"count": 1
+},
+{
+"name": "Cathar Commando",
+"count": 1
+},
+{
+"name": "Cephalid Inkmage",
+"count": 1
+},
+{
+"name": "Curator of Destinies",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 2
+},
+{
+"name": "Empyrean Eagle",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 1
+},
+{
+"name": "Faebloom Trick",
+"count": 2
+},
+{
+"name": "Felidar Savior",
+"count": 2
+},
+{
+"name": "Fleeting Distraction",
+"count": 2
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Luminous Rebuke",
+"count": 3
+},
+{
+"name": "Mischievous Mystic",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 7
+},
+{
+"name": "Refute",
+"count": 2
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 2
+},
+{
+"name": "Tranquil Cove",
+"count": 1
+}
+]
+}

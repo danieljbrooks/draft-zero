@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_20626_WG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck e38a5704187b461f912fd050275a10a8:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Blossoming Sands",
+"count": 1
+},
+{
+"name": "Cackling Prowler",
+"count": 2
+},
+{
+"name": "Cathar Commando",
+"count": 1
+},
+{
+"name": "Celestial Armor",
+"count": 1
+},
+{
+"name": "Dazzling Angel",
+"count": 1
+},
+{
+"name": "Exemplar of Light",
+"count": 1
+},
+{
+"name": "Felling Blow",
+"count": 1
+},
+{
+"name": "Fleeting Flight",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 8
+},
+{
+"name": "Gnarlid Colony",
+"count": 3
+},
+{
+"name": "Good-Fortune Unicorn",
+"count": 1
+},
+{
+"name": "Guarded Heir",
+"count": 1
+},
+{
+"name": "Healer's Hawk",
+"count": 1
+},
+{
+"name": "Joust Through",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 2
+},
+{
+"name": "Overrun",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 8
+},
+{
+"name": "Sun-Blessed Healer",
+"count": 1
+},
+{
+"name": "Sylvan Scavenging",
+"count": 1
+},
+{
+"name": "Treetop Snarespinner",
+"count": 1
+},
+{
+"name": "Youthful Valkyrie",
+"count": 2
+}
+]
+}

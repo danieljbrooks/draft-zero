@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_20234_UG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 797bc417ca0c4878859d4e6a5f586495:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Affectionate Indrik",
+"count": 1
+},
+{
+"name": "Beast-Kin Ranger",
+"count": 2
+},
+{
+"name": "Bite Down",
+"count": 2
+},
+{
+"name": "Bushwhack",
+"count": 2
+},
+{
+"name": "Eager Trufflesnout",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 9
+},
+{
+"name": "Giant Growth",
+"count": 2
+},
+{
+"name": "Goldvein Pick",
+"count": 1
+},
+{
+"name": "High Fae Trickster",
+"count": 1
+},
+{
+"name": "Island",
+"count": 6
+},
+{
+"name": "Llanowar Elves",
+"count": 1
+},
+{
+"name": "Micromancer",
+"count": 1
+},
+{
+"name": "Mild-Mannered Librarian",
+"count": 1
+},
+{
+"name": "Nessian Hornbeetle",
+"count": 1
+},
+{
+"name": "Quakestrider Ceratops",
+"count": 1
+},
+{
+"name": "Rogue's Passage",
+"count": 1
+},
+{
+"name": "Thornwood Falls",
+"count": 1
+},
+{
+"name": "Treetop Snarespinner",
+"count": 2
+},
+{
+"name": "Wary Thespian",
+"count": 2
+},
+{
+"name": "Zimone, Paradox Sculptor",
+"count": 1
+}
+]
+}

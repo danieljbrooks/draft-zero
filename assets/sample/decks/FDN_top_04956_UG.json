@@ -1,0 +1,87 @@
+{
+"name": "FDN_top_04956_UG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 3fa8994427764394ab54742e30259d5f:1, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Beast-Kin Ranger",
+"count": 2
+},
+{
+"name": "Bite Down",
+"count": 1
+},
+{
+"name": "Clinquant Skymage",
+"count": 1
+},
+{
+"name": "Dwynen's Elite",
+"count": 2
+},
+{
+"name": "Dwynen, Gilt-Leaf Daen",
+"count": 1
+},
+{
+"name": "Felling Blow",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 8
+},
+{
+"name": "Homunculus Horde",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Kiora, the Rising Tide",
+"count": 1
+},
+{
+"name": "Koma, World-Eater",
+"count": 1
+},
+{
+"name": "Llanowar Elves",
+"count": 1
+},
+{
+"name": "Mischievous Mystic",
+"count": 1
+},
+{
+"name": "Mossborn Hydra",
+"count": 1
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 4
+},
+{
+"name": "Thornwood Falls",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+},
+{
+"name": "Witness Protection",
+"count": 2
+}
+]
+}

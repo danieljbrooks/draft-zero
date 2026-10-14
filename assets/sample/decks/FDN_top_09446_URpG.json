@@ -1,0 +1,111 @@
+{
+"name": "FDN_top_09446_URpG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 73c53140f4f3433ca4e2c3f963d27911:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Aegis Turtle",
+"count": 1
+},
+{
+"name": "Arcane Epiphany",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Brineborn Cutthroat",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 2
+},
+{
+"name": "Clinquant Skymage",
+"count": 1
+},
+{
+"name": "Curator of Destinies",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 2
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 1
+},
+{
+"name": "Goblin Surprise",
+"count": 1
+},
+{
+"name": "Icewind Elemental",
+"count": 1
+},
+{
+"name": "Inspiration from Beyond",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Mocking Sprite",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 6
+},
+{
+"name": "Seismic Rupture",
+"count": 1
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 1
+},
+{
+"name": "Tatyova, Benthic Druid",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 2
+},
+{
+"name": "Thornwood Falls",
+"count": 1
+},
+{
+"name": "Twinflame Tyrant",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+},
+{
+"name": "Witness Protection",
+"count": 1
+}
+]
+}

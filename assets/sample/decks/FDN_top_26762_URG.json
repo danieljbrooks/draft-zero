@@ -1,0 +1,115 @@
+{
+"name": "FDN_top_26762_URG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 1754f25a4321448ca7ea43b750db5751:0, player win-rate bucket 0.64 (CC BY 4.0)",
+"cards": [
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Campus Guide",
+"count": 1
+},
+{
+"name": "Cephalid Inkmage",
+"count": 1
+},
+{
+"name": "Dragon Trainer",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 1
+},
+{
+"name": "Flamewake Phoenix",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 6
+},
+{
+"name": "Giant Growth",
+"count": 1
+},
+{
+"name": "Goblin Boarders",
+"count": 1
+},
+{
+"name": "Imprisoned in the Moon",
+"count": 1
+},
+{
+"name": "Incinerating Blast",
+"count": 1
+},
+{
+"name": "Island",
+"count": 3
+},
+{
+"name": "Llanowar Elves",
+"count": 1
+},
+{
+"name": "Mild-Mannered Librarian",
+"count": 2
+},
+{
+"name": "Mountain",
+"count": 6
+},
+{
+"name": "Rune-Sealed Wall",
+"count": 1
+},
+{
+"name": "Scavenging Ooze",
+"count": 1
+},
+{
+"name": "Scrawling Crawler",
+"count": 1
+},
+{
+"name": "Searslicer Goblin",
+"count": 1
+},
+{
+"name": "Slagstorm",
+"count": 1
+},
+{
+"name": "Slumbering Cerberus",
+"count": 1
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Swiftwater Cliffs",
+"count": 1
+},
+{
+"name": "Thornwood Falls",
+"count": 1
+},
+{
+"name": "Thrill of Possibility",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+}
+]
+}

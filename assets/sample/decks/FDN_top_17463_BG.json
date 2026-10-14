@@ -1,0 +1,99 @@
+{
+"name": "FDN_top_17463_BG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck d205ce136cca4c529ea7188e43428524:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Beast-Kin Ranger",
+"count": 1
+},
+{
+"name": "Bite Down",
+"count": 1
+},
+{
+"name": "Cackling Prowler",
+"count": 1
+},
+{
+"name": "Elvish Regrower",
+"count": 1
+},
+{
+"name": "Felling Blow",
+"count": 2
+},
+{
+"name": "Forest",
+"count": 9
+},
+{
+"name": "Gnarlid Colony",
+"count": 2
+},
+{
+"name": "Hero's Downfall",
+"count": 1
+},
+{
+"name": "Infestation Sage",
+"count": 1
+},
+{
+"name": "Jungle Hollow",
+"count": 1
+},
+{
+"name": "Lathril, Blade of the Elves",
+"count": 1
+},
+{
+"name": "Llanowar Elves",
+"count": 1
+},
+{
+"name": "Mild-Mannered Librarian",
+"count": 1
+},
+{
+"name": "Nessian Hornbeetle",
+"count": 1
+},
+{
+"name": "Reclamation Sage",
+"count": 2
+},
+{
+"name": "Snakeskin Veil",
+"count": 1
+},
+{
+"name": "Spinner of Souls",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 7
+},
+{
+"name": "Treetop Snarespinner",
+"count": 1
+},
+{
+"name": "Vampire Nighthawk",
+"count": 1
+},
+{
+"name": "Wardens of the Cycle",
+"count": 1
+},
+{
+"name": "Wary Thespian",
+"count": 1
+},
+{
+"name": "Wildwood Scourge",
+"count": 1
+}
+]
+}

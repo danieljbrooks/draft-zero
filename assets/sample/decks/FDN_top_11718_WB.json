@@ -1,0 +1,99 @@
+{
+"name": "FDN_top_11718_WB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 455a2e59bff74a77bb8a3328df3d0cc2:0, player win-rate bucket 0.66 (CC BY 4.0)",
+"cards": [
+{
+"name": "Angel of Finality",
+"count": 1
+},
+{
+"name": "Arahbo, the First Fang",
+"count": 1
+},
+{
+"name": "Arbiter of Woe",
+"count": 1
+},
+{
+"name": "Bake into a Pie",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 2
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Gutless Plunderer",
+"count": 1
+},
+{
+"name": "Healer's Hawk",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 2
+},
+{
+"name": "Inspiring Paladin",
+"count": 1
+},
+{
+"name": "Liliana, Dreadhorde General",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 7
+},
+{
+"name": "Prideful Parent",
+"count": 1
+},
+{
+"name": "Scoured Barrens",
+"count": 1
+},
+{
+"name": "Serra Angel",
+"count": 1
+},
+{
+"name": "Skyknight Squire",
+"count": 1
+},
+{
+"name": "Squad Rallier",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 2
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Tragic Banshee",
+"count": 2
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+},
+{
+"name": "Vampire Soulcaller",
+"count": 1
+}
+]
+}

@@ -1,0 +1,111 @@
+{
+"name": "FDN_top_24789_BGpW",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 9bb19ed708424b94bbc7389e5211dbb5:0, player win-rate bucket 0.70 (CC BY 4.0)",
+"cards": [
+{
+"name": "Ajani's Pridemate",
+"count": 1
+},
+{
+"name": "Apothecary Stomper",
+"count": 1
+},
+{
+"name": "Bake into a Pie",
+"count": 2
+},
+{
+"name": "Beast-Kin Ranger",
+"count": 1
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Cackling Prowler",
+"count": 1
+},
+{
+"name": "Campus Guide",
+"count": 1
+},
+{
+"name": "Cat Collector",
+"count": 1
+},
+{
+"name": "Dwynen's Elite",
+"count": 3
+},
+{
+"name": "Elvish Archdruid",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 2
+},
+{
+"name": "Forest",
+"count": 6
+},
+{
+"name": "Gnarlid Colony",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 1
+},
+{
+"name": "Hero's Downfall",
+"count": 1
+},
+{
+"name": "Jungle Hollow",
+"count": 1
+},
+{
+"name": "Macabre Waltz",
+"count": 1
+},
+{
+"name": "Nessian Hornbeetle",
+"count": 1
+},
+{
+"name": "Pilfer",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 2
+},
+{
+"name": "Spinner of Souls",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 6
+},
+{
+"name": "Treetop Snarespinner",
+"count": 1
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+},
+{
+"name": "Wardens of the Cycle",
+"count": 1
+},
+{
+"name": "Zul Ashur, Lich Lord",
+"count": 1
+}
+]
+}

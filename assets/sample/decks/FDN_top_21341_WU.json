@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_21341_WU",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck cbf293763430445ba8bd93ee24ff0cbf:1, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Brineborn Cutthroat",
+"count": 1
+},
+{
+"name": "Day of Judgment",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 1
+},
+{
+"name": "Empyrean Eagle",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 1
+},
+{
+"name": "Faebloom Trick",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 2
+},
+{
+"name": "Fleeting Flight",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 3
+},
+{
+"name": "Island",
+"count": 9
+},
+{
+"name": "Joust Through",
+"count": 1
+},
+{
+"name": "Make Your Move",
+"count": 1
+},
+{
+"name": "Micromancer",
+"count": 1
+},
+{
+"name": "Mischievous Mystic",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 8
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Resolute Reinforcements",
+"count": 1
+},
+{
+"name": "Scrawling Crawler",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 2
+}
+]
+}

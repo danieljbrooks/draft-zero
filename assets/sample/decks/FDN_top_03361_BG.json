@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_03361_BG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 2066b37b02ff44958b2862a03f869137:1, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Ambush Wolf",
+"count": 2
+},
+{
+"name": "Bake into a Pie",
+"count": 1
+},
+{
+"name": "Beast-Kin Ranger",
+"count": 1
+},
+{
+"name": "Bite Down",
+"count": 1
+},
+{
+"name": "Dwynen's Elite",
+"count": 2
+},
+{
+"name": "Eaten Alive",
+"count": 1
+},
+{
+"name": "Elvish Regrower",
+"count": 2
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Felling Blow",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 8
+},
+{
+"name": "Lathril, Blade of the Elves",
+"count": 2
+},
+{
+"name": "Llanowar Elves",
+"count": 1
+},
+{
+"name": "Mossborn Hydra",
+"count": 1
+},
+{
+"name": "Preposterous Proportions",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 2
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Tragic Banshee",
+"count": 1
+},
+{
+"name": "Wardens of the Cycle",
+"count": 1
+},
+{
+"name": "Wary Thespian",
+"count": 1
+},
+{
+"name": "Wildwood Scourge",
+"count": 1
+}
+]
+}

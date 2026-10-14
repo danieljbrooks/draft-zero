@@ -1,0 +1,79 @@
+{
+"name": "FDN_top_06683_BR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 4aff2cd1f9da4b12bb4394331953c1e3:0, player win-rate bucket 0.68 (CC BY 4.0)",
+"cards": [
+{
+"name": "Battlesong Berserker",
+"count": 1
+},
+{
+"name": "Blasphemous Edict",
+"count": 1
+},
+{
+"name": "Bloodfell Caves",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 4
+},
+{
+"name": "Courageous Goblin",
+"count": 2
+},
+{
+"name": "Dragon Trainer",
+"count": 1
+},
+{
+"name": "Goblin Boarders",
+"count": 1
+},
+{
+"name": "Goblin Negotiation",
+"count": 2
+},
+{
+"name": "Goblin Surprise",
+"count": 2
+},
+{
+"name": "Heraldic Banner",
+"count": 2
+},
+{
+"name": "Infestation Sage",
+"count": 1
+},
+{
+"name": "Kellan, Planar Trailblazer",
+"count": 2
+},
+{
+"name": "Macabre Waltz",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 9
+},
+{
+"name": "Perforating Artist",
+"count": 1
+},
+{
+"name": "Scrawling Crawler",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 7
+},
+{
+"name": "Vengeful Bloodwitch",
+"count": 1
+}
+]
+}

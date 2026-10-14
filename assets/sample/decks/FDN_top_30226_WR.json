@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_30226_WR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 6cdc16a55e19471eb862bca3c10ad99c:1, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Axgard Cavalry",
+"count": 1
+},
+{
+"name": "Battlesong Berserker",
+"count": 3
+},
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Courageous Goblin",
+"count": 1
+},
+{
+"name": "Dazzling Angel",
+"count": 1
+},
+{
+"name": "Dragon Trainer",
+"count": 1
+},
+{
+"name": "Exemplar of Light",
+"count": 1
+},
+{
+"name": "Fanatical Firebrand",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 1
+},
+{
+"name": "Firebrand Archer",
+"count": 1
+},
+{
+"name": "Fleeting Flight",
+"count": 4
+},
+{
+"name": "Goblin Boarders",
+"count": 1
+},
+{
+"name": "Gorehorn Raider",
+"count": 1
+},
+{
+"name": "Heartfire Immolator",
+"count": 1
+},
+{
+"name": "Incinerating Blast",
+"count": 1
+},
+{
+"name": "Inspiring Paladin",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 8
+},
+{
+"name": "Plains",
+"count": 8
+},
+{
+"name": "Slumbering Cerberus",
+"count": 1
+},
+{
+"name": "Sun-Blessed Healer",
+"count": 1
+}
+]
+}

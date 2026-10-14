@@ -1,0 +1,103 @@
+{
+"name": "FDN_top_14705_BG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 9741f5848ec04c51bf20947fcb57c2fa:0, player win-rate bucket 0.68 (CC BY 4.0)",
+"cards": [
+{
+"name": "Affectionate Indrik",
+"count": 1
+},
+{
+"name": "Ambush Wolf",
+"count": 2
+},
+{
+"name": "Apothecary Stomper",
+"count": 1
+},
+{
+"name": "Bake into a Pie",
+"count": 1
+},
+{
+"name": "Beast-Kin Ranger",
+"count": 1
+},
+{
+"name": "Bite Down",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 2
+},
+{
+"name": "Eager Trufflesnout",
+"count": 1
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 7
+},
+{
+"name": "Gutless Plunderer",
+"count": 1
+},
+{
+"name": "Infestation Sage",
+"count": 2
+},
+{
+"name": "Jungle Hollow",
+"count": 1
+},
+{
+"name": "Macabre Waltz",
+"count": 1
+},
+{
+"name": "Ravenous Amulet",
+"count": 1
+},
+{
+"name": "Snakeskin Veil",
+"count": 1
+},
+{
+"name": "Soulstone Sanctuary",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Sylvan Scavenging",
+"count": 1
+},
+{
+"name": "Tragic Banshee",
+"count": 1
+},
+{
+"name": "Treetop Snarespinner",
+"count": 1
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+},
+{
+"name": "Vampire Soulcaller",
+"count": 1
+},
+{
+"name": "Zul Ashur, Lich Lord",
+"count": 1
+}
+]
+}

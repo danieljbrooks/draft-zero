@@ -1,0 +1,83 @@
+{
+"name": "FDN_top_06982_G",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 548ef107e99046259ee6321316a69474:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Ambush Wolf",
+"count": 1
+},
+{
+"name": "Beast-Kin Ranger",
+"count": 2
+},
+{
+"name": "Bite Down",
+"count": 2
+},
+{
+"name": "Bushwhack",
+"count": 2
+},
+{
+"name": "Cackling Prowler",
+"count": 1
+},
+{
+"name": "Dwynen's Elite",
+"count": 2
+},
+{
+"name": "Eager Trufflesnout",
+"count": 1
+},
+{
+"name": "Elfsworn Giant",
+"count": 1
+},
+{
+"name": "Elvish Archdruid",
+"count": 1
+},
+{
+"name": "Elvish Regrower",
+"count": 2
+},
+{
+"name": "Felling Blow",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 16
+},
+{
+"name": "Giant Growth",
+"count": 1
+},
+{
+"name": "Gnarlid Colony",
+"count": 2
+},
+{
+"name": "Needletooth Pack",
+"count": 1
+},
+{
+"name": "Preposterous Proportions",
+"count": 1
+},
+{
+"name": "Sylvan Scavenging",
+"count": 1
+},
+{
+"name": "Treetop Snarespinner",
+"count": 1
+},
+{
+"name": "Wary Thespian",
+"count": 1
+}
+]
+}

@@ -1,0 +1,103 @@
+{
+"name": "FDN_top_08530_WR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 2a13a22c3c254b149382f9e410cf1436:0, player win-rate bucket 0.72 (CC BY 4.0)",
+"cards": [
+{
+"name": "Arahbo, the First Fang",
+"count": 1
+},
+{
+"name": "Axgard Cavalry",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Courageous Goblin",
+"count": 2
+},
+{
+"name": "Dragon Trainer",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 1
+},
+{
+"name": "Fleeting Flight",
+"count": 1
+},
+{
+"name": "Frenzied Goblin",
+"count": 1
+},
+{
+"name": "Gorehorn Raider",
+"count": 1
+},
+{
+"name": "Inspiring Paladin",
+"count": 2
+},
+{
+"name": "Joust Through",
+"count": 1
+},
+{
+"name": "Krenko, Mob Boss",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 8
+},
+{
+"name": "Plains",
+"count": 7
+},
+{
+"name": "Prideful Parent",
+"count": 2
+},
+{
+"name": "Rogue's Passage",
+"count": 1
+},
+{
+"name": "Savannah Lions",
+"count": 1
+},
+{
+"name": "Scrawling Crawler",
+"count": 1
+},
+{
+"name": "Slumbering Cerberus",
+"count": 1
+},
+{
+"name": "Squad Rallier",
+"count": 1
+},
+{
+"name": "Strongbox Raider",
+"count": 1
+},
+{
+"name": "Twinflame Tyrant",
+"count": 1
+},
+{
+"name": "Wind-Scarred Crag",
+"count": 1
+}
+]
+}

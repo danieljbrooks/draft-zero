@@ -1,0 +1,107 @@
+{
+"name": "FDN_top_21606_BGpR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck c1441b5433404f9d8e57340d45ad8905:0, player win-rate bucket 0.68 (CC BY 4.0)",
+"cards": [
+{
+"name": "Abyssal Harvester",
+"count": 1
+},
+{
+"name": "Ambush Wolf",
+"count": 2
+},
+{
+"name": "Apothecary Stomper",
+"count": 1
+},
+{
+"name": "Ashroot Animist",
+"count": 1
+},
+{
+"name": "Bite Down",
+"count": 2
+},
+{
+"name": "Bloodfell Caves",
+"count": 2
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Cackling Prowler",
+"count": 1
+},
+{
+"name": "Eager Trufflesnout",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 1
+},
+{
+"name": "Elfsworn Giant",
+"count": 1
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 9
+},
+{
+"name": "Giant Growth",
+"count": 1
+},
+{
+"name": "Goldvein Pick",
+"count": 1
+},
+{
+"name": "Jungle Hollow",
+"count": 1
+},
+{
+"name": "Llanowar Elves",
+"count": 2
+},
+{
+"name": "Mountain",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 4
+},
+{
+"name": "Sylvan Scavenging",
+"count": 1
+},
+{
+"name": "Treetop Snarespinner",
+"count": 1
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+},
+{
+"name": "Vampire Soulcaller",
+"count": 1
+},
+{
+"name": "Vivien Reid",
+"count": 1
+},
+{
+"name": "Wardens of the Cycle",
+"count": 1
+}
+]
+}

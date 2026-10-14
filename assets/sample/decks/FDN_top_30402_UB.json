@@ -1,0 +1,87 @@
+{
+"name": "FDN_top_30402_UB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck b371e3fe098c49b79ced93d5a4e24f8d:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Bake into a Pie",
+"count": 2
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Brineborn Cutthroat",
+"count": 1
+},
+{
+"name": "Cephalid Inkmage",
+"count": 1
+},
+{
+"name": "Dreadwing Scavenger",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 1
+},
+{
+"name": "Faebloom Trick",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 1
+},
+{
+"name": "Icewind Elemental",
+"count": 1
+},
+{
+"name": "Inspiration from Beyond",
+"count": 1
+},
+{
+"name": "Island",
+"count": 9
+},
+{
+"name": "Lightshell Duo",
+"count": 1
+},
+{
+"name": "Macabre Waltz",
+"count": 1
+},
+{
+"name": "Pilfer",
+"count": 2
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Seeker's Folly",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Think Twice",
+"count": 3
+},
+{
+"name": "Tolarian Terror",
+"count": 2
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+}
+]
+}
