@@ -83,9 +83,11 @@ dz relay configs/runs/X.yml --host pod1 /root/dz/run "root@1.2.3.4 -p 40066"    
 
 RunPod pods for such actors (Community Cloud GPU pods bought for their vCPUs; CPU pods on Secure Cloud with
 `--secure`): `dz pod offers`, `dz pod up --name dz-a1 --gpu ID --max-price 0.25 --max-hours 2` (both caps are
-required; it prints the cost guard, asks, arms the pod to terminate itself after `--max-hours`, then copies the
-engine, cards, decks and repo and bootstraps a venv), `dz pod list`, `dz pod balance` and `dz pod down ID`. Billing
-stops only at `dz pod down`. The flow is in the `draftzero.workers.runpod` docstring; no real pod has run it yet.
+required; it prints the cost guard, asks, arms the pod to terminate itself `--max-hours` after its create, the wait
+for SSH included, then copies the engine, cards, decks and repo and bootstraps a venv; any failure removes the pod,
+and `--keep-on-failure` keeps only a pod that is already armed), `dz pod list`, `dz pod balance` and `dz pod down
+ID...` (it tries every pod and exits 1 if any terminate failed). Billing stops at `dz pod down` or the self-destruct.
+The flow is in the `draftzero.workers.runpod` docstring; no real pod has run it yet.
 
 ## Where data lives
 
