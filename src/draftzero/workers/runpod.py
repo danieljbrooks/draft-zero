@@ -1,122 +1,590 @@
-"""runpod.py — a rented GPU pod. An SSH host that has to be created and, crucially, destroyed.
+"""runpod.py — rent RunPod pods for actors, fill them, and give them back.
 
-Notes that cost real time to learn:
+A pod is an SSH host that has to be created and, crucially, destroyed. Actors on it play against a LocalStore on the
+pod's disk and the relay (draftzero.loop.relay, running beside the run's store on d1) pulls their shards over SSH,
+so a pod holds no DraftZero or Hugging Face token. The RunPod key stays on d1: `api_key()` reads it with
+`secrets.load("/root/.runpod/env")`; it travels only in an Authorization header and is scrubbed from every error.
 
-* Self-play is CPU-bound XMage/MCTS, so pick a pod by **vCPU**, not VRAM. The GPU only
-  serves small batched inference and sits near-idle (2-8% in measurements).
-* `runpodctl gpu list` shows only cards with stock. The GraphQL catalogue lists every card
-  including unavailable ones, and `lowestPrice.minVcpu` is the only place vCPU is exposed.
-* Network volumes exist **only in Secure Cloud**, so persistence and the cheapest community
-  pricing are mutually exclusive.
-* The container is cgroup-capped well below what it advertises: a pod sold as 9 vCPU /
-  50 GB reports nproc=48 / 251 GB and is capped to ~7.65 cores / 46 GB. Never size threads
-  from nproc.
+The expected flow (the integration agent's first real pod; spend a dollar or two, never add credits):
+
+    from draftzero.workers import runpod as rp
+    from draftzero.loop.relay import Relay
+    api = rp.RunPodAPI()
+    api.balance()                                  # {clientBalance, currentSpendPerHr, spendLimit}
+    offers = api.offers(min_vcpu=8)                # Community GPU pods, most vCPU per dollar first, in stock only
+    spec = rp.PodSpec(name="dz-a1", gpu=offers[0]["gpu_id"], max_price=0.25, min_vcpu=8)
+    b = rp.Bundle(repo=Path("/work/dz-main"), engine_root=Path("/work/gorge-fork"),
+                  decks=Path("data/gorge/decks"), pool=Path("data/gorge/pool.tsv"))   # or assets/sample/...
+    pod = rp.up(api, spec, max_hours=2, files=b)   # create -> wait for SSH -> arm -> bundle -> bootstrap; any failure
+                                                   # after create terminates the pod
+    relay = Relay("runs/x", [{"name": "dz-a1", "ssh": pod.target.spec, "root": b.remote_run}])
+    relay.sync_once()                              # config.yml + control.json (+ versions) onto the pod
+    pod.worker(b).start_actor(store=f"{b.remote_run}/store", machine="dz-a1")
+    relay.run(interval=60)                         # until the run stops; then
+    api.terminate(pod.id); api.list()              # billing stops only on terminate; check nothing is left
+
+Steps, each usable alone:
+
+- `offers()`: GPU types on Community Cloud ranked by vCPU per dollar (self-play is CPU-bound; the GPU idles), from the
+  GraphQL catalogue (`lowestPrice` is the only place vCPU is exposed). `cpu_quote()`: a CPU flavor's price and the
+  data centers that have it (the v2 catalog; a CPU create must be pinned to one).
+- `create(spec)`: REST `POST /v1/pods`. **Community Cloud only**, refused unless `spec.allow_secure` -- and CPU pods
+  exist only on Secure Cloud, so they need it (docs/020 §7). Refused when the current quote is above
+  `spec.max_price`, when the balance is below an hour of it, or when a pod of that name exists (a create can fail
+  after the pod exists: a retry must not make a second one). A pod that bills above max_price is terminated at once.
+  `RunPodCtl.create(spec)` does GPU pods through runpodctl instead (`--public-ip` is required for `--wait` on
+  Community Cloud).
+- `wait_ssh(id)`: until the pod has a public IP and port 22 mapping that answers with an SSH banner. Through RunPod's
+  SSH proxy (`<podHostId>@ssh.runpod.io`) there is only a PTY: no rsync, so no relay. A network that blocks high
+  ports (docs/005) cannot run relay actors.
+- `arm(target, max_hours)`: deploy/runpod_arm.sh piped over SSH: the pod terminates itself after max_hours with its
+  own key, even if d1 dies. Do it first.
+- `bundle(target, b)`: rsync the dzgorge binary + bin/dzgorge.build.json and .cards (at the same absolute path as
+  on d1, so a config's engine.root works unchanged), the deck pool to <repo>/data/gorge/, and the repo (git archive
+  of HEAD, or rsync of the working tree) to <remote_root>/draftzero.
+- `bootstrap(target, b)`: deploy/pod_bootstrap.sh on the pod: a venv with CPU torch, `pip install -e .`, `dz version`
+  and a one-game dzgorge smoke.
+
+Notes that cost real time to learn (docs/005, docs/020): pods are cgroup-capped below what they advertise (size
+workers from draftzero.resources.cpu_quota, never nproc); Community hosts often stall pulling big images (the default
+image is RunPod's 0.7 GB base; CPU torch comes from pip); stock moves by the minute; a stopped pod still bills.
+
+    python -m draftzero.workers.runpod offers [--min-vcpu 8] [--max-price 0.3]
+    python -m draftzero.workers.runpod balance | ls | get ID | rm ID
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
-import subprocess
+import posixpath
+import socket
+import sys
+import tempfile
 import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Mapping, Optional
 
-from draftzero.workers.base import Result, WorkerConfig, local_run
+from draftzero import secrets
+from draftzero.data.paths import GORGE_DECKS, GORGE_POOL, REPO
+from draftzero.workers.base import DEFAULT_EXCLUDES, RSYNC_FLAGS, Result, WorkerConfig, local_run, q
 from draftzero.workers.ssh import SSHTarget, SSHWorker
 
-CTL = os.path.expanduser(os.environ.get("RUNPODCTL", "~/.local/bin/runpodctl"))
+REST = "https://rest.runpod.io/v1"
 GQL = "https://api.runpod.io/graphql"
+CATALOG_CPU = "https://api.runpod.io/v2/catalog/cpus"
+IMAGE = "runpod/base:1.4.0-ubuntu2404"          # 0.7 GB; deploy/pod_bootstrap.sh installs CPU torch
+IMAGE_PYTORCH = "runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404"   # 10.7 GB, CUDA torch: for training on a pod
+CPU_FLAVORS = {"cpu3c": 2, "cpu3g": 4, "cpu3m": 8, "cpu5c": 2, "cpu5g": 4, "cpu5m": 8}   # flavor -> GB per vCPU
+ENV_FILES = ("/root/.runpod/env", "~/.runpod/env")
+CTL = os.environ.get("RUNPODCTL", "~/.local/bin/runpodctl")
+USER_AGENT = "curl/8.7.1"      # RunPod's API filter refuses urllib's default User-Agent
+ARM_SCRIPT = REPO / "deploy" / "runpod_arm.sh"
+BOOTSTRAP = "deploy/pod_bootstrap.sh"
+MAX_ARM_HOURS = 72.0
+SSH_KEY = "~/.ssh/id_ed25519"
 
 
-def _ctl(*args: str) -> Result:
-    return local_run([CTL, *args])
+class RunPodError(RuntimeError):
+    pass
 
 
-def _ctl_json(*args: str):
-    r = _ctl(*args)
-    if not r.ok:
-        raise RuntimeError(f"runpodctl {' '.join(args)} failed: {r.err or r.out}")
-    return json.loads(r.out)
+def api_key(env_file: str | None = None) -> str:
+    """The RunPod API key: from the env file (parsed, never sourced), else $RUNPOD_API_KEY. Never print it."""
+    for f in ([env_file] if env_file else ENV_FILES):
+        v = secrets.load(f, default_key="RUNPOD_API_KEY", export=False).get("RUNPOD_API_KEY")
+        if v:
+            return v
+    if os.environ.get("RUNPOD_API_KEY"):
+        return os.environ["RUNPOD_API_KEY"]
+    raise RunPodError(f"no RunPod API key: put `export RUNPOD_API_KEY=...` in {ENV_FILES[0]} (chmod 600)")
 
 
-def catalogue_vcpu() -> dict[str, dict]:
-    """displayName -> {minVcpu, minMemory}. Only the GraphQL API exposes vCPU."""
-    key = os.environ.get("RUNPOD_API_KEY", "")
-    q = ('{"query":"query { gpuTypes { displayName lowestPrice(input:{gpuCount:1}) '
-         '{ minVcpu minMemory } } }"}')
-    auth = ["-H", f"Authorization: Bearer {key}"] if key else []   # a header, never ?api_key= in the URL
-    out = subprocess.run(["curl", "-s", "-X", "POST", GQL, *auth,
-                          "-H", "Content-Type: application/json", "-d", q],
-                         capture_output=True, text=True).stdout
+Http = Callable[[str, str, Optional[bytes], dict], tuple[int, str]]
+
+
+def urllib_http(method: str, url: str, data: Optional[bytes], headers: dict) -> tuple[int, str]:
+    r = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        types = json.loads(out)["data"]["gpuTypes"]
-    except Exception:
-        return {}
-    return {g["displayName"]: (g.get("lowestPrice") or {}) for g in types}
+        with urllib.request.urlopen(r, timeout=60) as f:
+            return f.status, f.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode(errors="replace")
 
 
-def rank_offers(min_vcpu: int = 8, secure_only: bool = True) -> list[dict]:
-    """In-stock GPUs ranked by vCPU per dollar -- the metric that matters for self-play."""
-    vcpu = catalogue_vcpu()
-    rows = []
-    for g in _ctl_json("gpu", "list"):
-        if not g.get("available"):
-            continue
-        lp = vcpu.get(g["displayName"]) or {}
-        v, m = lp.get("minVcpu"), lp.get("minMemory")
-        price = g.get("securePricePerHr") if secure_only else (
-            g.get("communityPricePerHr") or g.get("securePricePerHr"))
-        dcs = [d["dataCenterId"] for d in (g.get("dataCenterAvailability") or [])
-               if d.get("stockStatus") not in (None, "", "none")]
-        if not (v and price and v >= min_vcpu) or (secure_only and not dcs):
-            continue
-        rows.append({"name": g["displayName"], "gpu_id": g["gpuId"], "price": price,
-                     "vcpu": v, "ram": m, "datacenters": dcs,
-                     "vcpu_per_dollar": round(v / price, 1)})
-    return sorted(rows, key=lambda r: -r["vcpu_per_dollar"])
+@dataclass
+class PodSpec:
+    """What to rent. `max_price` ($/h) is required: offers above it are refused, a pod billing above it is removed."""
+    name: str
+    max_price: float
+    gpu: Optional[str] = None             # a GPU type id ("NVIDIA GeForce RTX 3090"): a GPU pod, bought for its vCPUs
+    cpu: Optional[str] = None             # a CPU flavor (cpu3c, cpu5c, ...): Secure Cloud only
+    vcpu: int = 8                         # CPU pods: vCPUs
+    min_vcpu: int = 8                     # GPU pods: vCPU floor
+    min_ram: int = 16                     # GPU pods: GB floor
+    image: str = IMAGE
+    disk_gb: int = 30
+    datacenters: tuple[str, ...] = ()
+    cloud: str = "COMMUNITY"
+    allow_secure: bool = False            # Secure Cloud costs more; set only when Dan said so (and for CPU pods)
+    cuda: tuple[str, ...] = ()            # allowedCudaVersions, for a CUDA image
+    env: dict = field(default_factory=dict)
+
+    def validate(self) -> "PodSpec":
+        if bool(self.gpu) == bool(self.cpu):
+            raise ValueError("a pod is either gpu= or cpu=")
+        if not (self.max_price and self.max_price > 0):
+            raise ValueError("max_price ($/h) must be positive")
+        if self.cloud not in ("COMMUNITY", "SECURE"):
+            raise ValueError(f"cloud {self.cloud!r}: COMMUNITY or SECURE")
+        if self.cpu:
+            if self.cpu not in CPU_FLAVORS:
+                raise ValueError(f"cpu flavor {self.cpu!r}: one of {', '.join(CPU_FLAVORS)}")
+            if self.cloud != "SECURE":
+                raise ValueError("CPU pods exist only on Secure Cloud: cloud='SECURE' (and allow_secure=True)")
+            if not self.datacenters:
+                raise ValueError("a CPU pod must be pinned to a data center that has it (cpu_quote)")
+        if self.cloud == "SECURE" and not self.allow_secure:
+            raise ValueError("Secure Cloud is refused unless allow_secure=True: actors rent Community Cloud")
+        return self
+
+
+def pod_request(spec: PodSpec) -> dict:
+    """The REST `POST /v1/pods` body for a spec."""
+    spec.validate()
+    body = {"name": spec.name, "imageName": spec.image, "containerDiskInGb": spec.disk_gb, "ports": ["22/tcp"],
+            "cloudType": spec.cloud}
+    if spec.cpu:
+        body.update(computeType="CPU", cpuFlavorIds=[spec.cpu], vcpuCount=spec.vcpu, cpuFlavorPriority="custom")
+    else:
+        body.update(computeType="GPU", gpuTypeIds=[spec.gpu], gpuCount=1, minVCPUPerGPU=spec.min_vcpu,
+                    minRAMPerGPU=spec.min_ram)
+        if spec.cloud == "COMMUNITY":
+            body["supportPublicIp"] = True       # without one there is no direct SSH, so no relay
+        if spec.cuda:
+            body["allowedCudaVersions"] = list(spec.cuda)
+    if spec.datacenters:
+        body.update(dataCenterIds=list(spec.datacenters), dataCenterPriority="custom")
+    if spec.env:
+        body["env"] = {str(k): str(v) for k, v in spec.env.items()}
+    return body
+
+
+def ssh_endpoint(pod: Mapping) -> Optional[tuple[str, int]]:
+    """(public IP, port mapped to 22) of a REST pod, or None while it has none."""
+    ip = pod.get("publicIp")
+    port = (pod.get("portMappings") or {}).get("22")
+    return (ip, int(port)) if ip and port else None
+
+
+def ssh_banner(host: str, port: int, timeout: float = 8.0) -> bool:
+    """True when host:port answers with an SSH banner (what runpodctl --wait checks; no key needed)."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as s:
+            s.settimeout(timeout)
+            return s.recv(64).startswith(b"SSH-")
+    except OSError:
+        return False
+
+
+def brief(p: Mapping) -> dict:
+    """The fields worth printing about a pod."""
+    ep = ssh_endpoint(p)
+    m = p.get("machine") or {}
+    return {k: p.get(k) for k in ("id", "name", "desiredStatus", "costPerHr", "vcpuCount", "memoryInGb",
+                                  "lastStatusChange")} | {
+        "ssh": f"root@{ep[0]} -p {ep[1]}" if ep else None, "gpu": (p.get("gpu") or {}).get("displayName"),
+        "machine": {k: m.get(k) for k in ("dataCenterId", "cpuTypeId", "gpuTypeId", "location")}}
+
+
+class RunPodAPI:
+    """RunPod's REST and GraphQL APIs with the key in a header. `http` is pluggable (tests pass a fake)."""
+
+    def __init__(self, key: str | None = None, *, http: Http | None = None, env_file: str | None = None,
+                 log: Callable[[str], None] = lambda m: print(m, file=sys.stderr)):
+        self._key, self._env_file = key, env_file
+        self.http = http or urllib_http
+        self.log = log
+
+    @property
+    def key(self) -> str:
+        if self._key is None:
+            self._key = api_key(self._env_file)
+        return self._key
+
+    def __repr__(self) -> str:
+        return f"<RunPodAPI key={secrets.redact(self._key) if self._key else 'unloaded'}>"
+
+    def _scrub(self, text: str) -> str:
+        return text.replace(self._key, secrets.redact(self._key)) if self._key else text
+
+    def request(self, method: str, url: str, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.key}", "User-Agent": USER_AGENT}
+        status, text = self.http(method, url, data, headers)
+        if status >= 400:
+            raise RunPodError(f"{method} {url}: HTTP {status}: {self._scrub(text)[:800]}")
+        return json.loads(text) if text and text.strip() else {}
+
+    def gql(self, query: str, variables: dict | None = None) -> dict:
+        r = self.request("POST", GQL, {"query": query, **({"variables": variables} if variables else {})})
+        if r.get("errors"):
+            raise RunPodError(f"GraphQL: {self._scrub(json.dumps(r['errors']))[:800]}")
+        return r.get("data") or {}
+
+    # ── money ──
+    def balance(self) -> dict:
+        """{clientBalance, currentSpendPerHr, spendLimit}. Read-only: nothing here adds credits."""
+        return self.gql("query { myself { clientBalance currentSpendPerHr spendLimit } }")["myself"]
+
+    def require_balance(self, usd: float) -> float:
+        b = float(self.balance().get("clientBalance") or 0.0)
+        if b < usd:
+            raise RunPodError(f"balance ${b:.2f} is below the ${usd:.2f} this needs; RunPod credits are never added here")
+        return b
+
+    # ── offers ──
+    def offers(self, min_vcpu: int = 8, *, max_price: float | None = None, community_only: bool = True) -> list[dict]:
+        """In-stock GPU offers, most vCPU per dollar first: {gpu_id, offer, cloud, price, vcpu, ram, stock,
+        usd_per_vcpu_hr}. A quote is the cheapest host meeting the vCPU floor, so the pod can come smaller: check
+        vcpuCount after create."""
+        rows = []
+        for secure in ((False,) if community_only else (False, True)):
+            d = self.gql("query { gpuTypes { id displayName lowestPrice(input:{gpuCount:1, secureCloud:%s, "
+                         "minVcpuCount:%d}) { uninterruptablePrice minVcpu minMemory stockStatus } } }"
+                         % ("true" if secure else "false", int(min_vcpu)))
+            for g in d.get("gpuTypes") or []:
+                lp = g.get("lowestPrice") or {}
+                price, v = lp.get("uninterruptablePrice"), lp.get("minVcpu")
+                if not (price and v and lp.get("stockStatus")):
+                    continue
+                if max_price is not None and price > max_price:
+                    continue
+                rows.append({"gpu_id": g["id"], "offer": g.get("displayName") or g["id"],
+                             "cloud": "SECURE" if secure else "COMMUNITY", "price": price, "vcpu": v,
+                             "ram": lp.get("minMemory"), "stock": lp["stockStatus"],
+                             "usd_per_vcpu_hr": round(price / v, 4)})
+        return sorted(rows, key=lambda r: (r["usd_per_vcpu_hr"], r["price"]))
+
+    def quote(self, spec: PodSpec) -> Optional[float]:
+        """The current $/h for a spec (None: not in stock)."""
+        if spec.cpu:
+            price, dcs = self.cpu_quote(spec.cpu, spec.vcpu)
+            return price if set(spec.datacenters) & set(dcs) else None
+        for o in self.offers(spec.min_vcpu, community_only=spec.cloud == "COMMUNITY"):
+            if o["gpu_id"] == spec.gpu and o["cloud"] == spec.cloud:
+                return o["price"]
+        return None
+
+    def cpu_quote(self, flavor: str, vcpu: int) -> tuple[float, list[str]]:
+        """A CPU flavor at a size: ($/h, data centers that have it), from the v2 catalog (Secure Cloud)."""
+        d = self.request("GET", f"{CATALOG_CPU}/{flavor}?include=AVAILABILITY&product=POD&vcpuCount={int(vcpu)}")
+        per = float((d.get("price") or {}).get("securePerVcpu") or 0)
+        dcs = [x["id"] for x in d.get("dataCenters") or [] if x.get("availability") not in (None, "NONE")]
+        return round(per * vcpu, 4), dcs
+
+    # ── pods ──
+    def list(self) -> list[dict]:
+        r = self.request("GET", f"{REST}/pods")
+        return r if isinstance(r, list) else r.get("pods", [])
+
+    def get(self, pod_id: str) -> dict:
+        return self.request("GET", f"{REST}/pods/{pod_id}")
+
+    def find(self, name: str) -> list[dict]:
+        return [p for p in self.list() if p.get("name") == name]
+
+    def terminate(self, pod_id: str) -> None:
+        """Remove the pod: billing stops only here (a stopped pod still bills its disk)."""
+        self.request("DELETE", f"{REST}/pods/{pod_id}")
+        self.log(f"runpod: terminated {pod_id}")
+
+    def create(self, spec: PodSpec, *, balance_hours: float = 1.0) -> dict:
+        """Rent a pod (REST). Refuses: Secure Cloud without allow_secure, a quote above max_price or none in stock,
+        a balance below `balance_hours` at max_price, a pod of the same name. Terminates a pod billing above max_price."""
+        body = pod_request(spec)
+        if self.find(spec.name):
+            raise RunPodError(f"a pod named {spec.name!r} exists: check `runpodctl pod list` before any retry")
+        self.require_balance(spec.max_price * balance_hours)
+        price = self.quote(spec)
+        if price is None:
+            raise RunPodError(f"no {spec.gpu or spec.cpu} offer in stock on {spec.cloud} Cloud")
+        if price > spec.max_price:
+            raise RunPodError(f"{spec.gpu or spec.cpu} costs ${price}/h, above max_price ${spec.max_price}/h")
+        pod = self.request("POST", f"{REST}/pods", body)
+        pid = pod.get("id")
+        if not pid:
+            raise RunPodError(f"create returned no pod id: {self._scrub(json.dumps(pod))[:400]}")
+        cost = pod.get("costPerHr")
+        if cost is not None and float(cost) > spec.max_price:
+            self.terminate(pid)
+            raise RunPodError(f"pod {pid} bills ${cost}/h, above max_price ${spec.max_price}/h: terminated")
+        self.log(f"runpod: created {pid} {spec.name} ({spec.gpu or spec.cpu}, ${cost}/h, {pod.get('vcpuCount')} vCPU)")
+        return pod
+
+    def wait_ssh(self, pod_id: str, *, timeout: float = 900, poll: float = 10, key: str = SSH_KEY,
+                 probe: Callable[[str, int], bool] = ssh_banner, sleep: Callable[[float], None] = time.sleep,
+                 clock: Callable[[], float] = time.monotonic) -> SSHTarget:
+        """Wait until the pod's public SSH port answers; return its SSHTarget (no host key checking: pods are new)."""
+        end = clock() + timeout
+        last = None
+        while True:
+            pod = self.get(pod_id)
+            ep = ssh_endpoint(pod)
+            if ep and probe(*ep):
+                self.log(f"runpod: {pod_id} ssh root@{ep[0]} -p {ep[1]}")
+                return SSHTarget(host=ep[0], user="root", port=ep[1], key=key, strict=False)
+            last = ep
+            if clock() >= end:
+                raise RunPodError(
+                    f"pod {pod_id}: no SSH banner after {timeout:.0f}s (endpoint {last}). Check `runpodctl pod logs "
+                    f"{pod_id}` and whether this network lets out high ports (docs/005); the SSH proxy has no rsync")
+            sleep(poll)
+
+
+class RunPodCtl:
+    """The runpodctl (2.x) path, for GPU pods: create, user, gpu list. The key goes in the child's environment."""
+
+    def __init__(self, ctl: str = CTL, runner: Callable[..., Result] = local_run, key: str | None = None):
+        self.ctl, self.runner, self._key = os.path.expanduser(ctl), runner, key
+
+    def argv_create(self, spec: PodSpec, wait: bool = True, wait_timeout: str = "10m") -> list[str]:
+        spec.validate()
+        if not spec.gpu:
+            raise ValueError("runpodctl here creates GPU pods; CPU pods go through RunPodAPI.create")
+        a = [self.ctl, "pod", "create", "--name", spec.name, "--gpu-id", spec.gpu, "--cloud-type", spec.cloud,
+             "--image", spec.image, "--container-disk-in-gb", str(spec.disk_gb), "--ports", "22/tcp", "-o", "json"]
+        if spec.cloud == "COMMUNITY":
+            a.append("--public-ip")           # --wait needs a public port 22; community cloud only gives one on request
+        if spec.datacenters:
+            a += ["--data-center-ids", ",".join(spec.datacenters)]
+        if spec.cuda:
+            a += ["--min-cuda-version", min(spec.cuda)]
+        if spec.env:
+            a += ["--env", json.dumps(spec.env)]
+        if wait:
+            a += ["--wait", "--wait-timeout", wait_timeout]
+        return a
+
+    def _run(self, argv: list[str], timeout: float = 120) -> object:
+        env = dict(os.environ)
+        if self._key:
+            env["RUNPOD_API_KEY"] = self._key
+        r = self.runner(argv, timeout=timeout, env=env)
+        if not r.ok:
+            raise RunPodError(f"runpodctl {' '.join(argv[1:3])} failed (exit {r.code}): {(r.err or r.out)[-500:]}")
+        return json.loads(r.out) if r.out.strip() else {}
+
+    def create(self, spec: PodSpec, wait: bool = True) -> dict:
+        return self._run(self.argv_create(spec, wait), timeout=900 if wait else 120)
+
+    def user(self) -> dict:
+        """Account and balance: clientBalance, currentSpendPerHr, spendLimit (and email: do not print it)."""
+        return self._run([self.ctl, "user", "-o", "json"])
+
+    def gpus(self) -> list:
+        return self._run([self.ctl, "gpu", "list", "-o", "json"])
+
+
+# ── on the pod ──
+def arm(target: SSHTarget, max_hours: float, *, runner: Callable[..., Result] = local_run,
+        script: Path = ARM_SCRIPT) -> Result:
+    """Arm (or move) the pod's self-destruct: deploy/runpod_arm.sh, piped over SSH, terminates the pod after
+    max_hours with the pod's own key. Arm first, before anything that can hang."""
+    if not (0 < max_hours <= MAX_ARM_HOURS):
+        raise ValueError(f"max_hours must be in (0, {MAX_ARM_HOURS}]")
+    secs = int(max_hours * 3600)
+    r = runner(target.ssh_argv(f"bash -s -- {secs}"), timeout=120, input=Path(script).read_text())
+    if not r.ok or "armed:" not in r.out:
+        raise RunPodError(f"arming the self-destruct failed (exit {r.code}): {(r.err or r.out)[-400:]}")
+    return r
+
+
+@dataclass
+class Step:
+    what: str
+    argv: list[str]
+    input: Optional[str] = None
+    timeout: float = 1800
+
+
+@dataclass
+class Bundle:
+    """What a pod needs to run actors, and where it goes there.
+
+    remote_root/draftzero      the repo (cwd of actors: a config's relative data paths resolve here)
+    remote_root/draftzero/data/gorge/{decks/, pool.tsv}
+    remote_engine/bin/{dzgorge, dzgorge.build.json}, remote_engine/.cards/   (default: the same path as engine_root)
+    remote_root/run/store      the actors' store (the relay host's root is remote_root/run)
+    remote_root/venv           made by deploy/pod_bootstrap.sh
+    """
+    repo: Path = REPO
+    engine_root: Path = Path(os.environ.get("GORGE_DIR", "/work/gorge-fork"))
+    decks: Path = GORGE_DECKS
+    pool: Path = GORGE_POOL
+    remote_root: str = "/root/dz"
+    remote_engine_root: Optional[str] = None
+    repo_mode: str = "git"          # git: archive of HEAD (committed code only) | rsync: the working tree
+
+    @property
+    def remote_repo(self) -> str:
+        return posixpath.join(self.remote_root, "draftzero")
+
+    @property
+    def remote_engine(self) -> str:
+        return self.remote_engine_root or str(self.engine_root)
+
+    @property
+    def remote_run(self) -> str:
+        return posixpath.join(self.remote_root, "run")
+
+    @property
+    def remote_python(self) -> str:
+        return posixpath.join(self.remote_root, "venv/bin/python")
+
+    def missing(self) -> list[str]:
+        need = [self.engine_root / "bin/dzgorge", self.engine_root / "bin/dzgorge.build.json",
+                self.engine_root / ".cards", self.decks, self.pool, self.repo / "pyproject.toml"]
+        return [str(p) for p in need if not Path(p).exists()]
+
+
+def bundle_steps(target: SSHTarget, b: Bundle, tmp: Path) -> list[Step]:
+    """The commands that fill a pod (run in order by `bundle`)."""
+    if b.repo_mode not in ("git", "rsync"):
+        raise ValueError(f"repo_mode {b.repo_mode!r}: git or rsync")
+    rs = ["rsync", *RSYNC_FLAGS, "-e", target.rsync_shell()]
+    eng, repo = Path(b.engine_root), Path(b.repo)
+    steps = [Step("prepare the pod", target.ssh_argv(
+        "command -v rsync >/dev/null || (apt-get update -qq && apt-get install -y -qq rsync >/dev/null); "
+        f"mkdir -p {q(b.remote_repo)}/data/gorge {q(b.remote_engine)}/bin {q(b.remote_run)}/store"), timeout=600)]
+    if b.repo_mode == "git":
+        tar = tmp / "draftzero.tar.gz"
+        remote_tar = posixpath.join(b.remote_root, "draftzero.tar.gz")
+        steps += [Step("archive the repo (HEAD)",
+                       ["git", "-C", str(repo), "archive", "--format=tar.gz", "-o", str(tar), "HEAD"]),
+                  Step("send the repo", [*rs, str(tar), target.remote(remote_tar)]),
+                  Step("unpack the repo",
+                       target.ssh_argv(f"tar -xzf {q(remote_tar)} -C {q(b.remote_repo)} && rm -f {q(remote_tar)}"))]
+    else:
+        ex = [x for p in DEFAULT_EXCLUDES for x in ("--exclude", p)]
+        steps.append(Step("send the working tree", [*rs, *ex, f"{repo}/", target.remote(f"{b.remote_repo}/")]))
+    steps += [
+        Step("send dzgorge", [*rs, str(eng / "bin/dzgorge"), str(eng / "bin/dzgorge.build.json"),
+                              target.remote(f"{b.remote_engine}/bin/")]),
+        Step("send .cards", [*rs, "--delete", f"{Path(eng / '.cards').resolve()}/",
+                             target.remote(f"{b.remote_engine}/.cards/")]),
+        Step("send the decks", [*rs, "--delete", f"{Path(b.decks).resolve()}/",
+                                target.remote(f"{b.remote_repo}/data/gorge/decks/")]),
+        Step("send the pool", [*rs, str(Path(b.pool).resolve()), target.remote(f"{b.remote_repo}/data/gorge/pool.tsv")]),
+    ]
+    return steps
+
+
+def _run_steps(steps: list[Step], runner: Callable[..., Result], log: Callable[[str], None]) -> None:
+    for s in steps:
+        t0 = time.monotonic()
+        r = runner(s.argv, timeout=s.timeout, input=s.input) if s.input is not None else runner(s.argv, timeout=s.timeout)
+        if not r.ok:
+            raise RunPodError(f"bundle: {s.what} failed (exit {r.code}): {(r.err or r.out)[-500:]}")
+        log(f"bundle: {s.what} ({time.monotonic() - t0:.0f}s)")
+
+
+def bundle(target: SSHTarget, b: Bundle, *, runner: Callable[..., Result] = local_run,
+           log: Callable[[str], None] = lambda m: print(m, file=sys.stderr)) -> None:
+    """Copy the engine, its card corpus, the deck pool and the repo to the pod."""
+    missing = b.missing()
+    if missing:
+        raise RunPodError(f"bundle: missing here: {', '.join(missing)}")
+    with tempfile.TemporaryDirectory(prefix="dz-bundle-") as tmp:
+        _run_steps(bundle_steps(target, b, Path(tmp)), runner, log)
+
+
+def bootstrap_argv(target: SSHTarget, b: Bundle) -> list[str]:
+    return target.ssh_argv(f"bash {q(posixpath.join(b.remote_repo, BOOTSTRAP))} {q(b.remote_root)} {q(b.remote_engine)}")
+
+
+def bootstrap(target: SSHTarget, b: Bundle, *, runner: Callable[..., Result] = local_run, timeout: float = 2400) -> Result:
+    """deploy/pod_bootstrap.sh on the pod: python deps, `dz version`, a one-game dzgorge smoke."""
+    r = runner(bootstrap_argv(target, b), timeout=timeout)
+    if not r.ok or "pod_bootstrap: ready" not in r.out:
+        raise RunPodError(f"pod bootstrap failed (exit {r.code}): {(r.err or r.out)[-800:]}")
+    return r
+
+
+@dataclass
+class Pod:
+    id: str
+    target: SSHTarget
+    info: dict
+
+    def worker(self, b: Bundle, name: str | None = None) -> SSHWorker:
+        """An SSHWorker for this pod's bundle: actors run from the repo with the venv's python."""
+        return SSHWorker(self.target, WorkerConfig(name=name or self.info.get("name") or self.id,
+                                                   workdir=b.remote_repo, python=b.remote_python))
+
+
+def up(api: RunPodAPI, spec: PodSpec, *, max_hours: float, files: Bundle | None = None, setup: bool = True,
+       key: str = SSH_KEY, wait_timeout: float = 900, runner: Callable[..., Result] = local_run,
+       probe: Callable[[str, int], bool] = ssh_banner, sleep: Callable[[float], None] = time.sleep,
+       keep_on_failure: bool = False) -> Pod:
+    """Create -> wait for SSH -> arm the self-destruct for max_hours -> (bundle `files` -> bootstrap if `setup`).
+    Any failure after the create terminates the pod (keep_on_failure: keep it, its id in the error; an armed pod
+    still removes itself). The balance must cover max_hours at max_price (1-4 h of it)."""
+    if not (0 < max_hours <= MAX_ARM_HOURS):
+        raise ValueError(f"max_hours must be in (0, {MAX_ARM_HOURS}]")
+    if files is not None and files.missing():
+        raise RunPodError(f"bundle: missing here: {', '.join(files.missing())}")
+    pod = api.create(spec, balance_hours=max(1.0, min(max_hours, 4.0)))
+    pid = pod["id"]
+    try:
+        target = api.wait_ssh(pid, timeout=wait_timeout, key=key, probe=probe, sleep=sleep)
+        arm(target, max_hours, runner=runner)
+        if files is not None:
+            bundle(target, files, runner=runner, log=api.log)
+            if setup:
+                bootstrap(target, files, runner=runner)
+    except BaseException as e:
+        if keep_on_failure:
+            raise RunPodError(f"pod {pid} kept after: {e}") from e
+        try:
+            api.terminate(pid)
+        except Exception as te:   # the original error matters more; say loudly that a pod may be billing
+            api.log(f"runpod: TERMINATE FAILED for {pid} ({te}): remove it by hand (runpodctl pod delete {pid})")
+        raise
+    return Pod(pid, target, pod)
 
 
 class RunPodWorker(SSHWorker):
-    """Rented, billed per second, and destroyed when the run finishes."""
+    """A rented pod as a Worker: provision() = up() without a bundle; teardown() terminates it."""
 
     ephemeral = True
 
-    def __init__(self, gpu_id: str, datacenter: str, volume_id: Optional[str] = None,
-                 image: str = "runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404",
-                 container_disk_gb: int = 60, ssh_key: str = "~/.ssh/id_ed25519",
-                 name: str = "draftzero", cfg: Optional[WorkerConfig] = None):
-        self.gpu_id, self.datacenter, self.volume_id = gpu_id, datacenter, volume_id
-        self.image, self.container_disk_gb, self.pod_name = image, container_disk_gb, name
-        self.ssh_key, self.pod_id, self.pod = ssh_key, None, None
-        super().__init__(SSHTarget(host="", key=ssh_key),
-                         cfg or WorkerConfig(name=name, workdir="/workspace/draftzero",
-                                             deck_root="/workspace/decks",
-                                             persist="/workspace/persist"))
+    def __init__(self, spec: PodSpec, *, max_hours: float, key: str = SSH_KEY, api: RunPodAPI | None = None,
+                 cfg: WorkerConfig | None = None, runner: Callable[..., Result] = local_run):
+        spec.validate()
+        self.spec, self.max_hours, self.key = spec, max_hours, key
+        self.api = api or RunPodAPI()
+        self.pod_id: Optional[str] = None
+        b = Bundle()
+        super().__init__(SSHTarget(host="", key=key, strict=False),
+                         cfg or WorkerConfig(name=spec.name, workdir=b.remote_repo, python=b.remote_python),
+                         runner=runner)
 
-    # ── lifecycle ──
-    def provision(self, wait: str = "10m") -> None:
-        args = ["pod", "create", "--name", self.pod_name, "--gpu-id", self.gpu_id,
-                "--cloud-type", "SECURE", "--data-center-ids", self.datacenter,
-                "--image", self.image, "--container-disk-in-gb", str(self.container_disk_gb),
-                "--ports", "22/tcp", "--wait", "--wait-timeout", wait]
-        if self.volume_id:
-            args += ["--network-volume-id", self.volume_id]
-        self.pod = _ctl_json(*args)
-        self.pod_id = self.pod.get("id") or (self.pod.get("ssh") or {}).get("id")
-        ssh = self.pod.get("ssh") or {}
-        self.target = SSHTarget(host=ssh["ip"], user="root", port=int(ssh["port"]), key=self.ssh_key)
-        if not self.wait_ready():
-            raise RuntimeError(f"pod {self.pod_id} never answered ssh")
+    def provision(self, probe: Callable[[str, int], bool] = ssh_banner,
+                  sleep: Callable[[float], None] = time.sleep) -> None:
+        pod = up(self.api, self.spec, max_hours=self.max_hours, key=self.key, runner=self.runner, probe=probe, sleep=sleep)
+        self.pod_id, self.target = pod.id, pod.target
 
     def teardown(self) -> Result:
-        """Destroy the pod. Billing only stops on remove; a stopped pod still bills disk."""
+        """Terminate the pod. Billing only stops on terminate; a stopped pod still bills disk."""
         if not self.pod_id:
             return Result(0, "no pod to tear down")
-        _ctl("pod", "stop", self.pod_id)
-        r = _ctl("pod", "remove", self.pod_id)
-        if r.ok:
-            self.pod_id = None
-        return r
+        self.api.terminate(self.pod_id)
+        self.pod_id = None
+        return Result(0, "terminated")
 
     # ── facts about the machine, as opposed to what it advertises ──
     def quota(self) -> dict:
@@ -126,24 +594,38 @@ class RunPodWorker(SSHWorker):
             " echo ram_gb=$(( $(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null ||"
             " cat /sys/fs/cgroup/memory.max) / 1024/1024/1024 ));"
             " echo nproc=$(nproc)")
-        out = {}
-        for line in r.out.splitlines():
-            if "=" in line:
-                k, _, v = line.partition("=")
-                out[k.strip()] = v.strip()
-        return out
-
-    def balance(self) -> Optional[float]:
-        try:
-            return _ctl_json("user").get("clientBalance")
-        except Exception:
-            return None
+        return dict(line.split("=", 1) for line in r.out.splitlines() if "=" in line)
 
 
-def ensure_volume(name: str, size_gb: int, datacenter: str) -> str:
-    """Return the id of a network volume with this name, creating it if needed."""
-    for v in _ctl_json("network-volume", "list") or []:
-        if v.get("name") == name:
-            return v["id"]
-    return _ctl_json("network-volume", "create", "--name", name,
-                     "--size", str(size_gb), "--data-center-id", datacenter)["id"]
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="python -m draftzero.workers.runpod", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    o = sub.add_parser("offers")
+    o.add_argument("--min-vcpu", type=int, default=8)
+    o.add_argument("--max-price", type=float, default=None)
+    o.add_argument("--secure", action="store_true", help="also list Secure Cloud")
+    sub.add_parser("balance")
+    sub.add_parser("ls")
+    sub.add_parser("get").add_argument("id")
+    sub.add_parser("rm").add_argument("id")
+    a = ap.parse_args(argv)
+    api = RunPodAPI()
+    if a.cmd == "offers":
+        for x in api.offers(a.min_vcpu, max_price=a.max_price, community_only=not a.secure):
+            print(f"{x['cloud']:9} {x['offer'][:30]:30} ${x['price']:<6} {x['vcpu']:>3} vCPU {x['ram'] or 0:>4} GB "
+                  f"${x['usd_per_vcpu_hr']:.4f}/vCPU-h {x['stock']}")
+    elif a.cmd == "balance":
+        print(json.dumps(api.balance()))
+    elif a.cmd == "ls":
+        for p in api.list():
+            print(json.dumps(brief(p)))
+    elif a.cmd == "get":
+        print(json.dumps(brief(api.get(a.id)), indent=1))
+    elif a.cmd == "rm":
+        api.terminate(a.id)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
