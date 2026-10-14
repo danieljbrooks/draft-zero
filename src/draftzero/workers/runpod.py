@@ -31,14 +31,16 @@ Steps, each usable alone:
 - `create(spec)`: REST `POST /v1/pods`. **Community Cloud only**, refused unless `spec.allow_secure` -- and CPU pods
   exist only on Secure Cloud, so they need it (docs/020 §7). Refused when the current quote is above
   `spec.max_price`, when the balance is below an hour of it, or when a pod of that name exists (a create can fail
-  after the pod exists: a retry must not make a second one). A pod that bills above max_price is terminated at once.
-  `RunPodCtl.create(spec)` does GPU pods through runpodctl instead (`--public-ip` is required for `--wait` on
-  Community Cloud).
+  after the pod exists: a retry must not make a second one, and every pod of that name is then terminated). A pod
+  that bills above max_price is terminated at once. This is the only way pods are rented here: `RunPodCtl` (runpodctl,
+  which has no price cap) only reads the account.
 - `wait_ssh(id)`: until the pod has a public IP and port 22 mapping that answers with an SSH banner. Through RunPod's
   SSH proxy (`<podHostId>@ssh.runpod.io`) there is only a PTY: no rsync, so no relay. A network that blocks high
   ports (docs/005) cannot run relay actors.
 - `arm(target, max_hours)`: deploy/runpod_arm.sh piped over SSH: the pod terminates itself after max_hours with its
-  own key, even if d1 dies. Do it first.
+  own key, even if d1 dies (retrying the terminate for up to 30 min, each try logged in /root/selfdestruct.log; it
+  arms nothing and fails without the pod's key). Do it first; `up` arms it for what is left of its
+  max_hours since the create.
 - `bundle(target, b)`: rsync the dzgorge binary + bin/dzgorge.build.json and .cards (at the same absolute path as
   on d1, so a config's engine.root works unchanged), the deck pool to <repo>/data/gorge/, and the repo (git archive
   of HEAD, or rsync of the working tree) to <remote_root>/draftzero.
@@ -85,6 +87,7 @@ USER_AGENT = "curl/8.7.1"      # RunPod's API filter refuses urllib's default Us
 ARM_SCRIPT = REPO / "deploy" / "runpod_arm.sh"
 BOOTSTRAP = "deploy/pod_bootstrap.sh"
 MAX_ARM_HOURS = 72.0
+MIN_ARM_S = 60                                   # a pod whose SSH comes up with less of max_hours left is removed
 SSH_KEY = "~/.ssh/id_ed25519"
 
 
@@ -204,10 +207,11 @@ class RunPodAPI:
     """RunPod's REST and GraphQL APIs with the key in a header. `http` is pluggable (tests pass a fake)."""
 
     def __init__(self, key: str | None = None, *, http: Http | None = None, env_file: str | None = None,
-                 log: Callable[[str], None] = lambda m: print(m, file=sys.stderr)):
+                 log: Callable[[str], None] = lambda m: print(m, file=sys.stderr),
+                 sleep: Callable[[float], None] = time.sleep):
         self._key, self._env_file = key, env_file
         self.http = http or urllib_http
-        self.log = log
+        self.log, self.sleep = log, sleep
 
     @property
     def key(self) -> str:
@@ -304,7 +308,9 @@ class RunPodAPI:
 
     def create(self, spec: PodSpec, *, balance_hours: float = 1.0) -> dict:
         """Rent a pod (REST). Refuses: Secure Cloud without allow_secure, a quote above max_price or none in stock,
-        a balance below `balance_hours` at max_price, a pod of the same name. Terminates a pod billing above max_price."""
+        a balance below `balance_hours` at max_price, a pod of the same name. Terminates a pod billing above max_price.
+        A POST that fails (a timeout, a lost or garbled reply, an HTTP error) may still have made the pod: every pod
+        of that name is then terminated (`remove_named`) and the error says what happened to it."""
         body = pod_request(spec)
         if self.find(spec.name):
             raise RunPodError(f"a pod named {spec.name!r} exists: check `runpodctl pod list` before any retry")
@@ -314,10 +320,17 @@ class RunPodAPI:
             raise RunPodError(f"no {spec.gpu or spec.cpu} offer in stock on {spec.cloud} Cloud")
         if price > spec.max_price:
             raise RunPodError(f"{spec.gpu or spec.cpu} costs ${price}/h, above max_price ${spec.max_price}/h")
-        pod = self.request("POST", f"{REST}/pods", body)
-        pid = pod.get("id")
-        if not pid:
-            raise RunPodError(f"create returned no pod id: {self._scrub(json.dumps(pod))[:400]}")
+        try:
+            pod = self.request("POST", f"{REST}/pods", body)
+            if not (isinstance(pod, dict) and pod.get("id")):
+                raise RunPodError(f"create returned no pod id: {self._scrub(json.dumps(pod))[:400]}")
+        except BaseException as e:      # Ctrl-C too: the POST may have gone through
+            outcome = self.remove_named(spec.name)
+            if not isinstance(e, Exception):
+                raise
+            raise RunPodError(f"creating pod {spec.name!r} failed ({type(e).__name__}: {self._scrub(str(e))[:400]}); "
+                              f"{outcome}") from e
+        pid = pod["id"]
         cost, vcpu = pod.get("costPerHr"), pod.get("vcpuCount")
         if cost is not None and float(cost) > spec.max_price:
             self.terminate(pid)
@@ -327,6 +340,39 @@ class RunPodAPI:
             raise RunPodError(f"pod {pid} came with {vcpu} vCPU, below min_vcpu {spec.min_vcpu}: terminated")
         self.log(f"runpod: created {pid} {spec.name} ({spec.gpu or spec.cpu}, ${cost}/h, {pod.get('vcpuCount')} vCPU)")
         return pod
+
+    def remove_named(self, name: str, *, looks: int = 3, wait: float = 10.0) -> str:
+        """After a failed create: terminate every pod named `name` (create refuses a name in use, so any is the one it
+        made), looking `looks` times `wait` s apart since a pod can show up late. Never raises; logs loudly when a pod
+        may be left billing, and returns what happened."""
+        problem = None
+        for i in range(looks):
+            try:
+                ids = [p.get("id") for p in self.find(name)]
+            except Exception as e:                       # noqa: BLE001
+                problem = f"cannot list the pods ({self._scrub(str(e))[:200]})"
+                break
+            if ids:
+                failed = []
+                for pid in ids:
+                    try:
+                        self.terminate(pid)
+                    except Exception as e:               # noqa: BLE001
+                        failed.append(f"{pid} ({self._scrub(str(e))[:200]})")
+                if not failed:
+                    return f"removed pod {', '.join(ids)} that it made anyway"
+                problem = f"terminating {', '.join(failed)} failed"
+                break
+            if i + 1 < looks:
+                self.sleep(wait)
+        if problem is None:
+            msg = f"no pod named {name!r} showed up, but one may still appear: check `dz pod list` in a few minutes"
+            self.log(f"runpod: WARNING: {msg}")
+            return msg
+        msg = (f"TERMINATE FAILED: {problem}: a pod named {name!r} may be billing; remove it with "
+               f"`dz pod down --name {name}`")
+        self.log(f"runpod: {msg}")
+        return msg
 
     def wait_ssh(self, pod_id: str, *, timeout: float = 900, poll: float = 10, key: str = SSH_KEY,
                  probe: Callable[[str, int], bool] = ssh_banner, sleep: Callable[[float], None] = time.sleep,
@@ -349,28 +395,12 @@ class RunPodAPI:
 
 
 class RunPodCtl:
-    """The runpodctl (2.x) path, for GPU pods: create, user, gpu list. The key goes in the child's environment."""
+    """runpodctl (2.x) for read-only account queries: user, gpu list. The key goes in the child's environment.
+    It rents nothing: runpodctl has no price cap, so pods are created only by RunPodAPI.create, which holds the money
+    guards (max_price, balance, a unique name, removal of a pod that bills above the cap or failed to come up)."""
 
     def __init__(self, ctl: str = CTL, runner: Callable[..., Result] = local_run, key: str | None = None):
         self.ctl, self.runner, self._key = os.path.expanduser(ctl), runner, key
-
-    def argv_create(self, spec: PodSpec, wait: bool = True, wait_timeout: str = "10m") -> list[str]:
-        spec.validate()
-        if not spec.gpu:
-            raise ValueError("runpodctl here creates GPU pods; CPU pods go through RunPodAPI.create")
-        a = [self.ctl, "pod", "create", "--name", spec.name, "--gpu-id", spec.gpu, "--cloud-type", spec.cloud,
-             "--image", spec.image, "--container-disk-in-gb", str(spec.disk_gb), "--ports", "22/tcp", "-o", "json"]
-        if spec.cloud == "COMMUNITY":
-            a.append("--public-ip")           # --wait needs a public port 22; community cloud only gives one on request
-        if spec.datacenters:
-            a += ["--data-center-ids", ",".join(spec.datacenters)]
-        if spec.cuda:
-            a += ["--min-cuda-version", min(spec.cuda)]
-        if spec.env:
-            a += ["--env", json.dumps(spec.env)]
-        if wait:
-            a += ["--wait", "--wait-timeout", wait_timeout]
-        return a
 
     def _run(self, argv: list[str], timeout: float = 120) -> object:
         env = dict(os.environ)
@@ -380,9 +410,6 @@ class RunPodCtl:
         if not r.ok:
             raise RunPodError(f"runpodctl {' '.join(argv[1:3])} failed (exit {r.code}): {(r.err or r.out)[-500:]}")
         return json.loads(r.out) if r.out.strip() else {}
-
-    def create(self, spec: PodSpec, wait: bool = True) -> dict:
-        return self._run(self.argv_create(spec, wait), timeout=900 if wait else 120)
 
     def user(self) -> dict:
         """Account and balance: clientBalance, currentSpendPerHr, spendLimit (and email: do not print it)."""
@@ -399,7 +426,7 @@ def arm(target: SSHTarget, max_hours: float, *, runner: Callable[..., Result] = 
     max_hours with the pod's own key. Arm first, before anything that can hang."""
     if not (0 < max_hours <= MAX_ARM_HOURS):
         raise ValueError(f"max_hours must be in (0, {MAX_ARM_HOURS}]")
-    secs = int(max_hours * 3600)
+    secs = int(round(max_hours * 3600))
     r = runner(target.ssh_argv(f"bash -s -- {secs}"), timeout=120, input=Path(script).read_text())
     if not r.ok or "armed:" not in r.out:
         raise RunPodError(f"arming the self-destruct failed (exit {r.code}): {(r.err or r.out)[-400:]}")
@@ -532,26 +559,36 @@ class Pod:
 def up(api: RunPodAPI, spec: PodSpec, *, max_hours: float, files: Bundle | None = None, setup: bool = True,
        key: str = SSH_KEY, wait_timeout: float = 900, runner: Callable[..., Result] = local_run,
        probe: Callable[[str, int], bool] = ssh_banner, sleep: Callable[[float], None] = time.sleep,
-       keep_on_failure: bool = False) -> Pod:
-    """Create -> wait for SSH -> arm the self-destruct for max_hours -> (bundle `files` -> bootstrap if `setup`).
-    Any failure after the create terminates the pod (keep_on_failure: keep it, its id in the error; an armed pod
-    still removes itself). The balance must cover max_hours at max_price (1-4 h of it)."""
+       keep_on_failure: bool = False, clock: Callable[[], float] = time.monotonic) -> Pod:
+    """Create -> wait for SSH -> arm the self-destruct -> (bundle `files` -> bootstrap if `setup`).
+    max_hours is the pod's whole life, counted from the create (it bills from there): SSH must come up within it,
+    and the self-destruct is armed for what is left, so the pod costs at most max_hours x max_price even if this
+    machine dies. Any failure after the create terminates the pod. keep_on_failure keeps it (its id in the error)
+    only once it is armed, so it still removes itself; a pod that is not armed yet is always terminated. The balance
+    must cover max_hours at max_price (1-4 h of it)."""
     if not (0 < max_hours <= MAX_ARM_HOURS):
         raise ValueError(f"max_hours must be in (0, {MAX_ARM_HOURS}]")
     if files is not None and files.missing():
         raise RunPodError(f"bundle: missing here: {', '.join(files.missing())}")
+    t0 = clock()
     pod = api.create(spec, balance_hours=max(1.0, min(max_hours, 4.0)))
-    pid = pod["id"]
+    pid, armed = pod["id"], False
     try:
-        target = api.wait_ssh(pid, timeout=wait_timeout, key=key, probe=probe, sleep=sleep)
-        arm(target, max_hours, runner=runner)
+        target = api.wait_ssh(pid, timeout=min(wait_timeout, max_hours * 3600 - (clock() - t0)), key=key,
+                              probe=probe, sleep=sleep)
+        left = max_hours * 3600 - (clock() - t0)
+        if left < MIN_ARM_S:
+            raise RunPodError(f"pod {pid}: SSH came up with {max(left, 0):.0f} s of --max-hours {max_hours:g} left")
+        arm(target, left / 3600, runner=runner)
+        armed = True
         if files is not None:
             bundle(target, files, runner=runner, log=api.log)
             if setup:
                 bootstrap(target, files, runner=runner)
     except BaseException as e:
-        if keep_on_failure:
-            raise RunPodError(f"pod {pid} kept after: {e}") from e
+        if keep_on_failure and armed:
+            raise RunPodError(f"pod {pid} kept after: {e} (it terminates itself {max_hours:g} h after its create; "
+                              f"`dz pod down {pid}` removes it sooner)") from e
         try:
             api.terminate(pid)
         except Exception as te:   # the original error matters more; say loudly that a pod may be billing

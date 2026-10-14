@@ -115,12 +115,21 @@ def test_roles_delegate_to_the_loop_cli(monkeypatch):
 
 def test_plan_status_stop_on_a_store(tmp_path, capsys):
     store = tmp_path / "store"
-    assert main(["status", str(store)]) == 0 and "no status yet" in capsys.readouterr().out
-    assert main(["plan", str(store), "set", "learner.lr=3e-4", "paused=true", "--by", "t"]) == 0
+    # a mistyped store path is refused (`dz stop` must not report success while the real run goes on), and no
+    # folder is created
+    for words in (["status", str(store)], ["stop", str(store)], ["plan", str(store), "list"],
+                  ["plan", "--store", str(store), "set", "paused=true"]):
+        assert main(words) == 2, words
+        assert "not a run's store" in capsys.readouterr().err
+    assert not store.exists()
+    # changes can be queued before the run starts, on purpose
+    assert main(["plan", str(store), "set", "learner.lr=3e-4", "paused=true", "--by", "t", "--before-start"]) == 0
     reqs = [LocalStore(store).read_json(p) for p in LocalStore(store).list(ctl.REQUESTS)]
     assert sorted((r["path"], r["value"]) for r in reqs) == [("learner.lr", 3e-4), ("paused", True)]
     out = capsys.readouterr().out
     assert "at the next version" in out and "now" in out
+    LocalStore(store).put(ctl.CONTROL, json.dumps({"format": "dz-control/1", "stop": False}).encode())  # it started
+    assert main(["status", str(store)]) == 0 and "no status yet" in capsys.readouterr().out
     assert main(["plan", str(store), "list"]) == 0 and capsys.readouterr().out.count("pending") == 2
     assert main(["stop", str(store)]) == 0 and (store / ctl.STOP).exists()
 
@@ -268,6 +277,7 @@ def test_engine_version_and_coverage(fake_dzgorge, tmp_path, monkeypatch, capsys
 
 class FakeAPI:
     terminated: list = []
+    fail: set = set()                                    # ids whose terminate fails
 
     def __init__(self, *a, **k):
         pass
@@ -283,6 +293,9 @@ class FakeAPI:
         return [p for p in self.list() if p["name"] == name]
 
     def terminate(self, pid):
+        if pid in FakeAPI.fail:
+            from draftzero.workers.runpod import RunPodError
+            raise RunPodError(f"DELETE https://rest.runpod.io/v1/pods/{pid}: HTTP 404: not found")
         FakeAPI.terminated.append(pid)
 
     def offers(self, *a, **k):
@@ -293,7 +306,7 @@ class FakeAPI:
 @pytest.fixture
 def pods(monkeypatch):
     from draftzero.workers import runpod as rp
-    FakeAPI.terminated = []
+    FakeAPI.terminated, FakeAPI.fail = [], set()
     ups = []
 
     def fake_up(api, spec, *, max_hours, files=None, setup=True, keep_on_failure=False):
@@ -316,6 +329,7 @@ def test_pod_up_needs_price_hours_and_confirmation(pods, monkeypatch, capsys):
     assert main(base + ["--max-price", "0.3", "--max-hours", "1.5", "--no-bundle"]) == 2
     out, err = capsys.readouterr()
     assert "cost guard" in out and "$0.300/h" in out and "1.5 h" in out and "$0.45" in out and "$30.50" in out
+    assert "1.5 h from its create, the wait for SSH included" in out
     assert "--yes" in err and pods == []
     assert main(base + ["--max-price", "0.3", "--max-hours", "1.5", "--no-bundle", "--yes"]) == 0
     assert len(pods) == 1 and pods[0]["max_hours"] == 1.5 and pods[0]["files"] is None
@@ -335,6 +349,16 @@ def test_pod_list_balance_offers_down(pods, capsys):
     assert main(["pod", "offers"]) == 0 and "RTX 3090" in capsys.readouterr().out
     assert main(["pod", "down", "p7", "--name", "dz-a1"]) == 0 and FakeAPI.terminated == ["p7", "p1"]
     assert main(["pod", "down"]) == 2
+
+
+def test_pod_down_tries_every_pod_and_reports_the_failures(pods, capsys):
+    """One failed terminate (a wrong or already removed id, a 5xx) must not leave the later pods billing."""
+    FakeAPI.fail = {"gone1"}
+    assert main(["pod", "down", "gone1", "live2", "live2", "--name", "dz-a1"]) == 1
+    assert FakeAPI.terminated == ["live2", "p1"]                 # every pod tried, each once
+    out, err = capsys.readouterr()
+    assert "terminated live2" in out and "1 pod(s) left: p1" in out
+    assert "gone1" in err and "HTTP 404" in err and "FAILED" in err
 
 
 # ------------------------------------------------------------------------------------------------ relay

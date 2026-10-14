@@ -128,8 +128,52 @@ def test_meta_json_is_copied_after_the_rest(world):
     assert Path(next(x for x in pulls[1] if x.startswith("--files-from="))[13:]).name == "meta"
     # and the pushes: versions, latest.json, then config + control
     pushes = [a for a in calls if a[-1].endswith("/store/") and "--list-only" not in a]
-    assert "--delete-excluded" in pushes[0] and pushes[1][-2].endswith("latest.json")
-    assert pushes[2][-3:-1] == [str(local.resolve() / "config.yml"), str(local.resolve() / "control.json")]
+    assert "--delete-excluded" in pushes[0] and pushes[1][-2].endswith("/./versions/player/latest.json")
+    assert [Path(p).name for p in pushes[2][-3:-1]] == ["config.yml", "control.json"]
+
+
+def test_push_sends_the_pointers_as_they_were_before_the_versions(world):
+    """The learner publishes v4 and the controller names it in control.json while the versions are in flight: the
+    host must get the latest.json and control.json read before the push (v3), never a pointer to a version it
+    lacks; the next sync brings v4."""
+    local, root = world
+    remote = root / "store"
+    bumped = []
+
+    def runner(argv, **kw):
+        r = local_run(argv, **kw)
+        if "--delete-excluded" in argv and not bumped:          # right after the first versions rsync
+            _version(local, 4)
+            (local / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": {"player": 4}}))
+            bumped.append(1)
+        return r
+    r = Relay(local, [Host("pod1", str(root))], transport=lambda h: Transport(runner=runner), log=lambda m: None)
+    st = r.sync_once()["pod1"]
+    assert st["ok"] and st["versions"] == ["player/v0003", "player/v0002"]
+    vp = remote / "versions" / "player"
+    named = json.loads((remote / "control.json").read_text())["version"]["player"]
+    assert named == 3 and json.loads((vp / "latest.json").read_text())["version"] == 3
+    assert (vp / f"v{named:04d}" / "meta.json").exists()
+    assert not list((local / rl.TMP).rglob("*"))
+    r.sync_once()
+    assert json.loads((remote / "control.json").read_text())["version"]["player"] == 4
+    assert (vp / "v0004" / "meta.json").exists()
+
+
+def test_push_keeps_the_version_control_json_names(world):
+    """The controller lags the learner: control.json names v1 while latest.json is v3. A host keeps v1 too."""
+    local, root = world
+    (local / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": {"player": 1}}))
+    st = Relay(local, [Host("pod1", str(root))], log=lambda m: None).sync_once()["pod1"]
+    assert st["versions"] == ["player/v0003", "player/v0002", "player/v0001"]
+    vp = root / "store" / "versions" / "player"
+    assert sorted(p.name for p in vp.iterdir()) == ["latest.json", "v0001", "v0002", "v0003"]
+    assert json.loads((root / "store" / "control.json").read_text())["version"]["player"] == 1
+    # a control.json naming a version this store lacks stays here; the host keeps the one it has
+    (local / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": {"player": 7}}))
+    st = Relay(local, [Host("pod1", str(root))], log=lambda m: None).sync_once()["pod1"]
+    assert st["ok"] and st["pushed"] == ["config.yml"]
+    assert json.loads((root / "store" / "control.json").read_text())["version"]["player"] == 1
 
 
 def test_a_new_host_gets_its_store_and_an_empty_one_pulls_nothing(tmp_path):
@@ -270,7 +314,8 @@ def test_upstream_store_mirrors_down_and_uploads_what_came_in(world, tmp_path):
     mirror = tmp_path / "relay-mirror"
     r = Relay(mirror, [Host("pod1", str(root))], upstream=up, log=lambda m: None)
     st = r.sync_once()["pod1"]
-    assert r.upstream_status["ok"] and r.upstream_status["down"]["got"][:2] == ["config.yml", "control.json"]
+    assert r.upstream_status["ok"] and r.upstream_status["down"]["got"] == ["player/v0003", "player/v0002",
+                                                                            "config.yml", "control.json"]
     assert st["versions"] == ["player/v0003", "player/v0002"]
     vp = root / "store" / "versions" / "player"
     assert sorted(p.name for p in vp.iterdir()) == ["latest.json", "v0002", "v0003"]
@@ -310,6 +355,45 @@ def test_an_unreachable_upstream_does_not_stop_the_hosts(world, tmp_path):
     r.upstream = FolderStore(run)
     r.sync_once()
     assert r.upstream_status["ok"] and r.upstream_status["up"]["shards"] == 2
+
+
+def test_a_failed_version_download_keeps_the_previous_control_json(world, tmp_path):
+    """The upstream publishes v4 and names it in control.json, but its download fails: the mirror and the hosts keep
+    the control.json naming v3 (a version they have) until a later sync brings v4."""
+    run, root = world
+
+    class Flaky(FolderStore):
+        broken = True
+
+        def get(self, path, dest):
+            if self.broken and path.startswith("versions/player/v0004/"):
+                raise RuntimeError("xet download failed")
+            return super().get(path, dest)
+    up = Flaky(run)
+    mirror = tmp_path / "m"
+    r = Relay(mirror, [Host("pod1", str(root))], upstream=up, log=lambda m: None)
+    r.sync_once()
+    _version(run, 4)
+    (run / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": {"player": 4}}))
+    res = r.sync_once()
+    assert not r.upstream_status["down"]["ok"] and "xet" in r.upstream_status["down"]["error"]
+    assert json.loads((mirror / "control.json").read_text())["version"]["player"] == 3
+    assert json.loads((mirror / "versions/player/latest.json").read_text())["version"] == 3
+    assert res["pod1"]["ok"] and json.loads((root / "store/control.json").read_text())["version"]["player"] == 3
+    up.broken = False
+    r.sync_once()
+    assert json.loads((root / "store/control.json").read_text())["version"]["player"] == 4
+    assert (root / "store/versions/player/v0004/meta.json").exists()
+
+
+def test_mirror_down_fetches_the_version_control_json_names(world, tmp_path):
+    run, root = world
+    (run / "control.json").write_text(json.dumps({"format": "dz-control/1", "version": {"player": 1}}))
+    r = Relay(tmp_path / "m", [Host("pod1", str(root))], upstream=FolderStore(run), log=lambda m: None)
+    r.sync_once()
+    assert r.upstream_status["ok"] and (tmp_path / "m/versions/player/v0001/meta.json").exists()
+    assert (root / "store/versions/player/v0001/meta.json").exists()
+    assert json.loads((root / "store/control.json").read_text())["version"]["player"] == 1
 
 
 def test_cli_once(world, capsys):

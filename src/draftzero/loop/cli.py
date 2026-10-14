@@ -7,7 +7,7 @@
     local       --config C [--store S] [--actors N] [--work-dir DIR] [--max-hours H]     every role on this machine
     status      [STORE] [--json]                                                         print status.md
     stop        [STORE]                                                                  ask the controller to stop
-    plan        [STORE] set PATH=VALUE [PATH=VALUE ...]                                  a live config change
+    plan        [STORE] set PATH=VALUE [PATH=VALUE ...] [--before-start]                 a live config change
     plan        [STORE] list                                                             pending, rejected, applied
 
 S is a folder or hf://buckets/<owner>/<name>; it defaults to the config's `store`. --machine names this process in
@@ -15,6 +15,9 @@ the store (heartbeats/<machine>.json, shards/<machine>/): it must be unique per 
 name (with the role appended for the other roles). --work-dir defaults to runs/<run>/work/<role>-<machine>.
 Roles poll the store every --poll seconds (default 30 on a folder, 60 on a bucket; local mode passes it on); the
 controller writes its status page every --status-every seconds (default 60 on a folder, 300 on a bucket).
+status, stop and plan refuse a STORE that is not a run's store (no config.yml or control.json, which the controller
+writes when the run starts), so a mistyped path creates nothing and reports no success; `plan ... --before-start`
+queues changes in a store whose run has not started yet.
 """
 from __future__ import annotations
 
@@ -43,6 +46,7 @@ PLAN_EPILOG = """examples:
   plan runs/smoke set learner.lr=3e-4             applied at the next version
   plan runs/smoke set paused=true                 paused and budget.* apply at once
   plan runs/smoke list
+  plan runs/new set learner.lr=3e-4 --before-start   queued before `dz run` starts the run
 
 Only live fields change (draftzero.config.LIVE: actor.sims, actor.pcr.*, actor.record_every, actor.chunk_games,
 learner.lr, learner.window_positions, learner.min_new_positions, learner.steps_per_position, learner.epochs,
@@ -92,6 +96,9 @@ def _parser(prog: str = "python -m draftzero.loop.cli") -> argparse.ArgumentPars
     p.add_argument("words", nargs="+", metavar="[STORE] set PATH=VALUE... | [STORE] list")
     p.add_argument("--store", default=None, help="the run's store, instead of STORE")
     p.add_argument("--by", default=None, help="who asks (default user@host)")
+    p.add_argument("--before-start", action="store_true",
+                   help="the run has not started yet: accept a store without config.yml or control.json (a folder "
+                        "is created); without it such a STORE is refused as a likely typo")
     return ap
 
 
@@ -174,7 +181,12 @@ def _store_command(a, ctl, open_store) -> int:
     if not spec:
         print(f"{a.role}: which store? (STORE or --store)", file=sys.stderr)
         return 2
+    run_files, early, remote = (ctl.CONFIG, ctl.CONTROL), getattr(a, "before_start", False), "://" in str(spec)
+    if not (early or remote or any((Path(spec) / f).is_file() for f in run_files)):
+        return _not_a_store(a.role, spec)                # before open_store, which would create the folder
     store = open_store(spec)
+    if not early and remote and not any(store.exists(f) for f in run_files):
+        return _not_a_store(a.role, spec)
     if a.role == "status":
         b = store.read_bytes(ctl.STATUS if a.json else ctl.STATUS_MD)
         print(b.decode() if b else "no status yet (is the controller running?)")
@@ -217,6 +229,13 @@ def _store_command(a, ctl, open_store) -> int:
         print(f"requested {k} = {v!r} ({name}); the controller applies it "
               + ("now" if ctl.immediate(k) else "at the next version"))
     return 0
+
+
+def _not_a_store(role: str, spec: str) -> int:
+    print(f"{role}: {spec} is not a run's store (it has no config.yml or control.json, which the controller writes "
+          "when the run starts): a typo?" + (" To queue a change before the run starts, add --before-start."
+                                             if role == "plan" else ""), file=sys.stderr)
+    return 2
 
 
 def _check_changes(store, ctl, changes) -> str | None:

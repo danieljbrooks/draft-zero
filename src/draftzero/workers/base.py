@@ -69,13 +69,15 @@ def actor_command(*, workdir: str, python: str, store: str, machine: str, config
     """The shell line that starts one actor, detached (nohup, stdin closed, output to a log), and prints its pid.
 
     `store` is the worker's own store folder; its config.yml (pushed there by the relay) is the default --config,
-    so start actors after the relay's first sync. The log goes beside the store: <store>/../actor-<machine>.log."""
+    so start actors after the relay's first sync. The log goes beside the store: <store>/../actor-<machine>.log.
+    Only the actor goes in the background (the braces): a backgrounded `cd ... && ...` chain would be a subshell
+    holding the caller's stdout (the SSH channel) open until the actor exits, and `$!` would be that subshell."""
     config = config or posixpath.join(store, "config.yml")
     log = log or posixpath.join(posixpath.dirname(store.rstrip("/")) or ".", f"actor-{machine}.log")
     exports = "".join(f"{k}={q(v)} " for k, v in (env or {}).items())
     return (f"cd {q(workdir)} && mkdir -p {q(posixpath.dirname(log) or '.')} && "
-            f"{exports}nohup {q(python)} -m {ACTOR_MODULE} actor --config {q(config)} --store {q(store)} "
-            f"--machine {q(machine)} > {q(log)} 2>&1 < /dev/null & echo $!")
+            f"{{ {exports}nohup {q(python)} -m {ACTOR_MODULE} actor --config {q(config)} --store {q(store)} "
+            f"--machine {q(machine)} > {q(log)} 2>&1 < /dev/null & echo $!; }}")
 
 
 class Worker(ABC):

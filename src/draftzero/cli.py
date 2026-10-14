@@ -192,7 +192,7 @@ def cmd_run(a) -> int:
           f"watch with `dz status {store}`, end with `dz stop {store}`", flush=True)
     rc = loop_cli.main(argv)
     why = {0: "the run stopped", 1: "a role failed (see its log)", 2: f"--max-hours {a.max_hours} reached",
-           130: "interrupted"}.get(rc, f"exit {rc}")
+           130: "interrupted", 143: "terminated (SIGTERM)", 129: "hung up (SIGHUP)"}.get(rc, f"exit {rc}")
     print(f"dz run: {why}; `dz status {store}`, `dz report {store}`", flush=True)
     return rc
 
@@ -509,9 +509,10 @@ def cost_guard(spec, max_hours: float, balance: str) -> str:
     what = f"GPU {spec.gpu}" if spec.gpu else f"CPU {spec.cpu} x {spec.vcpu} vCPU"
     return (f"pod {spec.name}: {what} on {spec.cloud.title()} Cloud\n"
             f"  cost guard: at most ${spec.max_price:.3f}/h (a quote above it is refused, a pod billing above it is\n"
-            f"  terminated) for at most {max_hours:g} h (the pod is armed to terminate itself then, even if this\n"
-            f"  machine dies): at most ${worst:.2f} in all. Balance {balance}. Billing stops only at "
-            "`dz pod down ID`.")
+            f"  terminated) for at most {max_hours:g} h from its create, the wait for SSH included (it is armed to\n"
+            f"  terminate itself then, even if this machine dies; one whose SSH is not up by then is removed): at\n"
+            f"  most ${worst:.2f} in all, more only if RunPod's API refuses the terminate (the pod retries it for\n"
+            f"  30 min). Balance {balance}. `dz pod down ID` stops the billing sooner.")
 
 
 def cmd_pod(a) -> int:
@@ -538,17 +539,33 @@ def cmd_pod(a) -> int:
             print(f"{x['cloud']:9} {x['offer'][:30]:30} ${x['price']:<6} {x['vcpu']:>3} vCPU {x['ram'] or 0:>4} GB "
                   f"${x['usd_per_vcpu_hr']:.4f}/vCPU-h {x['stock']}")
         return 0
-    if a.pod_cmd == "down":
-        ids = list(a.ids)
+    if a.pod_cmd == "down":         # try every pod: one failure must not leave the later ones billing
+        ids, failed = list(a.ids), []
         for name in a.name or []:
-            ids += [p["id"] for p in api.find(name)]
-        if not ids:
+            try:
+                ids += [p["id"] for p in api.find(name)]
+            except Exception as e:                       # noqa: BLE001 - reported below
+                failed.append(f"--name {name}")
+                print(f"dz pod down: listing pods named {name!r} failed: {e}", file=sys.stderr)
+        ids = list(dict.fromkeys(ids))
+        if not ids and not failed:
             raise CliError("no pod to remove: give pod ids or --name NAME")
         for pid in ids:
-            api.terminate(pid)
-            print(f"terminated {pid}")
-        left = api.list()
-        print(f"{len(left)} pod(s) left" + (": " + ", ".join(p.get("id", "?") for p in left) if left else ""))
+            try:
+                api.terminate(pid)
+                print(f"terminated {pid}")
+            except Exception as e:                       # noqa: BLE001 - reported below
+                failed.append(pid)
+                print(f"dz pod down: {pid}: {e}", file=sys.stderr)
+        try:
+            left = api.list()
+            print(f"{len(left)} pod(s) left" + (": " + ", ".join(p.get("id", "?") for p in left) if left else ""))
+        except Exception as e:                           # noqa: BLE001
+            print(f"dz pod down: listing the pods left failed ({e}): check `dz pod list`", file=sys.stderr)
+        if failed:
+            print(f"dz pod down: FAILED for {', '.join(failed)}: those pods may still be billing; check `dz pod list`",
+                  file=sys.stderr)
+            return 1
         return 0
     # up
     spec = rp.PodSpec(name=a.name, max_price=a.max_price, gpu=a.gpu, cpu=a.cpu, vcpu=a.vcpu, min_vcpu=a.min_vcpu,
@@ -575,7 +592,8 @@ def cmd_pod(a) -> int:
     pod = rp.up(api, spec, max_hours=a.max_hours, files=files, setup=not a.no_setup,
                 keep_on_failure=a.keep_on_failure)
     print(json.dumps(rp.brief(pod.info) | {"id": pod.id, "ssh": pod.target.spec}, indent=1, default=str))
-    print(f"pod {pod.id} is up and armed for {a.max_hours:g} h. Remove it with `dz pod down {pod.id}`; "
+    print(f"pod {pod.id} is up and armed to terminate itself {a.max_hours:g} h after its create. Remove it with "
+          f"`dz pod down {pod.id}`; "
           + ("its actors run from " + files.remote_repo + " (`dz relay` pulls their shards)" if files else
              "nothing was copied to it (--no-bundle)"))
     return 0
@@ -639,8 +657,9 @@ def parser() -> argparse.ArgumentParser:
     p = add("run", "start every role of a run on this machine (local mode)",
             description="Start the controller, the learner, one evaluator and N actors on this machine against one "
                         "store (python -m draftzero.loop.cli local). Returns when the run stops: 0 at its budget or "
-                        "`dz stop`, 1 when a role failed, 2 at --max-hours, 130 on Ctrl-C. Starting it again on the "
-                        "same store resumes the run.")
+                        "`dz stop`, 1 when a role failed, 2 at --max-hours, 130 on Ctrl-C, 143 on SIGTERM, 129 on "
+                        "SIGHUP (the roles are stopped either way). Starting it again on the same store resumes the "
+                        "run.")
     p.add_argument("config", metavar="CONFIG")
     p.add_argument("--store", default=None, help="a folder or hf://buckets/<owner>/<bucket> (default: the config's)")
     p.add_argument("--actors", type=int, default=1, help="actor processes (default 1)")
@@ -742,17 +761,18 @@ def parser() -> argparse.ArgumentParser:
                         "/root/.runpod/env or ~/.runpod/env (RUNPOD_API_KEY). Pods bill until `dz pod down`.")
     psub = p.add_subparsers(dest="pod_cmd", required=True, metavar="up|down|list|balance|offers")
     q = psub.add_parser("up", help="rent a pod, arm its self-destruct, copy the engine, decks and repo, bootstrap it",
-                        description="Create a pod, wait for SSH, arm it to terminate itself after --max-hours, then "
-                                    "(unless --no-bundle) copy dzgorge, the card corpus, the deck pool and the repo "
-                                    "and bootstrap a venv. Any failure after the create removes the pod. Prints the "
-                                    "cost guard and asks before renting (--yes skips the question).")
+                        description="Create a pod, wait for SSH, arm it to terminate itself --max-hours after its "
+                                    "create, then (unless --no-bundle) copy dzgorge, the card corpus, the deck pool "
+                                    "and the repo and bootstrap a venv. Any failure after the create removes the pod. "
+                                    "Prints the cost guard and asks before renting (--yes skips the question).")
     q.add_argument("--name", required=True, help="pod name (unique: an existing name is refused)")
     g = q.add_mutually_exclusive_group(required=True)
     g.add_argument("--gpu", default=None, help="GPU type id from `dz pod offers` (bought for its vCPUs)")
     g.add_argument("--cpu", default=None, help="CPU flavor (cpu3c, cpu5c, ...): Secure Cloud only, needs --secure "
                                                "and --datacenter")
     q.add_argument("--max-price", type=float, required=True, help="$/h cap: required")
-    q.add_argument("--max-hours", type=float, required=True, help="hours until the pod terminates itself: required")
+    q.add_argument("--max-hours", type=float, required=True,
+                   help="the pod's whole life, from its create: it terminates itself then (required)")
     q.add_argument("--min-vcpu", type=int, default=8, help="GPU pods: vCPU floor (default 8)")
     q.add_argument("--vcpu", type=int, default=8, help="CPU pods: vCPUs (default 8)")
     q.add_argument("--datacenter", action="append", default=[], help="pin to a data center (repeatable)")
@@ -760,10 +780,13 @@ def parser() -> argparse.ArgumentParser:
     q.add_argument("--image", default=None, help="container image (default RunPod's base image)")
     q.add_argument("--no-bundle", action="store_true", help="only the armed pod: copy nothing")
     q.add_argument("--no-setup", action="store_true", help="copy the bundle but skip the bootstrap")
-    q.add_argument("--keep-on-failure", action="store_true", help="keep the (armed) pod when a step fails")
+    q.add_argument("--keep-on-failure", action="store_true",
+                   help="keep the pod when a step after arming it fails (one not armed yet is always removed)")
     q.add_argument("--yes", action="store_true", help="rent without asking")
     _add_config(q, "its engine.root and deck pool are copied; default /work/gorge-fork and data/gorge")
-    q = psub.add_parser("down", help="terminate pods (billing stops only here)")
+    q = psub.add_parser("down", help="terminate pods (billing stops only here)",
+                        description="Terminate every pod given (by id or --name), even when one fails, then list the "
+                                    "pods left. Exit 1 when any terminate failed (those pods may still be billing).")
     q.add_argument("ids", nargs="*", metavar="ID")
     q.add_argument("--name", action="append", default=[], help="every pod with this name (repeatable)")
     q = psub.add_parser("list", help="the account's pods")

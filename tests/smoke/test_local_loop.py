@@ -54,8 +54,8 @@ def test_local_loop_smoke(tmp_path):
     store, work = tmp_path / "store", tmp_path / "work"
     env = dict(os.environ, PYTHONPATH=str(REPO / "src"), PYTHONUNBUFFERED="1")
     cli = [sys.executable, "-m", "draftzero.loop.cli"]
-    subprocess.run(cli + ["plan", str(store), "set", "learner.lr=2e-4", "--by", "smoke"], cwd=REPO, env=env,
-                   check=True, timeout=60)
+    subprocess.run(cli + ["plan", str(store), "set", "learner.lr=2e-4", "--by", "smoke", "--before-start"], cwd=REPO,
+                   env=env, check=True, timeout=60)
     p = subprocess.run(cli + ["local", "--config", str(CONFIG), "--store", str(store), "--work-dir", str(work),
                               "--actors", "1", "--max-hours", str(MAX_HOURS), "--poll", "5"],
                        cwd=REPO, env=env, capture_output=True, text=True, timeout=MAX_HOURS * 3600 + 120)

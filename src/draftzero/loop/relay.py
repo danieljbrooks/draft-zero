@@ -15,9 +15,11 @@ and the relay, running beside the run's real store (a local folder on d1), keeps
 
 Each sync, for every host (a host that fails is logged and retried next time; the others go on):
 
-- **push** `versions/<kind>/v<N>/` for the latest version and the one before (older ones are deleted on the host;
-  each version's files appear together), then `latest.json`, then `config.yml` and `control.json`, so a host never
-  points at a version it lacks. Nothing else is pushed.
+- **push** `versions/<kind>/v<N>/` for the latest version and the one before, and the one control.json names if it
+  is older (older ones are deleted on the host; each version's files appear together), then `latest.json`, then
+  `config.yml` and `control.json`. The pointers are read before the versions go (control.json first: the controller
+  names a version only once it is latest) and pushed as read, so a host never points at a version it lacks; a
+  version published meanwhile goes at the next sync. Nothing else is pushed.
 - **pull** `<root>/store/shards/<actor>/<seq>/` for each shard that is complete there (its `meta.json` exists:
   actors write it last) and not yet here: every other file first, `meta.json` last, so a reader here also sees a
   complete shard or no meta.json. Then `heartbeats/` and `metrics/` (rsync's quick check skips unchanged files).
@@ -30,9 +32,11 @@ relay host needs a direct public IP and port.
 
 **Upstream.** When the run's store is not a local folder (`hf://buckets/...`: the relay is then the only process with
 the token), pass it as `upstream=` (CLI `--upstream SPEC`) and give the relay a folder of its own as the local
-store: each sync first mirrors config.yml, control.json and the latest + previous versions down from the upstream
-store into the folder, and after the pulls uploads every newly pulled complete shard (one put_many each, meta.json
-last) and the heartbeat and metrics files that changed. Only the Store API is used (read_bytes, list, get, put_many).
+store: each sync first mirrors the latest + previous versions (and the one control.json names), then config.yml and
+control.json, down from the upstream store into the folder (when a version fails to come down, the folder keeps its
+previous control.json, so hosts are never pointed at it), and after the pulls uploads every newly pulled complete
+shard (one put_many each, meta.json last) and the heartbeat and metrics files that changed. Only the Store API is
+used (read_bytes, list, get, put_many).
 
 Notes: give every actor machine a unique --machine name (shards/<actor>/ and heartbeats/<machine>.json are merged
 from all hosts into one store). rsync stages pulled files in `<store>/.relay-tmp/`. In sync mode an actor behind the
@@ -214,20 +218,21 @@ class Relay:
 
     # ── upstream: the run's real store when this folder is only the relay's mirror (hf://buckets/...) ──
     def mirror_down(self) -> dict:
-        """config.yml, control.json and the versions hosts get (latest + previous of each kind) from the upstream
-        store into this folder: a version's files before its meta.json, latest.json after the version."""
+        """config.yml, control.json and the versions hosts get (latest + previous of each kind, and the one
+        control.json names) from the upstream store into this folder: a version's files before its meta.json,
+        latest.json after the version, config.yml and control.json last. control.json is read first (so latest.json,
+        read after it, is at least as new) but written only once every version it names is here: a failed download
+        raises and leaves the previous control.json, which the hosts then keep getting."""
         up, got = self.upstream, []
-        for f in PUSH_FILES:
-            b = up.read_bytes(f)
-            if b is not None and _differs(self.root / f, b):
-                _atomic_write(self.root / f, b)
-                got.append(f)
+        pointers = {f: up.read_bytes(f) for f in PUSH_FILES}
+        named = _named_versions(pointers["control.json"])
         for kind in self.kinds:
             latest = up.read_bytes(f"versions/{kind}/latest.json")
             if latest is None:
                 continue
             top = int(json.loads(latest)["version"])
-            for v in range(top, max(top - self.keep_versions, -1), -1):
+            want = set(range(top, max(top - self.keep_versions, -1), -1)) | ({named[kind]} if kind in named else set())
+            for v in sorted(want, reverse=True):
                 name = f"v{v:04d}"
                 if (self.root / "versions" / kind / name / "meta.json").exists():
                     continue
@@ -237,6 +242,16 @@ class Relay:
                 got += [f"{kind}/{name}"] if files else []
             if _differs(self.root / "versions" / kind / "latest.json", latest):
                 _atomic_write(self.root / "versions" / kind / "latest.json", latest)
+        lacking = [f"{k}/v{v:04d}" for k, v in named.items()
+                   if k in self.kinds and not (self.root / "versions" / k / f"v{v:04d}" / "meta.json").exists()]
+        if lacking:
+            raise RuntimeError(f"control.json names {', '.join(lacking)}, which the upstream store did not give: "
+                               "keeping the previous control.json")
+        for f in PUSH_FILES:
+            b = pointers[f]
+            if b is not None and _differs(self.root / f, b):
+                _atomic_write(self.root / f, b)
+                got.append(f)
         return {"got": got}
 
     def mirror_up(self) -> dict:
@@ -297,9 +312,10 @@ class Relay:
             return False
 
     # ── push: versions, then the pointers ──
-    def keep(self, kind_dir: Path) -> list[str]:
-        """Version dirs of one kind to put on hosts: the latest (latest.json) and the ones before it, newest first,
-        `keep_versions` in all. Without latest.json, the newest dirs that hold a meta.json."""
+    def keep(self, kind_dir: Path, latest: Optional[bytes] = None, pin: Optional[int] = None) -> list[str]:
+        """Version dirs of one kind to put on hosts: the latest (latest.json; `latest`: its bytes as already read)
+        and the ones before it, newest first, `keep_versions` in all, plus `pin` (the version control.json names)
+        when it is older. Without latest.json, the newest dirs that hold a meta.json."""
         found = {}
         for d in kind_dir.iterdir() if kind_dir.is_dir() else ():
             m = VERSION_RE.match(d.name)
@@ -307,21 +323,29 @@ class Relay:
                 found[int(m.group(1))] = d.name
         top = None
         try:
-            latest = json.loads((kind_dir / "latest.json").read_text())
-            top = int(latest["version"])
+            top = int(json.loads(latest if latest is not None else (kind_dir / "latest.json").read_bytes())["version"])
         except (OSError, ValueError, KeyError, TypeError):
             found = {v: n for v, n in found.items() if (kind_dir / n / "meta.json").exists()}
-        nums = sorted((v for v in found if top is None or v <= top), reverse=True)
-        return [found[v] for v in nums[: self.keep_versions]]
+        nums = sorted((v for v in found if top is None or v <= top), reverse=True)[: self.keep_versions]
+        if pin in found and pin not in nums:
+            nums.append(pin)
+        return [found[v] for v in nums]
 
     def push(self, h: Host) -> dict:
+        """Versions, then latest.json, then config.yml and control.json. The pointers are read first (control.json
+        before latest.json: the controller names a version only once it is latest) and pushed as read, so a version
+        published or named while the versions are in flight waits for the next sync."""
         t = self.transports[h.name]
         dest = t.remote(h.store + "/")
-        versions = []
+        snap = {f: _read(self.root / f) for f in PUSH_FILES}
         vroot = self.root / "versions"
-        for kind_dir in sorted(p for p in vroot.iterdir() if p.is_dir()) if vroot.is_dir() else ():
+        kinds = sorted(p for p in vroot.iterdir() if p.is_dir()) if vroot.is_dir() else []
+        latest = {k.name: _read(k / "latest.json") for k in kinds}
+        named = _named_versions(snap["control.json"])
+        versions, pointers = [], []
+        for kind_dir in kinds:
             kind = kind_dir.name
-            keep = self.keep(kind_dir)
+            keep = self.keep(kind_dir, latest[kind], named.get(kind))
             if not keep:
                 continue
             rules = ["-f", f"P /versions/{kind}/latest.json"]
@@ -330,13 +354,24 @@ class Relay:
             rules += ["-f", f"- /versions/{kind}/*"]
             _check(t.rsync(["-R", "--delete", "--delete-excluded", "--delay-updates", *rules,
                             f"{self.root}/./versions/{kind}/", dest], mkdir=h.store), f"push versions/{kind}")
-            if (kind_dir / "latest.json").exists():
-                _check(t.rsync(["-R", f"{self.root}/./versions/{kind}/latest.json", dest], mkdir=h.store),
-                       f"push versions/{kind}/latest.json")
             versions += [f"{kind}/{v}" for v in keep]
-        files = [f for f in PUSH_FILES if (self.root / f).exists()]
-        if files:
-            _check(t.rsync([*(str(self.root / f) for f in files), dest], mkdir=h.store), "push " + ", ".join(files))
+            if latest[kind] is not None:
+                pointers.append((f"versions/{kind}/latest.json", latest[kind]))
+        lacking = [f"{k}/v{v:04d}" for k, v in named.items() if f"{k}/v{v:04d}" not in versions]
+        if lacking:         # never point a host at a version it lacks: it keeps the control.json it has
+            self.log(f"{h.name}: control.json names {', '.join(lacking)}, which this store lacks: not pushing it")
+            snap["control.json"] = None
+        files = [f for f in PUSH_FILES if snap[f] is not None]
+        tmp = self.root / TMP
+        tmp.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=tmp, prefix="push-") as d:
+            for rel, b in pointers + [(f, snap[f]) for f in files]:
+                (Path(d) / rel).parent.mkdir(parents=True, exist_ok=True)
+                (Path(d) / rel).write_bytes(b)
+            for rel, _ in pointers:
+                _check(t.rsync(["-R", f"{d}/./{rel}", dest], mkdir=h.store), f"push {rel}")
+            if files:
+                _check(t.rsync([*(f"{d}/{f}" for f in files), dest], mkdir=h.store), "push " + ", ".join(files))
         return {"versions": versions, "pushed": files}
 
     # ── pull: complete shards (meta.json last), heartbeats, metrics ──
@@ -368,6 +403,22 @@ class Relay:
         body = {"format": "dz-relay/1", "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "hosts": hosts, **({"upstream": self.upstream_status} if self.upstream is not None else {})}
         _atomic_write(self.root / self.status_path, json.dumps(body, indent=1, sort_keys=True).encode())
+
+
+def _read(path: Path) -> Optional[bytes]:
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def _named_versions(control: Optional[bytes]) -> dict[str, int]:
+    """{kind: version} that a control.json names ({} when it names none, or doesn't parse)."""
+    try:
+        named = json.loads(control).get("version") or {}
+        return {str(k): int(v) for k, v in named.items() if v is not None}
+    except (TypeError, ValueError, AttributeError):
+        return {}
 
 
 def _differs(path: Path, data: bytes) -> bool:

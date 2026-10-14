@@ -50,11 +50,16 @@ dz report runs/smoke --out runs/smoke/report          # the standard plots
 `dz run` checks that the engine and the deck pool are where the config says before it starts anything, and takes
 `--store`, `--actors N`, `--max-hours H`, `--work-dir DIR` (caches and role logs, default `runs/<id>/work`) and
 `--set PATH=VALUE` (any field, at launch; the store's `config.yml` records the result). It returns 0 when the run
-stops at its budget or `dz stop`, 1 when a role failed, 2 at `--max-hours`. Starting it again on the same store
-resumes the run, on the store's `config.yml` plus `events.jsonl`: the config given then may differ only in machine
-paths (`engine.root`, `data.*` paths, `search.belief` paths, `player.init`, `store`, `tracking`); the controller
-refuses one that changes any other field (use `dz plan set` for live ones) unless it is started allowing config
-changes, which records them in `events.jsonl`.
+stops at its budget or `dz stop`, 1 when a role failed, 2 at `--max-hours`, 130 on Ctrl-C and 143 or 129 on
+SIGTERM or SIGHUP (the roles are stopped in every case). Starting it again on the same store resumes the run, on the
+store's `config.yml` plus `events.jsonl`: the config given then may differ only in machine paths (`engine.root`,
+`data.*` paths, `search.belief` paths, `player.init`, `store`, `tracking`); the controller refuses one that changes
+any other field (use `dz plan set` for live ones) unless it is started with `--allow-config-change`, which records
+the changes in `events.jsonl`. When a role fails, `dz run` asks the controller to stop the run (`stop.request`), but
+when the controller itself fails it stops the other roles directly and leaves no `stop.request` behind (one no
+controller acted on is withdrawn), so the next `dz run` does not stop at its first tick. `dz status`, `dz plan` and
+`dz stop` refuse a path that is not a run's store (no `config.yml` or `control.json`), so a typo creates nothing and
+reports no success; `dz plan STORE set ... --before-start` queues a change in a store whose run has not started yet.
 
 The controller is the only writer of `control.json`, `events.jsonl` and the status page. Each version it opens one
 evaluation job per opponent, split into shards of 10 pairs that it assigns to the live evaluators; a shard whose
@@ -83,9 +88,11 @@ dz relay configs/runs/X.yml --host pod1 /root/dz/run "root@1.2.3.4 -p 40066"    
 
 RunPod pods for such actors (Community Cloud GPU pods bought for their vCPUs; CPU pods on Secure Cloud with
 `--secure`): `dz pod offers`, `dz pod up --name dz-a1 --gpu ID --max-price 0.25 --max-hours 2` (both caps are
-required; it prints the cost guard, asks, arms the pod to terminate itself after `--max-hours`, then copies the
-engine, cards, decks and repo and bootstraps a venv), `dz pod list`, `dz pod balance` and `dz pod down ID`. Billing
-stops only at `dz pod down`. The flow is in the `draftzero.workers.runpod` docstring; no real pod has run it yet.
+required; it prints the cost guard, asks, arms the pod to terminate itself `--max-hours` after its create, the wait
+for SSH included, then copies the engine, cards, decks and repo and bootstraps a venv; any failure removes the pod,
+and `--keep-on-failure` keeps only a pod that is already armed), `dz pod list`, `dz pod balance` and `dz pod down
+ID...` (it tries every pod and exits 1 if any terminate failed). Billing stops at `dz pod down` or the self-destruct.
+The flow is in the `draftzero.workers.runpod` docstring; no real pod has run it yet.
 
 ## Where data lives
 

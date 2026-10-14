@@ -4,6 +4,7 @@ import json
 import os
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -92,6 +93,30 @@ def test_actor_command_runs_detached_with_the_contract_arguments(tmp_path):
     assert (tmp_path / "run dir" / "actor-pod-1.log").exists()
 
 
+@pytest.mark.parametrize("shell", ["bash", "sh"])
+def test_actor_command_returns_at_once_with_the_actors_pid(tmp_path, shell):
+    """Over SSH the caller's stdout is a pipe: only the actor may go in the background (with its own output), or
+    the shell holds the pipe until the actor exits and start_actor times out. The pid printed is the actor's."""
+    pidfile = tmp_path / "actor.pid"
+    fake = tmp_path / "fakepy"
+    fake.write_text(f"#!/bin/sh\necho $$ > {pidfile}.tmp && mv {pidfile}.tmp {pidfile}\nexec sleep 30\n")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    cmd = actor_command(workdir=str(tmp_path), python=str(fake), store=str(tmp_path / "store"), machine="pod-1",
+                        env={"DZ_X": "1"})
+    pid = None
+    try:
+        r = subprocess.run([shell, "-c", cmd], capture_output=True, text=True, timeout=10)
+        pid = int(r.stdout.strip())
+        for _ in range(200):
+            if pidfile.exists():
+                break
+            time.sleep(0.05)
+        assert r.returncode == 0 and int(pidfile.read_text()) == pid
+    finally:
+        if pid:
+            os.kill(pid, 9)
+
+
 def test_status_parses_heartbeats_and_actor_count():
     out = 'actors=2\nhb=pod-1 {"machine": "pod-1", "time": "t"}\nhb=pod-2 not json\n'
     w = SSHWorker(SSHTarget("h"), runner=Recorder(Result(0, out)))
@@ -168,9 +193,11 @@ GPU_TYPES = {"gpuTypes": [
 class FakeRunPod:
     """The REST + GraphQL endpoints this module uses, in memory."""
 
-    def __init__(self, balance=10.0, pods=(), cost=0.13, fail=None):
+    def __init__(self, balance=10.0, pods=(), cost=0.13, fail=None, post_fails=None):
         self.calls, self.balance, self.pods, self.cost, self.fail = [], balance, list(pods), cost, fail
         self.gets = []      # successive GET /pods/<id> answers (the last one repeats)
+        self.post_fails = post_fails    # an exception the POST raises after RunPod made the pod (a lost reply)
+        self.delete_fails = False
 
     def __call__(self, method, url, data, headers):
         body = json.loads(data) if data else None
@@ -189,11 +216,18 @@ class FakeRunPod:
         if url == f"{rp.REST}/pods" and method == "GET":
             return 200, json.dumps(self.pods)
         if url == f"{rp.REST}/pods" and method == "POST":
-            return 200, json.dumps({"id": "pod123", "name": body["name"], "costPerHr": self.cost, "vcpuCount": 18})
+            pod = {"id": "pod123", "name": body["name"], "costPerHr": self.cost, "vcpuCount": 18}
+            self.pods.append(pod)
+            if self.post_fails:
+                raise self.post_fails
+            return 200, json.dumps(pod)
         if url.startswith(f"{rp.REST}/pods/") and method == "GET":
             g = self.gets.pop(0) if len(self.gets) > 1 else (self.gets[0] if self.gets else {})
             return 200, json.dumps(g)
         if url.startswith(f"{rp.REST}/pods/") and method == "DELETE":
+            if self.delete_fails:
+                return 500, "internal error"
+            self.pods = [p for p in self.pods if p.get("id") != url.rsplit("/", 1)[1]]
             return 200, ""
         return 404, "no route"
 
@@ -274,6 +308,38 @@ def test_create_posts_the_spec_and_removes_a_pod_billing_above_the_cap():
     assert fake.made("DELETE", "/pods/pod123")
 
 
+def test_a_create_that_fails_after_the_pod_exists_removes_it():
+    """The POST times out (or the reply is lost) but RunPod made the pod: it must not stay up, unarmed."""
+    spec = rp.PodSpec(name="dz-a1", gpu="NVIDIA GeForce RTX 3070", max_price=0.2)
+    fake = FakeRunPod(post_fails=TimeoutError("The read operation timed out"))
+    logs = []
+    api = rp.RunPodAPI(key=KEY, http=fake, log=logs.append, sleep=lambda s: None)
+    with pytest.raises(rp.RunPodError, match="removed pod pod123"):
+        api.create(spec)
+    assert fake.made("DELETE", "/pods/pod123") and fake.pods == []
+    # the pod shows up only on a later look
+    fake = FakeRunPod(post_fails=ValueError("Expecting value: line 1 column 1 (char 0)"))
+    listed = []
+
+    def late(method, url, data, headers):
+        if method == "GET" and url == f"{rp.REST}/pods":
+            listed.append(1)
+            if len(listed) == 2:                      # the create's own name check, then the first look
+                return 200, "[]"
+        return fake(method, url, data, headers)
+    sleeps = []
+    with pytest.raises(rp.RunPodError, match="removed pod pod123"):
+        rp.RunPodAPI(key=KEY, http=late, log=logs.append, sleep=sleeps.append).create(spec)
+    assert sleeps and fake.made("DELETE", "/pods/pod123")
+    # removing it fails: say so loudly
+    fake = FakeRunPod(post_fails=ConnectionResetError("reset"))
+    fake.delete_fails = True
+    logs.clear()
+    with pytest.raises(rp.RunPodError, match="TERMINATE FAILED"):
+        rp.RunPodAPI(key=KEY, http=fake, log=logs.append, sleep=lambda s: None).create(spec)
+    assert any("TERMINATE FAILED" in m and "dz pod down" in m for m in logs) and KEY not in " ".join(logs)
+
+
 def test_cpu_quote_and_terminate_and_list():
     fake = FakeRunPod(pods=[{"id": "a", "name": "x"}])
     api = _api(fake)
@@ -305,18 +371,14 @@ def test_wait_ssh_waits_for_an_endpoint_that_answers():
         _api(fake).wait_ssh("pod123", timeout=300, probe=probe, sleep=lambda s: None, clock=lambda: next(clock))
 
 
-def test_runpodctl_gpu_create_args_and_key_in_env_only():
-    r = Recorder(Result(0, json.dumps({"id": "p", "ssh": {"ip": "1.2.3.4", "port": 4000}})))
+def test_runpodctl_only_reads_and_its_key_goes_in_the_env():
+    """Pods are rented only through RunPodAPI.create, which holds the money guards: runpodctl has no create path."""
+    assert not hasattr(rp.RunPodCtl, "create") and not hasattr(rp.RunPodCtl, "argv_create")
+    r = Recorder(Result(0, json.dumps({"clientBalance": 3.5})))
     ctl = rp.RunPodCtl(ctl="/bin/runpodctl", runner=r, key=KEY)
-    spec = rp.PodSpec(name="dz-a1", gpu="NVIDIA GeForce RTX 3070", max_price=0.2, datacenters=("CA-MTL-3",))
-    assert ctl.create(spec)["id"] == "p"
+    assert ctl.user()["clientBalance"] == 3.5
     argv, env = r.calls[0]["argv"], r.calls[0]["env"]
-    assert argv[:3] == ["/bin/runpodctl", "pod", "create"]
-    assert argv[argv.index("--cloud-type") + 1] == "COMMUNITY" and "--public-ip" in argv and "--wait" in argv
-    assert argv[argv.index("--data-center-ids") + 1] == "CA-MTL-3"
-    assert KEY not in " ".join(argv) and env["RUNPOD_API_KEY"] == KEY
-    with pytest.raises(ValueError):
-        ctl.argv_create(rp.PodSpec(name="c", cpu="cpu5c", max_price=1, cloud="SECURE", allow_secure=True, datacenters=("A",)))
+    assert argv[:2] == ["/bin/runpodctl", "user"] and KEY not in " ".join(argv) and env["RUNPOD_API_KEY"] == KEY
     r = Recorder(Result(1, "", "boom"))
     with pytest.raises(rp.RunPodError):
         rp.RunPodCtl(runner=r).user()
@@ -335,6 +397,67 @@ def test_arm_pipes_the_self_destruct_script():
     for bad in (0, -1, rp.MAX_ARM_HOURS + 1):
         with pytest.raises(ValueError):
             rp.arm(t, bad, runner=r)
+
+
+def _armed_here() -> bool:
+    """A real self-destruct on this machine (a pod): the arm script's pkill would disarm it, so skip."""
+    try:
+        if Path("/root/selfdestruct.deadline").exists():
+            return True
+    except OSError:
+        pass
+    return subprocess.run(["pgrep", "-f", "^selfdestruct_sleep "], capture_output=True).returncode == 0
+
+
+def _arm_env(tmp_path, environ: bytes, **extra) -> dict:
+    # a script that ignored these would arm this machine's /root: never run one
+    assert all(v in rp.ARM_SCRIPT.read_text() for v in ("DZ_SELFDESTRUCT_DIR", "DZ_SELFDESTRUCT_ENVIRON"))
+    (tmp_path / "environ").write_bytes(environ)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RUNPOD_")}
+    return {**env, "DZ_SELFDESTRUCT_DIR": str(tmp_path), "DZ_SELFDESTRUCT_ENVIRON": str(tmp_path / "environ"), **extra}
+
+
+def test_arm_refuses_without_the_pods_key(tmp_path):
+    """No RUNPOD_API_KEY or RUNPOD_POD_ID in PID 1's environment: the script must fail, so up() removes the pod."""
+    r = subprocess.run(["bash", str(rp.ARM_SCRIPT), "3600"], capture_output=True, text=True, timeout=30,
+                       env=_arm_env(tmp_path, b"PATH=/usr/bin\0RUNPOD_POD_ID=pod123\0"))
+    assert r.returncode != 0 and "armed:" not in r.stdout and "NOT armed" in r.stderr
+    assert not (tmp_path / "selfdestruct_now.sh").exists()
+
+
+@pytest.mark.skipif(_armed_here(), reason="a real self-destruct is armed on this machine")
+def test_the_self_destruct_retries_until_runpod_accepts(tmp_path):
+    """At the deadline the pod asks RunPod to terminate it; a refused or failed call is retried (with a timeout on
+    each), every try is logged on the pod, and it stops once RunPod accepts."""
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    calls, args = tmp_path / "calls", tmp_path / "args"
+    curl = bin_ / "curl"
+    curl.write_text(f"""#!/bin/sh
+n=$(cat {calls} 2>/dev/null || echo 0); n=$((n + 1)); echo $n > {calls}
+printf '%s ' "$@" >> {args}; echo >> {args}
+case $n in
+1) echo "curl: (7) Failed to connect to api.runpod.io port 443" >&2; printf '\\nHTTP 000'; exit 7 ;;
+2) printf '{{"errors":[{{"message":"rate limited"}}],"data":null}}\\nHTTP 200' ;;
+*) printf '{{"data":{{"podTerminate":null}}}}\\nHTTP 200' ;;
+esac
+""")
+    curl.chmod(0o755)
+    env = _arm_env(tmp_path, b"PATH=/usr/bin\0RUNPOD_POD_ID=pod123\0RUNPOD_API_KEY=rpa_TEST\0",
+                   PATH=f"{bin_}:{os.environ['PATH']}", DZ_SELFDESTRUCT_DELAY="0")
+    r = subprocess.run(["bash", str(rp.ARM_SCRIPT), "2"], capture_output=True, text=True, timeout=30, env=env)
+    assert r.returncode == 0 and "armed: terminates pod123" in r.stdout, r.stderr
+    log = tmp_path / "selfdestruct.log"
+    for _ in range(300):
+        if "accepted" in (log.read_text() if log.exists() else ""):
+            break
+        time.sleep(0.1)
+    text = log.read_text()
+    assert "try 1" in text and "try 2" in text and "try 3" in text and "terminate accepted" in text, text
+    assert calls.read_text().strip() == "3" and "rpa_TEST" not in text
+    sent = args.read_text().splitlines()[0]
+    assert "--max-time" in sent and "Bearer rpa_TEST" in sent and 'podTerminate(input:{podId:\\"pod123\\"})' in sent
+    assert oct((tmp_path / "selfdestruct_now.sh").stat().st_mode & 0o777) == "0o700"
 
 
 def _bundle(tmp_path, **kw):
@@ -405,18 +528,23 @@ def test_pod_bootstrap_script_is_valid_bash():
 
 
 class FakeAPI:
-    def __init__(self, fail_wait=False):
-        self.events, self.fail_wait = [], fail_wait
+    def __init__(self, fail_wait=False, ssh_after=0.0):
+        self.events, self.fail_wait, self.ssh_after, self.now = [], fail_wait, ssh_after, 1000.0
         self.log = lambda m: None
+
+    def clock(self):
+        return self.now
 
     def create(self, spec, balance_hours=1.0):
         self.events.append(("create", spec.name, balance_hours))
+        self.now += 5                                   # the create itself takes a moment
         return {"id": "pod123", "name": spec.name}
 
     def wait_ssh(self, pid, **kw):
-        self.events.append(("wait", pid))
+        self.events.append(("wait", pid, kw.get("timeout")))
         if self.fail_wait:
             raise rp.RunPodError("no banner")
+        self.now += self.ssh_after
         return SSHTarget("1.2.3.4", port=40001, strict=False, key=kw.get("key"))
 
     def terminate(self, pid):
@@ -427,30 +555,63 @@ def test_up_runs_the_whole_flow(tmp_path):
     api, r = FakeAPI(), Recorder(Result(0, "armed: ok"))
     b = _bundle(tmp_path)
     r.results += [Result(0, "")] * len(rp.bundle_steps(SSHTarget("x"), b, tmp_path)) + [Result(0, "pod_bootstrap: ready")]
-    pod = rp.up(api, rp.PodSpec(name="dz-a1", gpu="g", max_price=0.2), max_hours=2, files=b, runner=r)
+    pod = rp.up(api, rp.PodSpec(name="dz-a1", gpu="g", max_price=0.2), max_hours=2, files=b, runner=r, clock=api.clock)
     assert pod.id == "pod123" and pod.target.port == 40001
-    assert api.events == [("create", "dz-a1", 2), ("wait", "pod123")]
-    assert r.calls[0]["argv"][-1] == "bash -s -- 7200"                      # armed before anything else on the pod
+    assert api.events == [("create", "dz-a1", 2), ("wait", "pod123", 900)]
+    assert r.calls[0]["argv"][-1] == "bash -s -- 7195"      # armed first, for what is left of 2 h since the create
     assert "pod_bootstrap.sh" in r.calls[-1]["argv"][-1]
     w = pod.worker(b)
     assert (w.cfg.workdir, w.cfg.python, w.target) == (b.remote_repo, b.remote_python, pod.target)
 
 
 def test_up_terminates_the_pod_on_any_failure(tmp_path):
+    spec = rp.PodSpec(name="dz-a1", gpu="g", max_price=0.2)
     api = FakeAPI()
     with pytest.raises(rp.RunPodError):
-        rp.up(api, rp.PodSpec(name="dz-a1", gpu="g", max_price=0.2), max_hours=1, runner=Recorder(Result(1, "", "x")))
+        rp.up(api, spec, max_hours=1, runner=Recorder(Result(1, "", "x")))
     assert api.events[-1] == ("terminate", "pod123")
     api = FakeAPI(fail_wait=True)
     with pytest.raises(rp.RunPodError):
-        rp.up(api, rp.PodSpec(name="dz-a1", gpu="g", max_price=0.2), max_hours=1, runner=Recorder())
+        rp.up(api, spec, max_hours=1, runner=Recorder())
     assert api.events[-1] == ("terminate", "pod123")
-    api = FakeAPI(fail_wait=True)
-    with pytest.raises(rp.RunPodError, match="kept"):
-        rp.up(api, rp.PodSpec(name="dz-a1", gpu="g", max_price=0.2), max_hours=1, runner=Recorder(), keep_on_failure=True)
-    assert ("terminate", "pod123") not in api.events
     with pytest.raises(ValueError):
-        rp.up(FakeAPI(), rp.PodSpec(name="dz-a1", gpu="g", max_price=0.2), max_hours=100)
+        rp.up(FakeAPI(), spec, max_hours=100)
+
+
+def test_keep_on_failure_never_keeps_an_unarmed_pod(tmp_path):
+    """A pod whose SSH never came up, or whose arming failed, has no self-destruct: it is removed even with
+    keep_on_failure. A pod that failed later (bundle, bootstrap) is armed and may be kept."""
+    spec = rp.PodSpec(name="dz-a1", gpu="g", max_price=0.2)
+    api = FakeAPI(fail_wait=True)
+    with pytest.raises(rp.RunPodError, match="no banner"):
+        rp.up(api, spec, max_hours=1, runner=Recorder(), keep_on_failure=True)
+    assert api.events[-1] == ("terminate", "pod123")
+    api = FakeAPI()
+    with pytest.raises(rp.RunPodError, match="arming"):
+        rp.up(api, spec, max_hours=1, runner=Recorder(Result(255, "", "Permission denied (publickey)")),
+              keep_on_failure=True)
+    assert api.events[-1] == ("terminate", "pod123")
+    api, b = FakeAPI(), _bundle(tmp_path)
+    with pytest.raises(rp.RunPodError, match="kept"):
+        rp.up(api, spec, max_hours=1, files=b, runner=Recorder(Result(0, "armed: ok"), Result(1, "", "no space")),
+              keep_on_failure=True)
+    assert ("terminate", "pod123") not in api.events
+
+
+def test_the_self_destruct_counts_from_the_create(tmp_path):
+    """--max-hours is the pod's whole life: the time to SSH comes off the self-destruct timer, SSH that is not up
+    within --max-hours ends the wait, and a pod with no time left is removed."""
+    spec = rp.PodSpec(name="dz-a1", gpu="g", max_price=0.25)
+    api, r = FakeAPI(ssh_after=895), Recorder(Result(0, "armed: ok"))
+    rp.up(api, spec, max_hours=1, runner=r, clock=api.clock)
+    assert r.calls[0]["argv"][-1] == "bash -s -- 2700"            # 3600 - 5 (create) - 895 (SSH)
+    api = FakeAPI()
+    rp.up(api, spec, max_hours=0.1, runner=Recorder(Result(0, "armed: ok")), clock=api.clock)
+    assert api.events[1] == ("wait", "pod123", 355)                # SSH must come up within the 6 minutes
+    api, r = FakeAPI(ssh_after=355), Recorder(Result(0, "armed: ok"))
+    with pytest.raises(rp.RunPodError, match="left"):
+        rp.up(api, spec, max_hours=0.1, runner=r, clock=api.clock)
+    assert api.events[-1] == ("terminate", "pod123") and not r.calls
 
 
 def test_runpod_worker_provision_and_teardown():
