@@ -538,17 +538,33 @@ def cmd_pod(a) -> int:
             print(f"{x['cloud']:9} {x['offer'][:30]:30} ${x['price']:<6} {x['vcpu']:>3} vCPU {x['ram'] or 0:>4} GB "
                   f"${x['usd_per_vcpu_hr']:.4f}/vCPU-h {x['stock']}")
         return 0
-    if a.pod_cmd == "down":
-        ids = list(a.ids)
+    if a.pod_cmd == "down":         # try every pod: one failure must not leave the later ones billing
+        ids, failed = list(a.ids), []
         for name in a.name or []:
-            ids += [p["id"] for p in api.find(name)]
-        if not ids:
+            try:
+                ids += [p["id"] for p in api.find(name)]
+            except Exception as e:                       # noqa: BLE001 - reported below
+                failed.append(f"--name {name}")
+                print(f"dz pod down: listing pods named {name!r} failed: {e}", file=sys.stderr)
+        ids = list(dict.fromkeys(ids))
+        if not ids and not failed:
             raise CliError("no pod to remove: give pod ids or --name NAME")
         for pid in ids:
-            api.terminate(pid)
-            print(f"terminated {pid}")
-        left = api.list()
-        print(f"{len(left)} pod(s) left" + (": " + ", ".join(p.get("id", "?") for p in left) if left else ""))
+            try:
+                api.terminate(pid)
+                print(f"terminated {pid}")
+            except Exception as e:                       # noqa: BLE001 - reported below
+                failed.append(pid)
+                print(f"dz pod down: {pid}: {e}", file=sys.stderr)
+        try:
+            left = api.list()
+            print(f"{len(left)} pod(s) left" + (": " + ", ".join(p.get("id", "?") for p in left) if left else ""))
+        except Exception as e:                           # noqa: BLE001
+            print(f"dz pod down: listing the pods left failed ({e}): check `dz pod list`", file=sys.stderr)
+        if failed:
+            print(f"dz pod down: FAILED for {', '.join(failed)}: those pods may still be billing; check `dz pod list`",
+                  file=sys.stderr)
+            return 1
         return 0
     # up
     spec = rp.PodSpec(name=a.name, max_price=a.max_price, gpu=a.gpu, cpu=a.cpu, vcpu=a.vcpu, min_vcpu=a.min_vcpu,
@@ -767,7 +783,9 @@ def parser() -> argparse.ArgumentParser:
                    help="keep the pod when a step after arming it fails (one not armed yet is always removed)")
     q.add_argument("--yes", action="store_true", help="rent without asking")
     _add_config(q, "its engine.root and deck pool are copied; default /work/gorge-fork and data/gorge")
-    q = psub.add_parser("down", help="terminate pods (billing stops only here)")
+    q = psub.add_parser("down", help="terminate pods (billing stops only here)",
+                        description="Terminate every pod given (by id or --name), even when one fails, then list the "
+                                    "pods left. Exit 1 when any terminate failed (those pods may still be billing).")
     q.add_argument("ids", nargs="*", metavar="ID")
     q.add_argument("--name", action="append", default=[], help="every pod with this name (repeatable)")
     q = psub.add_parser("list", help="the account's pods")

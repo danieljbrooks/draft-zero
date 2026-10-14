@@ -268,6 +268,7 @@ def test_engine_version_and_coverage(fake_dzgorge, tmp_path, monkeypatch, capsys
 
 class FakeAPI:
     terminated: list = []
+    fail: set = set()                                    # ids whose terminate fails
 
     def __init__(self, *a, **k):
         pass
@@ -283,6 +284,9 @@ class FakeAPI:
         return [p for p in self.list() if p["name"] == name]
 
     def terminate(self, pid):
+        if pid in FakeAPI.fail:
+            from draftzero.workers.runpod import RunPodError
+            raise RunPodError(f"DELETE https://rest.runpod.io/v1/pods/{pid}: HTTP 404: not found")
         FakeAPI.terminated.append(pid)
 
     def offers(self, *a, **k):
@@ -293,7 +297,7 @@ class FakeAPI:
 @pytest.fixture
 def pods(monkeypatch):
     from draftzero.workers import runpod as rp
-    FakeAPI.terminated = []
+    FakeAPI.terminated, FakeAPI.fail = [], set()
     ups = []
 
     def fake_up(api, spec, *, max_hours, files=None, setup=True, keep_on_failure=False):
@@ -336,6 +340,16 @@ def test_pod_list_balance_offers_down(pods, capsys):
     assert main(["pod", "offers"]) == 0 and "RTX 3090" in capsys.readouterr().out
     assert main(["pod", "down", "p7", "--name", "dz-a1"]) == 0 and FakeAPI.terminated == ["p7", "p1"]
     assert main(["pod", "down"]) == 2
+
+
+def test_pod_down_tries_every_pod_and_reports_the_failures(pods, capsys):
+    """One failed terminate (a wrong or already removed id, a 5xx) must not leave the later pods billing."""
+    FakeAPI.fail = {"gone1"}
+    assert main(["pod", "down", "gone1", "live2", "live2", "--name", "dz-a1"]) == 1
+    assert FakeAPI.terminated == ["live2", "p1"]                 # every pod tried, each once
+    out, err = capsys.readouterr()
+    assert "terminated live2" in out and "1 pod(s) left: p1" in out
+    assert "gone1" in err and "HTTP 404" in err and "FAILED" in err
 
 
 # ------------------------------------------------------------------------------------------------ relay
