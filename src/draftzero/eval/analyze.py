@@ -1,182 +1,106 @@
 """
-Read dzgorge game records (cmd/dzgorge in the pinned gorge fork): win rates, 17lands card statistics, throughput.
+Read dzgorge game records (`dzgorge play -out`, gorge fork cmd/dzgorge): scores, ratings, 17lands card
+statistics, throughput.
 
-  python -m draftzero.eval.analyze wins data/gorge/runs/bench/*.jsonl
-  python -m draftzero.eval.analyze gih data/gorge/runs/bench/bot_self.jsonl [--min-games 30] [--json out.json]
-  python -m draftzero.eval.analyze speed data/gorge/runs/bench/*.summary.json
+  python -m draftzero.eval.analyze wins RUN.jsonl [...]
+  python -m draftzero.eval.analyze ratings DIR_OR_FILE [...] [--min-games 200] [--anchor sbtactical] [--json OUT]
+  python -m draftzero.eval.analyze gih RUN.jsonl [...] [--min-games 30] [--side A] [--json OUT]
+  python -m draftzero.eval.analyze speed RUN.jsonl.summary.json [...]
 
-wins   A's score (a draw or a turn-capped game counts half; engine errors are dropped), with a 95%
-       interval. In paired runs both games of a deck pair share a seed and swap the policies, so the
-       pair is the sampling unit.
-gih    17lands' games-in-hand win rate from the simulated games: per card, the win rate of the seats
-       that had it in hand (kept opening hand or drawn), over games with a winner. Spearman rank
-       correlation with 17lands' FDN Premier Draft GIH WR (assets/reference/FDN_gih.json), over
-       commons and over every non-basic card with at least --min-games games in hand, as in
-       docs/019 §4.4. Also the spread of the commons' win rates and the colour-pair records.
-speed  games per hour from each run's summary.
+wins     A's score in each file over complete deck pairs (eval.paired: a draw or stall counts half, engine
+         errors are dropped with their pair), with a 95% interval over pairs.
+ratings  one Bradley-Terry fit (eval.ratings) over every non-self-play games file; a player is its policy spec
+         with the shared search keys dropped and a network named by its directory.
+gih      17lands' games-in-hand win rate from the simulated games and its Spearman correlation with 17lands'
+         (eval.gih), over commons and over every non-basic card with --min-games games in hand (use 100 to
+         match docs/019), plus the colour pairs' records.
+speed    games per hour from each run's summary.
 """
 from __future__ import annotations
 
 import argparse
-import csv
 import json
-import math
-from collections import defaultdict
 from pathlib import Path
 
-import numpy as np
-
-from draftzero.data.paths import REPO
-
-REFERENCE = REPO / "assets" / "reference" / "FDN_gih.json"
-RARITY = REPO / "assets" / "cards" / "FDN_card_ids.tsv"
-POOL = REPO / "data" / "gorge" / "pool.tsv"
-BASICS = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
+from draftzero.eval import gih as gihmod
+from draftzero.eval.paired import policies, score_pairs
+from draftzero.eval.ratings import game_triples, table
 
 
 def load(paths) -> list[dict]:
+    """games.jsonl rows; a killed run's partial last line is skipped."""
     out = []
     for p in paths:
         with open(p) as f:
-            out += [json.loads(l) for l in f if l.strip()]
+            for line in f:
+                if line.strip():
+                    try:
+                        out.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
     return out
 
 
-def points(g: dict) -> float | None:
-    """A's points in one game: 1 win, 0.5 draw or stall, 0 loss; None for an engine error."""
-    return {"A": 1.0, "B": 0.0, "draw": 0.5, "stall": 0.5}.get(g["result"])
+def games_files(paths) -> list[Path]:
+    """Files as given, and every games file under directories (no chunk, audit or visit files)."""
+    out = []
+    for p in map(Path, paths):
+        if p.is_dir():
+            out += sorted(f for f in p.rglob("*.jsonl")
+                          if not any(x in f.name for x in (".chunk", "audit", "visits", "corpus")))
+        else:
+            out.append(p)
+    return out
 
 
-def score(games: list[dict]) -> dict:
-    by_pair = defaultdict(list)
-    for g in games:
-        p = points(g)
-        if p is not None:
-            by_pair[g["pair"]].append(p)
-    pair_means = np.array([np.mean(v) for v in by_pair.values()])
-    n_games = sum(len(v) for v in by_pair.values())
-    if len(pair_means) == 0:
-        return {"games": 0}
-    s = float(np.mean(pair_means))
-    se = float(np.std(pair_means, ddof=1) / math.sqrt(len(pair_means))) if len(pair_means) > 1 else float("nan")
-    return {"games": n_games, "pairs": len(pair_means), "score": s,
-            "lo": max(0.0, s - 1.96 * se), "hi": min(1.0, s + 1.96 * se),
-            "errors": sum(g["result"] == "error" for g in games),
-            "stalls": sum(g["result"] == "stall" for g in games),
-            "turns": float(np.mean([g["turns"] for g in games]))}
+def _pct(x) -> str:
+    return "  n/a" if x is None else f"{100 * x:5.1f}"
 
 
 def cmd_wins(a):
     for p in a.games:
         games = load([p])
-        r = score(games)
-        if not r["games"]:
-            print(f"{p}: no games")
+        r = score_pairs(games)
+        if not r["n_pairs"]:
+            print(f"{p}: no complete pairs ({len(games)} games, {r['errors']} errors)")
             continue
-        pols = games[0]["pols"] if games[0]["side"][0] == "A" else games[0]["pols"][::-1]
-        print(f"{Path(p).stem:24s} {pols[0]:>28s} vs {pols[1]:<28s} {r['score']:.3f} [{r['lo']:.3f}, {r['hi']:.3f}]"
-              f"  {r['games']} games / {r['pairs']} pairs, {r['stalls']} stalls, {r['errors']} errors, {r['turns']:.1f} turns")
+        pols = policies(games)
+        turns = sum(g.get("turns", 0) for g in games) / max(len(games), 1)
+        print(f"{Path(p).stem:24s} {'|'.join(sorted(pols['A'])):>28s} vs {'|'.join(sorted(pols['B'])):<28s}"
+              f" {_pct(r['score'])}% [{_pct(r['lo'])}, {_pct(r['hi'])}]  {r['n_games']} games / {r['n_pairs']} pairs,"
+              f" {r['stalls']} stalls, {r['errors']} errors, {turns:.1f} turns")
 
 
-def ranks(x: np.ndarray) -> np.ndarray:
-    order = np.argsort(x, kind="mergesort")
-    r = np.empty(len(x), float)
-    xs = x[order]
-    i = 0
-    while i < len(x):
-        j = i
-        while j + 1 < len(x) and xs[j + 1] == xs[i]:
-            j += 1
-        r[order[i:j + 1]] = (i + j) / 2 + 1
-        i = j + 1
-    return r
-
-
-def spearman(a, b) -> float:
-    ra, rb = ranks(np.asarray(a, float)), ranks(np.asarray(b, float))
-    if len(ra) < 3 or ra.std() == 0 or rb.std() == 0:
-        return float("nan")
-    return float(np.corrcoef(ra, rb)[0, 1])
-
-
-def rarity() -> dict[str, str]:
-    out: dict[str, str] = {}
-    with open(RARITY) as f:
-        for r in csv.DictReader((l for l in f if not l.startswith("#")), delimiter="\t"):
-            if r.get("expansion") == "FDN" or r["name"] not in out:
-                out[r["name"]] = r.get("rarity", "")
-    return out
-
-
-def gih(games: list[dict], side: str | None = None):
-    """card -> [games in hand, wins]; deck colours -> [games, wins]; player-games counted."""
-    cards: dict[str, list[int]] = defaultdict(lambda: [0, 0])
-    decks: list[tuple[str, int]] = []
-    seats = 0
-    for g in games:
-        if g["result"] not in ("A", "B"):
-            continue
-        for s in (0, 1):
-            if side and g["side"][s] != side:
-                continue
-            seats += 1
-            won = int(g["winner"] == s)
-            for c in set(g["in_hand"][s] or []):
-                cards[c][0] += 1
-                cards[c][1] += won
-            decks.append((g["decks"][s], won))
-    return cards, decks, seats
-
-
-def deck_colors() -> dict[str, str]:
-    with open(POOL) as f:
-        return {r["deck"]: r["main_colors"] for r in csv.DictReader(f, delimiter="\t")}
-
-
-def gih_report(games: list[dict], min_games: int, side: str | None = None) -> dict:
-    ref_all = json.loads(REFERENCE.read_text())
-    ref = ref_all["cards"]
-    rar = rarity()
-    cards, decks, seats = gih(games, side)
-    out = {"games": len(games), "player_games": seats, "min_games": min_games}
-    for label, keep in (("commons", lambda c: rar.get(c) == "common"), ("all", lambda c: True)):
-        rows = [(c, n, w / n, ref[c]["gih_wr"]) for c, (n, w) in cards.items()
-                if c not in BASICS and c in ref and n >= min_games and keep(c)]
-        sim = np.array([r[2] for r in rows])
-        hum = np.array([r[3] for r in rows])
-        out[label] = {"cards": len(rows), "spearman": spearman(sim, hum),
-                      "sd_sim": float(sim.std()) if len(rows) else float("nan"),
-                      "sd_17lands": float(hum.std()) if len(rows) else float("nan"),
-                      "rows": sorted(rows, key=lambda r: -r[2])}
-    # Colour pairs: the decks' main colours, two-colour decks only.
-    col = deck_colors()
-    by = defaultdict(lambda: [0, 0])
-    for d, w in decks:
-        c = col.get(d, "")
-        if len(c) == 2:
-            by[c][0] += 1
-            by[c][1] += w
-    refc = ref_all["colors"]
-    pairs = sorted(c for c in by if c in refc)
-    out["colors"] = {"rows": {c: {"games": by[c][0], "wr": by[c][1] / by[c][0], "ref_wr": refc[c]["wr"]} for c in pairs},
-                     "spearman": spearman([by[c][1] / by[c][0] for c in pairs], [refc[c]["wr"] for c in pairs])}
-    return out
+def cmd_ratings(a):
+    triples = []
+    for f in games_files(a.paths):
+        triples += game_triples(load([f]))
+    rows = table(triples, anchor=a.anchor, min_games=a.min_games)
+    print(f"{len(triples):,} games; Elo points, {a.anchor} = 0")
+    for r in rows:
+        print(f"{r['elo']:7.0f} ± {r['se']:3.0f}  {r['games']:6.0f} games  {r['player']}")
+    if a.json:
+        Path(a.json).write_text(json.dumps(rows, indent=1))
 
 
 def cmd_gih(a):
     games = load(a.games)
-    r = gih_report(games, a.min_games, a.side)
+    r = gihmod.gih_report(games, a.min_games, a.side)
     print(f"{r['games']:,} games, {r['player_games']:,} player-games with a winner")
     for label in ("commons", "all"):
         x = r[label]
-        print(f"{label:8s} {x['cards']:3d} cards with {a.min_games}+ games in hand: Spearman {x['spearman']:.3f} vs 17lands;"
-              f" SD of win rates {100 * x['sd_sim']:.1f} pts (17lands {100 * x['sd_17lands']:.1f})")
+        rho = "n/a" if x["spearman"] is None else f"{x['spearman']:.3f}"
+        sd = "n/a" if x["sd_sim"] is None else f"{100 * x['sd_sim']:.1f} pts (17lands {100 * x['sd_17lands']:.1f})"
+        print(f"{label:8s} {x['cards']:3d} cards with {a.min_games}+ games in hand: Spearman {rho} vs 17lands;"
+              f" SD of win rates {sd}")
     c = r["colors"]
-    print(f"colour pairs: Spearman {c['spearman']:.3f} vs 17lands; " +
+    rho = "n/a" if c["spearman"] is None else f"{c['spearman']:.3f}"
+    print(f"colour pairs: Spearman {rho} vs 17lands; " +
           ", ".join(f"{k} {v['wr']:.3f}" for k, v in sorted(c["rows"].items(), key=lambda kv: -kv[1]["wr"])))
     rows = r["commons"]["rows"]
     if rows:
-        avg_s, avg_h = np.mean([x[2] for x in rows]), np.mean([x[3] for x in rows])
+        avg_s = sum(x[2] for x in rows) / len(rows)
+        avg_h = sum(x[3] for x in rows) / len(rows)
         print("\nbest commons in the simulation (points above each source's commons average):")
         for card, n, s, h in rows[:8]:
             print(f"  {card:28s} sim {100 * (s - avg_s):+5.1f} ({n:6d})  17lands {100 * (h - avg_h):+5.1f}")
@@ -202,6 +126,12 @@ def main(argv=None):
     w = sub.add_parser("wins")
     w.add_argument("games", nargs="+")
     w.set_defaults(fn=cmd_wins)
+    r = sub.add_parser("ratings")
+    r.add_argument("paths", nargs="+")
+    r.add_argument("--min-games", type=float, default=200)
+    r.add_argument("--anchor", default="sbtactical")
+    r.add_argument("--json", default=None)
+    r.set_defaults(fn=cmd_ratings)
     g = sub.add_parser("gih")
     g.add_argument("games", nargs="+")
     g.add_argument("--min-games", type=int, default=30)
