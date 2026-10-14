@@ -5,6 +5,10 @@
     evaluator   --config C [--store S] [--machine M] [--work-dir DIR]                    play evaluation shards
     controller  --config C [--store S] [--once] [--status-every SECS]                    control.json, plan, status
     local       --config C [--store S] [--actors N] [--work-dir DIR] [--max-hours H]     every role on this machine
+                [--builder-actors M]
+    builder-actor      --config C [--store S] [--machine M] [--work-dir DIR] [--max-chunks N]   (builder.learn)
+    builder-learner    --config C [--store S] [--machine M] [--work-dir DIR]                    deck builder roles:
+    builder-evaluator  --config C [--store S] [--machine M] [--work-dir DIR]                    draftzero.loop.builder
     status      [STORE] [--json]                                                         print status.md
     stop        [STORE]                                                                  ask the controller to stop
     plan        [STORE] set PATH=VALUE [PATH=VALUE ...] [--before-start]                 a live config change
@@ -32,7 +36,8 @@ import sys
 import time
 from pathlib import Path
 
-ROLES = ("actor", "learner", "evaluator", "controller", "local")
+BUILDER_ROLES = ("builder-actor", "builder-learner", "builder-evaluator")
+ROLES = ("actor", "learner", "evaluator", "controller", "local") + BUILDER_ROLES
 COMMANDS = ROLES + ("status", "stop", "plan")
 HELP = {
     "actor": "play self-play chunks with the current version and upload them as shards (many, on any machine)",
@@ -41,6 +46,12 @@ HELP = {
     "controller": "write config.yml, manifest.json and control.json; apply plan changes; assign evaluation "
                   "shards; write status.md and status.json; stop the run at stop.request or the budget (one)",
     "local": "every role on this machine as separate processes sharing one store (`dz run`)",
+    "builder-actor": "build sealed decks with the current builder version, play them and upload the results as "
+                     "builder shards (builder.learn; many, on any machine)",
+    "builder-learner": "fit the deck value ensemble on the newest builder shards and publish builder versions "
+                       "(builder.learn; one per run, holding a lease)",
+    "builder-evaluator": "play the builder evaluation shards the controller assigns to this machine (each builder "
+                         "version's decks against best23's on held-out pools) and score finished jobs",
     "status": "print the run's status page (status.md, or status.json with --json)",
     "stop": "ask the controller to stop the run (writes stop.request)",
     "plan": "request a live config change (`set PATH=VALUE ...`) or list requested, rejected and applied ones",
@@ -82,7 +93,7 @@ def _parser(prog: str = "python -m draftzero.loop.cli") -> argparse.ArgumentPars
                            help="this process's name in the store; unique per actor (default: the host name)")
             p.add_argument("--work-dir", type=Path, default=None,
                            help="local cache and logs (default runs/<run>/work/...)")
-        if role == "actor":
+        if role in ("actor", "builder-actor"):
             p.add_argument("--max-chunks", type=int, default=None, help="exit after this many chunks")
         if role == "controller":
             p.add_argument("--once", action="store_true", help="one tick, then exit")
@@ -91,6 +102,8 @@ def _parser(prog: str = "python -m draftzero.loop.cli") -> argparse.ArgumentPars
             p.add_argument("--actors", type=int, default=1, help="actor processes (default 1)")
             p.add_argument("--max-hours", type=float, default=None,
                            help="stop the run after this long (exit code 2)")
+            p.add_argument("--builder-actors", type=int, default=1,
+                           help="builder actor processes when the config's builder.learn is on (default 1)")
         if role in ("controller", "local"):
             p.add_argument("--allow-config-change", action="store_true",
                            help=("passed on to the controller: " if role == "local" else "") + ALLOW_HELP)
@@ -135,7 +148,9 @@ def main(argv=None, prog: str | None = None) -> int:
         from draftzero.loop import local
         wd = a.work_dir or Path("runs") / run / "work"
         return local.run(a.config, store_spec, wd, machine=a.machine or "local", actors=a.actors,
-                         max_hours=a.max_hours, poll_s=a.poll, log=_log, allow_config_change=a.allow_config_change)
+                         max_hours=a.max_hours, poll_s=a.poll, log=_log, allow_config_change=a.allow_config_change,
+                         player=bool(ctl.get(cfg, "player.learn", True)),
+                         builder=bool(ctl.get(cfg, "builder.learn", False)), builder_actors=a.builder_actors)
 
     _sigterm_exits()
     store = open_store(store_spec)
@@ -150,6 +165,8 @@ def main(argv=None, prog: str | None = None) -> int:
         return controller.run(poll_s=poll, once=a.once)
     machine = ctl.check_name(a.machine or (_host() if a.role == "actor" else f"{_host()}-{a.role}"))
     wd = a.work_dir or Path("runs") / run / "work" / f"{a.role}-{machine}"
+    if a.role in BUILDER_ROLES:
+        return _builder_role(a, cfg, store, machine, wd, poll)
     if a.role == "actor":
         from draftzero.loop.actor import Actor
         return Actor(store, cfg, machine, wd, log=_log, poll_s=poll).run(max_chunks=a.max_chunks)
@@ -163,6 +180,30 @@ def main(argv=None, prog: str | None = None) -> int:
             return learner.run()
         except LeaseHeld as e:
             _log(f"learner: {e}; waiting")
+            c = ctl.read(store)
+            if c and c.get("stop"):
+                return 0
+            time.sleep(poll)
+
+
+def _builder_role(a, cfg, store, machine: str, wd: Path, poll: float) -> int:
+    """builder-actor, builder-learner or builder-evaluator (draftzero.loop.builder); refused without builder.learn."""
+    from draftzero.loop import builder as bld
+    from draftzero.loop import control as ctl
+    if not bld.enabled(cfg):
+        print(f"{a.role}: the config's builder.learn is false: this run has no deck builder to train", file=sys.stderr)
+        return 2
+    if a.role == "builder-actor":
+        return bld.BuilderActor(store, cfg, machine, wd, log=_log, poll_s=poll).run(max_chunks=a.max_chunks)
+    if a.role == "builder-evaluator":
+        return bld.BuilderEvaluator(store, cfg, machine, wd, log=_log, poll_s=poll).run()
+    from draftzero.loop.learner import LeaseHeld
+    learner = bld.BuilderLearner(store, cfg, machine, wd, log=_log, poll_s=poll)
+    while True:
+        try:
+            return learner.run()
+        except LeaseHeld as e:
+            _log(f"builder learner: {e}; waiting")
             c = ctl.read(store)
             if c and c.get("stop"):
                 return 0

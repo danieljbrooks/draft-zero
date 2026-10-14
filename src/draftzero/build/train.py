@@ -30,6 +30,10 @@ def split_games(games, frac=0.05):
 
 
 def evaluate(ens, games, decks):
+    """Held-out log-loss and accuracy of the ensemble's mean prediction, and the log-loss of knowing only who played
+    first; games 0 (and None for the rest) without a decided game."""
+    if not any(g.get("winner", -1) in (0, 1) and all(d in decks for d in g["decks"]) for g in games):
+        return {"games": 0, "logloss": None, "base_logloss": None, "acc": None}
     A, B, P, Y = M.games_tensors(games, decks)
     with torch.no_grad():
         s = np.mean([(m(A) - m(B) + m.beta * P).numpy() for m in ens.members], 0)
@@ -45,7 +49,18 @@ def evaluate(ens, games, decks):
 def fit(gen_dirs, members=5, epochs=40, init=None, log=print, weights=None, draws=False, castable=False, **kw):
     decks = S.load_decks([os.path.join(g, "decks.jsonl") for g in gen_dirs])
     games = S.load_games([os.path.join(g, "games.jsonl") for g in gen_dirs])
+    return fit_games(decks, games, members, epochs, init=init, log=log, draws=draws, castable=castable, **kw)
+
+
+def fit_games(decks, games, members=5, epochs=40, init=None, log=print, draws=False, castable=False, **kw):
+    """An ensemble of `members` DeckNets on `games` (dicts with decks, winner, starter, seed) between `decks`
+    (name -> count vector), each on a bootstrap resample when members > 1, early-stopped on the held-out 5% of
+    pairings (split_games); member k starts from init's member k mod its size. Only decided games between known
+    decks count (a draw, stall or skipped game says nothing here). -> (Ensemble, held-out report)."""
+    games = [g for g in games if g.get("winner", -1) in (0, 1) and all(d in decks for d in g.get("decks", ()))]
     tr, va = split_games(games)
+    if not tr:
+        raise ValueError(f"no decided game to train on ({len(va)} held out)")
     log(f"{len(games):,} games ({len(tr):,} train, {len(va):,} held out), {len(decks):,} decks")
     ms = []
     for k in range(members):

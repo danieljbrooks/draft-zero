@@ -6,7 +6,9 @@ The same programs as on many machines; only the store differs.
 
 Starts the controller, the learner, one evaluator and N actors (`python -m draftzero.loop.cli <role>`), each in its
 own session with its log in <work-dir>/logs/<role>.log and its cache in <work-dir>/<role>-<machine>
-(--allow-config-change goes on to the controller). It returns once the controller has stopped the run (budget,
+(--allow-config-change goes on to the controller). With builder.learn it also starts the builder learner, one builder
+evaluator and M builder actors (--builder-actors, default 1); with player.learn false, no player learner, evaluator
+or actors. It returns once the controller has stopped the run (budget,
 `stop`) and the others have followed. If a role dies, or at --max-hours, it asks the run to stop (stop.request) and
 waits up to `grace_s` for the roles to exit. If the controller itself fails, nothing would act on a stop.request, so
 it stops the others at once and leaves none in the store (a stop.request it wrote that no controller acted on is
@@ -32,18 +34,26 @@ REPO_SRC = Path(__file__).resolve().parents[2]
 
 
 def role_commands(config: str, store: str, work_dir: Path, machine: str, actors: int,
-                  poll_s: float | None = None, allow_config_change: bool = False) -> dict[str, list[str]]:
-    """{log name: argv} for every role; allow_config_change goes to the controller (--allow-config-change)."""
+                  poll_s: float | None = None, allow_config_change: bool = False, *, player: bool = True,
+                  builder: bool = False, builder_actors: int = 1) -> dict[str, list[str]]:
+    """{log name: argv} for every role; allow_config_change goes to the controller (--allow-config-change).
+    player: the player's learner, evaluator and actors (player.learn); builder: the builder's (builder.learn)."""
     base = [sys.executable, "-m", "draftzero.loop.cli"]
     common = ["--config", str(config), "--store", str(store)] + (["--poll", str(poll_s)] if poll_s else [])
 
     def role(name: str, m: str) -> list[str]:
         return base + [name, *common, "--machine", m, "--work-dir", str(work_dir / f"{name}-{m}")]
-    cmds = {"controller": base + ["controller", *common] + (["--allow-config-change"] if allow_config_change else []),
-            "learner": role("learner", f"{machine}-learner"),
-            "evaluator": role("evaluator", f"{machine}-evaluator")}
-    for i in range(actors):
-        cmds[f"actor-{i}"] = role("actor", f"{machine}-{i}")
+    cmds = {"controller": base + ["controller", *common] + (["--allow-config-change"] if allow_config_change else [])}
+    if player:
+        cmds["learner"] = role("learner", f"{machine}-learner")
+        cmds["evaluator"] = role("evaluator", f"{machine}-evaluator")
+        for i in range(actors):
+            cmds[f"actor-{i}"] = role("actor", f"{machine}-{i}")
+    if builder:
+        cmds["builder-learner"] = role("builder-learner", f"{machine}-builder-learner")
+        cmds["builder-evaluator"] = role("builder-evaluator", f"{machine}-builder-evaluator")
+        for i in range(builder_actors):
+            cmds[f"builder-actor-{i}"] = role("builder-actor", f"{machine}-b{i}")
     return cmds
 
 
@@ -105,14 +115,16 @@ def _set_handlers(sigs, handler) -> dict:
 
 def run(config: str, store: str, work_dir: Path, *, machine: str = "local", actors: int = 1,
         max_hours: float | None = None, grace_s: float = 180.0, poll_s: float | None = None, log=print,
-        commands: dict[str, list[str]] | None = None, tick_s: float = 2.0, allow_config_change: bool = False) -> int:
+        commands: dict[str, list[str]] | None = None, tick_s: float = 2.0, allow_config_change: bool = False,
+        player: bool = True, builder: bool = False, builder_actors: int = 1) -> int:
     work_dir = Path(work_dir).resolve()
     (work_dir / "logs").mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     env["PYTHONPATH"] = str(REPO_SRC) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     env.setdefault("PYTHONUNBUFFERED", "1")
     cmds = commands or role_commands(config, store, work_dir, machine, actors, poll_s,
-                                     allow_config_change=allow_config_change)
+                                     allow_config_change=allow_config_change, player=player, builder=builder,
+                                     builder_actors=builder_actors)
     st = None
     if commands is None:
         from draftzero.loop.store import open_store

@@ -19,7 +19,7 @@ SCHEMA_KEYS = [
     "engine.name", "engine.root", "engine.census", "engine.max_turns", "engine.max_intents", "engine.mulligans",
     "engine.mull_heuristic", "engine.topk_max_options",
     "data.decks", "data.pool", "data.train_split", "data.eval_split",
-    "player.arch", "player.config", "player.init",
+    "player.arch", "player.config", "player.init", "player.learn",
     "search.keys", "search.topk", "search.cpuct", "search.closedlist", "search.belief.decks", "search.belief.pool",
     "search.belief.split",
     "actor.sims", "actor.explore", "actor.record_every", "actor.chunk_games", "actor.chunk_secs", "actor.workers",
@@ -31,6 +31,14 @@ SCHEMA_KEYS = [
     "learner.window.beta",
     "eval.every_versions", "eval.sims", "eval.pairs", "eval.seed", "eval.workers", "eval.opponents",
     "store", "tracking.trackio", "tracking.project", "sync.games_per_version", "paused",
+    "builder.learn", "builder.kinds", "builder.random_share", "builder.members", "builder.pools_per_chunk",
+    "builder.games_per_chunk", "builder.games_per_version", "builder.sims", "builder.pilot", "builder.closedlist",
+    "builder.workers", "builder.chunk_secs", "builder.init", "builder.window.kind", "builder.window.size",
+    "builder.warm_start", "builder.epochs", "builder.lr", "builder.warm_lr", "builder.draws", "builder.castable",
+    "builder.land_support", "builder.threads", "builder.pools.kind", "builder.pools.set", "builder.pools.seed",
+    "builder.pools.packs", "builder.pools.collation", "builder.pools.count", "builder.eval.every_versions",
+    "builder.eval.pools", "builder.eval.pairs", "builder.eval.seed", "builder.eval.sims", "builder.eval.opponent",
+    "builder.eval.workers",
 ]
 LIVE = {
     "actor.sims", "actor.pcr.prob", "actor.pcr.cheap_sims", "actor.pcr.by_kind", "actor.record_every",

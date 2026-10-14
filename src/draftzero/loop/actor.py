@@ -124,6 +124,8 @@ class Actor:
             return "stop"
         if c.get("paused"):
             return self._idle("paused", "the run is paused", ret="paused")
+        if not ctl.get(self.cfg, "player.learn", True):
+            return self._idle("waiting", "player.learn is false: this run trains no player (start builder actors)")
         v = ctl.player_version(c)
         if v is None:
             return self._idle("waiting", "waiting for the learner to publish version 0")

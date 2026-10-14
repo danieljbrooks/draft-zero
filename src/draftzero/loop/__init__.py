@@ -7,6 +7,7 @@
     evaluator   plays each new version against eval.opponents in paired games (a few)
     controller  the only writer of control.json: versions, plan changes, evaluation jobs, budget, status.md
     relay       moves shards and versions between a token-less machine's folder and the bucket, over ssh
+    builder     the deck builder's actor, learner and evaluator (builder.learn; off by default)
     local       every role on one machine, as separate processes sharing a store
     cli         python -m draftzero.loop.cli <role>
 """

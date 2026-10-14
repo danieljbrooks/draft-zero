@@ -18,6 +18,7 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 - Evaluation (`draftzero.eval`): paired-game scoring, SPRT, Bradley–Terry ratings; `sbtactical` and `nonet` as standard opponents. Standard figures in `draftzero.plots`.
 - `draftzero.oppdeck`: a belief corpus of the run's own decks for gorge's `:closedlist`, the version-0 opponent-deck model.
 - `draftzero.hub`: `hf://owner/repo[@rev]/path` model files.
+- The deck builder on the loop (`draftzero.loop.builder`, opt-in with `builder.learn`): builder actors, a builder learner and builder evaluators train docs/032's deck value ensemble on gorge draftlab sealed pools (`dzgorge sealed-pools`, `draftzero.build.pools`) and evaluate each version against gorge's `best23@1` decks on held-out pools; `player.learn: false` makes a builder-only run. `configs/smoke-sealed.yml` is its smoke run; `dz builder-actor|builder-learner|builder-evaluator` and `dz run --builder-actors` start its roles.
 - The `dz` commands `version`, `manifest` (alias `provenance`), `run`, `actor`, `learner`, `evaluator`, `controller`, `plan`, `status`, `stop`, `report`, `models pull`, `play`, `eval`, `engine build|version|coverage`, `pod up|down|list|balance|offers` (RunPod pods for relay actors; `up` requires `--max-price` and `--max-hours`) and `relay`.
 - `assets/sample/`: 80 FDN decks in gorge's format (40 train, 40 eval), which the smoke configs play.
 - CI: `.github/workflows/ci.yml` runs the unit and contract tests on Python 3.11 and 3.12.
@@ -55,6 +56,12 @@ All ten rigid interfaces are named and versioned for the first time.
 8. **Run config schema:** new (`src/draftzero/config.py`). v0.1.0 configs do not load.
 9. **Run manifest and metrics schema:** new: `draftzero-manifest/1` and `draftzero-metrics/1`. The manifest's `belief` key records the `:closedlist` belief corpus (decks, pool, split and `corpus_hash`), or null without `:closedlist`.
 10. **Evaluation protocol and data splits:** paired games on the eval split at seed 3131 against `prev` and `sbtactical` by default; the splits in `assets/decks.tsv` and `assets/sealed/` are unchanged.
+
+Pending Dan's review (the deck builder on the loop, branch `wip/sealedloop`):
+
+- 3: a new driver command on the fork, `dzgorge sealed-pools` (branch `draftzero-sealed`, `8aa1f37dc`; not yet in `GORGE_REF`).
+- 8: the `builder` section and `player.learn` (both default to the player loop as it was).
+- 10: a new evaluation, builder version v's decks against `best23@1`'s on held-out draftlab pools (`builder.eval`; `draftzero.loop.builder.score_match`).
 
 ## [0.1.0] - 2026-10-14
 

@@ -31,7 +31,7 @@ def test_defaults_are_the_contract_values(cfg):
                            "max_intents": 20000, "mulligans": 2, "mull_heuristic": True, "topk_max_options": 64}
     assert d["data"] == {"decks": "data/gorge/decks", "pool": "data/gorge/pool.tsv", "train_split": "train",
                          "eval_split": "eval"}
-    assert d["player"] == {"arch": "mlp", "init": None,
+    assert d["player"] == {"arch": "mlp", "init": None, "learn": True,
                            "config": {"d": 128, "ff": 256, "layers": 1, "d_emb": 32, "card_d": 64, "head_hidden": 128}}
     assert d["search"] == {"keys": ["autopay", "oppnodes", "oppfull", "morekinds"], "topk": 6, "cpuct": 0.25,
                            "closedlist": True, "belief": {"decks": None, "pool": None, "split": "train"}}
@@ -46,6 +46,47 @@ def test_defaults_are_the_contract_values(cfg):
                          "opponents": ["prev", "sbtactical"]}
     assert d["store"] == "runs/smoke" and d["tracking"] == {"trackio": False, "project": "draftzero"}
     assert d["sync"] == {"games_per_version": 200} and d["paused"] is False
+    assert d["builder"] == {
+        "learn": False, "kinds": "btplr", "random_share": 0.15, "members": 5, "pools_per_chunk": 50,
+        "games_per_chunk": 400, "games_per_version": 10000, "sims": None, "pilot": None, "closedlist": False,
+        "workers": 2, "chunk_secs": 3600, "init": None, "window": {"kind": "versions", "size": 4}, "warm_start": True,
+        "epochs": 40, "lr": 3e-3, "warm_lr": 1e-3, "draws": False, "castable": False, "land_support": 0.02,
+        "threads": 4, "pools": {"kind": "draftlab", "set": "FDN", "seed": 1, "packs": 6, "collation": "arena",
+                                "count": 5000},
+        "eval": {"every_versions": 1, "pools": 200, "pairs": 1, "seed": 2, "sims": 100, "opponent": "best23",
+                 "workers": 2}}
+
+
+@pytest.mark.parametrize("over, path", [
+    ({"builder": {"kinds": "bx"}}, "builder.kinds"),
+    ({"builder": {"kinds": ""}}, "builder.kinds"),
+    ({"builder": {"games_per_chunk": 15}}, "builder.games_per_chunk"),
+    ({"builder": {"pools_per_chunk": 1}}, "builder.pools_per_chunk"),
+    ({"builder": {"sims": -1}}, "builder.sims"),
+    ({"builder": {"pilot": "/x/model.pt"}}, "builder.pilot"),
+    ({"builder": {"pilot": "/x:y/model.dzgw"}}, "builder.pilot"),
+    ({"builder": {"window": {"kind": "hours"}}}, "builder.window.kind"),
+    ({"builder": {"land_support": 0.5}}, "builder.land_support"),
+    ({"builder": {"pools": {"set": "BLB"}}}, "builder.pools.set"),
+    ({"builder": {"pools": {"collation": "draft"}}}, "builder.pools.collation"),
+    ({"builder": {"pools": {"count": 10}}}, "builder.pools.count"),
+    ({"builder": {"eval": {"pools": 3}}}, "builder.eval.pools"),
+    ({"builder": {"eval": {"seed": 1}}}, "builder.eval.seed"),
+    ({"builder": {"eval": {"opponent": "random"}}}, "builder.eval.opponent"),
+    ({"player": {"learn": False}}, "player.learn"),
+])
+def test_builder_checks(over, path):
+    with pytest.raises(C.ConfigError) as e:
+        C.from_dict({"run": "t", **over})
+    assert e.value.path == path
+
+
+def test_builder_only_run_loads_and_its_machine_paths_are_machine():
+    cfg = C.from_dict({"run": "t", "player": {"learn": False},
+                       "builder": {"learn": True, "pilot": "/nets/b7.dzgw", "kinds": "bt"}})
+    assert not cfg.player.learn and cfg.builder.learn and cfg.builder.pilot == "/nets/b7.dzgw"
+    assert {"builder.pilot", "builder.init"} <= C.MACHINE
+    assert not C.is_live("builder.learn") and not C.is_live("builder.games_per_chunk")
 
 
 def test_defaults_are_not_shared_between_configs():

@@ -32,6 +32,8 @@ relay/                                     the relay's last sync and upload ledg
 stop.request                               present = stop the run
 ```
 
+A run with `builder.learn` (below) adds `versions/builder/v0001/` (`ens.pt`, `meta.json`) and `versions/builder/latest.json`, `builder/shards/<actor>/000001/` (`decks.jsonl`, `games.jsonl`, `meta.json`), `builder/learner/` (lease, ingested shards, status) and evaluation jobs `evals/builder-v0001-vs-best23/`.
+
 Each metrics line has the time, run, component, machine, metric name, value and, when they apply, the version, step, sample size and 95% interval. Standard names include `throughput.games_per_hour`, `learn.policy_ce`, `learn.value_logloss`, `eval.score` and `eval.elo`.
 
 ### Running one
@@ -84,6 +86,49 @@ it). None is live: they are fixed for a run, but `learner.window_positions` stay
 
 The training log's `policy_ce` and `value_logloss` are always unweighted. Model selection uses the unweighted
 holdout total.
+
+### The deck builder on the loop (opt-in)
+
+`builder.learn: true` trains docs/032's sealed deck builder (`draftzero.build`) on the same store, beside the player
+or alone (`player.learn: false`). It is tabula rasa: the train pools are gorge draftlab sealed pools, made by the
+fork's `dzgorge sealed-pools` (six FDN Play Boosters a pool, a pure function of the seed and the pool's index) and
+cached once per machine; no 17lands pool or human decklist enters. `configs/smoke-sealed.yml` is the smallest such
+run; it needs a `dzgorge` with `sealed-pools` (the fork's `draftzero-sealed` branch) until the pin includes it:
+
+```bash
+dz run configs/smoke-sealed.yml --set engine.root=DIR     # DIR: bin/dzgorge with sealed-pools, and .cards
+dz builder-actor --config C --store S --machine pod1      # more builder actors, on any machine
+```
+
+| Role | How many | What it does |
+| --- | --- | --- |
+| Builder actor | many (`dz run --builder-actors M`, default 1) | Draws `pools_per_chunk` train pools, builds a deck of each kind in `kinds` from each with the current builder version (b best, t Thompson, p perturbed, l land-shifted, r random; version 0 is untrained: four random deck-shaped decks a pool), pairs decks of different pools, each pairing dealt twice with the seats swapped, and plays them with `dzgorge play -deckfile -pairs-file -single`. Idles once the version has `games_per_version` decided games |
+| Builder learner | one (a lease) | Fits a `members`-network ensemble (Bradley–Terry on the results, bootstrap resamples) on the window's games, warm-started from the previous version, bounds the land count by `land_support`, publishes `versions/builder/vNNNN/ens.pt` |
+| Builder evaluator | one or more | Plays each version's best decks against gorge's `best23@1` decks on `eval.pools` held-out pools (another seed): pools 2i and 2i+1 crossed, each crossing dealt `eval.pairs` times, both seat orders; `evals/builder-vNNNN-vs-best23/summary.json` and `eval.score` (opponent `best23`, tag `model: builder`) |
+
+The pilot of every builder game is `builder.pilot` (a fixed `.dzgw`) when set, else the player version actors play
+now (its `.dzgw`; an evaluation job keeps the version current when it opened), else the search without a network,
+at `builder.sims` simulations (null: `actor.sims`; 0: gorge's heuristic bot) with `builder.closedlist` (default off,
+as in docs/032). `budget.max_versions` counts every learning component's versions: the run drains once each has
+reached it. In a builder-only run, plan changes wait for builder versions. No `builder.*` field is live yet.
+
+| Field | Default | What it does |
+| --- | --- | --- |
+| `player.learn` | `true` | `false`: no player actors, learner or evaluator (needs `builder.learn`) |
+| `builder.learn` | `false` | Start the builder's roles; off, nothing of the builder runs and control.json has no builder fields |
+| `builder.kinds`, `random_share` | `btplr`, `0.15` | Decks per pool (also `c` cautious, `k` a random colour pair); `r` is a wide random build with probability `random_share`, else Thompson |
+| `builder.members`, `epochs`, `lr`, `warm_lr`, `warm_start` | 5, 40, 3e-3, 1e-3, true | The ensemble and its training (`build.train.fit_games`; early stopping on 5% of pairings) |
+| `builder.pools_per_chunk`, `games_per_chunk`, `games_per_version` | 50, 400, 10000 | A chunk's pools and games; decided games of a version before the next one (docs/032's generation: 10k–40k games, 600–800 pools) |
+| `builder.window` | `{kind: versions, size: 4}` | The newest 4 versions' games, or `{kind: games, size: N}`: the newest shards holding N decided games |
+| `builder.draws`, `castable`, `land_support` | false, false, 0.02 | docs/032's draw term, castability weighting and land range |
+| `builder.sims`, `pilot`, `closedlist`, `workers`, `chunk_secs` | null, null, false, 2, 3600 | The pilot, and each actor's dzgorge workers and chunk time limit |
+| `builder.init` | null | An `ens.pt` for version 0 (for example docs/032's released builder) instead of the untrained one |
+| `builder.pools` | `{kind: draftlab, set: FDN, seed: 1, packs: 6, collation: arena, count: 5000}` | The train pools (pool indices 0..count-1 of the seed) |
+| `builder.eval` | `{every_versions: 1, pools: 200, pairs: 1, seed: 2, sims: 100, opponent: best23, workers: 2}` | Held-out pools of another seed; 2 × pools × pairs games a version |
+
+`best23@1` ranks cards by 17lands games-in-hand win rates, so it is a yardstick, never training data. docs/033's step
+6 success criterion (docs/032's generation-1 result against the human decks) needs the 17lands val pools, which this
+evaluation does not use.
 
 For several machines, start each role on its own, against a shared store:
 

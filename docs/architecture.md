@@ -66,15 +66,16 @@ draft-zero/
     engine/           gorge.py (the Gorge class), specs.py (policy strings, interface 3)
     nets/             player networks: packfmt, data, models, targets, train, serve, client, export,
                       gonet_parity, bench, SPEC.md                (interfaces 6, 7)
-    loop/             store, control, actor, learner, evaluator, controller, local, relay, cli
+    loop/             store, control, actor, learner, evaluator, controller, local, relay, cli, builder (the
+                      deck builder's actor, learner and evaluator)
     eval/             paired games, ratings, games-in-hand statistics, 17lands reference (interface 10)
     plots/            the standard figures
     data/             17lands decks, pools and splits
-    build/            the sealed deck builder (docs/032)
+    build/            the sealed deck builder (docs/032): cards, model, build, kinds, train, pools (draftlab)
     oppdeck/          the opponent-deck belief corpus (v0: gorge's :closedlist)
     workers/          local, ssh and RunPod machines
     alerts.py secrets.py resources.py watchdog.py
-  configs/            base/player.yml, smoke.yml, smoke-distributed.yml, runs/*.yml
+  configs/            base/player.yml, smoke.yml, smoke-distributed.yml, smoke-sealed.yml, runs/*.yml
   assets/             decks.tsv, sealed/, reference/, cards/, sample/
   docs/               numbered docs, README.md (index), architecture.md, runs.md, img/
   tests/              unit/, contract/, engine/, smoke/
@@ -170,4 +171,4 @@ One game's path through the system:
 4. The learner trains the next version and exports `.pt` and `.dzgw` (7).
 5. The evaluator plays it in paired games under the evaluation protocol (10). Every step logs metrics, and the manifest records the code, engine, cards and config (8, 9).
 
-Deckbuilding and drafting sit beside play. The deck builder (`draftzero.build`, docs/032) plays its decks through `dzgorge play -deckfile -pairs-file`. gorge's `draftlab` (packs, sealed pools, drafts, events) and `gorge-agent/1` (external `pick` and `build` agents) are the environment for the learned builder and drafter. Search-based play stays in Go.
+Deckbuilding and drafting sit beside play. The deck builder (`draftzero.build`, docs/032) plays its decks through `dzgorge play -deckfile -pairs-file`; with `builder.learn` it trains on the loop (`draftzero.loop.builder`: builder actors, a builder learner and builder evaluators on the same store, versions under `versions/builder/`), on draftlab sealed pools from `dzgorge sealed-pools`. gorge's `draftlab` (packs, sealed pools, drafts, events) and `gorge-agent/1` (external `pick` and `build` agents) are the environment for the learned builder and drafter. Search-based play stays in Go.
