@@ -481,6 +481,25 @@ def test_actor_stop_pause_and_spooled_uploads(tmp_path):
     assert a.run() == 0 and r.store.read_json("heartbeats/a1.json")["state"] == "stopped"
 
 
+def test_actor_waits_for_a_version_its_store_lacks(tmp_path):
+    """control.json can name a version this host's store does not hold yet (a relay copied control.json before
+    the version): the actor waits and retries on its next poll, saying so once, instead of dying."""
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()
+    r.controller.tick()
+    a = r.actors[0]
+    assert a.step() == "played"
+    r.store.put(ctl.CONTROL, json.dumps({**r.control(), "version": {"player": 1}}).encode())
+    r.log.clear()
+    assert [a.step() for _ in range(3)] == ["wait"] * 3
+    assert len([x for x in r.log if "version 1" in x]) == 1
+    assert r.store.read_json("heartbeats/a1.json")["state"] == "waiting"
+    meta1 = {"version": 1, "net": False, "sha256": {}}
+    r.store.put_many({ctl.version_file(1, "meta.json"): json.dumps(meta1).encode()})
+    assert a.step() == "played" and r.store.read_json("shards/a1/000002/meta.json")["version"] == 1
+
+
 def test_actor_sync_mode_plays_exactly_games_per_version(tmp_path):
     r = Run(tmp_path, make_cfg(tmp_path, mode="sync", sync={"games_per_version": 10}))
     r.controller.tick()

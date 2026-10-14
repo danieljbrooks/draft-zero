@@ -4,7 +4,8 @@
   2. in sync mode, idles once the store holds sync.games_per_version games of the current version (a chunk is
      cut to what is missing, so one actor plays exactly that many);
   3. fetches the current player version's .dzgw (checked against its SHA-256); version 0 without player.init
-     has no network: the search runs on its own priors, without topk;
+     has no network: the search runs on its own priors, without topk. A version control.json names but the
+     store lacks (a relay host that has control.json before the version) is waited for, not an error;
   4. plays one chunk of self-play games, the same spec on both seats: Gorge.play(spec, spec, pairs=chunk_games,
      record=True, record_every, timeout=chunk_secs) on the train split, with exploration and :closedlist;
   5. uploads the shard (corpus.jsonl.gz, games.jsonl, meta.json last), its heartbeat and its metrics in ONE
@@ -83,7 +84,7 @@ class Actor:
         self.versions: dict[int, Path | None] = {}
         self.games = self.records = self.chunks = self.failed = 0
         self.last = {}                 # the last chunk's numbers, for the heartbeat
-        self.state, self.hb_time = None, 0.0
+        self.state, self.why, self.hb_time = None, None, 0.0
 
     @property
     def gorge(self):
@@ -129,19 +130,23 @@ class Actor:
             if left <= 0:
                 return self._idle("waiting", f"sync: version {v} has its {play['games_per_version']} games")
             n = min(n, left)
-        gonet = self.ensure_version(v)
+        try:
+            gonet = self.ensure_version(v)
+        except FileNotFoundError as e:              # e.g. a relay copied control.json before the version itself
+            return self._idle("waiting", f"version {v} is not in this store yet ({e}); retrying at each poll")
         spec = policy_spec(self.cfg, sims=play["sims"], explore=play.get("explore", True), gonet=gonet,
                            pcr=play.get("pcr"))
         return "played" if self.play_chunk(v, spec, n, play) else "failed"
 
     def _idle(self, state: str, why: str, force: bool = False, ret: str = "wait") -> str:
+        """Heartbeat (on a change of state, else every HEARTBEAT_EVERY_S); `why` is logged once while it holds."""
         now = time.time()
-        if state != self.state:
+        if (state, why) != (self.state, self.why):
             self.log(f"actor {self.machine}: {why}")
         if force or state != self.state or now - self.hb_time >= self.HEARTBEAT_EVERY_S:
             path, hb = self._heartbeat(state)
             self._upload({path: hb})
-        self.state = state
+        self.state, self.why = state, why
         return ret
 
     # ---------------------------------------------------------------------------- versions
