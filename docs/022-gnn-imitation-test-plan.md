@@ -1,5 +1,7 @@
 # Testing MageZero's graph network for imitation learning
 
+*Started 2026-10-04 · Applies to v0.1.0 · Plan*
+
 *A proposal, 4 October 2026 (evening, Pacific time). Will Wroble (inkling_6 on Discord) wrote a graph neural
 network (GNN) for MageZero on 3–4 October: branch `graph-encoder` of [WillWroble/mage](https://github.com/WillWroble/mage/tree/graph-encoder)
 (the state encoder) and of [WillWroble/MageZero](https://github.com/WillWroble/MageZero/tree/graph-encoder) (the

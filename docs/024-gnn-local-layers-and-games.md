@@ -1,5 +1,7 @@
 # MageZero's graph network, part 2: local layers, a full run on Dama's GPUs, and games
 
+*Started 2026-10-05 · Applies to v0.1.0 · Report*
+
 *Follows [docs/023](023-gnn-run-log.md), where the GNN at width 256 beat experiment #4's MLP and transformer on
 every offline measure (test set NLL 0.214 against 0.229 and 0.234). Started Monday 5 October 2026, 8:30 AM PT, at
 Dan's request after Will's review ("this looks great! also try to ablate GNN local layers ... the num local layers is

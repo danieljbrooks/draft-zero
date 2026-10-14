@@ -1,5 +1,7 @@
 # Human gameplay data: imitation learning and MCTS coaching
 
+*Started 2026-09-26 · Applies to v0.1.0 · Report*
+
 A feasibility study, written 2026-09-26 on branch `gameplay-data`. So far this repo has asked
 whether MageZero can play FDN limited well enough to generate trustworthy statistics from self-play.
 This study asks the reverse question: **how far can existing human gameplay data be used?** Two

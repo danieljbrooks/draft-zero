@@ -1,5 +1,7 @@
 # From imitation to self-play: what the literature suggests, and a plan of runs
 
+*Started 2026-10-07 · Applies to v0.1.0 · Plan*
+
 *Status: done (Friday 9 October 2026). The results are in [docs/029](029-imitation-to-self-play-results.md); the
 code is on the [`selfplay-transition`](https://github.com/danieljbrooks/draft-zero/tree/selfplay-transition) branch.*
 

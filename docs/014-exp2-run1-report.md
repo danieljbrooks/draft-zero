@@ -1,5 +1,7 @@
 # Experiment #2a: self-play from a heuristic start (final report)
 
+*Started 2026-09-28 · Applies to v0.1.0 · Report*
+
 > **Experiment #2 has two components.** They share the settings (`configs/exp2.yml`; #2b's
 > `configs/exp2_run2.yml` differs only in the start), the code, the pod type and the budget, and
 > differ only in the starting network:

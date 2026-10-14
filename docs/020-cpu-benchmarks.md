@@ -1,5 +1,7 @@
 # CPU benchmarks: where the MLP's compute should go
 
+*Started 2026-10-03 · Applies to v0.1.0 · Report*
+
 *October 2026 (the evening of 3 October, Pacific time). Written for Dan after experiment #4's MLP (docs/018) made a
 network cheap enough to run on a CPU. The question: which compute gives the most per dollar for training the MLP,
 for self-play games with search, and for the two together? The candidates are RunPod's CPU pods, its GPU pods, the

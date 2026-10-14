@@ -1,5 +1,7 @@
 # Learning to play Magic: The Gathering limited from human games
 
+*Started 2026-10-04 · Applies to v0.1.0 · Report*
+
 *Experiment #4's report, October 2026. The plan is [docs/017](017-experiment4-scaling-up-imitation-learning.md) and
 the detailed run log is [docs/018](018-experiment4-run-log.md).*
 

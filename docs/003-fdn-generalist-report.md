@@ -1,5 +1,7 @@
 # FDN Generalist: one MageZero agent for a whole limited format
 
+*Started 2026-09-25 · Applies to v0.1.0 · Report*
+
 **Run:** `2026-09-22_02-46-01` · **Written:** 2026-09-23 · training finished 12:31 UTC, final eval 14:50 UTC, pod deleted after the final push
 **Author:** Daniel Brooks · **Engine:** MageZero (Will Wroble) · **Harness:** draft-zero · **Data:** [17lands](https://www.17lands.com/public_datasets) (CC BY 4.0)
 **Code:** [`danieljbrooks/draft-zero` @ tag `exp1-fdn-generalist`](https://github.com/danieljbrooks/draft-zero/tree/exp1-fdn-generalist) · **Release:** [`danbrooks/draftzero-fdn-exp1`](https://huggingface.co/danbrooks/draftzero-fdn-exp1) on Hugging Face (§5) · **Next:** [ROADMAP.md](../ROADMAP.md)

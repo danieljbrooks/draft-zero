@@ -1,5 +1,7 @@
 # Moving to Will's v0.2 engine, and its pilot
 
+*Started 2026-09-26 · Applies to v0.1.0 · Report*
+
 DraftZero now runs on Will's MageZero v0.2. This doc records:
 - what changed, and why;
 - a 3-generation pilot on a RunPod pod that checks it end to end.
