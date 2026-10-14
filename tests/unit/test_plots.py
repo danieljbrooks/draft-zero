@@ -143,6 +143,24 @@ def test_report_draws_every_figure_light_and_dark(tmp_path):
         assert px == pytest.approx(want, abs=2 / 255)
 
 
+def test_learning_curves_are_by_version(tmp_path, monkeypatch):
+    """The learner logs learn.* at step = the step of that version's own training run, which starts again at 0 for
+    every version (and stays about the same once the window is full): the curves are by version, not by step."""
+    pytest.importorskip("matplotlib")
+    figs = []
+    save = st._save
+    monkeypatch.setattr(st, "_save", lambda fig, *a, **k: figs.append(fig) or save(fig, *a, **k))
+    lines = [line("learn.policy_ce", ce, component="learner", machine="d1", minutes=v, version=v, step=step, n=40)
+             for v, ce, step in ((1, 2.0, 444), (2, 1.8, 1113), (3, 1.6, 1113), (4, 1.4, 1121), (5, 1.2, 1113))]
+    assert st.learning(lines, tmp_path / "l.png") is not None
+    ax = figs[0].axes[0]
+    assert ax.get_xlabel() == "player version"
+    assert ax.lines[0].get_xydata().tolist() == [[1, 2.0], [2, 1.8], [3, 1.6], [4, 1.4], [5, 1.2]]
+    # lines without a version (a training run's own log) are by step
+    st.learning([dict(x, version=None) for x in lines[:2]], tmp_path / "s.png")
+    assert figs[1].axes[0].get_xlabel() == "training step"
+
+
 def test_figures_without_data_are_skipped(tmp_path):
     pytest.importorskip("matplotlib")
     only_tp = [x for x in synthetic_run(versions=2, actors=("solo",)) if x["name"].startswith("throughput.")]

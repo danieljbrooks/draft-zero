@@ -5,8 +5,9 @@ look, each in a light and a dark variant (docs/033 "Metrics, plots and experimen
     report(store, out)  report("hf://buckets/o/b", out)  report(lines, out)  report("metrics.jsonl", out)
 
 learning     every learn.* metric (holdout policy cross-entropy, value log loss, top-1 agreement, AUC, ...), one
-             panel each, by training step when every point has one, else by version; a series per string tag
-             (e.g. split=holdout).
+             panel each, by version (the learner's step restarts with each version's training run; lines without
+             a version but with a step, a training run's own log, go by step); a series per string tag (e.g.
+             split=holdout).
 strength     eval.score by version, one series per opponent tag, with the 95% interval (lo/hi, else +-1.96 se).
 ratings      Bradley-Terry Elo by version (eval.elo lines when the evaluator logs them, else one fit over every
              eval.score line, eval.ratings), fixed opponents as level lines; whiskers are 95% intervals.
@@ -211,7 +212,8 @@ def report(run_dir_or_store: Any, out_dir: str | Path, *, themes: Iterable[str] 
 
 
 def learning(lines: Iterable[dict], path: Path, theme: str = "light") -> Path | None:
-    """learn.* by step (or version), one panel per metric (at most six), a series per string tag."""
+    """learn.* by version (or step, without versions), one panel per metric (at most six), a series per string
+    tag."""
     learn = [x for x in lines if x["name"].startswith("learn.")]
     names = [n for n in LEARN if any(x["name"] == n for x in learn)]
     names += sorted({x["name"] for x in learn} - set(names))
@@ -226,7 +228,10 @@ def learning(lines: Iterable[dict], path: Path, theme: str = "light") -> Path | 
         fig, axes = _figure(t, len(names), ncols, 4.2, 3.0)
         for ax, name in zip(axes, names):
             pts = [x for x in learn if x["name"] == name]
-            by_step = all(_num(x.get("step")) is not None for x in pts)
+            # a version's step is that version's own training run's (it starts again at 0), so a line with a
+            # version is placed by its version; only lines without one (a training run's own log) go by step
+            by_step = any(_version(x.get("version")) is None for x in pts) and \
+                all(_num(x.get("step")) is not None for x in pts)
             series: dict[str, dict[float, float]] = defaultdict(dict)
             for x in pts:
                 xv = _num(x.get("step")) if by_step else _version(x.get("version"))
