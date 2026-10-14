@@ -1,7 +1,8 @@
 """config.py — the run config (interface 8, contracts §3): one YAML file per run, read by every role.
 
     run: e1-baseline-mlp            # the run id (required)
-    extends: base/player.yml        # merged (deep) first: dicts merge, lists and scalars replace
+    extends: base/player.yml        # merged (deep) first: dicts merge, lists and scalars replace, {} clears a
+                                    # free dict (actor.pcr.by_kind, player.config)
     actor: {sims: 200}              # everything else as in configs/base/player.yml
 
 The YAML mirrors the nested dataclasses below (RunConfig and one class per section). Unknown keys are errors
@@ -394,12 +395,17 @@ def _check_keys(raw: Mapping, cls, prefix: str, where: str) -> None:
 
 # ------------------------------------------------------------------------------------------------ loading
 
-def _merge(base: Mapping, over: Mapping) -> dict:
-    """`over` deep-merged onto `base`: mappings merge key by key; anything else (lists too) replaces."""
+def _merge(base: Mapping, over: Mapping, tp=None) -> dict:
+    """`over` deep-merged onto `base`: mappings merge key by key; anything else (lists too) replaces. With the
+    schema type `tp` of `base`, an empty mapping for a free dict field (player.config, actor.pcr.by_kind) clears
+    it, where it would otherwise change nothing."""
+    hints = _hints(tp) if is_dataclass(tp) else {}
     out = copy.deepcopy(dict(base))
     for k, v in over.items():
-        if isinstance(out.get(k), Mapping) and isinstance(v, Mapping):
-            out[k] = _merge(out[k], v)
+        ftp = _optional_of(hints.get(k)) or hints.get(k)
+        clear = isinstance(v, Mapping) and not v and typing.get_origin(ftp) is dict
+        if isinstance(out.get(k), Mapping) and isinstance(v, Mapping) and not clear:
+            out[k] = _merge(out[k], v, ftp)
         else:
             out[k] = copy.deepcopy(v)
     return out
@@ -448,15 +454,15 @@ def _raw(data, src: str, here: Path | None, seen: tuple[Path, ...]) -> dict:
         if bp in seen:
             raise ConfigError(f"{src}: extends cycle through {bp}", "extends")
         base = yaml.safe_load(bp.read_text())
-        merged = _merge(merged, _raw(base, str(bp), bp.parent, (*seen, bp)))
-    return _merge(merged, data)
+        merged = _merge(merged, _raw(base, str(bp), bp.parent, (*seen, bp)), RunConfig)
+    return _merge(merged, data, RunConfig)
 
 
 def from_dict(d: Mapping, overrides: Mapping[str, Any] | None = None) -> RunConfig:
     """A RunConfig from a plain mapping (to_dict's shape); `extends` is resolved against the working directory."""
     raw = _raw(d, "config", None, ())
     if overrides:
-        raw = _merge(raw, _expand(overrides))
+        raw = _merge(raw, _expand(overrides), RunConfig)
     cfg = _coerce(raw, RunConfig, "")
     check(cfg)
     return cfg
@@ -467,7 +473,7 @@ def loads(text: str, overrides: Mapping[str, Any] | None = None, *, base_dir: st
     here = Path(base_dir).resolve() if base_dir is not None else Path.cwd()
     raw = _raw(yaml.safe_load(text), "config", here, ())
     if overrides:
-        raw = _merge(raw, _expand(overrides))
+        raw = _merge(raw, _expand(overrides), RunConfig)
     cfg = _coerce(raw, RunConfig, "")
     check(cfg)
     return cfg
@@ -483,7 +489,7 @@ def load(path: str | Path, overrides: Mapping[str, Any] | None = None) -> RunCon
         raise ConfigError(f"{path}: not valid YAML: {e}") from None
     raw = _raw(data, str(path), p.parent, (p,))
     if overrides:
-        raw = _merge(raw, _expand(overrides))
+        raw = _merge(raw, _expand(overrides), RunConfig)
     try:
         cfg = _coerce(raw, RunConfig, "")
         check(cfg)
@@ -699,7 +705,7 @@ def _set(cfg: RunConfig, path: str, value) -> RunConfig:
                     v = _parse_text(value) if isinstance(value, str) else value
                     if not isinstance(v, Mapping):
                         raise _bad(here, "a mapping", value)
-                    node[part] = _merge(node[part] or {}, v)
+                    node[part] = _merge(node[part] or {}, v, ftp)
                 else:
                     node[part] = value
             else:
@@ -718,8 +724,9 @@ def _set(cfg: RunConfig, path: str, value) -> RunConfig:
 
 def apply_change(cfg: RunConfig, path: str, value) -> RunConfig:
     """`cfg` with one plan change applied (a new object; `cfg` is untouched). The path must be live (is_live) and
-    the value must fit its type; text values are read as YAML ("3e-4", "true", "null", "{prob: 0.5}"). Setting a
-    by_kind entry to None removes it. ConfigError otherwise."""
+    the value must fit its type; text values are read as YAML ("3e-4", "true", "null", "{prob: 0.5}"). A section
+    merges into the current one; setting a by_kind entry to None removes it, and an empty by_kind ({}, alone or in
+    an actor.pcr section) clears it. ConfigError otherwise."""
     if not is_live(path):
         get(cfg, path)                           # an unknown path says so first
         raise ConfigError(f"{path} is fixed for the run; live paths: {', '.join(sorted(LIVE))}", path)

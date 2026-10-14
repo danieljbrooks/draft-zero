@@ -213,6 +213,24 @@ def test_extends_merges_deep_and_chains(tmp_path):
     assert c.eval.opponents == ["bot"]                                                           # lists replace
 
 
+def test_an_empty_mapping_clears_a_free_dict(tmp_path):
+    """{} for actor.pcr.by_kind or player.config clears it (a child config, an override, a section plan change);
+    a non-empty mapping merges key by key; an empty section is no change."""
+    write(tmp_path / "configs/base/arm.yml",
+          "run: arm\nactor: {pcr: {prob: 0.5, cheap_sims: 40, by_kind: {priority: 0.65, target: 0.3}}}\n")
+    leaf = write(tmp_path / "configs/runs/uniform.yml",
+                 "extends: base/arm.yml\nrun: uniform\nactor: {pcr: {by_kind: {}}}\nbudget: {}\n")
+    c = C.load(leaf)
+    assert c.actor.pcr.by_kind == {} and c.actor.pcr.prob == 0.5
+    assert C.load(tmp_path / "configs/base/arm.yml", {"actor.pcr.by_kind": {}}).actor.pcr.by_kind == {}
+    arm = C.load(tmp_path / "configs/base/arm.yml")
+    assert C.apply_change(arm, "actor.pcr", {"prob": 0.4, "by_kind": {}}).actor.pcr.by_kind == {}
+    assert C.apply_change(arm, "actor.pcr", "{by_kind: {}}").actor.pcr.prob == 0.5
+    assert C.apply_change(arm, "actor.pcr", {"by_kind": {"blockers": 0.2}}).actor.pcr.by_kind == \
+        {"priority": 0.65, "target": 0.3, "blockers": 0.2}
+    assert C.from_dict({"run": "t", "player": {"config": {}}}).player.config == {}
+
+
 def test_extends_list_and_absolute(tmp_path):
     a = write(tmp_path / "a.yml", "run: a\nseed: 5\nactor: {sims: 7}\n")
     write(tmp_path / "b.yml", "actor: {sims: 9, workers: 3}\n")
