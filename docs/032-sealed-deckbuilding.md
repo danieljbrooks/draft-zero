@@ -1,9 +1,10 @@
 # Building sealed decks from self-play: FDN on gorge
 
-*Status (Monday 12 October 2026, 3:00 PM PT): done for this round. A deck builder trained only on its own games builds
-simple, white-based creature decks that its pilot can play well, and with them beats the human decks from the same
-pools 64% of the time on fresh test pools; more search in its training games makes its decks steadily more human. The
-code is on the [`sealed-deckbuilding`](https://github.com/danieljbrooks/draft-zero/tree/sealed-deckbuilding) branch
+*Status (Wednesday 14 October 2026): finished. A deck builder trained only on its own games builds simple, white-based
+creature decks that its pilot can play well, and with them beats the human decks from the same pools 64% of the time
+on fresh test pools; more search in its training games makes its decks steadily more human. Phase C's later
+generations ran on r1, which closed before they could be collected or judged. The code is on the
+[`sealed-deckbuilding`](https://github.com/danieljbrooks/draft-zero/tree/sealed-deckbuilding) branch
 (`gorge/sealed/`).*
 
 **The goal:** a model that builds a 40-card sealed deck from a pool of six FDN packs, trained **only from games it
@@ -188,7 +189,8 @@ On the 1,000 Premier Draft test pools (no builder trained on draft pools):
 - **On val pools** the same builders won 66.1% (phase B, generation 4) and 66.9% (phase C, generation 1); they were
   chosen as the best of several there, so a small drop on fresh pools is expected.
 - **At 300 simulations** the val results hold: phase A's generation 2 59.4% (60.9% at 100), phase B's generation 2
-  61.9% (61.6%) and generation 4 65.6% (66.1%), the 17lands heuristic 54.5% (56.6%), imitation 54.7% (54.3%).
+  61.9% (61.6%) and generation 4 65.6% (66.1%), phase C's generation 1 65.2% (66.9%), the 17lands heuristic 54.5%
+  (56.6%), imitation 54.7% (54.3%).
 
 ![Win rate against the human decks at 100 simulations, per builder (val pools)](img/032-builders-light.png)
 
