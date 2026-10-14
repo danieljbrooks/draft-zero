@@ -47,7 +47,7 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 
 All ten rigid interfaces are named and versioned for the first time.
 
-1. **Engine pin:** `engine/gorge/GORGE_REF` = `a7afdc1527ad32e96e089ca8baab1059fe70edf6` on `danieljbrooks/gorge` (was `gorge/GORGE_REF` = `c9a422b703f40acec744cb8c947b724f057305b3` on `adams-shaun/gorge` plus patches).
+1. **Engine pin:** `engine/gorge/GORGE_REF` = `8aa1f37dc81c9e15f7caa77481415e82908177d8` on `danieljbrooks/gorge` (branch `draftzero`: gorge main 813dcf3b4 plus eight DraftZero commits) (was `gorge/GORGE_REF` = `c9a422b703f40acec744cb8c947b724f057305b3` on `adams-shaun/gorge` plus patches).
 2. **Card corpus pin:** gorge's `FORGE_REF` = `098b0553` on `adams-shaun/forge` (was `ab2a79bd`).
 3. **Driver CLI and policy strings:** upstream's `cmd/dzgorge` plus DraftZero's deltas. New: the `:closedlist` key with `-belief-decks`, `-belief-pool` and `-belief-split`; the `sbtactical` policy; `-no-paid-mana-census`, since the census is now on by default; playout-cap randomization (`pcr=`, `cheap=`, `pcrk=`); the decided-game cheap search (`decided[=H]`, `decidedn=`, `decidedsims=`, `decidedw=`) and forced playouts (`forced[=K]`), whose visit records gain an optional `weight` field. `PolicySpec` renders them after `pcrk=` and before `gonet=`; a spec without them renders as before. Kept from v0.1.0: `-deckfile`, `-pairs-file`, `ksims=`, `-topk-max-options`, `-audit-*`.
 4. **Scorer hook:** `policynet.External` unchanged, now upstream; the in-engine MLP moved to gorge's `internal/gonet`.
@@ -60,7 +60,7 @@ All ten rigid interfaces are named and versioned for the first time.
 
 Pending Dan's review (the deck builder on the loop, branch `wip/sealedloop`):
 
-- 3: a new driver command on the fork, `dzgorge sealed-pools` (branch `draftzero-sealed`, `8aa1f37dc`; not yet in `GORGE_REF`).
+- 3: a new driver command on the fork, `dzgorge sealed-pools` (`8aa1f37dc`, in `GORGE_REF` since `7aafb6f`).
 - 8: the `builder` section and `player.learn` (both default to the player loop as it was).
 - 10: a new evaluation, builder version v's decks against `best23@1`'s on held-out draftlab pools (`builder.eval`; `draftzero.loop.builder.score_match`).
 
