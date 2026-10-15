@@ -79,7 +79,8 @@ def run_ratio(spec: str, entries: list[dict], dirs: dict, cfg, out: Path, a) -> 
     """spec: a replay ratio ("4": steps_per_position 4) or "e<E>" (E epochs of the window a version)."""
     epochs = float(spec[1:]) if spec.startswith("e") else None
     r = None if epochs else float(spec)
-    rd = out / (f"E{epochs:g}" if epochs else f"R{r:g}")
+    blend = float(cfg.learner.value_blend) if a.value_blend is None else a.value_blend
+    rd = out / ((f"E{epochs:g}" if epochs else f"R{r:g}") + ("" if a.value_blend is None else f"-vb{blend:g}"))
     rd.mkdir(parents=True, exist_ok=True)
     rows_path = rd / "rows.json"
     rows = json.loads(rows_path.read_text()) if rows_path.exists() else []
@@ -107,7 +108,7 @@ def run_ratio(spec: str, entries: list[dict], dirs: dict, cfg, out: Path, a) -> 
                     "--train", *[p for x in reversed(win) for p in dirs[x["shard"]]],
                     "--val", f"test={out / 'test'}", "--batch", str(batch), "--lr", repr(float(cfg.learner.lr)),
                     "--warmup", str(int(cfg.learner.warmup)), "--policy-target", cfg.learner.policy_target,
-                    "--value-blend", repr(float(cfg.learner.value_blend)), "--device", "cpu", "--in-ram",
+                    "--value-blend", repr(blend), "--device", "cpu", "--in-ram",
                     "--eval-max", str(a.eval_max), "--seed", str(1_000_003 + version), "--epochs", "1000000",
                     "--max-steps", str(steps)]
             argv += ["--init", str(prev)] if prev else ["--arch", cfg.player.arch,
@@ -121,7 +122,8 @@ def run_ratio(spec: str, entries: list[dict], dirs: dict, cfg, out: Path, a) -> 
             if p.returncode:
                 raise SystemExit(f"{spec} version {version}: training failed (see {vd / 'train.log'})")
             summary = json.loads(p.stdout.strip().splitlines()[-1])
-            row = {"ratio": spec, "version": version, "new_positions": new, "window_positions": n,
+            row = {"ratio": spec, "value_blend": blend, "version": version, "new_positions": new,
+                   "window_positions": n,
                    "window_shards": len(win), "steps": steps, "wall_s": round(time.time() - t0, 1),
                    **test_metrics(vd / "train" / "curves.jsonl", summary.get("best_step"))}
             rows.append(row)
@@ -144,6 +146,8 @@ def main(argv=None) -> int:
     ap.add_argument("--test-frac", type=float, default=0.15)
     ap.add_argument("--eval-max", type=int, default=30000, help="records per evaluation set")
     ap.add_argument("--max-versions", type=int, default=0, help="stop each ratio after this many versions (0: all)")
+    ap.add_argument("--value-blend", type=float, default=None,
+                    help="value target (1-x) outcome + x root value (default: the run's learner.value_blend)")
     a = ap.parse_args(argv)
     store, out = LocalStore(a.store), Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -172,7 +176,8 @@ def main(argv=None) -> int:
     results = {"split": split, "rows": []}
     for spec in a.ratios.split(","):
         results["rows"] += run_ratio(spec.strip(), entries[:cut], dirs, cfg, out, a)
-        (out / "results.json").write_text(json.dumps(results, indent=1))
+        (out / ("results.json" if a.value_blend is None else f"results-vb{a.value_blend:g}.json")).write_text(
+            json.dumps(results, indent=1))
     return 0
 
 
