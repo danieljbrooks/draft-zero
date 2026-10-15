@@ -2,8 +2,8 @@
 
 *Started 2026-10-14 · Applies to v0.2.0 · Report*
 
-*Status (Wednesday 14 October 2026, 7 PM PT): draft. The live test (E2c, §5) runs until about 21:10 PT; its results
-and costs are filled in after its final evaluation.*
+*Status (Wednesday 14 October 2026, 9:45 PM PT): complete. The pods were removed at 21:38 PT. The volume
+(`5njr2ebemc`, EUR-IS-1, about $0.70 a month) is left for Dan to keep or delete (`dz pod volume rm 5njr2ebemc`).*
 
 **RunPod's global volumes cannot hold a run's store, but its network volumes can.** Dan asked whether RunPod volumes
 could replace the Hugging Face bucket for distributed actor-learner training. A *global* volume (beta since September
@@ -15,7 +15,9 @@ the store of three runs, with no relay and no token on any pod:
   half-written 0 times.
 - **Visibility:** a new file showed on another pod in 27 ms (median).
 - **Smoke run:** two versions in about a minute (`configs/smoke-volume.yml`).
-- **E2c:** E2b's two arms continued from their stores (§5).
+- **E2c:** E2b's two arms continued from their stores for 2.5 hours on five pods (§5). They added 4,704 games
+  without a storage error, then played their final matches from the same volume.
+- **Cost:** the whole test cost about $1.90.
 
 The catch is price: only Secure Cloud pods mount volumes. The cheapest Secure vCPU-hour is 2–4 times the price of
 the Community pods that the relay serves, and a run is limited to one data center's stock.
@@ -101,6 +103,17 @@ after it, or they all upload.
 | Secure CPU `cpu3c` | 0.030 | E2b's actor pod, E2c |
 | Secure CPU `cpu5c` | 0.035 | |
 
+- **`cpu3c` is not one machine.** E2c's 4-vCPU pods in EUR-IS-1 ran on AMD EPYC 9965 and 9754 CPUs and played the
+  control arm at 92 games per worker-hour over the run. E2b's 16-vCPU `cpu3c` pod (CPU not recorded) managed 50,
+  with the same worker-to-vCPU ratio and the same networks. Per 1,000 control games at 200 simulations
+  (*estimates*):
+
+| Setup | $ per 1,000 games |
+|---|---|
+| E1's Community RTX 3070 host and the relay (a different network and arm) | 0.12 |
+| E2c, Secure `cpu3c` in EUR-IS-1 with the volume | 0.32 |
+| E2b, Secure `cpu3c` with the relay | 0.64 |
+
 - **Stock moves faster than the catalog.** cpu3c in US-NC-2 went from "HIGH" to absent within minutes. In EUR-IS-1
   two 8-vCPU creates were refused ("no longer any instances available") while the catalog said "MEDIUM", and 4-vCPU
   pods were granted at once. A run on a volume is bound to that one data center's stock.
@@ -146,9 +159,40 @@ The read retries in `LocalStore` never fired in these probes, but they cost noth
 
 The pods ran 68b62fd throughout, so these runs kept their hand-started roles.
 
-*Results: to come.*
+*How it ran:* both runs stopped at `--max-hours 2.5` (21:11). Every shard reached its learner and every version
+reached the actors; no storage error was logged anywhere.
 
-## 6. Not done yet
+| | Control (P0) | PCR 200/40 (P1) |
+|---|---|---|
+| Versions | v4 → v12 | v3 → v10 |
+| Games added (E2b's before) | 1,800 (888) | 2,904 (1,488) |
+| Positions added (E2b's before) | 128,296 (62,598) | 115,066 (56,512) |
+| Games per worker-hour (E2b's pod) | 92.4 (50.3) | 147.7 (84.8) |
+
+*The final matches* ran on all five pods at once (21:14-21:36), reading the versions and B17 from the volume and
+writing their games back to it. 100 pairs a match, eval split, no errors. The science is in
+[docs/034](034-v0.2.0-first-experiments.md) §7: the arms are dead even head to head (50.2% over 200 pairs at 100
+simulations, 50.0% at 25).
+
+*Cost:* five 4-vCPU pods ran 18:30-21:38 at $0.12/h each: about $1.90, plus the volume. The account went from $33.82
+to $31.78, which includes E1's last hour.
+
+## 6. Which to use
+
+- **Community pods and the relay** remain the cheapest way to buy self-play, when Community has stock and the pods
+  get a public SSH port: about 2.5 times cheaper per game than E2c's Secure pods.
+- **A network volume** is the simpler and sturdier setup:
+  - no relay or SSH from d1, and no tokens on pods;
+  - versions are published once, and every pod sees them within about 30 ms;
+  - logs and results outlive the pods;
+  - Secure stock was there on 14 October when Community's was not (E2b's rent loop was refused 39 times).
+
+  It is the fallback when Community has no stock, and the default for runs that must not depend on d1. Check the
+  CPU model on the first pod: it changed the price of a game by 2× between two `cpu3c` pods.
+- **Global volumes** are not for a run's store: a running pod does not see later writes. At most they could carry
+  read-only inputs across data centers.
+
+## 7. Not done yet
 
 - **d1 over S3, untested against RunPod.** d1 would keep the learner, controller and evaluator on its own (free)
   cores and reach the volume through RunPod's S3 API, with only actors on pods: `--store
