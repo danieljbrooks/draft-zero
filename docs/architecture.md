@@ -38,7 +38,7 @@ Every result, checkpoint and comparison between runs depends on these. Everythin
 | 9 | Run manifest and metrics schema | `src/draftzero/manifest.py` (`draftzero-manifest/1`), `src/draftzero/metrics.py` (`draftzero-metrics/1`) | runs ↔ reports and papers | Reports and plots read every run the same way |
 | 10 | Evaluation protocol and data splits | `src/draftzero/eval/` (opponents, simulations, paired games, seeds); `assets/decks.tsv` and `assets/sealed/` (train, val and test splits) | runs ↔ runs | Changing either breaks comparisons with earlier runs; the test split is used once |
 
-Interfaces 2, 4 and 5 live inside gorge. They reach DraftZero only through a new `GORGE_REF`, so a change to them is also a change to interface 1.
+Interfaces 2, 4 and 5 live inside gorge. They reach DraftZero only through a new `GORGE_REF`, so a change to them is also a change to interface 1. [docs/036](036-gorge-draftzero-interface.md) lists what our fork of gorge changes and why, and the interface that would let DraftZero drop it.
 
 **Free to change, with green tests:** new network architectures (added beside the old ones, never edited once published), trainer internals, actor, learner and controller internals, plots, experiment scripts, and docs other than published results.
 
