@@ -136,6 +136,8 @@ def main(argv=None, prog: str | None = None) -> int:
     a = (_parser(prog) if prog else _parser()).parse_args(argv)
     from draftzero.loop import control as ctl
     from draftzero.loop.store import open_store
+    from draftzero.resources import raise_open_files
+    raise_open_files()          # a learner's window memory-maps every shard's arrays (one descriptor each)
 
     if a.role in ("status", "stop", "plan"):
         return _store_command(a, ctl, open_store)

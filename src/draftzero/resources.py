@@ -45,6 +45,23 @@ def cpu_quota() -> Optional[float]:
     return None
 
 
+def raise_open_files(want: int = 65536) -> int:
+    """Raise this process's soft limit on open files toward `want` (never above the hard limit) and return the soft
+    limit now in force (-1 where there is none to read). The trainer memory-maps every array of every shard in its
+    window, and each map holds a descriptor: a window of about 80 shards passed a RunPod pod's default soft limit of
+    1,024 (E2c, 14 Oct 2026; its hard limit was 1,048,576)."""
+    try:
+        import resource
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        target = want if hard == resource.RLIM_INFINITY else min(want, hard)
+        if soft != resource.RLIM_INFINITY and soft < target:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+            return target
+        return soft
+    except (ImportError, ValueError, OSError):
+        return -1
+
+
 def mem_limit_gb() -> Optional[float]:
     """Container memory cap in GB, or None when uncapped."""
     for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):

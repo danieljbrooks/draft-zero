@@ -308,6 +308,8 @@ def _subsample(idx: np.ndarray, k: int | None, seed: int) -> np.ndarray:
 
 def main(argv=None) -> dict:
     args = parse_args(argv)
+    from draftzero.resources import raise_open_files
+    raise_open_files()          # ShardSet memory-maps every array of every shard (one descriptor each)
     t0 = time.time()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
