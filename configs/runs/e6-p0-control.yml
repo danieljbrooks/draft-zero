@@ -5,8 +5,9 @@
 # Arms, from E1's final version (v36: +8.0 points over B17, paired by deal), at equal CPU-hours on the same machines:
 #   e6-p0-control     value_blend 1.0, the root value (E1's recipe)
 #   e6-p1-value-half  value_blend 0.5, half the game's result and half the root value
-# Both: the decided-game search on (docs/034 §8 item 3), PCR off (E2c: no gain), 8 training steps per new position
-# (the replay study: test loss fell from 2 to 4 to 8 steps), evaluation every 4 versions against sbtactical.
+# Both: the decided-game search on (docs/034 §8 item 3), PCR off (E2c: no gain), E1's replay (2 epochs of the
+# window a version: the replay study, docs/034 §5.4, found it beat 2, 4 and 8 steps per new position on held-out
+# games), evaluation every 4 versions against sbtactical.
 # Success: p1 beats p0 head to head by >= 20 Elo (about 3 points) over 500 pairs at 100 simulations, interval above
 # 50%, and p1's score against sbtactical rises over the run. Cost (estimate): about 5,000 games an arm, $0.6 an arm on
 # Community pods with the relay, $1.6 on Secure CPU pods with a network volume (docs/035).
@@ -18,7 +19,7 @@ actor:
   pcr: {prob: 0.0}
   decided: {high: 0.9, n: 3, sims: 40, weight: 0.1}
 learner:
-  steps_per_position: 8
+  epochs: 2
   value_blend: 1.0
 eval: {every_versions: 4, pairs: 100, opponents: [sbtactical]}
 store: runs/e6-p0-control
