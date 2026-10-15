@@ -51,7 +51,9 @@ Network volumes (docs/035): `create_volume(name, size_gb, dc)` rents a MooseFS v
 GB-month; it bills until deleted, pods or not), and `PodSpec(volume=ID)` mounts it at /workspace on a Secure Cloud pod
 pinned to that data center. Several pods can mount one volume at once, so a run's store can live on it: every role
 opens the same folder (`--store /workspace/runs/<run>/store`), with no relay and no token on the pods. `delete_volume`
-is permanent and is for people to run (`dz pod volume rm`).
+is permanent and is for people to run (`dz pod volume rm`). With a volume, `up` bundles from the volume when it can:
+the first pod of a commit uploads the bundle from here and leaves it there as one tarball (`seed_path`), and later
+pods unpack it inside the data center in seconds (docs/035: d1's uplink gave 2-3 MB/s for ~340 MB a pod).
 
 Notes that cost real time to learn (docs/005, docs/020): pods are cgroup-capped below what they advertise (size
 workers from draftzero.resources.cpu_quota, never nproc); Community hosts often stall pulling big images (the default
@@ -63,6 +65,7 @@ image is RunPod's 0.7 GB base; CPU torch comes from pip); stock moves by the min
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import posixpath
@@ -88,6 +91,7 @@ VOLUMES = f"{REST}/networkvolumes"
 VOLUME_MOUNT = "/workspace"
 VOLUME_USD_PER_GB_MONTH = 0.07                   # STANDARD volumes, the first TB (docs.runpod.io/pods/pricing, Oct 2026)
 MIN_VOLUME_GB, MAX_VOLUME_GB = 10, 50            # RunPod's floor; this module's cap (a volume grows but never shrinks)
+SEED_DIR = "dz/seed"                             # under a volume's mount: bundle-<commit>-<dzgorge>-<pool>.tgz
 IMAGE = "runpod/base:1.4.0-ubuntu2404"          # 0.7 GB; deploy/pod_bootstrap.sh installs CPU torch
 IMAGE_PYTORCH = "runpod/pytorch:1.0.3-cu1281-torch291-ubuntu2404"   # 10.7 GB, CUDA torch: for training on a pod
 CPU_FLAVORS = {"cpu3c": 2, "cpu3g": 4, "cpu3m": 8, "cpu5c": 2, "cpu5g": 4, "cpu5m": 8}   # flavor -> GB per vCPU
@@ -582,6 +586,40 @@ def bundle_steps(target: SSHTarget, b: Bundle, tmp: Path) -> list[Step]:
     return steps
 
 
+def seed_key(b: Bundle, *, git: Callable[..., Result] = local_run) -> Optional[str]:
+    """What a bundle left on a volume is named by: the repo's commit, dzgorge's sha256 and the deck pool's. None for a
+    working-tree bundle (repo_mode rsync: no commit names its contents) or when one of them can't be read."""
+    if b.repo_mode != "git":
+        return None
+    r = git(["git", "-C", str(b.repo), "rev-parse", "HEAD"], timeout=60)
+    try:
+        eng = json.loads((Path(b.engine_root) / "bin/dzgorge.build.json").read_text())["binary_sha256"]
+        pool = hashlib.sha256(Path(b.pool).read_bytes()).hexdigest()
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    commit = r.out.strip() if r.ok else ""
+    return f"{commit[:12]}-{str(eng)[:12]}-{pool[:8]}" if commit and eng else None
+
+
+def seed_path(spec: PodSpec, key: str) -> str:
+    return posixpath.join(spec.volume_mount, SEED_DIR, f"bundle-{key}.tgz")
+
+
+def unpack_seed_argv(target: SSHTarget, b: Bundle, path: str) -> list[str]:
+    """Unpack the volume's bundle onto the pod's own disk (prints "dz-seed: unpacked", or "dz-seed: none")."""
+    return target.ssh_argv(f"if [ -f {q(path)} ]; then mkdir -p {q(b.remote_root)} && tar -xzf {q(path)} -C / && "
+                           f"echo 'dz-seed: unpacked'; else echo 'dz-seed: none'; fi")
+
+
+def write_seed_argv(target: SSHTarget, b: Bundle, path: str) -> list[str]:
+    """Leave this pod's fresh bundle (the repo with its decks, and the engine) on the volume, renamed into place
+    whole; two pods writing the same bundle at once write the same bytes."""
+    d = posixpath.dirname(path)
+    members = " ".join(q(m.lstrip("/")) for m in (b.remote_repo, b.remote_engine))
+    return target.ssh_argv(f'mkdir -p {q(d)} && tar -czf "{d}/.tmp-$$.tgz" -C / {members} && '
+                           f'mv "{d}/.tmp-$$.tgz" {q(path)} && echo "dz-seed: written"')
+
+
 def _run_steps(steps: list[Step], runner: Callable[..., Result], log: Callable[[str], None]) -> None:
     for s in steps:
         t0 = time.monotonic()
@@ -651,7 +689,18 @@ def up(api: RunPodAPI, spec: PodSpec, *, max_hours: float, files: Bundle | None 
         arm(target, left / 3600, runner=runner)
         armed = True
         if files is not None:
-            bundle(target, files, runner=runner, log=api.log)
+            key = seed_key(files) if spec.volume else None
+            seed = seed_path(spec, key) if key else None
+            r = runner(unpack_seed_argv(target, files, seed), timeout=900) if seed else None
+            if r is not None and r.ok and "dz-seed: unpacked" in r.out:
+                api.log(f"bundle: unpacked from the volume ({seed})")
+            else:
+                bundle(target, files, runner=runner, log=api.log)
+                if seed:
+                    w = runner(write_seed_argv(target, files, seed), timeout=900)
+                    api.log(f"bundle: left on the volume for the next pods ({seed})" if w.ok and "dz-seed: written"
+                            in w.out else f"bundle: could not leave it on the volume (exit {w.code}): "
+                                          f"{(w.err or w.out)[-200:]}")
             if setup:
                 bootstrap(target, files, runner=runner)
     except BaseException as e:

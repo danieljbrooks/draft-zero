@@ -641,6 +641,49 @@ def test_up_runs_the_whole_flow(tmp_path):
     assert (w.cfg.workdir, w.cfg.python, w.target) == (b.remote_repo, b.remote_python, pod.target)
 
 
+def test_seed_key_names_the_commit_the_engine_and_the_pool(tmp_path):
+    b = _bundle(tmp_path)
+    (b.engine_root / "bin/dzgorge.build.json").write_text(json.dumps({"binary_sha256": "e" * 64}))
+    sha = "c0ffee" + "0" * 34
+    key = rp.seed_key(b, git=lambda argv, **kw: Result(0, sha + "\n"))
+    assert key.startswith("c0ffee000000-eeeeeeeeeeee-") and len(key.split("-")[2]) == 8
+    assert rp.seed_key(b, git=lambda argv, **kw: Result(128, "", "not a git repository")) is None
+    assert rp.seed_key(_bundle(tmp_path / "w", repo_mode="rsync"), git=lambda argv, **kw: Result(0, sha)) is None
+    spec = rp.PodSpec(name="x", gpu="g", max_price=1, cloud="SECURE", allow_secure=True, datacenters=("A",),
+                      volume="v")
+    assert rp.seed_path(spec, key) == f"/workspace/dz/seed/bundle-{key}.tgz"
+
+
+def test_up_with_a_volume_unpacks_its_bundle_or_leaves_one_there(tmp_path, monkeypatch):
+    """The first pod of a commit uploads the bundle from here and leaves it on the volume; the next ones unpack it
+    there (seconds, inside the data center) instead of uploading ~340 MB each."""
+    monkeypatch.setattr(rp, "seed_key", lambda b: "abc-def-123")
+    spec = rp.PodSpec(name="dz-va", cpu="cpu3c", vcpu=4, max_price=0.2, cloud="SECURE", allow_secure=True,
+                      datacenters=("EUR-IS-1",), volume="vol1")
+    b = _bundle(tmp_path)
+    seed = "/workspace/dz/seed/bundle-abc-def-123.tgz"
+    # a seeded volume: arm, unpack, bootstrap; nothing uploaded
+    api, r = FakeAPI(), Recorder(Result(0, "armed: ok"), Result(0, "dz-seed: unpacked\n"),
+                                 Result(0, "pod_bootstrap: ready"))
+    rp.up(api, spec, max_hours=2, files=b, runner=r, clock=api.clock)
+    cmds = [c["argv"][-1] if c["argv"][0] == "ssh" else " ".join(c["argv"]) for c in r.calls]
+    assert len(cmds) == 3 and seed in cmds[1] and "tar -xzf" in cmds[1] and "pod_bootstrap.sh" in cmds[2]
+    assert not any(c["argv"][0] == "rsync" for c in r.calls)
+    # an empty one: upload as usual, then leave the bundle there, renamed into place whole
+    n = len(rp.bundle_steps(SSHTarget("x"), b, tmp_path))
+    api, r = FakeAPI(), Recorder(Result(0, "armed: ok"), Result(0, "dz-seed: none\n"),
+                                 *[Result(0, "")] * n, Result(0, "dz-seed: written\n"), Result(0, "pod_bootstrap: ready"))
+    rp.up(api, spec, max_hours=2, files=b, runner=r, clock=api.clock)
+    assert any(c["argv"][0] == "rsync" for c in r.calls)
+    write = r.calls[-2]["argv"][-1]
+    assert "tar -czf" in write and f"mv \"/workspace/dz/seed/.tmp-$$.tgz\" {seed}" in write
+    assert "root/dz/draftzero" in write and str(b.engine_root).lstrip("/") in write
+    # no volume: no seed at all
+    api, r = FakeAPI(), Recorder(Result(0, "armed: ok"), *[Result(0, "")] * n, Result(0, "pod_bootstrap: ready"))
+    rp.up(api, rp.PodSpec(name="dz-a1", gpu="g", max_price=0.2), max_hours=2, files=b, runner=r, clock=api.clock)
+    assert not any("dz-seed" in str(c["argv"]) for c in r.calls)
+
+
 def test_up_terminates_the_pod_on_any_failure(tmp_path):
     spec = rp.PodSpec(name="dz-a1", gpu="g", max_price=0.2)
     api = FakeAPI()
