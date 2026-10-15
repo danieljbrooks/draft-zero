@@ -8,7 +8,7 @@ A run is one training job: one config, one store, one manifest. This page says h
 
 - **Run id:** `<date>-<experiment>-<variant>`, for example `2026-10-20-e1-mlp`.
 - **Config:** one YAML file in `configs/runs/`, usually extending `configs/base/player.yml`. It names the run (`run:`), the release it starts from (`code: v0.2.0`, or `dev`), the seed, the mode (`async` or `sync`), the budget and the store. Unknown keys are an error. `configs/smoke.yml` is the smallest run that exercises every role.
-- **Store:** where the run's files go while it runs: a local folder (`runs/<id>`) or a Hugging Face Storage Bucket (`hf://buckets/danbrooks/dz-<id>`). Machines without a token run their actors on a local folder of their own, and `dz relay` carries files between it and the store over ssh.
+- **Store:** where the run's files go while it runs: a local folder (`runs/<id>`), a folder on a RunPod network volume that every pod of the run mounts (`/workspace/runs/<id>/store`, docs/035), or a Hugging Face Storage Bucket (`hf://buckets/danbrooks/dz-<id>`). Machines without a token run their actors on a local folder of their own, and `dz relay` carries files between it and the store over ssh.
 - **Manifest:** `manifest.json`, written at the start: the DraftZero version, commit, branch and dirty flag; the config and its hash; the engine (gorge fork commit, binary SHA-256, build record, card lock, census setting); with `:closedlist`, the belief corpus (decks, pool, split and its hash); Python, torch and numpy versions; the machine; the seed. `dz manifest CONFIG` prints the same record for this machine.
 
 Every role writes into the same layout:
@@ -170,7 +170,24 @@ required; it prints the cost guard, asks, arms the pod to terminate itself `--ma
 for SSH included, then copies the engine, cards, decks and repo and bootstraps a venv; any failure removes the pod,
 and `--keep-on-failure` keeps only a pod that is already armed), `dz pod list`, `dz pod balance` and `dz pod down
 ID...` (it tries every pod and exits 1 if any terminate failed). Billing stops at `dz pod down` or the self-destruct.
-The flow is in the `draftzero.workers.runpod` docstring; no real pod has run it yet.
+The flow is in the `draftzero.workers.runpod` docstring; E1 and E2b ran on it (docs/034).
+
+**On a RunPod network volume** ([docs/035](035-runpod-network-volumes.md)), every role opens the same folder on the
+volume and no relay is needed: Secure Cloud pods in the volume's data center mount it at `/workspace`, and the run's
+store is `--store /workspace/runs/<id>/store` on each of them. Global volumes do not work for this (a running pod
+does not see later writes).
+
+```bash
+dz pod volume create --name dz-vol --size 10 --datacenter EUR-IS-1          # about $0.70 a month until `dz pod volume rm`
+dz pod up --name dz-vh --cpu cpu3c --vcpu 4 --max-price 0.13 --max-hours 4 --secure --volume VOL     # the head
+dz pod up --name dz-va --cpu cpu3c --vcpu 4 --max-price 0.13 --max-hours 4 --secure --volume VOL     # an actor pod
+dz run configs/smoke-volume.yml --actors 0                                   # on the head, from /root/dz/draftzero
+dz actor --config /workspace/runs/smoke-volume/store/config.yml --store /workspace/runs/smoke-volume/store --machine dz-va
+```
+
+The first pod of a commit uploads the bundle and leaves it on the volume, and later pods unpack it from there in
+seconds. Start remote actors once `dz status STORE` shows the run up: an actor exits at once on a `control.json` that
+says stop.
 
 ## Where data lives
 

@@ -9,6 +9,7 @@ Two pages are not numbered, because they track the current code:
 
 | Number | Title | Started | Applies to | Kind | Superseded by |
 | --- | --- | --- | --- | --- | --- |
+| 035 | [RunPod network volumes as a run's store](035-runpod-network-volumes.md) | 2026-10-14 | v0.2.0 | Report |  |
 | 034 | [The first experiments on the 0.2.0 pipeline](034-v0.2.0-first-experiments.md) | 2026-10-14 | v0.2.0 | Report |  |
 | 033 | [DraftZero 0.2.0 refactor plan](033-v0.2.0-refactor-plan.md) | 2026-10-14 | v0.2.0 | Plan |  |
 | 032 | [Building sealed decks from self-play: FDN on gorge](032-sealed-deckbuilding.md) | 2026-10-11 | v0.1.0 | Report |  |
