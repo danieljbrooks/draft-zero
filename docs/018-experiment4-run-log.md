@@ -1,5 +1,7 @@
 # Experiment #4: detailed run log
 
+*Started 2026-10-01 · Applies to v0.1.0 · Run log*
+
 *October 2026. **The detailed run log** of experiment #4: every stage, sweep, pod and decision as it happened,
 with the numbers behind them, written as the runs went (so earlier sections can be superseded by later ones; the
 newest summary is first). A shorter, polished account of what we learned will follow as docs/019. The plan, its

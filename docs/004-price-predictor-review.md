@@ -1,5 +1,7 @@
 # lordofthepigs' Forge simulations: notes for DraftZero
 
+*Started 2026-09-25 · Applies to v0.1.0 · Review*
+
 lordofthepigs ([npiguet](https://github.com/npiguet) on GitHub) is doing some great work simulating
 limited games. His repo, [npiguet/price-predictor](https://github.com/npiguet/price-predictor),
 has played hundreds of thousands of games in the Forge engine. On top of those games he has built

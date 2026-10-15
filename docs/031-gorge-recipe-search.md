@@ -1,5 +1,7 @@
 # Searching for a self-play recipe that scales: laptop experiments on gorge
 
+*Started 2026-10-11 · Applies to v0.1.0 · Run log*
+
 *Status (Wednesday 14 October 2026, 1:45 AM PT): stopped at Dan's request; §7 sums up. In short: the AlphaZero loop on
 cheap games stalls (nearly uniform policy targets; gains only through the value); lower exploration (`cpuct` 0.25) is
 worth ~30 Elo at test time; labels from 100-200-simulation searches with every decision recorded (E7, loop F) beat the

@@ -1,5 +1,7 @@
 # FDN generalist
 
+*Started 2026-09-21 · Applies to v0.1.0 · Reference*
+
 One network that plays FDN Premier Draft limited with any deck. Every game draws both decks at random from about 31.5k decks built by top 17lands players.
 
 ## Pieces

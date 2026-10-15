@@ -1,5 +1,7 @@
 # Hidden information: what MageZero sees, what its search sees, and how other games do it
 
+*Started 2026-09-26 · Applies to v0.1.0 · Report*
+
 Written 2026-09-26 on branch `gameplay-data`. It answers four questions:
 
 1. How is private information handled? What are the data structures, and where is it masked?

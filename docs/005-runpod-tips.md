@@ -1,5 +1,7 @@
 # Reserving RunPod instances: what worked and what didn't
 
+*Started 2026-09-25 · Applies to v0.1.0 · Reference*
+
 **Read this before reserving a pod.** Every item here cost real time or money to learn.
 Written 2026-09-25 while reserving pods for the experiment #2 pilot; the exp #1 lessons come
 from the [report](003-fdn-generalist-report.md) §4.2 and the [RUNBOOK](002-RUNBOOK.md).

@@ -1,5 +1,7 @@
 # FDN long run — runbook
 
+*Started 2026-09-21 · Applies to v0.1.0 · Reference*
+
 Target: a generalist that plays FDN limited with any deck, trained on one machine for
 ~10 days at ~$70, with a checkpoint every ~3 hours and enough eval signal to tell whether
 it is actually improving.

@@ -1,5 +1,7 @@
 # Self-play from the imitation start: architecture and plan
 
+*Started 2026-10-05 · Applies to v0.1.0 · Plan*
+
 *Revised 5 October 2026 (Pacific time). How we improve our best imitation-learned network by playing against itself:
 the architecture, the method, and a loose plan of small experiments. Budgets and training sizes are left out; the
 experiments will set them. The loop's code is built and passed a smoke test on the laptop (§3.4).*

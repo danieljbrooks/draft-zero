@@ -1,5 +1,7 @@
 # Experiment #2b – Imitation (run 2): starting self-play from human decisions
 
+*Started 2026-09-26 · Applies to v0.1.0 · Plan*
+
 > Experiment #2 has two components: **#2a**, the heuristic start ("run 1",
 > [docs/014](014-exp2-run1-report.md)), and **#2b – Imitation**, this run ("run 2"). Results for #2b
 > are in [docs/013](013-exp2-imitation-report.md).
