@@ -172,6 +172,25 @@ def test_pod_spec_refuses_secure_cloud_and_bad_cpu_pods():
     assert cpu["dataCenterIds"] == ["EU-RO-1"] and cpu["dataCenterPriority"] == "custom"
 
 
+def test_pod_request_attaches_a_network_volume_in_its_data_center():
+    spec = rp.PodSpec(name="dz-va", cpu="cpu3c", vcpu=8, max_price=0.25, cloud="SECURE", allow_secure=True,
+                      datacenters=("US-MD-1",), volume="vol1")
+    body = rp.pod_request(spec)
+    assert body["networkVolumeId"] == "vol1" and body["volumeMountPath"] == "/workspace"
+    assert body["dataCenterIds"] == ["US-MD-1"] and body["cloudType"] == "SECURE" and "supportPublicIp" not in body
+    assert "networkVolumeId" not in rp.pod_request(rp.PodSpec(name="x", gpu="g", max_price=0.2))
+    with pytest.raises(ValueError, match="Secure Cloud"):
+        rp.PodSpec(name="x", gpu="g", max_price=0.2, volume="vol1").validate()
+    with pytest.raises(ValueError, match="exactly one"):
+        rp.PodSpec(name="x", gpu="g", max_price=0.2, cloud="SECURE", allow_secure=True, volume="vol1").validate()
+    with pytest.raises(ValueError, match="exactly one"):
+        rp.PodSpec(name="x", gpu="g", max_price=0.2, cloud="SECURE", allow_secure=True, volume="vol1",
+                   datacenters=("A", "B")).validate()
+    with pytest.raises(ValueError, match="absolute"):
+        rp.PodSpec(name="x", gpu="g", max_price=0.2, cloud="SECURE", allow_secure=True, volume="vol1",
+                   datacenters=("A",), volume_mount="/").validate()
+
+
 def test_ssh_endpoint_and_brief():
     pod = {"id": "p1", "name": "dz", "publicIp": "1.2.3.4", "portMappings": {"22": 40066}, "costPerHr": 0.2}
     assert rp.ssh_endpoint(pod) == ("1.2.3.4", 40066)
@@ -198,6 +217,7 @@ class FakeRunPod:
         self.gets = []      # successive GET /pods/<id> answers (the last one repeats)
         self.post_fails = post_fails    # an exception the POST raises after RunPod made the pod (a lost reply)
         self.delete_fails = False
+        self.volumes = []
 
     def __call__(self, method, url, data, headers):
         body = json.loads(data) if data else None
@@ -229,6 +249,22 @@ class FakeRunPod:
                 return 500, "internal error"
             self.pods = [p for p in self.pods if p.get("id") != url.rsplit("/", 1)[1]]
             return 200, ""
+        if url == rp.VOLUMES and method == "GET":
+            return 200, json.dumps(self.volumes)
+        if url == rp.VOLUMES and method == "POST":
+            v = {"id": f"vol{len(self.volumes) + 1}", "name": body["name"], "size": body["size"],
+                 "dataCenterId": body["dataCenterId"]}
+            self.volumes.append(v)
+            return 200, json.dumps(v)
+        if url.startswith(f"{rp.VOLUMES}/"):
+            vid = url.rsplit("/", 1)[1]
+            v = [x for x in self.volumes if x["id"] == vid]
+            if not v:
+                return 404, "network volume not found"
+            if method == "DELETE":
+                self.volumes = [x for x in self.volumes if x["id"] != vid]
+                return 200, ""
+            return 200, json.dumps(v[0])
         return 404, "no route"
 
     def made(self, method, frag=""):
@@ -350,6 +386,47 @@ def test_cpu_quote_and_terminate_and_list():
     assert [p["id"] for p in api.list()] == ["a"]
     api.terminate("a")
     assert fake.made("DELETE", f"{rp.REST}/pods/a")
+
+
+def test_create_pins_the_pod_to_its_volumes_data_center():
+    fake = FakeRunPod()
+    fake.volumes = [{"id": "vol1", "name": "dz-vol", "size": 10, "dataCenterId": "US-X"}]
+    spec = dict(name="dz-va", cpu="cpu5c", vcpu=8, max_price=1, cloud="SECURE", allow_secure=True)
+    with pytest.raises(rp.RunPodError, match="in US-X"):
+        _api(fake).create(rp.PodSpec(**spec, datacenters=("EU-RO-1",), volume="vol1"))
+    with pytest.raises(rp.RunPodError, match="no network volume vol9"):
+        _api(fake).create(rp.PodSpec(**spec, datacenters=("EU-RO-1",), volume="vol9"))
+    assert not fake.made("POST", "/pods")
+    fake.volumes[0]["dataCenterId"] = "EU-RO-1"                  # the fake catalog has cpu5c in EU-RO-1
+    pod = _api(fake).create(rp.PodSpec(**spec, datacenters=("EU-RO-1",), volume="vol1"))
+    (post,) = fake.made("POST", f"{rp.REST}/pods")
+    assert pod["id"] == "pod123" and post[2]["networkVolumeId"] == "vol1"
+
+
+def test_volumes_create_list_and_delete_with_guards():
+    fake = FakeRunPod()
+    logs = []
+    api = rp.RunPodAPI(key=KEY, http=fake, log=logs.append)
+    for size in (5, 51):
+        with pytest.raises(rp.RunPodError, match="between 10 and 50"):
+            api.create_volume("dz-vol", size, "US-MD-1")
+    with pytest.raises(rp.RunPodError, match="data center"):
+        api.create_volume("dz-vol", 10, "")
+    assert not fake.made("POST", "networkvolumes")
+    v = api.create_volume("dz-vol", 10, "US-MD-1")
+    (post,) = fake.made("POST", "networkvolumes")
+    assert post[2] == {"name": "dz-vol", "size": 10, "dataCenterId": "US-MD-1"} and v["id"] == "vol1"
+    assert any("$0.70 a month until deleted" in m for m in logs)
+    with pytest.raises(rp.RunPodError, match="exists"):
+        api.create_volume("dz-vol", 10, "US-MD-1")                 # a retry must not make a second one
+    assert [x["id"] for x in api.volumes()] == ["vol1"] and api.volume("vol1")["dataCenterId"] == "US-MD-1"
+    api.delete_volume("vol1")
+    assert fake.made("DELETE", f"{rp.VOLUMES}/vol1") and api.volumes() == []
+    def post_fails(method, url, data, headers):                  # a 5xx may still have made it: say where to look
+        return (502, f"bad gateway {KEY}") if method == "POST" else fake(method, url, data, headers)
+    with pytest.raises(rp.RunPodError, match="dz pod volume list") as e:
+        rp.RunPodAPI(key=KEY, http=post_fails, log=logs.append).create_volume("dz-vol2", 10, "US-MD-1")
+    assert KEY not in str(e.value)
 
 
 def test_wait_ssh_waits_for_an_endpoint_that_answers():

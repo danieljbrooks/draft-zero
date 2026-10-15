@@ -16,6 +16,11 @@ fine-grained token limited to the run's bucket), else $HF_TOKEN, else the machin
 
 An ssh:// store is not opened here: a machine without a token writes to a local folder and a relay
 (draftzero.loop.relay) on a machine with the token moves files between that folder and the bucket.
+
+A folder can also be shared: a RunPod network volume mounted on several pods (MooseFS, docs/035). Every file has one
+writer and is renamed into place whole, so readers see the old file or the new one; a reader whose cached directory
+entry lags a rename by up to ~1 s can find the file gone between looking and opening it, so reads try again
+(VANISH_TRIES) before they say it is not there.
 """
 from __future__ import annotations
 
@@ -25,6 +30,9 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+
+VANISH_TRIES = 3             # a file seen but gone when opened (a shared folder's cached directory entry): look again
+VANISH_PAUSE_S = 0.3
 
 
 class Store:
@@ -97,50 +105,75 @@ class LocalStore(Store):
         return p
 
     def put_many(self, files, message=""):
+        """Each file goes to a temp file beside its target, is flushed to disk (fsync: on a network filesystem the
+        rename must not reach the other machines before the data) and renamed into place."""
         for path, src in files.items():
             dst = self._p(path)
             dst.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp = tempfile.mkstemp(dir=dst.parent, prefix=".tmp-")
-            os.close(fd)
-            if isinstance(src, (bytes, bytearray)):
-                Path(tmp).write_bytes(src)
-            else:
-                shutil.copyfile(src, tmp)
-            os.replace(tmp, dst)
+            try:
+                with os.fdopen(fd, "wb") as f:
+                    if isinstance(src, (bytes, bytearray)):
+                        f.write(src)
+                    else:
+                        with open(src, "rb") as s:
+                            shutil.copyfileobj(s, f, 1 << 20)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp, dst)
+            except BaseException:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+                raise
 
     def get(self, path, dest):
         src = self._p(path)
-        if not src.is_file():
-            return None
         dest = Path(dest)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(src, dest)
-        return dest
+        for _ in range(VANISH_TRIES):
+            if not src.is_file():
+                return None
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copyfile(src, dest)
+                return dest
+            except FileNotFoundError:            # replaced or removed between the look and the open
+                time.sleep(VANISH_PAUSE_S)
+        return None
 
     def list(self, prefix):
         """Every file under prefix, except dot-files and anything in a dot-folder: this store's own `.tmp-*`
-        files, rsync's temporary `.name.XXXXXX` files while a relay pulls, and the relay's `.relay-tmp/`."""
+        files, rsync's temporary `.name.XXXXXX` files while a relay pulls, and the relay's `.relay-tmp/`.
+        os.walk, not rglob: no stat per file, which on a network filesystem is a round trip each."""
         base = self._p(prefix) if prefix else self.root
         if base.is_file():
             return [prefix]
-        if not base.exists():
+        if not base.is_dir():
             return []
         out = []
-        for p in base.rglob("*"):
-            rel = p.relative_to(self.root)
-            if p.is_file() and not any(part.startswith(".") for part in rel.parts):
-                out.append(rel.as_posix())
+        for d, dirs, names in os.walk(base):
+            dirs[:] = [x for x in dirs if not x.startswith(".")]
+            rel = Path(d).relative_to(self.root)
+            if any(part.startswith(".") for part in rel.parts):
+                continue
+            out += [(rel / n).as_posix() for n in names if not n.startswith(".")]
         return sorted(out)
 
     def delete(self, paths, message=""):
         for path in paths:
             p = self._p(path)
             if p.exists():
-                p.unlink()
+                p.unlink(missing_ok=True)
 
     def read_bytes(self, path):
         p = self._p(path)
-        return p.read_bytes() if p.is_file() else None
+        for _ in range(VANISH_TRIES):
+            if not p.is_file():
+                return None
+            try:
+                return p.read_bytes()
+            except FileNotFoundError:            # replaced or removed between the look and the open
+                time.sleep(VANISH_PAUSE_S)
+        return None
 
     def exists(self, path):
         return self._p(path).is_file()

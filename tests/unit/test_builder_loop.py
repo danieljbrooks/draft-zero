@@ -302,6 +302,16 @@ def test_actor_pilot_follows_the_player_or_the_fixed_net(tmp_path):
     assert r.store.read_json(f"{bld.shard_dir('ba2', 1)}/meta.json")["player_version"] is None
 
 
+def test_builder_learner_never_republishes_version_zero_over_a_run_in_progress(tmp_path):
+    cfg = make_cfg(tmp_path)
+    st = LocalStore(tmp_path / "s")
+    st.write_json(ctl.version_file(2, "meta.json", bld.COMPONENT), {"version": 2})
+    lr = bld.BuilderLearner(st, cfg, "bl", tmp_path / "w")
+    with pytest.raises(RuntimeError, match="refusing to publish version 0"):
+        lr.bootstrap()
+    assert st.read_json(ctl.latest_path(bld.COMPONENT)) is None
+
+
 def test_learner_window_by_versions_and_by_games(tmp_path):
     cfg = make_cfg(tmp_path, builder={"window": {"kind": "versions", "size": 2}})
     lr = bld.BuilderLearner(LocalStore(tmp_path / "s"), cfg, "bl", tmp_path / "w")

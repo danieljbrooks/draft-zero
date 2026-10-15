@@ -305,11 +305,32 @@ class FakeAPI:
         return [{"cloud": "COMMUNITY", "offer": "RTX 3090", "price": 0.22, "vcpu": 16, "ram": 64, "stock": "High",
                  "usd_per_vcpu_hr": 0.0138, "gpu_id": "NVIDIA GeForce RTX 3090"}]
 
+    vols: list = []
+    deleted: list = []
+
+    def volumes(self):
+        return list(FakeAPI.vols)
+
+    def volume(self, vid):
+        for v in FakeAPI.vols:
+            if v["id"] == vid:
+                return v
+        from draftzero.workers.runpod import RunPodError
+        raise RunPodError(f"no network volume {vid} on this account")
+
+    def create_volume(self, name, size, dc):
+        v = {"id": f"vol{len(FakeAPI.vols) + 1}", "name": name, "size": size, "dataCenterId": dc}
+        FakeAPI.vols.append(v)
+        return v
+
+    def delete_volume(self, vid):
+        FakeAPI.deleted.append(vid)
+
 
 @pytest.fixture
 def pods(monkeypatch):
     from draftzero.workers import runpod as rp
-    FakeAPI.terminated, FakeAPI.fail = [], set()
+    FakeAPI.terminated, FakeAPI.fail, FakeAPI.vols, FakeAPI.deleted = [], set(), [], []
     ups = []
 
     def fake_up(api, spec, *, max_hours, files=None, setup=True, keep_on_failure=False):
@@ -344,6 +365,36 @@ def test_pod_up_needs_price_hours_and_confirmation(pods, monkeypatch, capsys):
                  "--yes"]) == 2                                          # CPU pods need --secure and a data center
     assert main(base + ["--max-price", "0.3", "--max-hours", "100", "--yes", "--no-bundle"]) == 2
     assert len(pods) == 1
+
+
+def test_pod_up_with_a_volume_goes_to_its_data_center_on_secure_cloud(pods, capsys):
+    FakeAPI.vols = [{"id": "vol1", "name": "dz-vol", "size": 10, "dataCenterId": "US-MD-1"}]
+    base = ["pod", "up", "--name", "dz-va", "--cpu", "cpu3c", "--vcpu", "8", "--max-price", "0.25", "--max-hours", "2",
+            "--no-bundle", "--yes", "--volume", "vol1"]
+    assert main(base) == 2 and "Secure Cloud" in capsys.readouterr().err          # --secure is never implied
+    assert main(base + ["--secure", "--datacenter", "EU-RO-1"]) == 2 and "US-MD-1" in capsys.readouterr().err
+    assert main(base[:-1] + ["vol9", "--secure"]) == 1 and "no network volume vol9" in capsys.readouterr().err
+    assert pods == []
+    assert main(base + ["--secure"]) == 0
+    out = capsys.readouterr().out
+    assert "network volume vol1 (dz-vol, 10 GB in US-MD-1) at /workspace" in out and "$0.70 a month" in out
+    s = pods[0]["spec"]
+    assert (s.volume, s.datacenters, s.cloud, s.allow_secure) == ("vol1", ("US-MD-1",), "SECURE", True)
+
+
+def test_pod_volume_create_list_rm_ask_first(pods, monkeypatch, capsys):
+    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False)
+    assert main(["pod", "volume", "list"]) == 0 and "no network volumes" in capsys.readouterr().out
+    create = ["pod", "volume", "create", "--name", "dz-vol", "--datacenter", "US-MD-1"]
+    assert main(create) == 2
+    out, err = capsys.readouterr()
+    assert "10 GB in US-MD-1" in out and "$0.70 a month until deleted" in out and "--yes" in err and FakeAPI.vols == []
+    assert main(create + ["--size", "20", "--yes"]) == 0 and FakeAPI.vols[0]["size"] == 20
+    capsys.readouterr()
+    assert main(["pod", "volume", "list"]) == 0 and "vol1  dz-vol" in capsys.readouterr().out
+    assert main(["pod", "volume", "rm", "vol1"]) == 2 and FakeAPI.deleted == []
+    assert "every file on it" in capsys.readouterr().out
+    assert main(["pod", "volume", "rm", "vol1", "--yes"]) == 0 and FakeAPI.deleted == ["vol1"]
 
 
 def test_pod_list_balance_offers_down(pods, capsys):

@@ -17,7 +17,7 @@
     dz play --a SPEC --b SPEC --pairs N         paired games between two gorge policy specs, and A's score
     dz eval MODEL --opponents a,b [--pairs N]   a network (.dzgw, hf:// file, or a run's version) against opponents
     dz engine build|version|coverage            build dzgorge at engine/gorge/GORGE_REF; its build record; deck support
-    dz pod up|down|list|balance|offers          RunPod pods for relay actors (up needs --max-price and --max-hours)
+    dz pod up|down|list|balance|offers|volume   RunPod pods (up needs --max-price and --max-hours) and network volumes
     dz relay CONFIG --host NAME ROOT [SSH] ...  move shards and versions between the run's store and actor hosts
 
 Commands that play games (run, play, eval, engine version|coverage, manifest) read the engine and the deck pool from
@@ -513,15 +513,64 @@ def _bundle(a):
     return rp.Bundle()
 
 
-def cost_guard(spec, max_hours: float, balance: str) -> str:
+def cost_guard(spec, max_hours: float, balance: str, volume: dict | None = None) -> str:
+    from draftzero.workers import runpod as rp
     worst = spec.max_price * max_hours
     what = f"GPU {spec.gpu}" if spec.gpu else f"CPU {spec.cpu} x {spec.vcpu} vCPU"
+    vol = ""
+    if volume:
+        size = float(volume.get("size") or 0)
+        vol = (f"\n  It mounts network volume {volume.get('id')} ({volume.get('name')}, {size:g} GB in "
+               f"{volume.get('dataCenterId')}) at {spec.volume_mount}; the volume bills about "
+               f"${size * rp.VOLUME_USD_PER_GB_MONTH:.2f} a month on its own until `dz pod volume rm`.")
     return (f"pod {spec.name}: {what} on {spec.cloud.title()} Cloud\n"
             f"  cost guard: at most ${spec.max_price:.3f}/h (a quote above it is refused, a pod billing above it is\n"
             f"  terminated) for at most {max_hours:g} h from its create, the wait for SSH included (it is armed to\n"
             f"  terminate itself then, even if this machine dies; one whose SSH is not up by then is removed): at\n"
             f"  most ${worst:.2f} in all, more only if RunPod's API refuses the terminate (the pod retries it for\n"
-            f"  30 min). Balance {balance}. `dz pod down ID` stops the billing sooner.")
+            f"  30 min). Balance {balance}. `dz pod down ID` stops the billing sooner." + vol)
+
+
+def _confirm(a, question: str, refused: str) -> bool:
+    """--yes, or a y at the prompt (no prompt without a terminal: then it is a CliError)."""
+    if a.yes:
+        return True
+    if not sys.stdin.isatty():
+        raise CliError(f"not confirmed: pass --yes to {question.rstrip('?').lower()} without a prompt")
+    if input(f"{question} [y/N] ").strip().lower() in ("y", "yes"):
+        return True
+    print(refused)
+    return False
+
+
+def _pod_volume(api, a) -> int:
+    from draftzero.workers import runpod as rp
+    if a.vol_cmd == "list":
+        vols = api.volumes()
+        if a.json:
+            print(json.dumps(vols, indent=1))
+        elif not vols:
+            print("no network volumes")
+        for v in ([] if a.json else vols):
+            size = float(v.get("size") or 0)
+            print(f"{v.get('id')}  {v.get('name') or '-':<16} {size:g} GB  {v.get('dataCenterId')}  "
+                  f"about ${size * rp.VOLUME_USD_PER_GB_MONTH:.2f} a month")
+        return 0
+    if a.vol_cmd == "create":
+        print(f"network volume {a.name}: {a.size} GB in {a.datacenter}. It bills about "
+              f"${a.size * rp.VOLUME_USD_PER_GB_MONTH:.2f} a month until deleted (`dz pod volume rm ID`), whether or "
+              "not a pod mounts it. Only Secure Cloud pods in that data center can mount it.", flush=True)
+        if not _confirm(a, "Create it?", "not created"):
+            return 1
+        print(json.dumps(api.create_volume(a.name, a.size, a.datacenter), indent=1))
+        return 0
+    v = api.volume(a.id)                                 # rm
+    print(f"network volume {v.get('id')} ({v.get('name')}, {v.get('size')} GB in {v.get('dataCenterId')}): deleting "
+          "it deletes every file on it, for good.", flush=True)
+    if not _confirm(a, "Delete it?", "not deleted"):
+        return 1
+    api.delete_volume(a.id)
+    return 0
 
 
 def cmd_pod(a) -> int:
@@ -548,6 +597,8 @@ def cmd_pod(a) -> int:
             print(f"{x['cloud']:9} {x['offer'][:30]:30} ${x['price']:<6} {x['vcpu']:>3} vCPU {x['ram'] or 0:>4} GB "
                   f"${x['usd_per_vcpu_hr']:.4f}/vCPU-h {x['stock']}")
         return 0
+    if a.pod_cmd == "volume":
+        return _pod_volume(api, a)
     if a.pod_cmd == "down":         # try every pod: one failure must not leave the later ones billing
         ids, failed = list(a.ids), []
         for name in a.name or []:
@@ -577,9 +628,19 @@ def cmd_pod(a) -> int:
             return 1
         return 0
     # up
+    vol = None
+    if a.volume:
+        if not a.secure:
+            raise CliError("network volumes exist only on Secure Cloud: add --secure")
+        vol = api.volume(a.volume)
+        dc = vol.get("dataCenterId")
+        if a.datacenter and list(a.datacenter) != [dc]:
+            raise CliError(f"network volume {a.volume} is in {dc}: pin the pod there (--datacenter {dc}, or leave "
+                           "--datacenter out)")
+        a.datacenter = [dc]
     spec = rp.PodSpec(name=a.name, max_price=a.max_price, gpu=a.gpu, cpu=a.cpu, vcpu=a.vcpu, min_vcpu=a.min_vcpu,
                       image=a.image or rp.IMAGE, datacenters=tuple(a.datacenter or ()),
-                      cloud="SECURE" if a.secure else "COMMUNITY", allow_secure=a.secure)
+                      cloud="SECURE" if a.secure else "COMMUNITY", allow_secure=a.secure, volume=a.volume)
     try:
         spec.validate()
     except ValueError as e:
@@ -591,19 +652,16 @@ def cmd_pod(a) -> int:
         bal = f"${float(api.balance().get('clientBalance') or 0):.2f}"
     except Exception as e:                               # noqa: BLE001 - the create checks the balance again
         bal = f"unknown ({type(e).__name__})"
-    print(cost_guard(spec, a.max_hours, bal), flush=True)
-    if not a.yes:
-        if not sys.stdin.isatty():
-            raise CliError("not confirmed: pass --yes to rent the pod without a prompt")
-        if input("Rent it? [y/N] ").strip().lower() not in ("y", "yes"):
-            print("not rented")
-            return 1
+    print(cost_guard(spec, a.max_hours, bal, vol), flush=True)
+    if not _confirm(a, "Rent the pod?", "not rented"):
+        return 1
     pod = rp.up(api, spec, max_hours=a.max_hours, files=files, setup=not a.no_setup,
                 keep_on_failure=a.keep_on_failure)
     print(json.dumps(rp.brief(pod.info) | {"id": pod.id, "ssh": pod.target.spec}, indent=1, default=str))
     print(f"pod {pod.id} is up and armed to terminate itself {a.max_hours:g} h after its create. Remove it with "
           f"`dz pod down {pod.id}`; "
-          + ("its actors run from " + files.remote_repo + " (`dz relay` pulls their shards)" if files else
+          + ("its actors run from " + files.remote_repo + (f" (a store under {spec.volume_mount} is shared with the "
+             "volume's other pods)" if vol else " (`dz relay` pulls their shards)") if files else
              "nothing was copied to it (--no-bundle)"))
     return 0
 
@@ -771,10 +829,11 @@ def parser() -> argparse.ArgumentParser:
     _add_config(q)
     p.set_defaults(func=cmd_engine)
 
-    p = add("pod", "RunPod pods for relay actors: up, down, list, balance, offers",
-            description="Rent and remove RunPod pods (draftzero.workers.runpod). The API key is read from "
-                        "/root/.runpod/env or ~/.runpod/env (RUNPOD_API_KEY). Pods bill until `dz pod down`.")
-    psub = p.add_subparsers(dest="pod_cmd", required=True, metavar="up|down|list|balance|offers")
+    p = add("pod", "RunPod pods for actors (up, down, list, balance, offers) and network volumes (volume)",
+            description="Rent and remove RunPod pods and network volumes (draftzero.workers.runpod). The API key is "
+                        "read from /root/.runpod/env or ~/.runpod/env (RUNPOD_API_KEY). Pods bill until `dz pod "
+                        "down`; a network volume bills until `dz pod volume rm`.")
+    psub = p.add_subparsers(dest="pod_cmd", required=True, metavar="up|down|list|balance|offers|volume")
     q = psub.add_parser("up", help="rent a pod, arm its self-destruct, copy the engine, decks and repo, bootstrap it",
                         description="Create a pod, wait for SSH, arm it to terminate itself --max-hours after its "
                                     "create, then (unless --no-bundle) copy dzgorge, the card corpus, the deck pool "
@@ -793,6 +852,9 @@ def parser() -> argparse.ArgumentParser:
     q.add_argument("--datacenter", action="append", default=[], help="pin to a data center (repeatable)")
     q.add_argument("--secure", action="store_true", help="allow Secure Cloud (costs more; CPU pods need it)")
     q.add_argument("--image", default=None, help="container image (default RunPod's base image)")
+    q.add_argument("--volume", default=None, metavar="ID",
+                   help="mount this network volume at /workspace (Secure Cloud: needs --secure; the pod goes to the "
+                        "volume's data center). Pods sharing a volume can share a run's store on it (docs/035)")
     q.add_argument("--no-bundle", action="store_true", help="only the armed pod: copy nothing")
     q.add_argument("--no-setup", action="store_true", help="copy the bundle but skip the bootstrap")
     q.add_argument("--keep-on-failure", action="store_true",
@@ -811,6 +873,20 @@ def parser() -> argparse.ArgumentParser:
     q.add_argument("--min-vcpu", type=int, default=8)
     q.add_argument("--max-price", type=float, default=None)
     q.add_argument("--secure", action="store_true", help="also list Secure Cloud")
+    q = psub.add_parser("volume", help="network volumes: create, list, rm",
+                        description="A network volume is a shared folder in one data center that Secure Cloud pods "
+                                    "there mount at /workspace. It bills about $0.07 a GB-month until deleted.")
+    vsub = q.add_subparsers(dest="vol_cmd", required=True, metavar="create|list|rm")
+    v = vsub.add_parser("create", help="rent a volume (asks first; --yes skips the question)")
+    v.add_argument("--name", required=True, help="volume name (unique: an existing name is refused)")
+    v.add_argument("--size", type=int, default=10, help="GB, 10-50 (default 10: about $0.70 a month)")
+    v.add_argument("--datacenter", required=True, help="its data center (pods that mount it run there)")
+    v.add_argument("--yes", action="store_true", help="create without asking")
+    v = vsub.add_parser("list", help="the account's volumes")
+    v.add_argument("--json", action="store_true")
+    v = vsub.add_parser("rm", help="delete a volume and every file on it (permanent; asks first)")
+    v.add_argument("id", metavar="ID")
+    v.add_argument("--yes", action="store_true", help="delete without asking")
     p.set_defaults(func=cmd_pod)
 
     p = add("relay", "move shards and versions between the run's store and actor hosts over rsync",

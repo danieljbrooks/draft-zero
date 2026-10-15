@@ -45,6 +45,51 @@ def test_local_store_list_skips_dot_files(tmp_path):
     assert s.list("") == ["heartbeats/a.json", "shards/a/000001/games.jsonl"]
 
 
+def test_local_store_reads_survive_a_file_replaced_mid_read(tmp_path, monkeypatch):
+    """On a shared network folder (a RunPod volume, MooseFS) a reader's cached directory entry can lag another
+    machine's rename: the file is there when looked at and gone when opened. That is a retry, not a crash (an
+    uncaught FileNotFoundError killed the role) and not "missing" (a learner would republish version 0)."""
+    s = LocalStore(tmp_path / "st")
+    s.write_json("versions/player/latest.json", {"version": 7})
+    monkeypatch.setattr(S, "VANISH_PAUSE_S", 0.0)
+    real_read, real_copy = Path.read_bytes, S.shutil.copyfile
+    fails = {"read": 2, "copy": 2}
+
+    def flaky_read(self):
+        if fails["read"]:
+            fails["read"] -= 1
+            raise FileNotFoundError(str(self))
+        return real_read(self)
+
+    def flaky_copy(src, dst, *a, **kw):
+        if fails["copy"]:
+            fails["copy"] -= 1
+            raise FileNotFoundError(str(src))
+        return real_copy(src, dst, *a, **kw)
+    monkeypatch.setattr(Path, "read_bytes", flaky_read)
+    monkeypatch.setattr(S.shutil, "copyfile", flaky_copy)
+    assert s.read_json("versions/player/latest.json") == {"version": 7}
+    assert s.get("versions/player/latest.json", tmp_path / "o" / "l.json") is not None
+    fails.update(read=S.VANISH_TRIES, copy=S.VANISH_TRIES)          # gone for good: not there, no exception
+    assert s.read_bytes("versions/player/latest.json") is None
+    assert s.get("versions/player/latest.json", tmp_path / "o" / "l2.json") is None
+
+
+def test_local_store_puts_leave_no_temp_file_behind(tmp_path, monkeypatch):
+    s = LocalStore(tmp_path / "st")
+    synced = []
+    real_fsync = S.os.fsync
+    monkeypatch.setattr(S.os, "fsync", lambda fd: (synced.append(fd), real_fsync(fd)))
+    src = tmp_path / "big.bin"
+    src.write_bytes(b"x" * (3 << 20))
+    s.put_many({"shards/a/000001/games.jsonl": src, "shards/a/000001/meta.json": b"{}"})
+    assert len(synced) == 2 and s.read_bytes("shards/a/000001/games.jsonl") == src.read_bytes()
+    with pytest.raises(FileNotFoundError):
+        s.put_many({"shards/a/000002/games.jsonl": tmp_path / "missing"})
+    assert sorted(x.name for x in (tmp_path / "st" / "shards" / "a").rglob("*") if x.is_file()) == \
+        ["games.jsonl", "meta.json"]                                  # the failed put's temp file is gone
+
+
 # ------------------------------------------------------------------------------------------------ a fake bucket
 
 @dataclasses.dataclass

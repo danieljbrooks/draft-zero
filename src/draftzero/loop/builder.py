@@ -518,6 +518,7 @@ class BuilderLearner:
         latest = self.latest()
         if latest is not None:
             return latest
+        ctl.refuse_version_zero_over(self.store, COMPONENT)
         init = self.c("builder.init")
         meta = {"version": 0, "parent": None, "net": False, "sha256": {}, "shards": [], "games": 0, "decided": 0,
                 "metrics": {}, "time": ctl.now_iso(), "source": init}

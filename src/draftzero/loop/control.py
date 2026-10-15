@@ -84,6 +84,23 @@ def latest_path(component: str = COMPONENT) -> str:
     return f"versions/{component}/latest.json"
 
 
+def published_versions(store, component: str = COMPONENT) -> list[int]:
+    """The versions of `component` with a meta.json (complete: it is written after the version's files)."""
+    pat = re.compile(rf"^versions/{re.escape(component)}/v(\d+)/meta\.json$")
+    return sorted(int(m.group(1)) for m in map(pat.match, store.list(f"versions/{component}/")) if m)
+
+
+def refuse_version_zero_over(store, component: str = COMPONENT) -> None:
+    """A learner publishes version 0 only on a fresh store. latest.json missing while a later version is published is
+    a store that lost it, or a shared network folder that does not show it yet: publishing version 0 then would
+    send every actor back to the start of the run."""
+    later = [v for v in published_versions(store, component) if v > 0]
+    if later:
+        raise RuntimeError(f"{latest_path(component)} is missing but version {later[-1]} is published: refusing to "
+                           "publish version 0 over a run in progress (restart the learner; if it persists, restore "
+                           f"latest.json from {version_dir(later[-1], component)})")
+
+
 def shard_dir(actor: str, seq: int) -> str:
     return f"shards/{actor}/{int(seq):06d}"
 

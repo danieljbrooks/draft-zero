@@ -763,6 +763,30 @@ def test_learner_lease(tmp_path):
     other.lease()                                              # a released lease is free at once
 
 
+def test_learner_never_republishes_version_zero_over_a_run_in_progress(tmp_path):
+    """latest.json unreadable (lost, or not yet visible on a shared network folder) while version 1 is published:
+    the learner refuses to start the run over. A bootstrap interrupted before latest.json (only v0000 written) may
+    finish."""
+    r = Run(tmp_path, make_cfg(tmp_path))
+    r.controller.tick()
+    r.learner.step()                                           # v0
+    r.controller.tick()
+    r.actors[0].step()
+    r.actors[0].step()
+    assert r.learner.step() == "published"                     # v1
+    assert ctl.published_versions(r.store) == [0, 1]
+    r.store.delete([ctl.latest_path()])
+    fresh = Learner(r.store, r.cfg, "l2", tmp_path / "work" / "l2", gorge=r.gorge, train=fake_train(r.trains),
+                    export=fake_export, log=r.log.append)
+    r.learner.release()
+    with pytest.raises(RuntimeError, match="refusing to publish version 0"):
+        fresh.step()
+    assert r.store.read_json(ctl.version_file(1, "meta.json"))["version"] == 1
+    s2 = LocalStore(tmp_path / "s2")
+    s2.write_json(ctl.version_file(0, "meta.json"), {"version": 0})
+    ctl.refuse_version_zero_over(s2)                           # only v0: a fresh start may redo it
+
+
 def test_a_learner_that_lost_its_lease_does_not_publish_and_forgets_its_state(tmp_path):
     """While learner A trains, its lease runs out and B takes it and publishes version 1: A does not publish over
     it; it forgets what it knew of the store, so once it holds the lease again it starts from B's ingested.json

@@ -200,6 +200,7 @@ class Learner:
         latest = self.latest()
         if latest is not None:
             return latest
+        ctl.refuse_version_zero_over(self.store)
         init = self.c("player.init")
         meta = {"version": 0, "parent": None, "net": False, "arch": self.c("player.arch", "mlp"), "sha256": {},
                 "shards": [], "positions": 0, "games": 0, "metrics": {}, "time": ctl.now_iso(), "source": init}
