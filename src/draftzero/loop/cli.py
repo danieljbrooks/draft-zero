@@ -154,8 +154,7 @@ def main(argv=None, prog: str | None = None) -> int:
 
     _sigterm_exits()
     store = open_store(store_spec)
-    from draftzero.loop.store import HFBucketStore
-    remote = isinstance(store, HFBucketStore)
+    remote = getattr(store, "remote", False)
     poll = a.poll if a.poll is not None else (60.0 if remote else 30.0)
     if a.role == "controller":
         from draftzero.loop.controller import Controller

@@ -2,6 +2,7 @@
 
     open_store("runs/smoke")                       a local folder: one machine (and the tests)
     open_store("hf://buckets/danbrooks/dz-e1")     a private Hugging Face Storage Bucket: many machines
+    open_store("runpodvol://<vol>@EUR-IS-1/runs/e1/store")   a RunPod network volume: its mount on a pod, else S3
 
 Paths are store-relative and use "/" ("control.json", "shards/pod1/000003/meta.json"). A prefix that ends in "/"
 is a folder; `list` returns every file under it, sorted. Writes are whole files: a reader never sees half of one.
@@ -37,6 +38,8 @@ VANISH_PAUSE_S = 0.3
 
 class Store:
     """The interface every role uses."""
+
+    remote = False          # True: every call is a network request (roles poll less often)
 
     def put_many(self, files: dict[str, Path | bytes], message: str = "") -> None:
         """Write every file (local path or bytes) at its store path, in the dict's order."""
@@ -198,6 +201,8 @@ class HFBucketStore(Store):
     times with a growing pause; a missing file is not an error (get and read_bytes return None).
     """
 
+    remote = True
+
     def __init__(self, bucket: str, token: str | None = None, *, api=None, retries: int = 3, backoff_s: float = 2.0):
         if bucket.count("/") != 1 or not all(bucket.split("/")):
             raise ValueError(f"a bucket id is owner/name, not {bucket!r}")
@@ -290,8 +295,12 @@ def _transient(e: Exception) -> bool:
 
 
 def open_store(spec: str | Path, *, token: str | None = None) -> Store:
-    """A store from its spec: a folder path, or hf://buckets/<owner>/<name>."""
+    """A store from its spec: a folder path, hf://buckets/<owner>/<name>, or runpodvol://<volume>@<DC>/<path> (a
+    folder on a RunPod network volume: this machine's mount of it, else RunPod's S3 API; draftzero.loop.s3)."""
     s = str(spec)
+    if s.startswith("runpodvol://"):
+        from draftzero.loop.s3 import open_volume_store
+        return open_volume_store(s)
     if s.startswith("hf://"):
         rest = s[len("hf://"):].strip("/")
         if not rest.startswith("buckets/"):

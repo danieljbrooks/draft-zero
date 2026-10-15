@@ -214,7 +214,12 @@ def cmd_loop(a) -> int:            # only reached through main's shortcut; kept 
 # ------------------------------------------------------------------------------------------------ report, models
 
 def _is_remote(spec: str) -> bool:
-    return "://" in str(spec)
+    """A store reached over the network: hf://, ssh://, or a runpodvol:// volume this machine does not mount."""
+    spec = str(spec)
+    if spec.startswith("runpodvol://"):
+        from draftzero.loop import s3
+        return s3.volume_mount(s3.parse_spec(spec)[0]) is None
+    return "://" in spec
 
 
 def cmd_report(a) -> int:
@@ -333,7 +338,7 @@ def _model_source(model: str):
     spec, v = m["store"], m["v"]
     from draftzero.loop import control as ctl
     from draftzero.loop.store import open_store
-    if not spec.startswith("hf://") and not (Path(spec) / ctl.CONFIG).is_file():
+    if "://" not in spec and not (Path(spec) / ctl.CONFIG).is_file():
         raise CliError(f"{model}: not a .dzgw file, an hf:// model file or a run store (a folder with config.yml)")
     store = open_store(spec)
     if v in (None, "latest"):
