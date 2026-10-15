@@ -80,7 +80,9 @@ def run_ratio(spec: str, entries: list[dict], dirs: dict, cfg, out: Path, a) -> 
     epochs = float(spec[1:]) if spec.startswith("e") else None
     r = None if epochs else float(spec)
     blend = float(cfg.learner.value_blend) if a.value_blend is None else a.value_blend
-    rd = out / ((f"E{epochs:g}" if epochs else f"R{r:g}") + ("" if a.value_blend is None else f"-vb{blend:g}"))
+    net = {**ctl.as_dict(cfg.player.config), **json.loads(a.player_config or "{}")}
+    rd = out / ((f"E{epochs:g}" if epochs else f"R{r:g}") + ("" if a.value_blend is None else f"-vb{blend:g}")
+                + ("" if not a.player_config else "-" + "-".join(f"{k}{v}" for k, v in json.loads(a.player_config).items())))
     rd.mkdir(parents=True, exist_ok=True)
     rows_path = rd / "rows.json"
     rows = json.loads(rows_path.read_text()) if rows_path.exists() else []
@@ -112,7 +114,7 @@ def run_ratio(spec: str, entries: list[dict], dirs: dict, cfg, out: Path, a) -> 
                     "--eval-max", str(a.eval_max), "--seed", str(1_000_003 + version), "--epochs", "1000000",
                     "--max-steps", str(steps)]
             argv += ["--init", str(prev)] if prev else ["--arch", cfg.player.arch,
-                                                        "--config", json.dumps(ctl.as_dict(cfg.player.config))]
+                                                        "--config", json.dumps(net)]
             env = {**os.environ, "OMP_NUM_THREADS": str(a.threads), "MKL_NUM_THREADS": str(a.threads)}
             t0 = time.time()
             shutil.rmtree(vd, ignore_errors=True)
@@ -146,6 +148,8 @@ def main(argv=None) -> int:
     ap.add_argument("--test-frac", type=float, default=0.15)
     ap.add_argument("--eval-max", type=int, default=30000, help="records per evaluation set")
     ap.add_argument("--max-versions", type=int, default=0, help="stop each ratio after this many versions (0: all)")
+    ap.add_argument("--player-config", default=None,
+                    help='network overrides for the random init, e.g. \'{"d": 256, "ff": 512}\' (default: the run\'s)')
     ap.add_argument("--value-blend", type=float, default=None,
                     help="value target (1-x) outcome + x root value (default: the run's learner.value_blend)")
     a = ap.parse_args(argv)
@@ -176,7 +180,8 @@ def main(argv=None) -> int:
     results = {"split": split, "rows": []}
     for spec in a.ratios.split(","):
         results["rows"] += run_ratio(spec.strip(), entries[:cut], dirs, cfg, out, a)
-        (out / ("results.json" if a.value_blend is None else f"results-vb{a.value_blend:g}.json")).write_text(
+        tag = ("" if a.value_blend is None else f"-vb{a.value_blend:g}") + ("" if not a.player_config else "-net")
+        (out / f"results{tag}.json").write_text(
             json.dumps(results, indent=1))
     return 0
 
