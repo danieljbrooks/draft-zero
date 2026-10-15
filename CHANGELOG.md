@@ -30,7 +30,7 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 
 ### Changed
 
-- **The engine is gorge only,** pinned through the fork `danieljbrooks/gorge`, branch `draftzero`: gorge main `813dcf3b4` plus seven DraftZero commits (0008 topk-max-options, 0009 sims-by-kind, the 0009 mayplay fix, the driver deltas, playout-cap randomization, the decided-game cheap search, forced playouts). v0.1.0 pinned `adams-shaun/gorge` at `c9a422b` and applied patches 0001–0009 at build time; 0001–0007 and the driver itself are now upstream.
+- **The engine is gorge only,** pinned through the fork `danieljbrooks/gorge`, branch `draftzero`: gorge main `36a6c1c36` (14 October, evening) plus eight DraftZero commits (0008 topk-max-options, 0009 sims-by-kind, the 0009 mayplay fix, the driver deltas, playout-cap randomization, the decided-game cheap search, forced playouts, `sealed-pools`). v0.1.0 pinned `adams-shaun/gorge` at `c9a422b` and applied patches 0001–0009 at build time; 0001–0007 and the driver itself are now upstream.
 - gorge's paid-mana census is on by default, and the search hides the opponent's decklist (`:closedlist`). Results and networks from v0.1.0 are not comparable with 0.2.0's.
 - Packages moved: `gorge/dzg/` → `draftzero.nets`, `gorge/sealed/` → `draftzero.build`, `draftzero.selfplay` → `draftzero.loop`, `gorge/decks.py` → `draftzero.data`, `gorge/analyze.py`, `stats.py` and `reference.py` → `draftzero.eval`, figure scripts → `draftzero.plots`, `tools/compute_bench/pods.py` → `draftzero.workers.runpod`.
 - `tools/extract_decks.py` no longer needs an XMage jar.
@@ -48,7 +48,7 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 
 All ten rigid interfaces are named and versioned for the first time.
 
-1. **Engine pin:** `engine/gorge/GORGE_REF` = `8aa1f37dc81c9e15f7caa77481415e82908177d8` on `danieljbrooks/gorge` (branch `draftzero`: gorge main 813dcf3b4 plus eight DraftZero commits) (was `gorge/GORGE_REF` = `c9a422b703f40acec744cb8c947b724f057305b3` on `adams-shaun/gorge` plus patches).
+1. **Engine pin:** `engine/gorge/GORGE_REF` = `27ff42e4c137582fcf1fce87c32c66ca790c73df` on `danieljbrooks/gorge` (branch `draftzero`: gorge main 36a6c1c36 plus eight DraftZero commits; the experiments of docs/034 ran on the earlier pins `5fd039e` and `8aa1f37dc`, on gorge main 813dcf3b4) (was `gorge/GORGE_REF` = `c9a422b703f40acec744cb8c947b724f057305b3` on `adams-shaun/gorge` plus patches).
 2. **Card corpus pin:** gorge's `FORGE_REF` = `098b0553` on `adams-shaun/forge` (was `ab2a79bd`).
 3. **Driver CLI and policy strings:** upstream's `cmd/dzgorge` plus DraftZero's deltas. New: the `:closedlist` key with `-belief-decks`, `-belief-pool` and `-belief-split`; the `sbtactical` policy; `-no-paid-mana-census`, since the census is now on by default; playout-cap randomization (`pcr=`, `cheap=`, `pcrk=`); the decided-game cheap search (`decided[=H]`, `decidedn=`, `decidedsims=`, `decidedw=`) and forced playouts (`forced[=K]`), whose visit records gain an optional `weight` field. `PolicySpec` renders them after `pcrk=` and before `gonet=`; a spec without them renders as before. Kept from v0.1.0: `-deckfile`, `-pairs-file`, `ksims=`, `-topk-max-options`, `-audit-*`.
 4. **Scorer hook:** `policynet.External` unchanged, now upstream; the in-engine MLP moved to gorge's `internal/gonet`.
