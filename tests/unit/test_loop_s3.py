@@ -100,6 +100,13 @@ def test_credentials_come_from_the_file_unexported(tmp_path, monkeypatch):
     with pytest.raises(s3.S3Error, match="S3 API Keys"):
         s3.credentials(str(tmp_path / "missing"))
 
+    def unreadable(*a, **k):                          # /root/.runpod/s3_env for a user who isn't root (CI)
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(s3.secrets, "load", unreadable)
+    monkeypatch.setenv("DZ_S3_ACCESS_KEY_ID", "user_env")
+    monkeypatch.setenv("DZ_S3_SECRET_ACCESS_KEY", "rps_env")
+    assert s3.credentials() == ("user_env", "rps_env")
+
 
 # ------------------------------------------------------------------------------------------------ a fake S3
 
@@ -200,7 +207,7 @@ def test_s3_store_retries_only_transient_errors_and_keeps_the_key_secret():
 def test_a_loop_runs_split_between_a_pod_mount_and_s3(tmp_path):
     """The volume seen two ways: the controller and the learner through S3 (d1), an actor through its mount (a pod).
     Here the "mount" is the fake server's own folder view, so both sides see the same files."""
-    from tests.unit.test_loop import Run, make_cfg      # noqa: F401 - the in-process loop harness
+    from test_loop import FakeGorge, Run, make_cfg      # noqa: F401 - the in-process loop harness (tests/unit)
 
     class FolderS3(FakeS3):
         """A fake S3 whose objects live in a folder: what the pods write through their mount, d1 reads through S3."""
@@ -230,7 +237,6 @@ def test_a_loop_runs_split_between_a_pod_mount_and_s3(tmp_path):
     cfg = make_cfg(tmp_path)
     r = Run(tmp_path, cfg, store=s3_side)                # controller, learner, evaluator over S3
     from draftzero.loop.actor import Actor
-    from tests.unit.test_loop import FakeGorge
     pod_actor = Actor(pod_side, cfg, "pod1", tmp_path / "work" / "pod1", gorge=r.gorge, log=lambda *a: None)
     r.controller.tick()
     r.learner.step()                                     # v0, written through S3

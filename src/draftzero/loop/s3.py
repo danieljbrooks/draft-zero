@@ -92,7 +92,10 @@ def sigv4_headers(method: str, url: str, headers: dict, payload_sha256: str, *, 
 
 def credentials(env_file: str | None = None) -> tuple[str, str]:
     """(access key, secret) for RunPod's S3 API. Never print them."""
-    vals = secrets.load(env_file or S3_ENV, export=False)
+    try:
+        vals = secrets.load(env_file or S3_ENV, export=False)
+    except OSError:                                   # e.g. /root/.runpod for a user who isn't root: not there
+        vals = {}
     ak = vals.get("RUNPOD_S3_ACCESS_KEY_ID") or os.environ.get("DZ_S3_ACCESS_KEY_ID")
     sk = vals.get("RUNPOD_S3_SECRET_ACCESS_KEY") or os.environ.get("DZ_S3_SECRET_ACCESS_KEY")
     if not (ak and sk):
