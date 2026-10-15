@@ -59,6 +59,10 @@ else changes: there is no relay, the pods hold no token, and sync mode counts ev
   visible, would otherwise restart the run).
 - **`dz run` on a stopped store** starts the learner, evaluator and actors only after the controller has resumed the
   run. Before c096a49 they read the old stop and exited cleanly, so nothing noticed (§5).
+- **Every loop role and `nets.train` raise their soft open-file limit** (8b9d685). The trainer memory-maps every
+  array of every shard in its window, and a pod starts processes at 1,024 open files (§5).
+- **`runpodvol://<volume>@<DC>/<path>`** (bbe15e3) names the same store from anywhere. On a pod that mounts the
+  volume it opens the folder; elsewhere it opens an `S3Store` through RunPod's S3 API (§6).
 
 ### Running one
 
@@ -80,7 +84,10 @@ old stop. `dz status STORE` shows when the run is up.
 **Seed pods from the volume, not from d1.** `dz pod up` uploads about 340 MB to each pod from d1: the repo, dzgorge,
 `.cards` and the deck pool. On 14 October d1's uplink to Iceland gave 2–3 MB/s in all, and one pod got 45 KB/s.
 Once one pod had the bundle, it went onto the volume as a single 70 MB tarball. Each other pod unpacked it in
-6–11 s and ran `deploy/pod_bootstrap.sh` (`/work/exp/e2c/seed.sh`). *Not in `dz pod up` yet.*
+6–11 s and ran `deploy/pod_bootstrap.sh` (`/work/exp/e2c/seed.sh`). `dz pod up --volume` now does this itself
+(71b34d0). The first pod of a commit, dzgorge build and deck pool uploads from d1 and leaves
+`/workspace/dz/seed/bundle-<commit>-<dzgorge>-<pool>.tgz`; later pods unpack it. Start one pod first and the rest
+after it, or they all upload.
 
 ## 3. What it costs
 
@@ -127,22 +134,37 @@ The read retries in `LocalStore` never fired in these probes, but they cost noth
 - **Final evaluation:** each arm's last version against B17, and the two arms head to head, at 100 and 25
   simulations.
 
-*What happened at the start:* `dz run` started each run's learner and evaluator together with its controller. They
-read E2b's final `control.json` (stop) before the controller had cleared it, and exited with code 0. The actors,
-started 25 s later, played on with no learner for 3 minutes, until the two roles were started by hand. c096a49 fixes
-this in `dz run`. The pods ran the earlier commit, so this run kept the hand-started roles.
+*Two failures, both fixed in the code since, neither caused by the volume:*
+- **18:41, the resume race.** `dz run` started each run's learner and evaluator together with its controller. They
+  read E2b's final `control.json` (stop) before the controller had cleared it, and exited with code 0, so `dz run`
+  did not notice. The actors, started 25 s later, played on with no learner for 3 minutes, until the two roles were
+  started by hand at 18:44. Fixed in c096a49.
+- **18:56, too many open files.** The PCR run's learner died in training with `EMFILE` once its window held about 80
+  shards. The trainer memory-maps each shard's arrays, and every map holds a descriptor: about 13 a shard, against
+  the pod's soft limit of 1,024 (hard limit 1,048,576; d1's is 524,288, which is why E1 and E2b never hit it). Both
+  learners were restarted at 18:57 under `ulimit -n 65536`. Fixed in 8b9d685.
+
+The pods ran 68b62fd throughout, so these runs kept their hand-started roles.
 
 *Results: to come.*
 
 ## 6. Not done yet
 
-- **d1 over S3 (design b).** d1 would keep the learner, controller and evaluator on its own (free) cores and reach
-  the volume through RunPod's S3 API, with only actors on pods.
-  - It needs an S3 API key, which only Dan can create (console, Settings → S3 API Keys), saved in d1's
-    `/root/.runpod/s3_env`. The key reaches every volume on the account.
-  - It also needs an `S3Store` (about 150 lines with SigV4 signing).
-  - Open questions to measure: S3 list latency on pod-written files (RunPod computes their checksums lazily), and
-    whether a PutObject appears atomically on the mount.
-- **Seeding in `dz pod up`** (§2): use the volume's bundle when it matches the commit and engine, and otherwise
-  upload once and put it there.
+- **d1 over S3, untested against RunPod.** d1 would keep the learner, controller and evaluator on its own (free)
+  cores and reach the volume through RunPod's S3 API, with only actors on pods: `--store
+  runpodvol://<volume>@<DC>/runs/<id>/store` on every machine. The code is in (bbe15e3):
+  - `draftzero.loop.s3.S3Store`: path-style requests signed with AWS Signature Version 4, which match AWS's three
+    published examples in the tests;
+  - one PutObject or DeleteObject per file, ListObjectsV2 pages without folder keys and dot-files;
+  - retries on network errors, 408, 429 and 5xx;
+  - an in-process test of a run split between an S3 view and a mount view of the same folder.
+
+  It needs an S3 API key, which only Dan can create (console, Settings → S3 API Keys), saved in d1's
+  `/root/.runpod/s3_env` as `RUNPOD_S3_ACCESS_KEY_ID=...` and `RUNPOD_S3_SECRET_ACCESS_KEY=...` (chmod 600). The key
+  reaches every volume on the account. Still to measure:
+  - S3 listing latency on pod-written files (RunPod computes their checksums lazily);
+  - whether a PutObject appears atomically on the mount;
+  - RunPod's request limits.
+
+  The relay already takes any store as its upstream, so Community pods could join a volume run through d1 this way.
 - **Several data centers:** one volume each, joined by the relay. Not needed at this scale.
