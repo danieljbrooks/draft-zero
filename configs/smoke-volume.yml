@@ -1,0 +1,7 @@
+# smoke.yml with its store on a RunPod network volume (docs/035): the controller, learner and evaluator on one pod
+# (`dz run configs/smoke-volume.yml --actors 0`), and an actor on each other pod that mounts the volume
+# (`dz actor --config /workspace/runs/smoke-volume/store/config.yml --store /workspace/runs/smoke-volume/store
+# --machine NAME`). No relay: every role reads and writes the same folder.
+extends: smoke.yml
+run: smoke-volume
+store: /workspace/runs/smoke-volume/store
