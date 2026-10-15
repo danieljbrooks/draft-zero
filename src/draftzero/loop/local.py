@@ -113,10 +113,27 @@ def _set_handlers(sigs, handler) -> dict:
     return {s: signal.signal(s, handler) for s in sigs}
 
 
+def _await_resume(st, ctrl: subprocess.Popen, *, timeout_s: float, tick_s: float, log) -> bool:
+    """On a store whose control.json says stop, wait until the controller has resumed the run (it clears the stop at
+    its first tick): a role started before that reads the old stop and exits at once, cleanly, so the loop below
+    would not notice. False when the controller exited first."""
+    log("local: the store's run is stopped; starting the other roles once the controller has resumed it")
+    end = time.time() + timeout_s
+    while time.time() < end:
+        if ctrl.poll() is not None:
+            return False
+        c = ctl.read(st)
+        if c is not None and not c.get("stop"):
+            return True
+        time.sleep(tick_s)
+    log(f"local: the run still says stop {timeout_s:.0f} s after the controller started; starting the roles anyway")
+    return True
+
+
 def run(config: str, store: str, work_dir: Path, *, machine: str = "local", actors: int = 1,
         max_hours: float | None = None, grace_s: float = 180.0, poll_s: float | None = None, log=print,
         commands: dict[str, list[str]] | None = None, tick_s: float = 2.0, allow_config_change: bool = False,
-        player: bool = True, builder: bool = False, builder_actors: int = 1) -> int:
+        player: bool = True, builder: bool = False, builder_actors: int = 1, resume_timeout_s: float = 300.0) -> int:
     work_dir = Path(work_dir).resolve()
     (work_dir / "logs").mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
@@ -148,8 +165,14 @@ def run(config: str, store: str, work_dir: Path, *, machine: str = "local", acto
     # The roles run in their own sessions, so a signal to this process reaches none of them: SIGTERM and SIGHUP
     # (kill, a harness timeout, a closed terminal) must end in the finally below, as Ctrl-C does.
     previous = _set_handlers((signal.SIGTERM, signal.SIGHUP), _raise_terminated)
+    stopped = st is not None and bool((ctl.read(st) or {}).get("stop"))
     try:
         for name, argv in cmds.items():
+            if stopped and name != "controller" and "controller" in procs:
+                stopped = False
+                if not _await_resume(st, procs["controller"], timeout_s=resume_timeout_s, tick_s=min(tick_s, 0.5),
+                                     log=log):
+                    break                                # the loop below handles the controller's exit
             lf = open(work_dir / "logs" / f"{name}.log", "ab")
             logs.append(lf)
             procs[name] = subprocess.Popen(argv, stdout=lf, stderr=subprocess.STDOUT, env=env, start_new_session=True)

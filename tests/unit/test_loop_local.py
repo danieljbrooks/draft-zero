@@ -119,6 +119,26 @@ def test_a_stop_request_no_controller_acted_on_is_removed(tmp_path, monkeypatch)
     assert (store / "stop.request").exists()
 
 
+def test_on_a_stopped_store_the_roles_start_once_the_controller_resumed_it(tmp_path, monkeypatch):
+    """`dz run` on a store whose control.json says stop (a run stopped earlier, resumed): the controller clears the
+    stop at its first tick, and a learner or evaluator started before that read the old stop and exited at once,
+    cleanly, so nothing noticed (E2c, 14 Oct: actors played for minutes with no learner)."""
+    import json
+    store = tmp_path / "store"
+    store.mkdir()
+    (store / "control.json").write_text(json.dumps({"format": "dz-control/1", "stop": True, "stop_reason": "x"}))
+    controller = ("import json, sys, time; time.sleep(1.0); open(sys.argv[1] + '/control.json', 'w')"
+                  ".write(json.dumps({'format': 'dz-control/1', 'stop': False})); time.sleep(2.0)")
+    learner = ("import json, sys; c = json.load(open(sys.argv[1] + '/control.json')); "
+               "open(sys.argv[1] + '/learner.saw', 'w').write('stop' if c.get('stop') else 'run')")
+    monkeypatch.setattr(local, "role_commands", lambda *a, **k: {"controller": [PY, "-c", controller, str(store)],
+                                                                 "learner": [PY, "-c", learner, str(store)]})
+    logs = []
+    assert local.run("c", str(store), tmp_path / "w", log=logs.append, grace_s=5, tick_s=0.2) == 0
+    assert (store / "learner.saw").read_text() == "run"
+    assert any("resume" in m for m in logs)
+
+
 @pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGHUP], ids=["SIGTERM", "SIGHUP"])
 def test_sigterm_or_sighup_stops_the_roles_as_ctrl_c_does(tmp_path, sig):
     """`kill`, a closed terminal or a harness timeout must not orphan the roles (they run in their own sessions)."""
