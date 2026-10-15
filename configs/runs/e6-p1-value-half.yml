@@ -2,7 +2,8 @@
 # E1 (from scratch) and E2c (from B17) both stopped gaining against fixed opponents after a few thousand games, while
 # their policy loss kept falling and their value loss against results rose (E2c's control: 0.385 at v4, 0.425 at
 # v12). The value is trained on the search's own root values (learner.value_blend 1.0): nothing ties it to who won.
-# Arms, from E1's final version (v36: +8.0 points over B17, paired by deal), at equal CPU-hours on the same machines:
+# Arms, from E1's final version (v36: level with E2c's B17-based finals, docs/034 §4; the run whose plateau is
+# clearest), at equal CPU-hours on the same machines:
 #   e6-p0-control     value_blend 1.0, the root value (E1's recipe)
 #   e6-p1-value-half  value_blend 0.5, half the game's result and half the root value
 # Both: the decided-game search on (docs/034 §8 item 3), PCR off (E2c: no gain), E1's replay (2 epochs of the
