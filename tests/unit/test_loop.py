@@ -1021,19 +1021,21 @@ def test_evaluator_plays_assigned_shards_and_scores_them(tmp_path):
 def test_playing_roles_heartbeat_so_a_hung_game_does_not_look_dead(tmp_path):
     """One hung game keeps Gorge.play busy past timeout_s (its pair's replay adds a probe), longer than the
     controller's liveness window: a playing evaluator (and actor) heartbeats every HEARTBEAT_EVERY_S, so the
-    controller does not declare it dead and move its shard to another evaluator."""
+    controller does not declare it dead and move its shard to another evaluator. The margins are wide (heartbeats
+    every 0.05 s, a 1 s liveness window, a 1.6 s game), so only a role that never heartbeats looks dead: a 0.4 s
+    window failed once on a loaded CI runner."""
     r = Run(tmp_path, make_cfg(tmp_path, eval={"opponents": ["sbtactical"], "pairs": 2}))
     r.controller.tick()
     r.learner.step()                                           # v0
     assert r.evaluator.step() == "wait"
     r.controller.tick()                                        # the job's shard goes to e1
-    r.controller.live_s, r.controller.late_s = 0.4, 60.0
+    r.controller.live_s, r.controller.late_s = 1.0, 60.0
     r.evaluator.HEARTBEAT_EVERY_S = r.actors[0].HEARTBEAT_EVERY_S = 0.05
     play, seen = r.gorge.play, []
 
     def hung(a, b, **kw):                                      # longer than the liveness window
         t0 = time.time()
-        time.sleep(0.8)
+        time.sleep(1.6)
         if kw["record"]:
             seen.append(r.store.read_json("heartbeats/a1.json")["time"] > t0)
         else:
