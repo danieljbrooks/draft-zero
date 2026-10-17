@@ -8,7 +8,7 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 
 ### Added
 
-- The actor-learner loop (`draftzero.loop`): actors, one learner per learned model, an evaluator and a controller that share nothing but a store. Async mode by default; a sync mode that replays exactly from the manifest.
+- The actor-learner loop (`draftzero.loop`): actors, one learner per learned model, an evaluator and a controller that share nothing but a store. Async mode by default; a sync mode built to replay exactly from the manifest (a byte-identical replay test is still to write).
 - Stores: a local folder, a Hugging Face Storage Bucket (`hf://buckets/<owner>/<bucket>`), and a relay over ssh for machines without a token.
 - Run configs (`draftzero.config`): one YAML file per run, checked against a schema, with `extends:` for shared bases (`configs/base/player.yml`). Live fields change mid-run with `dz plan`; each change is an event in `events.jsonl`.
 - Run manifests (`draftzero.manifest`, `draftzero-manifest/1`): code, engine build, card lock, census setting, config and its hash, machine and seed.

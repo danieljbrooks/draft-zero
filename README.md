@@ -125,7 +125,7 @@ In Python, `draftzero.hub.resolve("hf://…")` returns a local path, and `draftz
 
 | Project | How it relates |
 | --- | --- |
-| [gorge](https://github.com/adams-shaun/gorge) (dama) | The rules engine and search every 0.2.0 game runs on. Our fork [danieljbrooks/gorge](https://github.com/danieljbrooks/gorge) adds five commits on its main branch (branch `draftzero`) |
+| [gorge](https://github.com/adams-shaun/gorge) (dama) | The rules engine and search every 0.2.0 game runs on. Our fork [danieljbrooks/gorge](https://github.com/danieljbrooks/gorge) adds eight commits on its main branch (branch `draftzero`; [docs/036](docs/036-gorge-draftzero-interface.md) lists them) |
 | [Forge](https://github.com/Card-Forge/forge) and dama's fork [adams-shaun/forge](https://github.com/adams-shaun/forge) | Forge's card scripts define what every card does; gorge compiles them from dama's fork |
 | [mtg-kernel](https://github.com/jackmaiorino/mtg-kernel) | A Rust rules engine; docs/025 tried FDN self-play on it, and it may join later behind the same engine interface |
 | [MageZero](https://github.com/WillWroble/MageZero) (Will Wroble) | AlphaZero-style training on XMage; DraftZero's v0.1.0 experiments 1–4 built on it |
