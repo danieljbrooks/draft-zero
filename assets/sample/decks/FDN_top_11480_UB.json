@@ -1,0 +1,95 @@
+{
+"name": "FDN_top_11480_UB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck c813047c32754788937dfc7bfb7b18d6:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 2
+},
+{
+"name": "Dismal Backwater",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 3
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Gutless Plunderer",
+"count": 2
+},
+{
+"name": "High-Society Hunter",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 1
+},
+{
+"name": "Infernal Vessel",
+"count": 2
+},
+{
+"name": "Island",
+"count": 7
+},
+{
+"name": "Kiora, the Rising Tide",
+"count": 1
+},
+{
+"name": "Lightshell Duo",
+"count": 1
+},
+{
+"name": "Reassembling Skeleton",
+"count": 1
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Skyship Buccaneer",
+"count": 1
+},
+{
+"name": "Soul-Shackled Zombie",
+"count": 1
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+}
+]
+}

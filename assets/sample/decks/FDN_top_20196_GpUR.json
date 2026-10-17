@@ -1,0 +1,107 @@
+{
+"name": "FDN_top_20196_GpUR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck eb495485fcd24c498ba83ab29c709632:0, player win-rate bucket 0.64 (CC BY 4.0)",
+"cards": [
+{
+"name": "Abrade",
+"count": 1
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Dwynen's Elite",
+"count": 2
+},
+{
+"name": "Dwynen, Gilt-Leaf Daen",
+"count": 1
+},
+{
+"name": "Elfsworn Giant",
+"count": 2
+},
+{
+"name": "Elvish Regrower",
+"count": 1
+},
+{
+"name": "Felling Blow",
+"count": 1
+},
+{
+"name": "Fiery Annihilation",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 9
+},
+{
+"name": "Garruk's Uprising",
+"count": 1
+},
+{
+"name": "Grow from the Ashes",
+"count": 1
+},
+{
+"name": "Island",
+"count": 2
+},
+{
+"name": "Koma, World-Eater",
+"count": 1
+},
+{
+"name": "Llanowar Elves",
+"count": 1
+},
+{
+"name": "Meteor Golem",
+"count": 2
+},
+{
+"name": "Mountain",
+"count": 3
+},
+{
+"name": "Needletooth Pack",
+"count": 1
+},
+{
+"name": "Nessian Hornbeetle",
+"count": 1
+},
+{
+"name": "Reclamation Sage",
+"count": 1
+},
+{
+"name": "Rugged Highlands",
+"count": 2
+},
+{
+"name": "Scavenging Ooze",
+"count": 1
+},
+{
+"name": "Snakeskin Veil",
+"count": 1
+},
+{
+"name": "Swiftwater Cliffs",
+"count": 1
+},
+{
+"name": "Treetop Snarespinner",
+"count": 1
+},
+{
+"name": "Wary Thespian",
+"count": 1
+}
+]
+}

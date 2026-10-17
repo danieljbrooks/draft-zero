@@ -1,0 +1,99 @@
+{
+"name": "FDN_top_12188_WB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 3eb36a56fb574f3b8a328bc5fe10f1b8:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Arbiter of Woe",
+"count": 1
+},
+{
+"name": "Bake into a Pie",
+"count": 1
+},
+{
+"name": "Blasphemous Edict",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 2
+},
+{
+"name": "Diregraf Ghoul",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 1
+},
+{
+"name": "Guarded Heir",
+"count": 1
+},
+{
+"name": "Healer's Hawk",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 2
+},
+{
+"name": "Joust Through",
+"count": 1
+},
+{
+"name": "Leyline Axe",
+"count": 2
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 7
+},
+{
+"name": "Prideful Parent",
+"count": 2
+},
+{
+"name": "Resolute Reinforcements",
+"count": 1
+},
+{
+"name": "Scoured Barrens",
+"count": 1
+},
+{
+"name": "Squad Rallier",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Vampire Soulcaller",
+"count": 1
+}
+]
+}

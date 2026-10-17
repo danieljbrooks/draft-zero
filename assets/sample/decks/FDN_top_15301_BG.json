@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_15301_BG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck d8e14e366a31499386ee141350fbe62a:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Abyssal Harvester",
+"count": 1
+},
+{
+"name": "Bake into a Pie",
+"count": 2
+},
+{
+"name": "Beast-Kin Ranger",
+"count": 2
+},
+{
+"name": "Bite Down",
+"count": 1
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 2
+},
+{
+"name": "Evolving Wilds",
+"count": 2
+},
+{
+"name": "Forest",
+"count": 6
+},
+{
+"name": "Gnarlid Colony",
+"count": 1
+},
+{
+"name": "Hero's Downfall",
+"count": 1
+},
+{
+"name": "High-Society Hunter",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 2
+},
+{
+"name": "Infernal Vessel",
+"count": 1
+},
+{
+"name": "Infestation Sage",
+"count": 1
+},
+{
+"name": "Lathril, Blade of the Elves",
+"count": 1
+},
+{
+"name": "Llanowar Elves",
+"count": 1
+},
+{
+"name": "Reassembling Skeleton",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Tragic Banshee",
+"count": 3
+},
+{
+"name": "Wary Thespian",
+"count": 1
+}
+]
+}

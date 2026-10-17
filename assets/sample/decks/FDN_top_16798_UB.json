@@ -1,0 +1,95 @@
+{
+"name": "FDN_top_16798_UB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 3b6d3e7b0b7844d9bd19cb84eb55afaa:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Arbiter of Woe",
+"count": 1
+},
+{
+"name": "Arcane Epiphany",
+"count": 1
+},
+{
+"name": "Archmage of Runes",
+"count": 1
+},
+{
+"name": "Bake into a Pie",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 1
+},
+{
+"name": "Gutless Plunderer",
+"count": 1
+},
+{
+"name": "Infernal Vessel",
+"count": 1
+},
+{
+"name": "Infestation Sage",
+"count": 2
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Micromancer",
+"count": 1
+},
+{
+"name": "Mischievous Mystic",
+"count": 1
+},
+{
+"name": "Pilfer",
+"count": 1
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Soul-Shackled Zombie",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Tolarian Terror",
+"count": 4
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+}
+]
+}

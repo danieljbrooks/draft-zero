@@ -9,14 +9,15 @@ A ResourceMonitor runs a daemon thread that polls psutil (and nvidia-smi when a 
 present) every `interval` seconds. `summary()` folds the samples into one metrics row so
 the dashboard can plot utilization next to games/hour: if games/hour is flat while the
 CPU sits at 40%, the JVM thread count is the thing to raise, not the GPU.
+
+psutil is imported only by ResourceMonitor (it is not a core dependency): the cgroup readers
+(cpu_quota, mem_limit_gb, cgroup_*) work without it.
 """
 import shutil
 import subprocess
 import threading
 import time
 from typing import Optional
-
-import psutil
 
 SMI_QUERY = "utilization.gpu,utilization.memory,memory.used,memory.total"
 
@@ -42,6 +43,23 @@ def cpu_quota() -> Optional[float]:
     except Exception:
         pass
     return None
+
+
+def raise_open_files(want: int = 65536) -> int:
+    """Raise this process's soft limit on open files toward `want` (never above the hard limit) and return the soft
+    limit now in force (-1 where there is none to read). The trainer memory-maps every array of every shard in its
+    window, and each map holds a descriptor: a window of about 80 shards passed a RunPod pod's default soft limit of
+    1,024 (E2c, 14 Oct 2026; its hard limit was 1,048,576)."""
+    try:
+        import resource
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        target = want if hard == resource.RLIM_INFINITY else min(want, hard)
+        if soft != resource.RLIM_INFINITY and soft < target:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+            return target
+        return soft
+    except (ImportError, ValueError, OSError):
+        return -1
 
 
 def mem_limit_gb() -> Optional[float]:
@@ -119,8 +137,17 @@ def _mean(xs: list[float]) -> Optional[float]:
     return sum(xs) / len(xs) if xs else None
 
 
+def _psutil():
+    try:
+        import psutil
+    except ImportError as e:  # pragma: no cover - depends on the environment
+        raise ImportError("ResourceMonitor needs psutil: pip install psutil") from e
+    return psutil
+
+
 class ResourceMonitor:
     def __init__(self, interval: float = 10.0):
+        self._ps = _psutil()
         self.interval = interval
         self._samples: list[dict] = []
         self._lock = threading.Lock()
@@ -128,10 +155,11 @@ class ResourceMonitor:
         self._thread: Optional[threading.Thread] = None
         self.has_gpu = _gpu_sample() is not None
         self.quota_cores = cpu_quota()
-        self.visible_cores = psutil.cpu_count() or 1
+        self.visible_cores = self._ps.cpu_count() or 1
         self.mem_cap_gb = mem_limit_gb()
 
     def _loop(self) -> None:
+        psutil = self._ps
         psutil.cpu_percent(interval=None)  # prime the counter; first call always reads 0
         last = (time.time(), cgroup_cpu_seconds())
         while not self._stop.wait(self.interval):
@@ -184,7 +212,7 @@ class ResourceMonitor:
         keys = {k for s in samples for k in s}
         row: dict = {"samples": len(samples), "cpu_count": self.visible_cores,
                      "cpu_quota_cores": self.quota_cores,
-                     "ram_total_gb": psutil.virtual_memory().total / 1024 ** 3,
+                     "ram_total_gb": self._ps.virtual_memory().total / 1024 ** 3,
                      "ram_cap_gb": self.mem_cap_gb,
                      "mem_failcnt": cgroup_mem_failcnt()}
         for k in sorted(keys):

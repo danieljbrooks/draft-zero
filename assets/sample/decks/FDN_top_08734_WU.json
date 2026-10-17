@@ -1,0 +1,99 @@
+{
+"name": "FDN_top_08734_WU",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck ef823035e4c641cda7ec9146227eb8bf:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Arcane Epiphany",
+"count": 1
+},
+{
+"name": "Banishing Light",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Blossoming Sands",
+"count": 2
+},
+{
+"name": "Essence Scatter",
+"count": 2
+},
+{
+"name": "Exemplar of Light",
+"count": 1
+},
+{
+"name": "Faebloom Trick",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 1
+},
+{
+"name": "High Fae Trickster",
+"count": 1
+},
+{
+"name": "Icewind Elemental",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Mocking Sprite",
+"count": 2
+},
+{
+"name": "Plains",
+"count": 5
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Resolute Reinforcements",
+"count": 2
+},
+{
+"name": "Run Away Together",
+"count": 1
+},
+{
+"name": "Tolarian Terror",
+"count": 1
+},
+{
+"name": "Tranquil Cove",
+"count": 2
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+},
+{
+"name": "Vanguard Seraph",
+"count": 1
+},
+{
+"name": "Witness Protection",
+"count": 2
+},
+{
+"name": "Youthful Valkyrie",
+"count": 1
+}
+]
+}

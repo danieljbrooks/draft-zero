@@ -1,12 +1,13 @@
-# End-to-end check of the generalist loop in ~15 minutes: tiny games, 4 gens.
-model: FDN_generalist_smoke
-version: 1
-generations: 4
-bootstrap_games: 4
-games_per_gen: 6
-chunk_games: 2
-mix: {self: 0.5, past: 0.3, gen0: 0.2}
-replay_states: 3000
-eval: {baselines: [offline, minimax], pairs: 1, window_gens: 2}
-stats: {window_gens: 2, min_card_games: 1}
-jvm: {heap: 6g, threads: 2, search_budget: 30, timeout_ms: 2000, max_minutes: 6}
+# The smallest run that exercises every role on one machine: `dz run configs/smoke.yml` (store runs/smoke).
+# Two versions from scratch (version 0 = the search without a net), 16-simulation games, 4 games a shard, a learner
+# that trains on its first 200 positions, and a 4-pair evaluation against the previous version. Minutes, not hours.
+# It plays the 80 sample decks in assets/sample (40 train, 40 eval), so a fresh clone needs only `dz engine build`;
+# engine.root comes from base/player.yml (override with `dz run configs/smoke.yml --set engine.root=DIR`).
+extends: base/player.yml
+run: smoke
+data: {decks: assets/sample/decks, pool: assets/sample/pool.tsv}
+actor: {sims: 16, chunk_games: 4, chunk_secs: 600, workers: 2}
+learner: {min_new_positions: 200, window_positions: 5000, epochs: 1, threads: 2}
+eval: {pairs: 4, sims: 16, opponents: [prev]}
+budget: {max_versions: 2}
+store: runs/smoke

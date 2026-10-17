@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_22118_WB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck d6288d5f5db9444aafe1f8c83b319612:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Burglar Rat",
+"count": 3
+},
+{
+"name": "Celestial Armor",
+"count": 1
+},
+{
+"name": "Dauntless Veteran",
+"count": 1
+},
+{
+"name": "Diregraf Ghoul",
+"count": 2
+},
+{
+"name": "Eaten Alive",
+"count": 2
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 1
+},
+{
+"name": "Fleeting Flight",
+"count": 1
+},
+{
+"name": "Goldvein Pick",
+"count": 1
+},
+{
+"name": "Guarded Heir",
+"count": 1
+},
+{
+"name": "Gutless Plunderer",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 2
+},
+{
+"name": "Mischievous Pup",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 8
+},
+{
+"name": "Prideful Parent",
+"count": 1
+},
+{
+"name": "Rune-Scarred Demon",
+"count": 1
+},
+{
+"name": "Squad Rallier",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+}
+]
+}

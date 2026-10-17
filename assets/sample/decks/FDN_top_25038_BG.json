@@ -1,0 +1,83 @@
+{
+"name": "FDN_top_25038_BG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck e0907e6eb5054240b1e5277a02d6cbe0:1, player win-rate bucket 0.64 (CC BY 4.0)",
+"cards": [
+{
+"name": "Bake into a Pie",
+"count": 1
+},
+{
+"name": "Bite Down",
+"count": 2
+},
+{
+"name": "Blasphemous Edict",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 2
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 7
+},
+{
+"name": "Gutless Plunderer",
+"count": 1
+},
+{
+"name": "Hero's Downfall",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 2
+},
+{
+"name": "Infestation Sage",
+"count": 2
+},
+{
+"name": "Macabre Waltz",
+"count": 1
+},
+{
+"name": "Seeker's Folly",
+"count": 1
+},
+{
+"name": "Soul-Shackled Zombie",
+"count": 1
+},
+{
+"name": "Stromkirk Bloodthief",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 10
+},
+{
+"name": "Tragic Banshee",
+"count": 2
+},
+{
+"name": "Treetop Snarespinner",
+"count": 2
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+},
+{
+"name": "Vampire Nighthawk",
+"count": 1
+}
+]
+}

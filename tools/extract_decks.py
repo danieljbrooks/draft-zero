@@ -12,19 +12,10 @@ Data: https://www.17lands.com/public_datasets (downloaded and cached under data/
 Outputs (under data/deckgen/<set>_<format>_wr<min>/):
   decks.jsonl   one deck per line: ids, player buckets, colors, games/wins in the sample, cards
   summary.txt   counts by color pair, deck size, and the most-played cards
-  top_player_<set>_decks/*.dck   (with --dck) XMage deck files, one per deck
 
-XMage card numbers come from XMage's own compiled set classes (via javap), because XMage's
-collector numbers differ from Scryfall's for some cards. Pass the set classes to search in order,
-e.g. Foundations plus SpecialGuests for FDN's bonus-sheet cards.
-
-  python tools/extract_decks.py --set FDN --dck --xmage-jar xmage/lib/mage-sets-1.4.58.jar \
-      --xmage-sets Foundations,SpecialGuests
+`python -m draftzero.data.decks` turns decks.jsonl into gorge deck files (data/gorge/decks/*.json and
+data/gorge/pool.tsv), named by the deck's 1-based position in decks.jsonl and its colours.
 """
-import re
-import shutil
-import subprocess
-import zipfile
 import argparse
 import csv
 import gzip
@@ -37,7 +28,7 @@ from collections import Counter, defaultdict
 URL = "https://17lands-public.s3.amazonaws.com/analysis_data/game_data/game_data_public.{set}.{format}.csv.gz"
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-# downloads and the XMage card-number cache (gitignored, regenerable)
+# downloads (gitignored, regenerable)
 CACHE = os.path.join(REPO, "data", "17lands")
 
 
@@ -50,70 +41,6 @@ def fetch(set_code: str, fmt: str) -> str:
         urllib.request.urlretrieve(url, path + ".part")
         os.replace(path + ".part", path)
     return path
-
-
-def find_javap() -> str:
-    for cand in (os.path.join(os.environ.get("JAVA_HOME", ""), "bin", "javap"), shutil.which("javap")):
-        if cand and os.path.exists(cand):
-            return cand
-    sys.exit("javap not found: set JAVA_HOME to a JDK")
-
-
-def xmage_card_numbers(jar: str, set_classes: list[str]) -> dict[str, tuple[str, str]]:
-    """card name -> (XMage set code, collector number), searching set classes in order."""
-    cache = os.path.join(CACHE, "xmage_" + "_".join(set_classes) + ".json")
-    if os.path.exists(cache) and (not os.path.exists(jar) or os.path.getmtime(cache) >= os.path.getmtime(jar)):
-        # no jar on this machine: trust the cache rather than fail (a stale cache is only
-        # possible if the jar changed, and then it is present to compare against)
-        return {k: tuple(v) for k, v in json.load(open(cache)).items()}
-    if not os.path.exists(jar):
-        sys.exit(f"XMage set jar not found: {jar}\n"
-                 f"Pass --xmage-jar, or point the repo's `xmage` symlink at an XMage build.")
-    javap = find_javap()
-    out: dict[str, tuple[str, str]] = {}
-    tmp = os.path.join(CACHE, "_classes")
-    with zipfile.ZipFile(jar) as z:
-        for cls in set_classes:
-            member = f"mage/sets/{cls}.class"
-            z.extract(member, tmp)
-            text = subprocess.run([javap, "-c", "-p", os.path.join(tmp, member)],
-                                  capture_output=True, text=True, check=True).stdout.splitlines()
-            strings = [re.search(r"// String (.*)$", l) for l in text]
-            set_code = [m.group(1) for m in strings if m][1]   # super("Set Name", "CODE", ...)
-            for i, m in enumerate(strings[:-1]):
-                if not m:
-                    continue
-                name = m.group(1).replace("\\'", "'").replace('\\"', '"')
-                nxt = text[i + 1]
-                num = re.search(r"(?:sipush|bipush)\s+(\d+)$", nxt) or re.search(r"iconst_(\d)$", nxt) \
-                    or re.search(r'// String (\w+)$', nxt)
-                if num and name not in out and name[:1].isupper():
-                    out[name] = (set_code, num.group(1))
-    shutil.rmtree(tmp, ignore_errors=True)
-    json.dump(out, open(cache, "w"), indent=0, sort_keys=True)
-    return out
-
-
-def write_dck(decks, out_dir: str, set_code: str, numbers: dict) -> tuple[int, Counter]:
-    """One XMage .dck per deck. Returns (written, missing card counts)."""
-    os.makedirs(out_dir, exist_ok=True)
-    missing = Counter()
-    written = 0
-    for i, d in enumerate(decks, 1):
-        unknown = [c for c in d["cards"] if c not in numbers]
-        if unknown:
-            missing.update(unknown)
-            continue
-        colors = d["main_colors"] + (f"+{d['splash_colors']}" if d["splash_colors"] else "")
-        name = f"Top player {set_code} deck {i:05d} {colors or 'C'} (player WR {d['user_game_win_rate_bucket']:.2f})"
-        lines = [f"NAME:{name}"]
-        lines += [f"{k} [{numbers[c][0]}:{numbers[c][1]}] {c}" for c, k in sorted(d["cards"].items())]
-        fname = f"{set_code}_top_{i:05d}_{(colors or 'C').replace('+', 'p')}.dck"
-        with open(os.path.join(out_dir, fname), "w") as f:
-            f.write("\n".join(lines) + "\n")
-        d["dck_file"] = fname
-        written += 1
-    return written, missing
 
 
 def bucket(value: str):
@@ -193,10 +120,6 @@ def main():
     ap.add_argument("--min-winrate", type=float, default=0.60, help="minimum user_game_win_rate_bucket")
     ap.add_argument("--min-player-games", type=int, default=0, help="minimum user_n_games_bucket")
     ap.add_argument("--out", default=None)
-    ap.add_argument("--dck", action="store_true", help="also write XMage .dck files")
-    ap.add_argument("--xmage-jar", default=os.path.join(REPO, "xmage", "lib", "mage-sets-1.4.58.jar"))
-    ap.add_argument("--xmage-sets", default="Foundations,SpecialGuests",
-                    help="XMage set classes to look up card numbers in, in priority order")
     args = ap.parse_args()
 
     path = fetch(args.set, args.format)
@@ -204,14 +127,6 @@ def main():
     out = args.out or os.path.join(REPO, "data", "deckgen", f"{args.set}_{args.format}_wr{int(args.min_winrate * 100)}")
     os.makedirs(out, exist_ok=True)
     decks.sort(key=lambda d: (d["draft_time"], d["draft_id"], d["build_index"]))
-    if args.dck:
-        numbers = xmage_card_numbers(args.xmage_jar, args.xmage_sets.split(","))
-        dck_dir = os.path.join(out, f"top_player_{args.set}_decks")
-        written, missing = write_dck(decks, dck_dir, args.set, numbers)
-        print(f"wrote {written:,} .dck files to {dck_dir}")
-        if missing:
-            print(f"skipped {len(decks) - written:,} decks with cards not in {args.xmage_sets}: "
-                  + ", ".join(f"{c} ({n})" for c, n in missing.most_common()))
     with open(os.path.join(out, "decks.jsonl"), "w") as f:
         for d in decks:
             f.write(json.dumps(d) + "\n")

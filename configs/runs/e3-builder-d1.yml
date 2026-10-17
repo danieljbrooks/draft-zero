@@ -1,0 +1,23 @@
+# E3, learn deckbuilding (docs/runs.md register): docs/032's deck value ensemble trained tabula rasa on gorge draftlab
+# sealed pools (no human decklists, no human decks in training), piloted by a FIXED player: a copy of E1's newest
+# version (from scratch on 0.2.0, closed lists) at 25 simulations, as docs/032's phase B. Decklists stay open for the
+# pilot (builder.closedlist false), as in docs/032, so results are comparable with it.
+# Scale for d1 (6 CPUs): 5,000 decided games a version (docs/032: 10k-40k a generation).
+# Each version's best decks play best23@1's (a builder that ranks cards by 17lands ratings: an evaluation opponent
+# only, never training data) on 100 held-out pools at 25 simulations; a final 100-simulation match comes afterwards.
+# Success: the builder beats best23 on held-out pools and keeps improving across versions.
+extends: ../base/player.yml
+run: e3-builder-d1
+code: dev
+player: {learn: false}
+eval: {opponents: []}
+store: runs/e3-builder-d1
+builder:
+  learn: true
+  sims: 25
+  pilot: /work/exp/e3/pilot.dzgw     # machine path: E1's newest model.dzgw, copied here at launch
+  workers: 3
+  games_per_chunk: 200
+  games_per_version: 5000
+  pools_per_chunk: 50
+  eval: {pools: 100, pairs: 1, sims: 25, workers: 2}

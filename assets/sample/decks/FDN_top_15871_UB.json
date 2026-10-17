@@ -1,0 +1,95 @@
+{
+"name": "FDN_top_15871_UB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 067346f203b74e8789deea5c177a7276:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Arcane Epiphany",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Billowing Shriekmass",
+"count": 1
+},
+{
+"name": "Brineborn Cutthroat",
+"count": 1
+},
+{
+"name": "Clinquant Skymage",
+"count": 1
+},
+{
+"name": "Erudite Wizard",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 2
+},
+{
+"name": "Imprisoned in the Moon",
+"count": 1
+},
+{
+"name": "Island",
+"count": 9
+},
+{
+"name": "Kiora, the Rising Tide",
+"count": 1
+},
+{
+"name": "Micromancer",
+"count": 1
+},
+{
+"name": "Mischievous Mystic",
+"count": 1
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Scrawling Crawler",
+"count": 1
+},
+{
+"name": "Seeker's Folly",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 3
+},
+{
+"name": "Swamp",
+"count": 7
+},
+{
+"name": "Think Twice",
+"count": 1
+},
+{
+"name": "Tinybones, Bauble Burglar",
+"count": 2
+},
+{
+"name": "Vampire Soulcaller",
+"count": 1
+},
+{
+"name": "Witness Protection",
+"count": 1
+}
+]
+}

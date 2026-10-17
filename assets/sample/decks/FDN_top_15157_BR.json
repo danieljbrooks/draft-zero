@@ -1,0 +1,99 @@
+{
+"name": "FDN_top_15157_BR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck d9470e666501429691663e3235944ccf:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Alesha, Who Laughs at Fate",
+"count": 1
+},
+{
+"name": "Bloodfell Caves",
+"count": 3
+},
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 2
+},
+{
+"name": "Flamewake Phoenix",
+"count": 1
+},
+{
+"name": "Gorehorn Raider",
+"count": 1
+},
+{
+"name": "Gutless Plunderer",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 1
+},
+{
+"name": "Incinerating Blast",
+"count": 1
+},
+{
+"name": "Infernal Vessel",
+"count": 1
+},
+{
+"name": "Involuntary Employment",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 6
+},
+{
+"name": "Slumbering Cerberus",
+"count": 1
+},
+{
+"name": "Soul-Shackled Zombie",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 2
+},
+{
+"name": "Stromkirk Bloodthief",
+"count": 1
+},
+{
+"name": "Strongbox Raider",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Vampire Gourmand",
+"count": 2
+},
+{
+"name": "Vampire Nighthawk",
+"count": 1
+},
+{
+"name": "Vampire Soulcaller",
+"count": 1
+},
+{
+"name": "Vengeful Bloodwitch",
+"count": 1
+}
+]
+}

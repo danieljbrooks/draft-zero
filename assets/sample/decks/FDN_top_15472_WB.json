@@ -1,0 +1,107 @@
+{
+"name": "FDN_top_15472_WB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 0a11cd3f19a44fee87d97cf2bf3768fa:1, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Cathar Commando",
+"count": 1
+},
+{
+"name": "Elenda, Saint of Dusk",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 1
+},
+{
+"name": "Goldvein Pick",
+"count": 1
+},
+{
+"name": "Gutless Plunderer",
+"count": 2
+},
+{
+"name": "Helpful Hunter",
+"count": 2
+},
+{
+"name": "High-Society Hunter",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 1
+},
+{
+"name": "Inspiring Paladin",
+"count": 1
+},
+{
+"name": "Macabre Waltz",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 7
+},
+{
+"name": "Prideful Parent",
+"count": 1
+},
+{
+"name": "Resolute Reinforcements",
+"count": 1
+},
+{
+"name": "Scoured Barrens",
+"count": 1
+},
+{
+"name": "Seeker's Folly",
+"count": 1
+},
+{
+"name": "Serra Angel",
+"count": 1
+},
+{
+"name": "Solemn Simulacrum",
+"count": 1
+},
+{
+"name": "Squad Rallier",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 1
+},
+{
+"name": "Sun-Blessed Healer",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+},
+{
+"name": "Zombify",
+"count": 1
+}
+]
+}

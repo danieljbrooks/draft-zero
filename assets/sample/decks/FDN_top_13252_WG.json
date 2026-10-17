@@ -1,0 +1,103 @@
+{
+"name": "FDN_top_13252_WG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck e7ece4f9cb4b495082b03c2ae73ea472:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Ajani's Pridemate",
+"count": 1
+},
+{
+"name": "Ambush Wolf",
+"count": 1
+},
+{
+"name": "Angel of Finality",
+"count": 1
+},
+{
+"name": "Apothecary Stomper",
+"count": 1
+},
+{
+"name": "Banishing Light",
+"count": 1
+},
+{
+"name": "Bite Down",
+"count": 2
+},
+{
+"name": "Blossoming Sands",
+"count": 1
+},
+{
+"name": "Broken Wings",
+"count": 1
+},
+{
+"name": "Bushwhack",
+"count": 1
+},
+{
+"name": "Cathar Commando",
+"count": 2
+},
+{
+"name": "Dazzling Angel",
+"count": 1
+},
+{
+"name": "Dwynen's Elite",
+"count": 1
+},
+{
+"name": "Elfsworn Giant",
+"count": 2
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Exemplar of Light",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 7
+},
+{
+"name": "Gnarlid Colony",
+"count": 1
+},
+{
+"name": "Healer's Hawk",
+"count": 1
+},
+{
+"name": "Inspiring Paladin",
+"count": 2
+},
+{
+"name": "Llanowar Elves",
+"count": 2
+},
+{
+"name": "Plains",
+"count": 6
+},
+{
+"name": "Prideful Parent",
+"count": 1
+},
+{
+"name": "Treetop Snarespinner",
+"count": 1
+},
+{
+"name": "Wind-Scarred Crag",
+"count": 1
+}
+]
+}

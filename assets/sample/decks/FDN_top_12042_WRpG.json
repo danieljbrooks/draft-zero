@@ -1,0 +1,115 @@
+{
+"name": "FDN_top_12042_WRpG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck d9e821d9816c484885bffe416b6d87ba:0, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Ajani's Pridemate",
+"count": 1
+},
+{
+"name": "Ajani, Caller of the Pride",
+"count": 1
+},
+{
+"name": "Axgard Cavalry",
+"count": 1
+},
+{
+"name": "Battlesong Berserker",
+"count": 2
+},
+{
+"name": "Blossoming Sands",
+"count": 2
+},
+{
+"name": "Campus Guide",
+"count": 1
+},
+{
+"name": "Cat Collector",
+"count": 1
+},
+{
+"name": "Dazzling Angel",
+"count": 1
+},
+{
+"name": "Dragon Trainer",
+"count": 1
+},
+{
+"name": "Fanatical Firebrand",
+"count": 1
+},
+{
+"name": "Firebrand Archer",
+"count": 1
+},
+{
+"name": "Firespitter Whelp",
+"count": 1
+},
+{
+"name": "Fleeting Flight",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 1
+},
+{
+"name": "Goblin Boarders",
+"count": 1
+},
+{
+"name": "Goblin Surprise",
+"count": 1
+},
+{
+"name": "Good-Fortune Unicorn",
+"count": 1
+},
+{
+"name": "Healer's Hawk",
+"count": 1
+},
+{
+"name": "Heroic Reinforcements",
+"count": 1
+},
+{
+"name": "Kellan, Planar Trailblazer",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 7
+},
+{
+"name": "Plains",
+"count": 6
+},
+{
+"name": "Resolute Reinforcements",
+"count": 1
+},
+{
+"name": "Savannah Lions",
+"count": 1
+},
+{
+"name": "Solemn Simulacrum",
+"count": 1
+},
+{
+"name": "Twinflame Tyrant",
+"count": 1
+},
+{
+"name": "Wind-Scarred Crag",
+"count": 1
+}
+]
+}

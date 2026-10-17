@@ -1,0 +1,26 @@
+# E6 (docs/runs.md; docs/034 §7-§8): does tying the value to game results restart the player's improvement?
+# E1 (from scratch) and E2c (from B17) both stopped gaining against fixed opponents after a few thousand games, while
+# their policy loss kept falling and their value loss against results rose (E2c's control: 0.385 at v4, 0.425 at
+# v12). The value is trained on the search's own root values (learner.value_blend 1.0): nothing ties it to who won.
+# Arms, from E1's final version (v36: level with E2c's B17-based finals, docs/034 §4; the run whose plateau is
+# clearest), at equal CPU-hours on the same machines:
+#   e6-p0-control     value_blend 1.0, the root value (E1's recipe)
+#   e6-p1-value-half  value_blend 0.5, half the game's result and half the root value
+# Both: the decided-game search on (docs/034 §8 item 3), PCR off (E2c: no gain), E1's replay (2 epochs of the
+# window a version: the replay study, docs/034 §5.4, found it beat 2, 4 and 8 steps per new position on held-out
+# games), evaluation every 4 versions against sbtactical.
+# Success: p1 beats p0 head to head by >= 20 Elo (about 3 points) over 500 pairs at 100 simulations, interval above
+# 50%, and p1's score against sbtactical rises over the run. Cost (estimate): about 5,000 games an arm, $0.6 an arm on
+# Community pods with the relay, $1.6 on Secure CPU pods with a network volume (docs/035).
+extends: base/player.yml
+run: e6-p0-control
+player: {init: /work/exp/e1/store/versions/player/v0036/model.pt}   # E1's final version (d1's store)
+actor:
+  sims: 200
+  pcr: {prob: 0.0}
+  decided: {high: 0.9, n: 3, sims: 40, weight: 0.1}
+learner:
+  epochs: 2
+  value_blend: 1.0
+eval: {every_versions: 4, pairs: 100, opponents: [sbtactical]}
+store: runs/e6-p0-control

@@ -1,0 +1,95 @@
+{
+"name": "FDN_top_18039_WUpR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 3400fd9972af4ac3ab4e0fac079c4b5e:1, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Abrade",
+"count": 1
+},
+{
+"name": "Arcane Epiphany",
+"count": 2
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Curator of Destinies",
+"count": 1
+},
+{
+"name": "Dragon Trainer",
+"count": 1
+},
+{
+"name": "Drake Hatcher",
+"count": 1
+},
+{
+"name": "Empyrean Eagle",
+"count": 2
+},
+{
+"name": "Fiery Annihilation",
+"count": 1
+},
+{
+"name": "High Fae Trickster",
+"count": 1
+},
+{
+"name": "Icewind Elemental",
+"count": 1
+},
+{
+"name": "Island",
+"count": 9
+},
+{
+"name": "Lightshell Duo",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 2
+},
+{
+"name": "Mountain",
+"count": 4
+},
+{
+"name": "Plains",
+"count": 3
+},
+{
+"name": "Refute",
+"count": 2
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 2
+},
+{
+"name": "Swiftwater Cliffs",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+},
+{
+"name": "Wind-Scarred Crag",
+"count": 1
+}
+]
+}

@@ -1,0 +1,13 @@
+# E1 as launched on 14 October: e1-baseline-mlp.yml with its actors on one RunPod pod (dz relay) and the controller,
+# learner and evaluator on d1. Evaluation is kept cheap for d1's 6 CPUs: every second version, 25 pairs against the
+# previous version and against the search without a net (the E1 criterion's opponent); sbtactical is left to the
+# end-of-run anchor matches.
+extends: e1-baseline-mlp.yml
+# The live E1 run launched on 14 October from this file used the run id e1-baseline-mlp (its store records that), so
+# the store and this file differ by design: the controller refuses this file on that store (the run id differs).
+run: e1-d1-pod
+store: runs/e1-d1-pod
+code: dev
+actor: {workers: 4, chunk_games: 24}
+learner: {threads: 2}
+eval: {every_versions: 2, pairs: 25, sims: 100, workers: 2, opponents: [prev, nonet]}

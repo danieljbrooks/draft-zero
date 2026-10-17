@@ -1,0 +1,95 @@
+{
+"name": "FDN_top_09703_UB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck c4af1abdb298411da3ee690895050107:1, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Bake into a Pie",
+"count": 2
+},
+{
+"name": "Bigfin Bouncer",
+"count": 2
+},
+{
+"name": "Bloodthirsty Conqueror",
+"count": 1
+},
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Dismal Backwater",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 2
+},
+{
+"name": "Faebloom Trick",
+"count": 1
+},
+{
+"name": "Hero's Downfall",
+"count": 1
+},
+{
+"name": "Island",
+"count": 7
+},
+{
+"name": "Lightshell Duo",
+"count": 2
+},
+{
+"name": "Mischievous Mystic",
+"count": 1
+},
+{
+"name": "Pilfer",
+"count": 1
+},
+{
+"name": "Refute",
+"count": 1
+},
+{
+"name": "Seeker's Folly",
+"count": 1
+},
+{
+"name": "Soul-Shackled Zombie",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 2
+},
+{
+"name": "Swamp",
+"count": 7
+},
+{
+"name": "Think Twice",
+"count": 2
+},
+{
+"name": "Tolarian Terror",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+},
+{
+"name": "Vengeful Bloodwitch",
+"count": 1
+}
+]
+}

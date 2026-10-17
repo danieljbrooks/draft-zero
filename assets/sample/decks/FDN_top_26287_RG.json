@@ -1,0 +1,87 @@
+{
+"name": "FDN_top_26287_RG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck b436fd2131ce4039ae1dc3020eda6943:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Abrade",
+"count": 2
+},
+{
+"name": "Ambush Wolf",
+"count": 2
+},
+{
+"name": "Ashroot Animist",
+"count": 1
+},
+{
+"name": "Battlesong Berserker",
+"count": 1
+},
+{
+"name": "Bite Down",
+"count": 1
+},
+{
+"name": "Brazen Scourge",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Courageous Goblin",
+"count": 2
+},
+{
+"name": "Dwynen's Elite",
+"count": 2
+},
+{
+"name": "Eager Trufflesnout",
+"count": 1
+},
+{
+"name": "Elvish Regrower",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 8
+},
+{
+"name": "Frenzied Goblin",
+"count": 1
+},
+{
+"name": "Giant Growth",
+"count": 1
+},
+{
+"name": "Goblin Boarders",
+"count": 1
+},
+{
+"name": "Gorehorn Raider",
+"count": 1
+},
+{
+"name": "Incinerating Blast",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 9
+},
+{
+"name": "Ruby, Daring Tracker",
+"count": 1
+},
+{
+"name": "Thrill of Possibility",
+"count": 2
+}
+]
+}

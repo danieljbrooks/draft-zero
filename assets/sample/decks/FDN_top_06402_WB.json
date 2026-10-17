@@ -1,0 +1,87 @@
+{
+"name": "FDN_top_06402_WB",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 2ce54500bb684d4aa4dcddb1858417db:0, player win-rate bucket 0.70 (CC BY 4.0)",
+"cards": [
+{
+"name": "Banishing Light",
+"count": 2
+},
+{
+"name": "Cat Collector",
+"count": 1
+},
+{
+"name": "Cathar Commando",
+"count": 1
+},
+{
+"name": "Claws Out",
+"count": 1
+},
+{
+"name": "Eaten Alive",
+"count": 1
+},
+{
+"name": "Fleeting Flight",
+"count": 1
+},
+{
+"name": "Goldvein Pick",
+"count": 1
+},
+{
+"name": "Healer's Hawk",
+"count": 3
+},
+{
+"name": "Hungry Ghoul",
+"count": 1
+},
+{
+"name": "Infestation Sage",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 9
+},
+{
+"name": "Prideful Parent",
+"count": 1
+},
+{
+"name": "Savannah Lions",
+"count": 2
+},
+{
+"name": "Squad Rallier",
+"count": 1
+},
+{
+"name": "Stab",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Vampire Gourmand",
+"count": 2
+},
+{
+"name": "Vanguard Seraph",
+"count": 1
+},
+{
+"name": "Youthful Valkyrie",
+"count": 1
+}
+]
+}

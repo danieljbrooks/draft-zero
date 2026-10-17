@@ -1,0 +1,99 @@
+{
+"name": "FDN_top_26460_WR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 3e1e4b2e3501437c892ffa972ed8314c:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Abrade",
+"count": 1
+},
+{
+"name": "Axgard Cavalry",
+"count": 1
+},
+{
+"name": "Cat Collector",
+"count": 1
+},
+{
+"name": "Celestial Armor",
+"count": 1
+},
+{
+"name": "Courageous Goblin",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Exemplar of Light",
+"count": 1
+},
+{
+"name": "Giada, Font of Hope",
+"count": 1
+},
+{
+"name": "Goblin Boarders",
+"count": 1
+},
+{
+"name": "Goblin Surprise",
+"count": 2
+},
+{
+"name": "Goldvein Pick",
+"count": 1
+},
+{
+"name": "Healer's Hawk",
+"count": 2
+},
+{
+"name": "Heartfire Immolator",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 2
+},
+{
+"name": "Heroic Reinforcements",
+"count": 1
+},
+{
+"name": "Krenko, Mob Boss",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 7
+},
+{
+"name": "Plains",
+"count": 8
+},
+{
+"name": "Quick-Draw Katana",
+"count": 1
+},
+{
+"name": "Strongbox Raider",
+"count": 1
+},
+{
+"name": "Sure Strike",
+"count": 1
+},
+{
+"name": "Swiftblade Vindicator",
+"count": 2
+}
+]
+}

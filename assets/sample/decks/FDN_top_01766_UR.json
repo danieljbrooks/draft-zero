@@ -1,0 +1,79 @@
+{
+"name": "FDN_top_01766_UR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck e0242ac62fa5485da89d1cfed4604e2d:3, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Abrade",
+"count": 1
+},
+{
+"name": "Battlesong Berserker",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Brazen Scourge",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 1
+},
+{
+"name": "Dragon Trainer",
+"count": 1
+},
+{
+"name": "Drake Hatcher",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Fleeting Distraction",
+"count": 3
+},
+{
+"name": "Heartfire Immolator",
+"count": 1
+},
+{
+"name": "Icewind Elemental",
+"count": 1
+},
+{
+"name": "Imprisoned in the Moon",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Lightshell Duo",
+"count": 2
+},
+{
+"name": "Mountain",
+"count": 8
+},
+{
+"name": "Strix Lookout",
+"count": 2
+},
+{
+"name": "Tolarian Terror",
+"count": 1
+},
+{
+"name": "Witness Protection",
+"count": 5
+}
+]
+}

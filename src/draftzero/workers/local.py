@@ -1,4 +1,4 @@
-"""local.py — run the loop on this machine. No provisioning, no network, no billing."""
+"""local.py — run actors on this machine. No provisioning, no network, no billing."""
 from __future__ import annotations
 
 import shutil
@@ -14,8 +14,8 @@ class LocalWorker(Worker):
     def __init__(self, cfg: Optional[WorkerConfig] = None):
         super().__init__(cfg or WorkerConfig(name="local"))
 
-    def run(self, cmd: str, timeout: Optional[int] = None) -> Result:
-        return local_run(cmd, timeout=timeout, cwd=self.cfg.workdir)
+    def run(self, cmd: str, timeout: Optional[int] = None, input: Optional[str] = None) -> Result:
+        return local_run(cmd, timeout=timeout, cwd=self.cfg.workdir, input=input)
 
     def push(self, local: Path, remote: str, excludes: Optional[list[str]] = None) -> Result:
         """A local worker already has the code. Copy only when src and dst differ."""

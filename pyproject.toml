@@ -1,27 +1,28 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "draftzero"
-version = "0.1.0"
-description = "One agent that plays a whole Magic limited format with any deck"
+version = "0.2.0.dev0"
+description = "Agents that play Magic: The Gathering limited tournaments end to end"
+readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+# The game engine is gorge, a Go binary pinned and built by engine/gorge (GORGE_REPO, GORGE_REF, build.sh),
+# not a Python dependency. Core stays small: anything heavier is an extra.
 dependencies = [
-    # MageZero supplies the RL framework, the XMage bridge and the training/eval runner.
-    # Pinned to a commit, not a branch: a branch pin silently changes what a result was
-    # produced against. Bump it deliberately, and record it (provenance.py does).
-    # Will's v0.2 (WillWroble/MageZero 11a5974) plus opt-in changes, branch `draftzero`: the
-    # policy width for a set-wide action vocabulary (#7, also on `action-vocab`), a CPU
-    # fallback, MZ_SERVER_THREADS and MZ_TRAIN_BATCH. Exp #1 ran on the older fork, mz-engine bcc76de; its
-    # metrics/report/resources now live in draftzero.
-    "magezero @ git+https://github.com/danieljbrooks/MageZero@521a8bd",
     "numpy>=1.24",
-    "scipy>=1.10",
+    "torch>=2.2",
     "pyyaml>=6.0",
-    "h5py>=3.8",
-    "psutil>=5.9",
+    "huggingface_hub>=1.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+tracking = ["trackio"]
+plots = ["matplotlib"]
+sealed = ["pandas", "scipy"]
+dev = ["pytest>=7"]
 
 [project.scripts]
 dz = "draftzero.cli:main"
@@ -30,4 +31,14 @@ dz = "draftzero.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-draftzero = ["py.typed", "assets/*"]
+"draftzero.nets" = ["SPEC.md", "README.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "engine: needs a built dzgorge and its card corpus (engine/gorge/build.sh)",
+    "smoke: an end-to-end run of the loop on this machine (minutes)",
+    "slow: takes more than a few seconds",
+]
+# `pytest` runs the fast, engine-free tests; `pytest -m engine` (or smoke, slow) runs the others
+addopts = '-m "not engine and not smoke and not slow"'

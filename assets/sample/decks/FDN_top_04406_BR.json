@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_04406_BR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 7243c7e9c8cd40dbb4cbd02811db4cc7:1, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Burglar Rat",
+"count": 2
+},
+{
+"name": "Courageous Goblin",
+"count": 1
+},
+{
+"name": "Diregraf Ghoul",
+"count": 2
+},
+{
+"name": "Eaten Alive",
+"count": 2
+},
+{
+"name": "Fake Your Own Death",
+"count": 1
+},
+{
+"name": "Fanatical Firebrand",
+"count": 1
+},
+{
+"name": "Goblin Surprise",
+"count": 1
+},
+{
+"name": "Goldvein Pick",
+"count": 1
+},
+{
+"name": "Gorehorn Raider",
+"count": 3
+},
+{
+"name": "Heartfire Immolator",
+"count": 1
+},
+{
+"name": "Hero's Downfall",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 1
+},
+{
+"name": "Infernal Vessel",
+"count": 1
+},
+{
+"name": "Infestation Sage",
+"count": 1
+},
+{
+"name": "Mountain",
+"count": 7
+},
+{
+"name": "Perforating Artist",
+"count": 2
+},
+{
+"name": "Soulstone Sanctuary",
+"count": 1
+},
+{
+"name": "Sower of Chaos",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Vampire Gourmand",
+"count": 1
+},
+{
+"name": "Zul Ashur, Lich Lord",
+"count": 1
+}
+]
+}

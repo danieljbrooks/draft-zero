@@ -1,0 +1,79 @@
+{
+"name": "FDN_top_22247_BR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck a2253f6e34bf449daf85e8c762ef108c:0, player win-rate bucket 0.66 (CC BY 4.0)",
+"cards": [
+{
+"name": "Axgard Cavalry",
+"count": 1
+},
+{
+"name": "Bloodfell Caves",
+"count": 2
+},
+{
+"name": "Burglar Rat",
+"count": 1
+},
+{
+"name": "Burst Lightning",
+"count": 2
+},
+{
+"name": "Eaten Alive",
+"count": 1
+},
+{
+"name": "Fiery Annihilation",
+"count": 1
+},
+{
+"name": "Hero's Downfall",
+"count": 1
+},
+{
+"name": "Hungry Ghoul",
+"count": 2
+},
+{
+"name": "Incinerating Blast",
+"count": 2
+},
+{
+"name": "Involuntary Employment",
+"count": 5
+},
+{
+"name": "Mountain",
+"count": 7
+},
+{
+"name": "Ravenous Amulet",
+"count": 1
+},
+{
+"name": "Rune-Scarred Demon",
+"count": 1
+},
+{
+"name": "Soul-Shackled Zombie",
+"count": 1
+},
+{
+"name": "Swamp",
+"count": 8
+},
+{
+"name": "Tragic Banshee",
+"count": 1
+},
+{
+"name": "Vampire Soulcaller",
+"count": 2
+},
+{
+"name": "Vengeful Bloodwitch",
+"count": 1
+}
+]
+}

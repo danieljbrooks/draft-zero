@@ -1,0 +1,63 @@
+{
+"name": "FDN_top_23736_U",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck acd5db986a5740899a8053b16f201276:1, player win-rate bucket 0.62 (CC BY 4.0)",
+"cards": [
+{
+"name": "Archmage of Runes",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 3
+},
+{
+"name": "Curator of Destinies",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 1
+},
+{
+"name": "Faebloom Trick",
+"count": 3
+},
+{
+"name": "Fleeting Distraction",
+"count": 3
+},
+{
+"name": "Island",
+"count": 17
+},
+{
+"name": "Kiora, the Rising Tide",
+"count": 1
+},
+{
+"name": "Lightshell Duo",
+"count": 2
+},
+{
+"name": "Refute",
+"count": 2
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 2
+},
+{
+"name": "Tolarian Terror",
+"count": 1
+},
+{
+"name": "Uncharted Voyage",
+"count": 2
+}
+]
+}

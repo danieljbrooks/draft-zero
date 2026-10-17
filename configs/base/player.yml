@@ -1,0 +1,110 @@
+# The player's base config: every key of the run-config schema (src/draftzero/config.py, interface 8), set to
+# docs/031 loop F's recipe: a width-128 MLP, 200-simulation self-play with every decision recorded, decklists hidden
+# (:closedlist), two epochs on the newest 300k positions, value target = the search's root value.
+# Run configs extend it (`extends: base/player.yml`) and set only their run id, store and what their experiment varies.
+# Live fields (draftzero.config.LIVE) can change mid-run: `dz plan STORE set actor.sims=100`.
+
+run: player-base                # run id <experiment>-<variant>: every run config sets its own
+code: dev                       # the release the run is launched from (v0.2.0, ...) or dev (not publishable)
+seed: 1
+mode: async                     # async (actors never wait) | sync (fixed games a version; replays exactly)
+budget: {max_versions: null, max_hours: null, max_games: null}   # live; null = no limit; the first limit reached stops
+
+engine:
+  name: gorge
+  root: /work/gorge-fork        # gorge checkout with bin/dzgorge (engine/gorge/build.sh) and .cards
+  census: true                  # gorge's paid-mana census (its default since eddaba289); false = -no-paid-mana-census
+  max_turns: 100
+  max_intents: 20000
+  mulligans: 2
+  mull_heuristic: true
+  topk_max_options: 64
+
+data: {decks: data/gorge/decks, pool: data/gorge/pool.tsv, train_split: train, eval_split: eval}
+
+player:
+  arch: mlp                     # mlp | transformer | gnn (only mlp runs inside the engine, as .dzgw)
+  config: {d: 128, ff: 256, layers: 1, d_emb: 32, card_d: 64, head_hidden: 128}   # loop F's width-128 MLP
+  init: null                    # null: version 0 is the search without a net | path/to/model.pt | hf://owner/repo/file
+  learn: true                   # false: no player actors or learner (a builder-only run, configs/smoke-sealed.yml)
+
+search:
+  keys: [autopay, oppnodes, oppfull, morekinds]
+  topk: 6
+  cpuct: 0.25
+  closedlist: true              # hide the opponent's decklist: sample worlds from the belief corpus
+  belief: {decks: null, pool: null, split: train}   # null: the run's own data.decks / data.pool
+
+actor:
+  sims: 200                     # live; loop F: 200
+  explore: true
+  record_every: 1               # live
+  chunk_games: 50               # live; games a shard
+  chunk_secs: 3600              # a chunk's hard timeout
+  workers: 2                    # dzgorge -workers per actor process
+  pcr: {prob: 0.0, cheap_sims: 40, by_kind: {}}   # live; playout-cap randomization, 0 = off (see configs/runs/e2-*)
+  decided: {high: 0.0, n: 3, sims: 40, weight: 0.1}   # live; decided-game cheap search (KataGo), 0 = off: after
+                                # n root values in a row above high (or below 1 - high), full searches use sims, no
+                                # noise, argmax, and are recorded at training weight `weight` (0: not recorded)
+  forced: {k: 0.0}              # live; forced playouts and policy target pruning (KataGo, k = 2); 0 = off. Both are
+                                # self-play only: the evaluator never uses them
+
+learner:
+  device: cpu
+  min_new_positions: 20000      # live; train once this many new recorded positions arrived (async) ...
+  window_positions: 300000      # live; ... on the newest this-many positions
+  epochs: 2                     # live
+  steps_per_position: null      # live; if set, max_steps = ceil(steps_per_position * new positions / batch)
+  batch: 512
+  lr: 1.0e-4                    # live
+  warmup: 100
+  policy_target: visits         # visits | cq
+  value_blend: 1.0              # value target (1-x) game outcome + x root value (E7: root value)
+  warm_start: true              # continue from the current version's weights
+  threads: 4
+  surprise_weight: 0.0          # KataGo policy surprise weighting: state weight (1-x) + x KL(target||prior)/mean; 0 = off
+  value_surprise: 0.0           # the same for the value loss, by |value target - prediction|; 0 = off (KataGo: 0.1)
+  ema_decay: 0.0                # weight moving average (bias-corrected); a version publishes it when its holdout
+                                # loss is lower than the raw weights'; 0 = off (e.g. 0.999)
+  window: {kind: fixed, c: 150000, alpha: 0.75, beta: 0.4}   # fixed: the newest window_positions; katago: KataGo's
+                                # growing window, N positions so far up to c, then c(1 + beta((N/c)^alpha - 1)/alpha),
+                                # at most window_positions (~400k at N = 1M)
+
+eval:
+  every_versions: 1             # live
+  sims: 100                     # live
+  pairs: 100                    # live; paired games, 2 games a pair
+  seed: 3131
+  workers: 2
+  opponents: [prev, sbtactical] # prev | v<N> | sbtactical | bot | nonet | file:/path.dzgw
+
+store: runs/player-base         # local path | hf://buckets/<owner>/<bucket> | ssh://host/path; `--store` overrides
+tracking: {trackio: false, project: draftzero}
+sync: {games_per_version: 200}  # sync mode only
+paused: false                   # live; actors idle while true
+
+builder:                        # the sealed deck builder on the loop (docs/032, draftzero.loop.builder); off here
+  learn: false                  # true: builder actors, learner and evaluators run too (dz run starts them)
+  kinds: btplr                  # decks per pool: b best, t Thompson, p perturbed, l land-shifted, r random (else t)
+  random_share: 0.15
+  members: 5                    # ensemble members, each on a bootstrap resample
+  pools_per_chunk: 50
+  games_per_chunk: 400          # cross-pool deck pairs, each dealt twice with the seats swapped
+  games_per_version: 10000      # decided games of a version before the next one (docs/032: 10k-40k a generation)
+  sims: null                    # the pilot's simulations; null = actor.sims; 0 = gorge's heuristic bot
+  pilot: null                   # a fixed pilot .dzgw; null = the current player version, or no network
+  closedlist: false             # docs/032's pilot saw both decklists
+  workers: 2
+  chunk_secs: 3600
+  init: null                    # null: version 0 is untrained (random deck-shaped builds) | path/to/ens.pt
+  window: {kind: versions, size: 4}   # the newest 4 versions' games (docs/032) | {kind: games, size: N}
+  warm_start: true
+  epochs: 40
+  lr: 3.0e-3
+  warm_lr: 1.0e-3
+  draws: false
+  castable: false
+  land_support: 0.02            # the land counts the window's decks support bound the builder; 0 = none
+  threads: 4                    # torch threads of each builder role (building decks, training)
+  pools: {kind: draftlab, set: FDN, seed: 1, packs: 6, collation: arena, count: 5000}   # dzgorge sealed-pools
+  eval: {every_versions: 1, pools: 200, pairs: 1, seed: 2, sims: 100, opponent: best23, workers: 2}

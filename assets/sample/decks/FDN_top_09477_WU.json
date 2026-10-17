@@ -1,0 +1,91 @@
+{
+"name": "FDN_top_09477_WU",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 936eb3ca41a74baca6dd5a19f7106aee:1, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Banishing Light",
+"count": 2
+},
+{
+"name": "Bigfin Bouncer",
+"count": 1
+},
+{
+"name": "Cat Collector",
+"count": 1
+},
+{
+"name": "Cathar Commando",
+"count": 1
+},
+{
+"name": "Celestial Armor",
+"count": 1
+},
+{
+"name": "Dazzling Angel",
+"count": 1
+},
+{
+"name": "Empyrean Eagle",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 4
+},
+{
+"name": "Fleeting Flight",
+"count": 1
+},
+{
+"name": "Goldvein Pick",
+"count": 1
+},
+{
+"name": "Helpful Hunter",
+"count": 1
+},
+{
+"name": "Heraldic Banner",
+"count": 1
+},
+{
+"name": "Island",
+"count": 7
+},
+{
+"name": "Joust Through",
+"count": 1
+},
+{
+"name": "Kykar, Zephyr Awakener",
+"count": 1
+},
+{
+"name": "Luminous Rebuke",
+"count": 1
+},
+{
+"name": "Make Your Move",
+"count": 1
+},
+{
+"name": "Plains",
+"count": 9
+},
+{
+"name": "Prideful Parent",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 2
+},
+{
+"name": "Youthful Valkyrie",
+"count": 1
+}
+]
+}

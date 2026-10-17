@@ -1,0 +1,13 @@
+# The smoke run with its actors on another machine: checks the relay path (contracts §4, loop/relay.py) for machines
+# without a Hugging Face token or behind NAT. Everything else, including the 80 sample decks (data: assets/sample),
+# is configs/smoke.yml.
+#
+#   here (holds the store):  dz controller --config configs/smoke-distributed.yml      (and the same for learner and
+#                            evaluator), plus the relay, which pushes config.yml, control.json and versions/ to each
+#                            host's <ROOT>/store and pulls shards/, heartbeats/ and metrics/ back over rsync:
+#                            dz relay configs/smoke-distributed.yml --host r1 /root/dz/run "root@HOST -p PORT"
+#   each remote machine:     dz actor --config /root/dz/run/store/config.yml --store /root/dz/run/store --machine r1
+#                            (from a checkout there; start it after the relay's first sync)
+extends: smoke.yml
+run: smoke-distributed
+store: runs/smoke-distributed

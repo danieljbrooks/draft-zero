@@ -1,0 +1,83 @@
+{
+"name": "FDN_top_02819_WU",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck dc0664387c234e5a94135d20890ab5dd:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Arahbo, the First Fang",
+"count": 1
+},
+{
+"name": "Dazzling Angel",
+"count": 3
+},
+{
+"name": "Drake Hatcher",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 1
+},
+{
+"name": "Empyrean Eagle",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Felidar Savior",
+"count": 1
+},
+{
+"name": "Goldvein Pick",
+"count": 2
+},
+{
+"name": "Healer's Hawk",
+"count": 1
+},
+{
+"name": "Icewind Elemental",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Plains",
+"count": 8
+},
+{
+"name": "Prideful Parent",
+"count": 2
+},
+{
+"name": "Refute",
+"count": 2
+},
+{
+"name": "Skyknight Squire",
+"count": 1
+},
+{
+"name": "Skyship Buccaneer",
+"count": 2
+},
+{
+"name": "Spectral Sailor",
+"count": 2
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+},
+{
+"name": "Vanguard Seraph",
+"count": 1
+}
+]
+}

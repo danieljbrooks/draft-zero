@@ -1,0 +1,83 @@
+{
+"name": "FDN_top_02810_UR",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 046c897b29524b8f82d9886a0f293793:0, player win-rate bucket 0.66 (CC BY 4.0)",
+"cards": [
+{
+"name": "Axgard Cavalry",
+"count": 1
+},
+{
+"name": "Balmor, Battlemage Captain",
+"count": 3
+},
+{
+"name": "Burst Lightning",
+"count": 2
+},
+{
+"name": "Crackling Cyclops",
+"count": 1
+},
+{
+"name": "Elementalist Adept",
+"count": 1
+},
+{
+"name": "Essence Scatter",
+"count": 1
+},
+{
+"name": "Fanatical Firebrand",
+"count": 1
+},
+{
+"name": "Fiery Annihilation",
+"count": 2
+},
+{
+"name": "Fleeting Distraction",
+"count": 1
+},
+{
+"name": "Goblin Boarders",
+"count": 2
+},
+{
+"name": "Goblin Surprise",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Mountain",
+"count": 8
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Sphinx of Forgotten Lore",
+"count": 1
+},
+{
+"name": "Sure Strike",
+"count": 1
+},
+{
+"name": "Think Twice",
+"count": 2
+},
+{
+"name": "Thrill of Possibility",
+"count": 2
+},
+{
+"name": "Uncharted Voyage",
+"count": 1
+}
+]
+}

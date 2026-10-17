@@ -1,0 +1,95 @@
+{
+"name": "FDN_top_09708_UG",
+"format": "limited",
+"notes": "17lands FDN PremierDraft deck 379ff1d2b0ae4c28806bb33e2f4a5efa:0, player win-rate bucket 0.60 (CC BY 4.0)",
+"cards": [
+{
+"name": "Ambush Wolf",
+"count": 1
+},
+{
+"name": "Apothecary Stomper",
+"count": 1
+},
+{
+"name": "Beast-Kin Ranger",
+"count": 1
+},
+{
+"name": "Bigfin Bouncer",
+"count": 2
+},
+{
+"name": "Bite Down",
+"count": 2
+},
+{
+"name": "Broken Wings",
+"count": 1
+},
+{
+"name": "Campus Guide",
+"count": 2
+},
+{
+"name": "Elementalist Adept",
+"count": 2
+},
+{
+"name": "Erudite Wizard",
+"count": 1
+},
+{
+"name": "Evolving Wilds",
+"count": 1
+},
+{
+"name": "Faebloom Trick",
+"count": 1
+},
+{
+"name": "Forest",
+"count": 8
+},
+{
+"name": "High Fae Trickster",
+"count": 1
+},
+{
+"name": "Icewind Elemental",
+"count": 1
+},
+{
+"name": "Imprisoned in the Moon",
+"count": 1
+},
+{
+"name": "Island",
+"count": 8
+},
+{
+"name": "Nessian Hornbeetle",
+"count": 1
+},
+{
+"name": "Spectral Sailor",
+"count": 1
+},
+{
+"name": "Strix Lookout",
+"count": 1
+},
+{
+"name": "Tatyova, Benthic Druid",
+"count": 1
+},
+{
+"name": "Treetop Snarespinner",
+"count": 1
+},
+{
+"name": "Witness Protection",
+"count": 1
+}
+]
+}
