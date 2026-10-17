@@ -250,7 +250,7 @@ A `.dzgw` runs inside gorge's search. A `.pt` holds the architecture, config and
 2. `dz engine build`, then compare `dz engine version` with the manifest's `engine` record: fork commit, binary SHA-256 and card lock must match. With `:closedlist`, `dz manifest config.yml` must also show the manifest's `belief.corpus_hash`.
 3. `dz run config.yml --store runs/<id>-repro`, with the manifest's config.
 
-A sync-mode run replays exactly: the same seeds and versions give byte-identical games. An async run reproduces statistically, because which version an actor plays depends on timing.
+A sync-mode run is built to replay exactly: the same seeds and versions should give byte-identical games (no test checks this end to end yet). An async run reproduces statistically, because which version an actor plays depends on timing.
 
 ## Publishing a run
 
