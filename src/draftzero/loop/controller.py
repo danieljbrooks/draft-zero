@@ -152,7 +152,9 @@ class Controller:
                              f"{what}. Change live fields with `dz plan set`; to change these anyway, add "
                              "--allow-config-change (`dz run` or the controller; the changes are recorded in "
                              "events.jsonl)")
-        at = ctl.player_version(ctl.read(self.store)) or 0
+        c = ctl.read(self.store)
+        builder_only = bld.enabled(self.base) and not bld.player_learns(self.base)   # its versions are the builder's
+        at = (ctl.player_version(c, bld.COMPONENT) if builder_only else ctl.player_version(c)) or 0
         ctl.append_events(self.store, [{"time": ctl.now_iso(), "kind": "set", "path": p, "old": ctl.plain(a),
                                         "new": ctl.plain(b), "by": "controller restart", "at_version": at}
                                        for p, (a, b) in sorted(changes.items())])

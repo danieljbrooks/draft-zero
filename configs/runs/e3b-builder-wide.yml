@@ -4,7 +4,11 @@
 # multi-colour decks lose (its decks go back to 2.7-2.8 colours and score 10-42%), and warm-starting each version from
 # the last only slows that down. Fitted fresh on 65,000-105,000 games it scored 61-63%, level with the plateau.
 # So: train every version fresh on the newest 100,000 decided games (about 40-80 s a fit on d1).
-# Either continue E3's store from its newest version (dz run with this file on /work/exp/e3/store) or start afresh.
+# This file starts it afresh (its own store). To switch E3 itself from its newest version instead, restart E3 with
+# the same two changes (a store refuses a config with another run id; the changes are recorded in events.jsonl):
+#   dz run configs/runs/e3-builder-d1.yml --store /work/exp/e3/store --actors 0 --builder-actors 1 \
+#     --set builder.window.kind=games --set builder.window.size=100000 --set builder.warm_start=false \
+#     --allow-config-change
 extends: e3-builder-d1.yml
 run: e3b-builder-wide
 store: runs/e3b-builder-wide

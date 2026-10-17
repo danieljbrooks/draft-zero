@@ -337,6 +337,21 @@ def test_builder_only_plan_changes_wait_for_builder_versions(tmp_path):
     assert [(e["path"], e["new"], e["at_version"]) for e in ev] == [("actor.sims", 9, 0)]
 
 
+def test_a_builder_only_restart_records_its_config_changes_at_the_builder_version(tmp_path):
+    """A builder-only run's plan changes count builder versions, so a restart's allowed changes do too."""
+    cfg = make_cfg(tmp_path)
+    r = Run(tmp_path, cfg)
+    r.controller.tick()
+    c = ctl.read(r.store)
+    c["version"]["builder"] = 3
+    ctl.write(r.store, c, "test: builder version 3")
+    wide = make_cfg(tmp_path, builder={"window": {"kind": "games", "size": 50}, "warm_start": False})
+    Controller(r.store, wide, log=lambda *_: None, write_manifest=lambda *a: None, allow_config_change=True).tick()
+    ev = ctl.read_events(r.store)
+    assert sorted((e["path"], e["new"], e["at_version"]) for e in ev) == [
+        ("builder.warm_start", False, 3), ("builder.window.kind", "games", 3), ("builder.window.size", 50, 3)]
+
+
 def test_builder_role_refuses_a_run_without_the_builder(tmp_path):
     from draftzero.loop import cli
     p = tmp_path / "c.yml"

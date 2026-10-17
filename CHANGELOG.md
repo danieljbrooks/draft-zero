@@ -22,6 +22,7 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 - The deck builder on the loop (`draftzero.loop.builder`, opt-in with `builder.learn`): builder actors, a builder learner and builder evaluators train docs/032's deck value ensemble on gorge draftlab sealed pools (`dzgorge sealed-pools`, `draftzero.build.pools`) and evaluate each version against gorge's `best23@1` decks on held-out pools; `player.learn: false` makes a builder-only run. `configs/smoke-sealed.yml` is its smoke run; `dz builder-actor|builder-learner|builder-evaluator` and `dz run --builder-actors` start its roles.
 - The `dz` commands `version`, `manifest` (alias `provenance`), `run`, `actor`, `learner`, `evaluator`, `controller`, `plan`, `status`, `stop`, `report`, `models pull`, `play`, `eval`, `engine build|version|coverage`, `pod up|down|list|balance|offers` (RunPod pods for relay actors; `up` requires `--max-price` and `--max-hours`) and `relay`.
 - RunPod network volumes as a run's store (docs/035): `dz pod volume create|list|rm`, `dz pod up --volume ID` (Secure Cloud, pinned to the volume's data center, mounted at `/workspace`; the bundle is unpacked from the volume when an earlier pod of the same commit left it there), `configs/smoke-volume.yml` and `tools/volume_probe.py`. `LocalStore` fsyncs before each rename and retries a read whose file vanished between the look and the open.
+- `tools/offline/builder_refit.py`: refits a builder run's deck ensemble on chosen versions' games and plays its decks exactly as the run's builder evaluator does, so its scores pair by deal with the run's versions (docs/034 §10). `configs/runs/e3b-builder-wide.yml` proposes E3b, fresh fits on the newest 100,000 games.
 - `assets/sample/`: 80 FDN decks in gorge's format (40 train, 40 eval), which the smoke configs play.
 - CI: `.github/workflows/ci.yml` runs the unit and contract tests on Python 3.11 and 3.12.
 - Four test tiers with pytest markers: `tests/unit/`, `tests/contract/` (one test per rigid interface), `tests/engine/` and `tests/smoke/`.
@@ -34,6 +35,7 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 - gorge's paid-mana census is on by default, and the search hides the opponent's decklist (`:closedlist`). Results and networks from v0.1.0 are not comparable with 0.2.0's.
 - Packages moved: `gorge/dzg/` → `draftzero.nets`, `gorge/sealed/` → `draftzero.build`, `draftzero.selfplay` → `draftzero.loop`, `gorge/decks.py` → `draftzero.data`, `gorge/analyze.py`, `stats.py` and `reference.py` → `draftzero.eval`, figure scripts → `draftzero.plots`, `tools/compute_bench/pods.py` → `draftzero.workers.runpod`.
 - `tools/extract_decks.py` no longer needs an XMage jar.
+- A builder-only run's controller, restarted with `--allow-config-change`, records the changes at the builder's version, as its plan changes are (it recorded the player's, always 0).
 - Dependencies: the core is numpy, torch, pyyaml and huggingface_hub; extras `tracking`, `plots`, `sealed` and `dev`.
 - `README.md` and `ROADMAP.md` rewritten; the roadmap is now short (phases 1–4).
 
