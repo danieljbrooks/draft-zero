@@ -1,0 +1,13 @@
+# E3b, proposed (docs/034 §10): E3 with a wide training window. E3's builder fell from ~60% against best23 (versions
+# 9-18) to 51.5% (version 22) while its held-out accuracy held. Offline refits on E3's own games (tools/offline/
+# builder_refit.py) showed why: fitted on the newest 4 versions' games alone, the ensemble forgets why greedy
+# multi-colour decks lose (its decks go back to 2.7-2.8 colours and score 10-42%), and warm-starting each version from
+# the last only slows that down. Fitted fresh on 65,000-105,000 games it scored 61-63%, level with the plateau.
+# So: train every version fresh on the newest 100,000 decided games (about 40-80 s a fit on d1).
+# Either continue E3's store from its newest version (dz run with this file on /work/exp/e3/store) or start afresh.
+extends: e3-builder-d1.yml
+run: e3b-builder-wide
+store: runs/e3b-builder-wide
+builder:
+  window: {kind: games, size: 100000}
+  warm_start: false
