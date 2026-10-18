@@ -5,38 +5,44 @@ docs/038 §7 step 4)
 E1's value target is the search's root value (learner.value_blend 1.0), whose leaves lie under a turn ahead, so it
 never sees the opponent's turn, where held mana and tricks pay off. The treatment trains the value partly on the
 seat's root value at its next own turn (nets.train --value-next; KataGo's short-term value targets, MuZero's n-step
-bootstrap). From one of E1's versions (default the last, v36) two arms fine-tune on E1's newest training window,
+bootstrap). From one of E1's versions (default the last, v36) the arms fine-tune on E1's newest training window,
 with the same steps and seed:
 
   control     --value-blend 1.0                     (E1's recipe)
-  treatment   --value-blend 0.5 --value-next 0.5
+  treatment   --value-blend 0.5 --value-next 0.5    (the proposal's)
+  next-only   --value-blend 0   --value-next 1.0    (opt-in with --arms: the whole target from the next own turn)
 
-The split is replay_ratio.py's: the run's shards in the learner's ingest order, the newest 15% the test set (neither
-arm trains on it), the window the newest learner.window_positions positions before it (the run's effective config:
+The split is replay_ratio.py's: the run's shards in the learner's ingest order, the newest 15% the test set (no arm
+trains on it), the window the newest learner.window_positions positions before it (the run's effective config:
 config.yml plus events.jsonl). A version's schedule is learner.epochs (E1's 2) passes of the window, as the learner
 runs it (--epochs, or --steps N). Each arm's best.pt (its holdout pick, which the learner would publish) is scored on
 the test set, beside the starting network and the search's own root value:
 
 - policy CE (visit targets), value log loss, AUC and Brier score against the game results, as nets.train evaluates;
-- drift = mean(value - next_rv) in points (x100), next_rv being the seat's root value at its next own turn
-  (nets.data.next_own_turn; records with none are left out), with a 95% interval clustered by game, by window class
-  (whose turn it is and the step: dense[19] and the one-hot dense[2:14]) and by whether the seat holds a castable
-  instant-speed card: a card in its hand (group 2) with the encoder's castable bit (raw[63]: not a land, mana value
-  at most its floating plus available mana; colours and targets are not checked) and instant-speed bit (raw[65]: an
-  instant, or a card with Flash). Positive drift is overshoot (docs/038 quotes next minus now, so its signs flip).
+- drift = mean(value - next_rv) in points (x100), next_rv being the training target's: the seat's root value at its
+  next own turn (nets.data.next_own_turn), or the game's result when the game ends first, over records with a known
+  result. A calibrated value has zero mean drift from it (by optional stopping), and the records whose game ends
+  before the seat's next turn are kept, since they overshoot most. With a 95% interval clustered by game, by window
+  class (whose turn it is and the step: dense[19] and the one-hot dense[2:14]) and by whether the seat holds a
+  castable instant-speed card: a card in its hand (group 2) with the encoder's castable bit (raw[63]: not a land,
+  mana value at most its floating plus available mana; colours and targets are not checked) and instant-speed bit
+  (raw[65]: an instant, or a card with Flash). Positive drift is overshoot (docs/038 quotes next minus now, so its
+  signs flip). A second table, "while the game continues", is the same over the records that have a next own turn,
+  against its root value.
 
-The gate passes when the treatment's drift over GATE_WINDOWS while holding is within +-1 point, its policy CE is at
-most 0.005 above the control's and its value log loss is not above the control's. Writes OUT/results.json and
-OUT/summary.md. A finished arm (OUT/<arm>/summary.json) is not retrained. Packs come from --packs folders (the
-learner's cache, or replay_ratio.py's OUT/packs) when they hold a shard whole, else are built in OUT/packs with
-dzgorge pack.
+Each arm beside the control passes the gate when its drift over GATE_WINDOWS while holding is within +-1 point, its
+policy CE is at most 0.005 above the control's and its value log loss is not above the control's. Writes
+OUT/results.json and OUT/summary.md. A finished arm (OUT/<arm>/summary.json) is reused by a rerun with the same
+settings and refused with other settings. Packs come from --packs folders (the learner's cache, or replay_ratio.py's
+OUT/packs) when they hold a shard whole, else are built in OUT/packs with dzgorge pack.
 
     python value_next_gate.py STORE OUT [--init PT] [--packs DIR ...] [--epochs E | --steps N] [--max-shards N]
-                              [--threads 2] [--arms control,treatment]
+                              [--threads 2] [--arms control,treatment[,next-only]]
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -58,7 +64,7 @@ from draftzero.loop import control as ctl                      # noqa: E402
 from draftzero.loop.store import LocalStore                    # noqa: E402
 from draftzero.nets import data as D                           # noqa: E402
 
-ARMS = {"control": (1.0, 0.0), "treatment": (0.5, 0.5)}      # (value_blend, value_next)
+ARMS = {"control": (1.0, 0.0), "treatment": (0.5, 0.5), "next-only": (0.0, 1.0)}   # (value_blend, value_next)
 STEPS = ("untap", "upkeep", "draw", "main1", "begin-combat", "declare-attackers", "declare-blockers", "combat-damage",
          "end-combat", "main2", "end", "cleanup")            # dense[2:14], gorge policynet stepNames
 OWN = {s: s for s in ("upkeep", "draw", "main1", "begin-combat", "declare-attackers", "declare-blockers", "main2",
@@ -72,7 +78,7 @@ CLASSES = [f"own {s}" for s in ("upkeep", "draw", "main1", "begin-combat", "decl
 # the windows where docs/038 §7 found the root value overshooting while the seat holds a castable instant
 GATE_WINDOWS = ("own begin-combat", "own declare-blockers", "own main2", "own end", "opp upkeep", "opp draw")
 CASTABLE, INSTANT, HAND = 63, 65, 2                          # card raw bits (gorge entCastable, entInstant); group
-GATE = {"drift_points": 1.0, "policy_ce": 0.005}
+GATE = {"drift_points": 1.0, "policy_ce": 0.005, "drift_share": 0.5}     # drift_share: an informational check
 METRICS = ("policy_ce", "policy_ce_uniform", "value_logloss", "value_auc", "value_brier")
 
 
@@ -119,29 +125,46 @@ def clustered(x: np.ndarray, groups: np.ndarray) -> dict:
 
 
 def test_set(dirs: list[str]) -> dict:
-    """The test records' per-record arrays: game keys, outcome, root value, next_rv (-1: no next own turn), class,
-    holding."""
+    """The test records' per-record arrays: game keys, outcome, root value, next (the next own turn's root value, -1
+    none), nrv (the training target's next_rv: next, else the outcome), class, holding."""
     ds = D.ShardSet(dirs)
     nxt = ds.next_own_turn()
     rv = ds.array("root_value").astype(np.float64)
+    oc = ds.array("outcome").astype(np.float64)
     dense = np.concatenate([np.asarray(p["dense"][:, :D.ACTIVE + 1]) for p in ds.packs])
-    return {"ds": ds, "game": ds.game_keys(), "outcome": ds.array("outcome").astype(np.float64), "rv": rv,
-            "next": np.where(nxt >= 0, rv[np.maximum(nxt, 0)], -1.0), "cls": window_class(dense),
-            "hold": holding(ds)}
+    nx = np.where(nxt >= 0, rv[np.maximum(nxt, 0)], -1.0)
+    return {"ds": ds, "game": ds.game_keys(), "outcome": oc, "rv": rv, "next": nx,
+            "nrv": np.where(nxt >= 0, nx, oc), "cls": window_class(dense), "hold": holding(ds)}
 
 
-def drift_table(value: np.ndarray, t: dict) -> dict:
-    """Drift in points by class and holding, over the gate windows and over every record with a next own turn."""
-    has = t["next"] >= 0
-    d = (value - t["next"]) * 100
-    out = {"all": clustered(d[has], t["game"][has])}
+def drift_table(value: np.ndarray, t: dict, against: str = "target") -> dict:
+    """Drift in points, 100 x (value - reference), by class and holding, over the gate windows while holding and over
+    all. against "target": the training target's next_rv, over records with a known result (each cell also gives
+    the share whose game ends before the seat's next own turn, whose reference is the result); "continues": the
+    next own turn's root value, over the records that have one."""
+    if against == "target":
+        ref, keep = t["nrv"], t["outcome"] >= 0
+    else:
+        ref, keep = t["next"], t["next"] >= 0
+    d = (value - ref) * 100
+    ends = t["next"] < 0
+
+    def cell(m):
+        r = clustered(d[m], t["game"][m])
+        if against == "target":
+            r["ends_first"] = float(ends[m].mean()) if m.any() else None
+        return r
+    out = {"all": cell(keep)}
     for i, c in enumerate(CLASSES):
         for h in (True, False):
-            m = has & (t["cls"] == i) & (t["hold"] == h)
-            out[f"{c} | {'holding' if h else 'not holding'}"] = clustered(d[m], t["game"][m])
-    gate = has & t["hold"] & np.isin(t["cls"], [CLASSES.index(c) for c in GATE_WINDOWS])
-    out["gate windows | holding"] = clustered(d[gate], t["game"][gate])
+            out[f"{c} | {'holding' if h else 'not holding'}"] = cell(keep & (t["cls"] == i) & (t["hold"] == h))
+    out["gate windows | holding"] = cell(keep & gate_mask(t))
     return out
+
+
+def gate_mask(t: dict) -> np.ndarray:
+    """[n] bool: the record is at one of GATE_WINDOWS and the seat holds a castable instant-speed card."""
+    return t["hold"] & np.isin(t["cls"], [CLASSES.index(c) for c in GATE_WINDOWS])
 
 
 # ------------------------------------------------------------------------------------------------ scoring
@@ -152,7 +175,8 @@ def score(pt: Path | None, t: dict, threads: int, batch: int = 1024) -> dict:
     (value metrics and drift only)."""
     if pt is None:
         p = np.clip(t["rv"], 1e-6, 1 - 1e-6)
-        return {**value_metrics(np.log(p / (1 - p)), t), "drift": drift_table(t["rv"], t)}
+        return {**value_metrics(np.log(p / (1 - p)), t), "drift": drift_table(t["rv"], t),
+                "drift_continues": drift_table(t["rv"], t, "continues")}
     import torch
     from draftzero.nets import models as M
     from draftzero.nets import train
@@ -175,8 +199,9 @@ def score(pt: Path | None, t: dict, threads: int, batch: int = 1024) -> dict:
             ce[sel[pm]] = x["ce_state"].numpy()[pm]
             unif[sel[pm]] = torch.log(k.clamp(min=1)).numpy()[pm]
     pol = ~np.isnan(ce)
+    v = 1 / (1 + np.exp(-vlogit))
     out = {"n_policy": int(pol.sum()), "policy_ce": float(ce[pol].mean()), "policy_ce_uniform": float(unif[pol].mean()),
-           **value_metrics(vlogit, t), "drift": drift_table(1 / (1 + np.exp(-vlogit)), t)}
+           **value_metrics(vlogit, t), "drift": drift_table(v, t), "drift_continues": drift_table(v, t, "continues")}
     out["_ce"], out["_vl"] = ce, vlogit
     return out
 
@@ -194,15 +219,21 @@ def value_metrics(vlogit: np.ndarray, t: dict) -> dict:
 
 
 def paired(a: dict, b: dict, t: dict) -> dict:
-    """Treatment minus control, per record and clustered by game: policy CE and value log loss against results."""
+    """Arm b minus the control a, per record and clustered by game: policy CE, value log loss against results, and
+    the drift at the gate windows while holding (points; the same records as the drift table's)."""
     pol = ~np.isnan(a["_ce"]) & ~np.isnan(b["_ce"])
     m = t["outcome"] >= 0
     y = t["outcome"]
+    g = m & gate_mask(t)
 
     def vl(l):
         return np.logaddexp(0, l) - y * l
+
+    def p(l):
+        return 1 / (1 + np.exp(-l))
     return {"policy_ce": clustered((b["_ce"] - a["_ce"])[pol], t["game"][pol]),
-            "value_logloss": clustered((vl(b["_vl"]) - vl(a["_vl"]))[m], t["game"][m])}
+            "value_logloss": clustered((vl(b["_vl"]) - vl(a["_vl"]))[m], t["game"][m]),
+            "gate_drift": clustered(((p(b["_vl"]) - p(a["_vl"])) * 100)[g], t["game"][g])}
 
 
 # ------------------------------------------------------------------------------------------------ data and training
@@ -232,13 +263,13 @@ def find_pack(e: dict, caches: list[Path], store: LocalStore, out: Path, gorge_b
     return pack_dirs(dst)
 
 
-def train_arm(name: str, blend: float, nxt: float, init: Path, window: list[str], cfg, seed: int, out: Path, a) -> dict:
+def train_arm(name: str, blend: float, nxt: float, init: Path, window: list[str], cfg, seed: int, out: Path, a,
+              dry: bool = False) -> dict | None:
     """nets.train from init on the window, with the learner's settings (as Learner.train_args); best.pt and the
-    summary. A finished arm is read back."""
+    summary. A finished arm is read back when it was trained with the same arguments, window and checkpoint pick,
+    and refused otherwise (a smoke run's arm is not scored as the full gate's). dry: only that check (None: to
+    train)."""
     d = out / name
-    done = d / "summary.json"
-    if done.exists():
-        return json.loads(done.read_text())
     lr = cfg.learner
     argv = [sys.executable, "-m", "draftzero.nets.train", "--init", str(init), "--train", *window,
             "--out", str(d / "train"), "--batch", str(int(lr.batch)), "--lr", repr(float(lr.lr)),
@@ -246,6 +277,19 @@ def train_arm(name: str, blend: float, nxt: float, init: Path, window: list[str]
             *(["--value-next", repr(nxt)] if nxt > 0 else []), "--device", "cpu", "--in-ram",
             "--eval-max", str(a.eval_max), "--seed", str(seed), "--workers", str(max(1, min(2, a.threads)))]
     argv += ["--epochs", "1000000", "--max-steps", str(a.steps)] if a.steps else ["--epochs", repr(float(a.epochs))]
+    i = argv.index("--train") + 1
+    key = {"argv": argv[3:i] + [f"<{len(window)} pack dirs>"] + argv[i + len(window):],
+           "window": hashlib.sha1("\n".join(window).encode()).hexdigest(), "checkpoint_arg": a.checkpoint}
+    done = d / "summary.json"
+    if done.exists():
+        res = json.loads(done.read_text())
+        diff = [k for k in key if res.get(k) != key[k]]
+        if not diff:
+            return res
+        raise SystemExit(f"{name}: {d} holds an arm trained with other settings (differing: {', '.join(diff)}); "
+                         "use another OUT, or remove that folder to retrain")
+    if dry:
+        return None
     src = str(Path(draftzero.__file__).resolve().parents[1])       # the subprocess trains with this checkout's code
     env = {**os.environ, "OMP_NUM_THREADS": str(a.threads), "MKL_NUM_THREADS": str(a.threads),
            "PYTHONPATH": os.pathsep.join([src] + [p for p in os.environ.get("PYTHONPATH", "").split(os.pathsep) if p])}
@@ -258,12 +302,10 @@ def train_arm(name: str, blend: float, nxt: float, init: Path, window: list[str]
         raise SystemExit(f"{name}: training failed (see {d / 'train.log'})")
     summary = json.loads(p.stdout.strip().splitlines()[-1])
     pick = "best" if a.checkpoint == "best" and (d / "train" / "best.pt").exists() else "last"
-    i = argv.index("--train") + 1
     res = {"arm": name, "value_blend": blend, "value_next": nxt, "steps": summary["steps"],
            "best_step": summary.get("best_step"), "checkpoint": pick, "pt": str(d / "train" / f"{pick}.pt"),
            "train_s": round(time.time() - t0, 1), "holdout": {k: (summary.get("best") or {}).get("holdout", {}).get(k)
-                                                               for k in ("total", *METRICS)},
-           "argv": argv[3:i] + [f"<{len(window)} pack dirs>"] + argv[i + len(window):]}
+                                                               for k in ("total", *METRICS)}, **key}
     done.write_text(json.dumps(res, indent=1))
     return res
 
@@ -292,50 +334,89 @@ def summary_md(res: dict) -> str:
         L += ["**A smoke run** (--max-shards): a few shards, so its numbers and verdict mean nothing.", ""]
     if s.get("init_saw_test"):
         L += [f"The starting network trained on {s['init_saw_test']} of the {s['test_shards']} test shards "
-              "(its own window), so the test set is not unseen by it; both arms share that.", ""]
-    g = res["gate"]
-    L += [f"**Gate: {'pass' if g['pass'] else 'fail'}.**", ""]
-    L += ["| Check | Treatment | Control | Want | Pass |", "|---|---|---|---|---|"]
-    for c in g["checks"]:
-        L.append(f"| {c['name']} | {c['treatment']} | {c['control']} | {c['want']} | {'yes' if c['pass'] else 'no'} |")
-    L += ["", "## Test-set metrics (against game results)", "",
+              "(its own window), so the test set is not unseen by it; every arm shares that.", ""]
+    if not res["gate"]:
+        L += ["**Gate: needs the control and another arm.**", ""]
+    for arm, g in res["gate"].items():
+        bl, nx = ARMS[arm]
+        L += [f"**Gate, {arm} (value_blend {bl:g}, value_next {nx:g}): {'pass' if g['pass'] else 'fail'}.**", "",
+              f"| Check | {arm} | control | Want | Pass |", "|---|---|---|---|---|"]
+        for c in g["checks"]:
+            ok = ("yes" if c["pass"] else "no") + ("" if c.get("gating", True) else " (not gating)")
+            L.append(f"| {c['name']} | {c['treatment']} | {c['control']} | {c['want']} | {ok} |")
+        L.append("")
+    gs = rows["search"]["drift"]["gate windows | holding"]["mean"]
+    gi = rows["init"]["drift"]["gate windows | holding"]["mean"] if "init" in rows else None
+    if gs is not None and gi is not None:
+        L += [f"For scale, at the gate windows while holding: the search's root value drifts {gs:+.2f} points and "
+              f"the starting network {gi:+.2f}, so the network sits {gi - gs:+.2f} above the root value it was "
+              f"trained on. A network that fitted value_blend b (the rest value_next) exactly would drift about "
+              f"b x {gs:+.2f}; one that also kept the starting network's bias would add {gi - gs:+.2f}.", ""]
+    L += ["## Test-set metrics (against game results)", "",
           "| | " + " | ".join(names) + " |", "|---" * (len(names) + 1) + "|"]
     for k in METRICS:
         L.append(f"| {k} | " + " | ".join(f"{rows[n][k]:.4f}" if isinstance(rows[n].get(k), float) else "–"
                                           for n in names) + " |")
-    if "paired" in res:
-        p = res["paired"]
-        L += ["", f"Treatment minus control, per record and clustered by game: policy CE {fmt(p['policy_ce'], 4)}, "
-              f"value log loss {fmt(p['value_logloss'], 4)}."]
-    L += ["", "## Drift: value minus the seat's root value at its next own turn (points, 95% interval)", "",
-          "Positive = the value overshoots its next own turn's. *search* is the root value itself.", "",
+    for arm, p in res.get("paired", {}).items():
+        L += ["", f"{arm} minus control, per record and clustered by game: policy CE {fmt(p['policy_ce'], 4)}, "
+              f"value log loss {fmt(p['value_logloss'], 4)}, drift at the gate windows while holding "
+              f"{fmt(p['gate_drift'])} points."]
+    L += ["", "## Drift from the value target's next_rv (points, 95% interval)", "",
+          "Value minus next_rv: the seat's root value at its next own turn, or the game's result when the game ends "
+          "first (a calibrated value drifts 0 from it, by optional stopping), over records with a known result. "
+          "Positive = overshoot. *search* is the root value itself; *ends first* is the share of the cell's records "
+          "whose game ends before the seat's next own turn.", "",
+          "| Window | Holding | n | ends first | " + " | ".join(names) + " |",
+          "|---|---|---|---" + "|---" * len(names) + "|"]
+    L += drift_rows(rows, names, "drift")
+    L += ["", "## Drift while the game continues (points, 95% interval)", "",
+          "Value minus the root value at the seat's next own turn, over the records that have one (the records "
+          "whose game ends first left out).", "",
           "| Window | Holding | n | " + " | ".join(names) + " |", "|---|---|---" + "|---" * len(names) + "|"]
-    for key in ["gate windows | holding", "all"] + [f"{c} | {h}" for c in CLASSES for h in ("holding", "not holding")]:
-        cell = rows[names[0]]["drift"].get(key)
-        if not cell or not cell["n"]:
-            continue
-        w, _, h = key.partition(" | ")
-        L.append(f"| {w} | {h or 'any'} | {cell['n']:,} | "
-                 + " | ".join(fmt(rows[n]["drift"][key]) for n in names) + " |")
+    L += drift_rows(rows, names, "drift_continues")
     return "\n".join(L) + "\n"
 
 
-def gate(rows: dict, paired_: dict | None) -> dict:
-    tr, co = rows.get("treatment"), rows.get("control")
-    if not tr or not co:
-        return {"pass": False, "checks": [], "note": "needs both arms"}
+def drift_rows(rows: dict, names: list[str], kind: str) -> list[str]:
+    """The drift table's lines: the gate windows, all records, then each class and holding with records."""
+    out = []
+    for key in ["gate windows | holding", "all"] + [f"{c} | {h}" for c in CLASSES for h in ("holding", "not holding")]:
+        cell = rows[names[0]][kind].get(key)
+        if not cell or not cell["n"]:
+            continue
+        w, _, h = key.partition(" | ")
+        ends = f" {cell['ends_first']:.0%} |" if "ends_first" in cell else ""
+        out.append(f"| {w} | {h or 'any'} | {cell['n']:,} |{ends} "
+                   + " | ".join(fmt(rows[n][kind][key]) for n in names) + " |")
+    return out
+
+
+def gate(rows: dict) -> dict:
+    """Each arm beside the control (none without the control): {arm: {"pass", "checks"}}."""
+    co = rows.get("control")
+    return {k: gate_arm(rows[k], co) for k in ARMS if k != "control" and k in rows} if co else {}
+
+
+def gate_arm(tr: dict, co: dict) -> dict:
+    """The gate's checks for one arm against the control. The drift share (the arm's drift at most half the
+    control's) is reported, not gated on: an alternative criterion for Dan."""
     dt, dc = tr["drift"]["gate windows | holding"], co["drift"]["gate windows | holding"]
-    lim = GATE["drift_points"]
+    lim, share = GATE["drift_points"], GATE["drift_share"]
+    both = dt["mean"] is not None and dc["mean"] is not None
     checks = [
         {"name": "drift at the gate windows, holding (points)", "treatment": fmt(dt), "control": fmt(dc),
          "want": f"within ±{lim:g}", "pass": dt["mean"] is not None and abs(dt["mean"]) <= lim},
         {"name": "policy CE", "treatment": f"{tr['policy_ce']:.4f}", "control": f"{co['policy_ce']:.4f}",
-         "want": f"at most control + {GATE['policy_ce']:g}", "pass": tr["policy_ce"] <= co["policy_ce"] + GATE["policy_ce"]},
+         "want": f"at most control + {GATE['policy_ce']:g}",
+         "pass": tr["policy_ce"] <= co["policy_ce"] + GATE["policy_ce"]},
         {"name": "value log loss against results", "treatment": f"{tr['value_logloss']:.4f}",
          "control": f"{co['value_logloss']:.4f}", "want": "at most control's",
          "pass": tr["value_logloss"] <= co["value_logloss"]},
+        {"name": "that drift's size against the control's", "control": "1",
+         "treatment": f"{abs(dt['mean']) / abs(dc['mean']):.2f}" if both and dc["mean"] else "–",
+         "want": f"at most {share:g}", "pass": both and abs(dt["mean"]) <= share * abs(dc["mean"]), "gating": False},
     ]
-    return {"pass": all(c["pass"] for c in checks), "checks": checks}
+    return {"pass": all(c["pass"] for c in checks if c.get("gating", True)), "checks": checks}
 
 
 # ------------------------------------------------------------------------------------------------ main
@@ -348,16 +429,20 @@ def main(argv=None) -> int:
     ap.add_argument("--packs", action="append", default=[],
                     help="a folder of packs named <actor>-<seq> (the learner's cache, replay_ratio.py's OUT/packs); "
                          "repeatable")
-    ap.add_argument("--arms", default="control,treatment")
+    ap.add_argument("--arms", default="control,treatment", help=f"of {', '.join(ARMS)}")
     ap.add_argument("--epochs", type=float, default=None, help="passes over the window (default: learner.epochs)")
     ap.add_argument("--steps", type=int, default=None, help="training steps instead of --epochs")
     ap.add_argument("--max-shards", type=int, default=None, help="at most N window shards and N test shards (smoke)")
     ap.add_argument("--test-frac", type=float, default=0.15)
     ap.add_argument("--eval-max", type=int, default=30000, help="holdout records per nets.train evaluation")
-    ap.add_argument("--checkpoint", choices=("best", "last"), default="best", help="best: the holdout pick, as published")
+    ap.add_argument("--checkpoint", choices=("best", "last"), default="best",
+                    help="best: the holdout pick, as published")
     ap.add_argument("--seed", type=int, default=None, help="default: the learner's seed for the next version")
     ap.add_argument("--threads", type=int, default=2)
     a = ap.parse_args(argv)
+    arm_names = [x.strip() for x in a.arms.split(",") if x.strip()]
+    if not arm_names or set(arm_names) - set(ARMS):
+        ap.error(f"--arms: of {', '.join(ARMS)}")
     store, out = LocalStore(a.store), Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     cfg = ctl.effective(C.loads((Path(a.store) / "config.yml").read_text()), store)
@@ -394,27 +479,28 @@ def main(argv=None) -> int:
              "gate_windows": list(GATE_WINDOWS), "threads": a.threads, "checkpoint": a.checkpoint,
              "smoke": bool(a.max_shards)}
     print(json.dumps(setup), flush=True)
+    for name in arm_names:                                     # refuse a stale OUT before the scoring
+        train_arm(name, *ARMS[name], init, window, cfg, seed, out, a, dry=True)
 
     t = test_set([d for e in test_e for d in dirs[e["shard"]]])
     setup.update(test_records=int(t["ds"].n), test_with_next=int((t["next"] >= 0).sum()),
                  test_holding=float(t["hold"].mean()) if t["ds"].n else None)
     rows = {"search": score(None, t, a.threads), "init": score(init, t, a.threads)}
     arms = {}
-    for name in a.arms.split(","):
-        blend, nxt = ARMS[name.strip()]
+    for name in arm_names:
+        blend, nxt = ARMS[name]
         arms[name] = train_arm(name, blend, nxt, init, window, cfg, seed, out, a)
         rows[name] = score(Path(arms[name]["pt"]), t, a.threads)
         print(json.dumps({"arm": name, **{k: rows[name].get(k) for k in METRICS},
                           "gate_drift": rows[name]["drift"]["gate windows | holding"]}), flush=True)
-    pr = paired(rows["control"], rows["treatment"], t) if {"control", "treatment"} <= set(rows) else None
+    pr = {k: paired(rows["control"], rows[k], t) for k in arms if k != "control"} if "control" in rows else {}
     res = {"time": time.strftime("%Y-%m-%d %H:%M"), "setup": setup, "arms": arms,
            "rows": {k: {x: y for x, y in v.items() if not x.startswith("_")} for k, v in rows.items()},
-           "gate": gate(rows, pr)}
-    if pr:
-        res["paired"] = pr
+           "gate": gate(rows), "paired": pr}
     (out / "results.json").write_text(json.dumps(res, indent=1))
     (out / "summary.md").write_text(summary_md(res))
-    print(json.dumps({"gate": res["gate"]["pass"], "results": str(out / "results.json")}), flush=True)
+    print(json.dumps({"gate": {k: g["pass"] for k, g in res["gate"].items()}, "results": str(out / "results.json")}),
+          flush=True)
     return 0
 
 
