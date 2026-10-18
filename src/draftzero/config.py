@@ -194,6 +194,7 @@ class LearnerConfig:
     warmup: int = 100
     policy_target: str = "visits"
     value_blend: float = 1.0                     # value target (1-x) game outcome + x root value
+    value_next: float = 0.0                      # y of the value target from the seat's next own turn; 0 = off
     warm_start: bool = True                      # continue from the current version's weights
     threads: int = 4
     surprise_weight: float = 0.0                 # KataGo policy surprise weighting (nets.train); 0 = off
@@ -315,7 +316,8 @@ class RunConfig:
     builder: BuilderConfig = field(default_factory=BuilderConfig)
 
 
-# the dotted paths a plan change may set mid-run (a path below one of these is live too: actor.pcr.by_kind.target)
+# the dotted paths a plan change may set mid-run (a path below one of these is live too: actor.pcr.by_kind.target);
+# learner.value_next is live exactly when learner.value_blend is (they share the value target)
 LIVE: frozenset[str] = frozenset({
     "actor.sims", "actor.pcr.prob", "actor.pcr.cheap_sims", "actor.pcr.by_kind", "actor.record_every",
     "actor.chunk_games", "actor.decided.high", "actor.decided.n", "actor.decided.sims", "actor.decided.weight",
@@ -770,6 +772,8 @@ def check(cfg: RunConfig) -> None:
     need(lr.warmup >= 0, "learner.warmup", ">= 0")
     need(lr.policy_target in POLICY_TARGETS, "learner.policy_target", f"one of {POLICY_TARGETS}")
     need(0.0 <= lr.value_blend <= 1.0, "learner.value_blend", "in [0, 1]")
+    need(0.0 <= lr.value_next and lr.value_blend + lr.value_next <= 1.0 + 1e-9, "learner.value_next",
+         f"in [0, 1 - learner.value_blend] (value_blend {lr.value_blend:g}; 0 = off)")
     need(lr.threads >= 1, "learner.threads", ">= 1")
     need(0.0 <= lr.surprise_weight <= 1.0, "learner.surprise_weight", "in [0, 1] (0 = off)")
     need(0.0 <= lr.value_surprise <= 1.0, "learner.value_surprise", "in [0, 1] (0 = off)")

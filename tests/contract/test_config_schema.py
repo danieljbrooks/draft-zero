@@ -27,7 +27,7 @@ SCHEMA_KEYS = [
     "actor.decided.sims", "actor.decided.weight", "actor.forced.k",
     "learner.device", "learner.min_new_positions", "learner.window_positions", "learner.epochs",
     "learner.steps_per_position", "learner.batch", "learner.lr", "learner.warmup", "learner.policy_target",
-    "learner.value_blend", "learner.warm_start", "learner.threads", "learner.surprise_weight",
+    "learner.value_blend", "learner.value_next", "learner.warm_start", "learner.threads", "learner.surprise_weight",
     "learner.value_surprise", "learner.ema_decay", "learner.window.kind", "learner.window.c", "learner.window.alpha",
     "learner.window.beta",
     "eval.every_versions", "eval.sims", "eval.pairs", "eval.seed", "eval.workers", "eval.opponents",
@@ -101,6 +101,7 @@ def test_base_is_loop_f():
     assert (c.eval.sims, c.eval.pairs, c.eval.opponents) == (100, 100, ["prev", "sbtactical"])
     assert c.actor.pcr.prob == 0 and c.search.closedlist
     assert c.actor.decided.high == 0 and c.actor.forced.k == 0         # self-play extras off by default
+    assert c.learner.value_next == 0.0                                 # so is the value target's next-turn share
 
 
 def test_run_ids_are_unique_and_match_file_names():

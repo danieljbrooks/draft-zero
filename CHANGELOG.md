@@ -24,6 +24,7 @@ Version 0.2.0, in progress (`0.2.0.dev0`). One reproducible, config-driven train
 - RunPod network volumes as a run's store (docs/035): `dz pod volume create|list|rm`, `dz pod up --volume ID` (Secure Cloud, pinned to the volume's data center, mounted at `/workspace`; the bundle is unpacked from the volume when an earlier pod of the same commit left it there), `configs/smoke-volume.yml` and `tools/volume_probe.py`. `LocalStore` fsyncs before each rename and retries a read whose file vanished between the look and the open.
 - `tools/offline/builder_refit.py`: refits a builder run's deck ensemble on chosen versions' games and plays its decks exactly as the run's builder evaluator does, so its scores pair by deal with the run's versions (docs/034 §10). `configs/runs/e3b-builder-wide.yml` proposes E3b, fresh fits on the newest 100,000 games.
 - `assets/sample/`: 80 FDN decks in gorge's format (40 train, 40 eval), which the smoke configs play.
+- A value target that reaches the seat's next own turn (draft-zero-report docs/038 §7 step 4), off by default: `learner.value_next` and `nets.train --value-next y` train the value on `(1 - x - y) outcome + x root_value + y next_rv`, `next_rv` being the root value of the first record of the same game and seat on one of its own turns after the record's (`nets.data.next_own_turn`), else the outcome. `ShardSet(next_rv=True)` derives it when the shards load (it is neither stored nor sent), so it needs the records of a turn in decision order, as `dzgorge pack` keeps them (an engine test checks it).
 - CI: `.github/workflows/ci.yml` runs the unit and contract tests on Python 3.11 and 3.12.
 - Four test tiers with pytest markers: `tests/unit/`, `tests/contract/` (one test per rigid interface), `tests/engine/` and `tests/smoke/`.
 - `AGENTS.md`, `CODEOWNERS` (the rigid-interface paths) and this changelog.
@@ -60,6 +61,11 @@ All ten rigid interfaces are named and versioned for the first time.
 8. **Run config schema:** new (`src/draftzero/config.py`). v0.1.0 configs do not load. `actor.decided` and `actor.forced` are live sections.
 9. **Run manifest and metrics schema:** new: `draftzero-manifest/1` and `draftzero-metrics/1`. The manifest's `belief` key records the `:closedlist` belief corpus (decks, pool, split and `corpus_hash`), or null without `:closedlist`.
 10. **Evaluation protocol and data splits:** paired games on the eval split at seed 3131 against `prev` and `sbtactical` by default; the splits in `assets/decks.tsv` and `assets/sealed/` are unchanged.
+
+Pending Dan's review (the value target's next-turn share, branch `value-next`):
+
+- 8: `learner.value_next` (default 0, after `learner.value_blend`; `value_blend + value_next` at most 1; fixed for the run, as `value_blend` is). Old configs load unchanged; every config's `config_hash` changes, since the dump now holds the key, and every config.yml this code writes holds it, so a checkout without this change refuses it: all machines of a run need this code. The learner passes `--value-next` only when it is above 0, so existing runs train with the same arguments.
+- 6 is unchanged: `next_rv` is derived from the packed `turn`, `seat`, `root_value` and `dense[19]` (gorge's "the viewer is active") at load, never written to a shard or sent on the wire.
 
 Pending Dan's review (the deck builder on the loop, branch `wip/sealedloop`):
 

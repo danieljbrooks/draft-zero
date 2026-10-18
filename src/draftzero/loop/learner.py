@@ -15,8 +15,8 @@
      newest version's model.pt with its own arch and config when learner.warm_start (else from random init with
      player.arch/config; so a player.init of another shape than player.config keeps its shape), for
      learner.epochs passes or, with steps_per_position, ceil(steps_per_position x new positions / batch) steps.
-     learner.surprise_weight, value_surprise and ema_decay pass through as nets.train's --surprise-weight,
-     --value-surprise and --ema-decay (with --export-ema) when above 0;
+     learner.value_next, surprise_weight, value_surprise and ema_decay pass through as nets.train's --value-next,
+     --surprise-weight, --value-surprise and --ema-decay (with --export-ema) when above 0;
   5. exports model.dzgw (mlp), publishes versions/player/v{N+1} (model.pt, model.dzgw, meta.json) and latest.json
      last; model.pt is the run's best.pt, and meta.json's metrics, its "step" and the learn.* metrics are that
      checkpoint's holdout evaluation (curves.jsonl at the summary's best_step, the moving average's evaluation when
@@ -358,7 +358,8 @@ class Learner:
                 "--value-blend", repr(float(self.c("learner.value_blend"))),
                 "--device", str(self.c("learner.device", "cpu")), "--in-ram",
                 "--seed", str((int(self.c("seed", 1)) * 1_000_003 + version) % 2**31)]
-        for key, flag in (("surprise_weight", "--surprise-weight"), ("value_surprise", "--value-surprise")):
+        for key, flag in (("value_next", "--value-next"), ("surprise_weight", "--surprise-weight"),
+                          ("value_surprise", "--value-surprise")):
             x = float(self.c(f"learner.{key}", 0.0) or 0.0)
             if x > 0:
                 argv += [flag, repr(x)]

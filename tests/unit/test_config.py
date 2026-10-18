@@ -40,7 +40,8 @@ def test_defaults_are_the_contract_values(cfg):
                           "decided": {"high": 0.0, "n": 3, "sims": 40, "weight": 0.1}, "forced": {"k": 0.0}}
     assert d["learner"] == {"device": "cpu", "min_new_positions": 20000, "window_positions": 300000, "epochs": 2.0,
                             "steps_per_position": None, "batch": 512, "lr": 1e-4, "warmup": 100,
-                            "policy_target": "visits", "value_blend": 1.0, "warm_start": True, "threads": 4,
+                            "policy_target": "visits", "value_blend": 1.0, "value_next": 0.0, "warm_start": True,
+                            "threads": 4,
                             "surprise_weight": 0.0, "value_surprise": 0.0, "ema_decay": 0.0,
                             "window": {"kind": "fixed", "c": 150000, "alpha": 0.75, "beta": 0.4}}
     assert d["eval"] == {"every_versions": 1, "sims": 100, "pairs": 100, "seed": 3131, "workers": 2,
@@ -136,6 +137,19 @@ def test_values_are_converted_to_the_field_type():
     assert c.player.init is None and c.budget.max_hours == 2.0
 
 
+def test_value_next_shares_the_value_target_with_value_blend():
+    """learner.value_next: 0 by default; value_blend + value_next at most 1 (sums that are 1 in decimals load); live
+    exactly when value_blend is (both fixed for the run today)."""
+    assert C.from_dict({"run": "t"}).learner.value_next == 0.0
+    for vb, vn in ((0.5, 0.5), (0.3, 0.7), (0.7, 0.3), (0.1, 0.9), (0.0, 1.0), (0.6, 0.4)):
+        c = C.from_dict({"run": "t", "learner": {"value_blend": vb, "value_next": str(vn)}})
+        assert (c.learner.value_blend, c.learner.value_next) == (vb, vn)
+        assert C.loads(C.dump(c)) == c
+    assert C.is_live("learner.value_next") == C.is_live("learner.value_blend") is False
+    with pytest.raises(C.ConfigError, match="fixed for the run"):
+        C.apply_change(C.from_dict({"run": "t"}), "learner.value_next", "0.5")
+
+
 def test_learner_extras_default_off_and_convert():
     c = C.from_dict({"run": "t"})
     assert (c.learner.surprise_weight, c.learner.value_surprise, c.learner.ema_decay) == (0.0, 0.0, 0.0)
@@ -191,6 +205,10 @@ def test_wrong_types_name_the_path(d, path):
     ({"learner": {"window_positions": 10, "min_new_positions": 20}}, "learner.window_positions"),
     ({"learner": {"policy_target": "q"}}, "learner.policy_target"),
     ({"learner": {"value_blend": 1.5}}, "learner.value_blend"),
+    ({"learner": {"value_next": -0.1}}, "learner.value_next"),
+    ({"learner": {"value_next": 0.5}}, "learner.value_next"),                  # value_blend 1.0 + 0.5 > 1
+    ({"learner": {"value_blend": 0.6, "value_next": 0.5}}, "learner.value_next"),
+    ({"learner": {"value_next": float("nan")}}, "learner.value_next"),
     ({"learner": {"surprise_weight": 1.5}}, "learner.surprise_weight"),
     ({"learner": {"value_surprise": -0.1}}, "learner.value_surprise"),
     ({"learner": {"ema_decay": 1.0}}, "learner.ema_decay"),

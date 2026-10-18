@@ -52,8 +52,9 @@ DEFAULTS = {
               "decided": {"high": 0.0, "n": 3, "sims": 40, "weight": 0.1}, "forced": {"k": 0.0}},
     "learner": {"device": "cpu", "min_new_positions": 20000, "window_positions": 300000, "epochs": 2,
                 "steps_per_position": None, "batch": 512, "lr": 1.0e-4, "warmup": 100, "policy_target": "visits",
-                "value_blend": 1.0, "warm_start": True, "threads": 4, "surprise_weight": 0.0, "value_surprise": 0.0,
-                "ema_decay": 0.0, "window": {"kind": "fixed", "c": 150000, "alpha": 0.75, "beta": 0.4}},
+                "value_blend": 1.0, "value_next": 0.0, "warm_start": True, "threads": 4, "surprise_weight": 0.0,
+                "value_surprise": 0.0, "ema_decay": 0.0, "window": {"kind": "fixed", "c": 150000, "alpha": 0.75,
+                                                                    "beta": 0.4}},
     "eval": {"every_versions": 1, "sims": 100, "pairs": 100, "seed": 3131, "workers": 2,
              "opponents": ["prev", "sbtactical"]},
     "store": "runs/smoke", "tracking": {"trackio": False, "project": "draftzero"},
@@ -713,6 +714,22 @@ def test_learner_passes_the_trainer_extras(tmp_path):
     from draftzero.nets import train
     a = train.parse_args(argv)
     assert (a.surprise_weight, a.value_surprise, a.ema_decay, a.export_ema) == (0.5, 0.1, 0.999, True)
+
+
+def test_learner_passes_value_next_only_when_set(tmp_path):
+    """learner.value_next 0 leaves the trainer's argument list as it was; above 0 it adds --value-next and nothing
+    else."""
+    def argv(sub, **learner):
+        (tmp_path / sub).mkdir()
+        cfg = make_cfg(tmp_path / sub, learner={"value_blend": 0.5, **learner})
+        return Run(tmp_path / sub, cfg).learner.train_args(tmp_path / "o", [tmp_path / "pk"], tmp_path / "v.pt", 3, 10)
+    plain, zero, half = argv("a"), argv("b", value_next=0.0), argv("c", value_next=0.5)
+    assert zero == plain and "--value-next" not in plain
+    i = half.index("--value-next")
+    assert half[i + 1] == "0.5" and half[:i] + half[i + 2:] == plain
+    from draftzero.nets import train
+    a = train.parse_args(half)
+    assert (a.value_blend, a.value_next) == (0.5, 0.5) and train.parse_args(plain).value_next == 0.0
 
 
 def test_curve_metrics_of_the_moving_average(tmp_path):
