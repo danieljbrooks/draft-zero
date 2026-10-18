@@ -77,6 +77,41 @@ def test_policy_and_value_masks():
     assert np.allclose(t.numpy()[[0, 2, 3]], [0.75 + 0.25 * 0.5, 0.375 + 0.125, 0.25 * 0.2])
 
 
+def _value_target_before_next(b, blend=0.0):
+    """targets.value_target as it was before next_w, verbatim."""
+    import torch
+    z = b.outcome.float()
+    mask = z >= 0
+    t = z if blend == 0 else (1 - blend) * z + blend * b.root_value.float()
+    return torch.where(mask, t, torch.zeros_like(t)), mask
+
+
+def test_value_target_with_the_next_turns_share():
+    """(1 - blend - next_w) outcome + blend root_value + next_w next_rv, the mask unchanged; next_w 0 is the target
+    before next_rv, bit for bit (with or without a next_rv in the batch); next_w > 0 needs one."""
+    import pytest
+    import torch
+    b = batch_of([{"visits": [1, 1], "prior": [0.5, 0.5], "q": [0.5, 0.5], "outcome": o, "root_value": r}
+                  for o, r in ((1.0, 0.7), (-1.0, 0.4), (0.5, 0.55), (0.0, 0.2))])
+    for blend in (0.0, 0.25, 0.5, 1.0):
+        t0, m0 = _value_target_before_next(b, blend)
+        t1, m1 = T.value_target(b, blend, 0.0)
+        assert torch.equal(t0, t1) and torch.equal(m0, m1)
+    with pytest.raises(ValueError, match="next_rv"):
+        T.value_target(b, 0.5, 0.5)
+    b.next_rv = torch.tensor([0.9, 0.3, 0.6, 0.1])
+    for blend in (0.0, 0.5, 1.0):
+        t0, _ = _value_target_before_next(b, blend)
+        assert torch.equal(T.value_target(b, blend)[0], t0)              # a batch with next_rv, next_w 0: unchanged
+    t, m = T.value_target(b, 0.5, 0.5)
+    assert m.tolist() == [True, False, True, True]
+    assert np.allclose(t.numpy(), [0.5 * 0.7 + 0.5 * 0.9, 0.0, 0.5 * 0.55 + 0.5 * 0.6, 0.5 * 0.2 + 0.5 * 0.1])
+    t, _ = T.value_target(b, 0.25, 0.5)
+    assert np.allclose(t.numpy()[[0, 2, 3]], [0.25 + 0.25 * 0.7 + 0.45, 0.125 + 0.25 * 0.55 + 0.3, 0.05 + 0.05])
+    t, _ = T.value_target(b, 0.0, 1.0)
+    assert np.allclose(t.numpy()[[0, 2, 3]], [0.9, 0.6, 0.1])
+
+
 def test_policy_surprise_by_hand():
     b = batch_of([{"visits": [3, 1, 0], "prior": [0.5, 0.3, 0.2], "q": [0.6, 0.4, 0]},
                   {"visits": [0, 2], "prior": [2.0, 2.0], "q": [0, 0.7]},           # prior renormalised: 0.5, 0.5

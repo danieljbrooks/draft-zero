@@ -293,3 +293,101 @@ def test_record_weights_reach_the_batch(tmp_path):
     assert D.collate(plain, np.arange(5)).weight is None                       # a bare pack: no weights
     assert torch.equal(D.collate(wpack, np.array([7, 2])).weight, torch.from_numpy(wpack["weight"][[7, 2]]))
     assert D.batch_from_wire(D.take(wpack, np.arange(3), targets=False)).weight is None
+
+
+# ------------------------------------------------------------------------------------------------ next_rv
+
+def test_next_own_turn_by_hand():
+    """The seat's next own turn: t + 2 from its own turn, t + 1 from the opponent's, t + 1 after an extra turn; its
+    first record there; other seats' and other games' records never count; none left: the outcome (-1 unknown)."""
+    rows = [  # game, seat, turn, own, root value, outcome
+        (0, 0, 1, 1, 0.50, 1.0),   # 0  seat 0's turn 1 -> its turn 3: record 6
+        (0, 1, 1, 0, 0.40, 0.0),   # 1  seat 1 on seat 0's turn 1 -> its turn 2: record 3 (not seat 0's record 4)
+        (0, 0, 1, 1, 0.52, 1.0),   # 2  -> 6
+        (0, 1, 2, 1, 0.45, 0.0),   # 3  seat 1's turn 2 -> its turn 4: none in this game (record 9 is game 1's)
+        (0, 0, 2, 0, 0.55, 1.0),   # 4  seat 0 on seat 1's turn 2 -> its turn 3: record 6
+        (1, 0, 3, 1, 0.99, 0.5),   # 5  game 1, interleaved with game 0: never game 0's
+        (0, 0, 3, 1, 0.60, 1.0),   # 6  the first record of seat 0's turn 3 -> its turn 5 (extra turn 6 after it)
+        (0, 0, 3, 1, 0.62, 1.0),   # 7  -> 10
+        (0, 1, 3, 0, 0.35, 0.0),   # 8  seat 1's next own turn would be 4: none -> outcome 0
+        (1, 1, 4, 1, 0.20, 0.5),   # 9  game 1, seat 1: none later -> outcome 0.5
+        (0, 0, 5, 1, 0.70, 1.0),   # 10 seat 0's turn 5 -> its extra turn 6: record 11
+        (0, 0, 6, 1, 0.80, 1.0),   # 11 none later -> outcome 1
+        (2, 0, 1, 1, 0.30, -1.0),  # 12 game 2, outcome unknown, nothing later: -1 (the value mask drops it)
+        (2, 0, 2, 0, 0.31, -1.0),  # 13 -> nothing: -1
+    ]
+    g, s, t, own, rv, oc = (np.array(c) for c in zip(*rows))
+    nxt = D.next_own_turn(g, s, t, own)
+    assert nxt.tolist() == [6, 3, 6, -1, 6, -1, 10, 10, -1, -1, 11, -1, -1, -1]
+    nrv = D.next_root_value(g, s, t, own, rv, oc)
+    want = [0.60, 0.45, 0.60, 0.0, 0.60, 0.5, 0.70, 0.70, 0.0, 0.5, 0.80, 1.0, -1.0, -1.0]
+    assert nrv.dtype == np.float32 and np.allclose(nrv, want)
+    # games numbered differently, records of other games anywhere: the same answer
+    perm = np.array([5, 9, 12, 13, 0, 1, 2, 3, 4, 6, 7, 8, 10, 11])
+    back = D.next_own_turn(g[perm] + 7, s[perm], t[perm], own[perm])
+    assert [perm[j] if j >= 0 else -1 for j in back] == nxt[perm].tolist()
+    assert D.next_own_turn([], [], [], []).tolist() == [] and D.next_own_turn([0], [0], [1], [0]).tolist() == [-1]
+
+
+def _turn_shards(root):
+    """Two shards whose games and turns are set by hand; game g1 spans both (its turn 3 is in the second)."""
+    first = [("g0", 0, 1, 1, 0.5, 1.0), ("g0", 1, 1, 0, 0.4, 0.0), ("g1", 0, 1, 1, 0.3, 0.0),
+             ("g0", 1, 2, 1, 0.45, 0.0), ("g1", 1, 2, 1, 0.7, 1.0), ("g0", 0, 3, 1, 0.6, 1.0)]
+    second = [("g1", 0, 3, 1, 0.35, 0.0), ("g2", 0, 1, 1, 0.9, -1.0), ("g1", 1, 3, 0, 0.66, 1.0)]
+    dirs = []
+    for k, rows in enumerate((first, second)):
+        pack, _ = pf.synthetic(len(rows), seed=30 + k)
+        games = list(dict.fromkeys(r[0] for r in rows))
+        pack["game"] = np.array([games.index(r[0]) for r in rows], np.int32)
+        pack["seat"] = np.array([r[1] for r in rows], np.uint8)
+        pack["turn"] = np.array([r[2] for r in rows], np.int32)
+        pack["dense"][:, D.ACTIVE] = [r[3] for r in rows]
+        pack["root_value"] = np.array([r[4] for r in rows], np.float32)
+        pack["outcome"] = np.array([r[5] for r in rows], np.float32)
+        d = root / f"{k:05d}"
+        pf.write_shard(d, pack, games)
+        dirs.append(d)
+    # g0: 0 -> 5, 1 -> 3, 3 -> none (0.0), 5 -> none (1.0); g1 across shards: 2 -> 6, 4 -> none, 8 -> none (1.0)
+    want = np.array([0.6, 0.45, 0.35, 0.0, 1.0, 1.0, 0.0, -1.0, 1.0], np.float32)
+    return dirs, want
+
+
+def test_shardset_next_rv_reaches_the_batch(tmp_path):
+    """ShardSet(next_rv=True): next_rv over every record, a game spanning shards matched by id, carried by take and
+    collate on the memory-mapped and in-RAM paths, flatten, the loader and a spawned worker's reopened set; without it,
+    no next_rv anywhere and the batch is otherwise identical. It is never written to a shard or sent on the wire."""
+    import pickle
+    _, want = _turn_shards(tmp_path / "pk")
+    sel = np.array([8, 0, 2, 6, 3])
+    for in_ram in (False, True):
+        ds = D.ShardSet(tmp_path / "pk", in_ram=in_ram, next_rv=True)
+        assert np.array_equal(ds.array("next_rv"), want)
+        b = ds.collate(sel)
+        order = sel if in_ram else np.array([0, 2, 3, 8, 6])       # memory-mapped: grouped by shard
+        assert b.next_rv.dtype == torch.float32 and torch.equal(b.next_rv, torch.from_numpy(want[order]))
+        _batch_equal(b, b.flatten().unflatten())
+        (lb,) = list(D.Loader(ds, [sel], workers=1))
+        assert torch.equal(lb.next_rv, b.next_rv)
+        back = pickle.loads(pickle.dumps(ds))                    # what a spawned loader process gets
+        assert back.next_rv and torch.equal(back.collate(sel).next_rv, b.next_rv)
+        plain = D.ShardSet(tmp_path / "pk", in_ram=in_ram)
+        assert all("next_rv" not in p for p in plain.packs)
+        pb = plain.collate(sel)
+        assert pb.next_rv is None
+        pb.next_rv = b.next_rv
+        _batch_equal(pb, b)                                      # next_rv is the only difference
+        sub = ds.take(sel)
+        pf.write_shard(tmp_path / f"out{int(in_ram)}", sub, [m for meta in ds.metas for m in meta["games"]])
+        assert not (tmp_path / f"out{int(in_ram)}" / "next_rv.npy").exists()
+        assert D.batch_from_wire(ds.take(sel, targets=False)).next_rv is None
+
+
+def test_loader_procs_carry_next_rv(tmp_path):
+    import multiprocessing as mp
+    _, want = _turn_shards(tmp_path / "pk")
+    ds = D.ShardSet(tmp_path / "pk", in_ram=True, next_rv=True)
+    bl = [np.array([0, 4, 8]), np.array([1, 2, 3, 5, 6, 7])]
+    method = "fork" if "fork" in mp.get_all_start_methods() else "spawn"
+    got = list(D.Loader(ds, bl, procs=1, start_method=method))
+    for b, sel in zip(got, bl):
+        assert torch.equal(b.next_rv, torch.from_numpy(want[sel]))

@@ -55,7 +55,10 @@ at zero, so a new network has a uniform policy and a 50% value.
   `--cq-c-visit 50`, `--cq-c-scale 0.1`.
 - The policy loss is the cross-entropy against the candidate log-softmax, over states with at least 2 candidates
   and some visits. The value loss is the log loss of the value logit against the outcome (draws 0.5), optionally
-  `(1 - x) outcome + x root_value` (`--value-blend x`), over states whose outcome is known (not -1).
+  `(1 - x) outcome + x root_value` (`--value-blend x`), over states whose outcome is known (not -1). With
+  `--value-next y` it is `(1 - x - y) outcome + x root_value + y next_rv`, `next_rv` being the seat's root value at
+  its next own turn: the first record of the same game and seat on one of its own turns after the record's
+  (`data.next_own_turn`), else the outcome. `ShardSet(next_rv=True)` derives it when the shards load; it is not stored.
 - A shard's optional `weight.npy` (SPEC.md §2: gorge's decided-game searches, recorded at weight `decidedw`)
   weights each state's policy and value loss. A batch's loss is then the weighted mean, `sum(w x loss) / sum(w)`,
   so a batch whose weights are all 1, such as any shard without the file, trains bit for bit as without weights.

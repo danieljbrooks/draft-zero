@@ -3,7 +3,9 @@
 Policy targets are per candidate (a distribution within each state):
   visits  visits^(1/T), normalised
   cq      Gumbel MuZero's completed-Q improved policy: softmax(log prior + sigma(normalised completed q))
-Value target: the outcome, optionally blended with the search's root value.
+Value target: the outcome, optionally blended with the search's root value and with the seat's root value at its
+next own turn (Batch.next_rv: KataGo's short-term value targets, MuZero's n-step bootstrap), which reaches past the
+opponent's turn that the search's own leaves, under a turn ahead, do not see.
 States with fewer than 2 candidates or no visits get no policy loss; outcome -1 gets no value loss.
 
 Surprise weighting (KataGo's policy and value surprise, arXiv 1902.10565 and KataGoMethods.md) reweights the
@@ -105,9 +107,16 @@ def surprise_weights(s: torch.Tensor, mask: torch.Tensor, frac: float) -> torch.
     return (1 - frac) + frac * rel
 
 
-def value_target(b, blend: float = 0.0) -> tuple[torch.Tensor, torch.Tensor]:
-    """(target [B], mask [B]): (1 - blend) * outcome + blend * root_value, masked where outcome < 0."""
+def value_target(b, blend: float = 0.0, next_w: float = 0.0) -> tuple[torch.Tensor, torch.Tensor]:
+    """(target [B], mask [B]): (1 - blend - next_w) * outcome + blend * root_value + next_w * next_rv, masked where
+    outcome < 0. next_w 0 is the target as before next_rv, bit for bit; next_w > 0 needs b.next_rv (a ShardSet loaded
+    with next_rv)."""
     z = b.outcome.float()
     mask = z >= 0
-    t = z if blend == 0 else (1 - blend) * z + blend * b.root_value.float()
+    if next_w == 0:
+        t = z if blend == 0 else (1 - blend) * z + blend * b.root_value.float()
+    else:
+        if b.next_rv is None:
+            raise ValueError("value_target: next_w > 0 needs the batch's next_rv (ShardSet(..., next_rv=True))")
+        t = max(0.0, 1 - blend - next_w) * z + blend * b.root_value.float() + next_w * b.next_rv.float()
     return torch.where(mask, t, torch.zeros_like(t)), mask

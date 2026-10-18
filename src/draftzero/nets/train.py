@@ -14,6 +14,11 @@ scale stays that of a plain mean, and a batch of weight 1 trains bit for bit as 
 weight.npy weigh 1. --no-record-weights ignores them. Evaluation and the logged losses are unweighted.
 
 Opt-in extras (all off by default, which leaves training bit-identical):
+  --value-next F        the value target's share F of the seat's root value at its next own turn (nets.data
+                        next_root_value: the first record of the same game and seat on its next own turn, else the
+                        outcome): (1 - B - F) outcome + B root_value + F next_rv with B = --value-blend. The search's
+                        leaves reach under a turn ahead, so the root value never sees the opponent's turn; this does.
+                        Evaluation still scores the value against the outcome.
   --surprise-weight F   KataGo's policy surprise weighting: each state's policy loss is weighted
                         (1 - F) + F * KL(target || prior) / its batch mean (targets.policy_surprise; the prior is
                         the one the search used, cand_prior), so the weights average 1 over a batch.
@@ -76,6 +81,9 @@ def parse_args(argv=None):
     ap.add_argument("--visits-temp", type=float, default=1.0)
     ap.add_argument("--value-weight", type=float, default=1.0)
     ap.add_argument("--value-blend", type=float, default=0.0, help="value target (1-x) outcome + x root_value")
+    ap.add_argument("--value-next", type=float, default=0.0,
+                    help="the value target's share y of the seat's root value at its next own turn: (1-x-y) outcome + "
+                         "x root_value + y next_rv (0 = off)")
     ap.add_argument("--surprise-weight", type=float, default=0.0,
                     help="policy surprise weighting F in [0, 1]: weight (1-F) + F x KL(target || prior) / batch mean")
     ap.add_argument("--value-surprise", type=float, default=0.0,
@@ -105,6 +113,8 @@ def parse_args(argv=None):
     for k in ("surprise_weight", "value_surprise"):
         if not 0.0 <= getattr(args, k) <= 1.0:
             ap.error(f"--{k.replace('_', '-')} must be in [0, 1]")
+    if not (0.0 <= args.value_next and args.value_blend + args.value_next <= 1.0 + 1e-9):
+        ap.error("--value-next must be >= 0, with --value-blend + --value-next at most 1")
     if not 0.0 <= args.ema_decay < 1.0:
         ap.error("--ema-decay must be in [0, 1)")
     if args.ema_every < 1:
@@ -159,7 +169,7 @@ def losses(model, b, args, weighted: bool = True):
     ce_state = seg_sum(-(tgt * lp), b.cand_state, b.B)
     npol = pm.sum()
     pce = torch.where(pm, ce_state, torch.zeros_like(ce_state)).sum() / npol.clamp(min=1)
-    vt, vm = T.value_target(b, args.value_blend)
+    vt, vm = T.value_target(b, args.value_blend, getattr(args, "value_next", 0.0))
     vl = F.binary_cross_entropy_with_logits(vlogit.float(), vt, reduction="none")
     nval = vm.sum()
     vloss = torch.where(vm, vl, torch.zeros_like(vl)).sum() / nval.clamp(min=1)
@@ -320,7 +330,8 @@ def main(argv=None) -> dict:
         overrides = json.loads(args.config if args.config.lstrip().startswith("{") else Path(args.config).read_text())
 
     # data
-    ds = D.ShardSet(args.train, in_ram=args.in_ram)
+    nrv = args.value_next > 0              # the value target's next-turn share needs each record's next_rv
+    ds = D.ShardSet(args.train, in_ram=args.in_ram, next_rv=nrv)
     tr_idx, ho_idx = ds.split(limit=args.limit_records)
     ho_idx = _subsample(ho_idx, args.eval_max, args.seed + 1)
     vals = []
@@ -328,7 +339,7 @@ def main(argv=None) -> dict:
         name, _, path = spec.partition("=")
         if not path:
             raise SystemExit(f"--val {spec!r}: expected NAME=DIR")
-        vds = D.ShardSet([path], in_ram=args.in_ram)
+        vds = D.ShardSet([path], in_ram=args.in_ram, next_rv=nrv)
         vals.append((name, vds, _subsample(np.arange(len(vds), dtype=np.int64), args.eval_max, args.seed + 2)))
     if len(tr_idx) == 0:
         raise SystemExit("no training records")

@@ -117,7 +117,8 @@ def test_defaults_are_bit_identical_to_training_before_the_extras(shards, tmp_pa
     """With every extra at its default (or explicitly 0), training gives the same weights, curves and best step as
     the loss function before the extras existed."""
     s_new = _run(shards, tmp_path / "new")
-    s_zero = _run(shards, tmp_path / "zero", "--surprise-weight", "0", "--value-surprise", "0", "--ema-decay", "0")
+    s_zero = _run(shards, tmp_path / "zero", "--surprise-weight", "0", "--value-surprise", "0", "--ema-decay", "0",
+                  "--value-next", "0")
     monkeypatch.setattr(train, "losses", _losses_before_extras)
     s_old = _run(shards, tmp_path / "old")
     for name in ("best.pt", "last.pt"):
@@ -181,9 +182,43 @@ def test_surprise_weighting_trains_and_differs(shards, tmp_path):
 
 def test_extras_reject_bad_values(shards, tmp_path):
     for bad in (["--surprise-weight", "1.5"], ["--value-surprise", "-0.1"], ["--ema-decay", "1"],
-                ["--export-ema"], ["--ema-decay", "0.9", "--ema-every", "0"]):
+                ["--export-ema"], ["--ema-decay", "0.9", "--ema-every", "0"], ["--value-next", "-0.1"],
+                ["--value-next", "0.6"]):                                   # _run's --value-blend 0.5: 0.5 + 0.6 > 1
         with pytest.raises(SystemExit):
             _run(shards, tmp_path / "bad", *bad)
+
+
+def test_value_next_trains_on_the_next_turns_root_value(shards, tmp_path, monkeypatch):
+    """--value-next: the training value loss is the log loss against (1 - B - F) outcome + B root_value + F next_rv,
+    with next_rv from ShardSet(next_rv=True) for the training and validation sets; it trains and differs."""
+    import torch
+    from draftzero.nets import data as D
+    from draftzero.nets import targets as T
+    seen = []
+    real = D.ShardSet
+
+    def spy(*a, **kw):
+        seen.append(kw.get("next_rv", False))
+        return real(*a, **kw)
+    monkeypatch.setattr(D, "ShardSet", spy)
+    base = _run(shards, tmp_path / "base")
+    assert seen == [False, False]                               # off: the sets load as before
+    s = _run(shards, tmp_path / "vn", "--value-next", "0.5")
+    assert seen[2:] == [True, True]
+    assert np.isfinite(s["best"]["holdout"]["total"]) and s["steps"] == base["steps"] == 12
+    assert not _same(_weights(tmp_path / "vn" / "last.pt"), _weights(tmp_path / "base" / "last.pt"))
+    assert json.loads((tmp_path / "vn" / "config.json").read_text())["args"]["value_next"] == 0.5
+    model, _ = M.load(tmp_path / "base" / "last.pt")            # trained: a fresh value head scores 0.5 everywhere
+    ds = real(shards / "train", next_rv=True)
+    b = ds.collate(np.arange(64))
+    assert b.next_rv is not None and float((b.next_rv != b.outcome).float().mean()) > 0.2
+    with torch.no_grad():
+        _, _, v0, x = train.losses(model, b, _args(value_blend=0.25))
+        t1, p1, v1, _ = train.losses(model, b, _args(value_blend=0.25, value_next=0.5))
+    vt, vm = T.value_target(b, 0.25, 0.5)
+    vl = torch.nn.functional.binary_cross_entropy_with_logits(x["vlogit"].float(), vt, reduction="none")
+    assert abs(float(v1) - float(vl[vm].mean())) < 1e-5 and abs(float(v1) - float(v0)) > 1e-4
+    assert abs(float(t1) - (float(p1) + float(v1))) < 1e-5
 
 
 # ------------------------------------------------------------------------------------------------ record weights

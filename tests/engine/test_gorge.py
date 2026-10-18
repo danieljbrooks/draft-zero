@@ -86,6 +86,46 @@ def test_engine_pack(gorge, selfplay, tmp_path):
 
 
 @pytest.mark.engine
+def test_engine_pack_keeps_decision_order(gorge, selfplay, tmp_path):
+    """dzgorge pack writes the records in corpus order, and the corpus holds each game's records together and in
+    decision order (VisitRecord.sequence, the event-log position at the decision, never falls within a game), which
+    nets.data.next_own_turn relies on. dense[0] is the record's turn (gorge's Game.Turn) and dense[ACTIVE] marks one
+    active seat a turn. next_rv then equals the next own turn's first record found by the corpus's own key."""
+    from draftzero.nets import data as D
+    with gzip.open(selfplay.corpus_path, "rt") as f:
+        recs = [json.loads(line) for line in f if line.strip()]
+    gorge.pack([selfplay.corpus_path], tmp_path / "pack", game_prefix="a1-000001-")
+    ds = D.ShardSet(tmp_path / "pack", next_rv=True)
+    games = np.concatenate([np.array(m["games"])[np.asarray(p["game"])] for p, m in zip(ds.packs, ds.metas)])
+    seat, turn = ds.array("seat"), ds.array("turn")
+    assert len(ds) == len(recs) > 0
+    assert [("a1-000001-" + r["game_id"], r["seat"], r["turn"]) for r in recs] == \
+        [(str(g), int(s), int(t)) for g, s, t in zip(games, seat, turn)]
+    assert np.array_equal(ds.array("root_value"), np.array([r["root_value"] for r in recs], np.float32))
+    ids = [r["game_id"] for r in recs]
+    assert [g for i, g in enumerate(ids) if i == 0 or ids[i - 1] != g] == list(dict.fromkeys(ids))   # contiguous
+    for g in set(ids):
+        seq = [r["sequence"] for r in recs if r["game_id"] == g]
+        assert seq == sorted(seq) and len(set(seq)) > 1
+    dense = np.concatenate([np.asarray(p["dense"]) for p in ds.packs])
+    assert np.array_equal(dense[:, 0], turn) and set(np.unique(dense[:, D.ACTIVE])) <= {0.0, 1.0}
+    active = {}
+    for g, s, t, a in zip(games, seat, turn, dense[:, D.ACTIVE]):
+        assert active.setdefault((g, int(t)), int(s) if a else 1 - int(s)) == (int(s) if a else 1 - int(s))
+    # next_rv by the corpus's explicit order key (game, seat, a later own turn, then sequence)
+    own = dense[:, D.ACTIVE] > 0.5
+    want = []
+    for i, r in enumerate(recs):
+        later = [(recs[j]["turn"], recs[j]["sequence"], j) for j in range(len(recs))
+                 if recs[j]["game_id"] == r["game_id"] and recs[j]["seat"] == r["seat"] and own[j]
+                 and recs[j]["turn"] > r["turn"]]
+        o = r["outcome"] if r["outcome_known"] else -1.0
+        want.append(recs[min(later)[2]]["root_value"] if later else o)
+    assert np.allclose(ds.array("next_rv"), np.array(want, np.float32))
+    assert (ds.next_own_turn() >= 0).mean() > 0.5
+
+
+@pytest.mark.engine
 def test_engine_timeout_resumes_same_games(gorge, selfplay, tmp_path):
     # every run is killed before its first game (the corpus and belief take seconds to load); each first missing
     # pair is then replayed alone, and the games are the uninterrupted run's

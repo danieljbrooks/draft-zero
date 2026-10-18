@@ -1,5 +1,9 @@
 """Shards -> batches: a dataset over shard directories, a split by game, a vectorised collate, the
-same Batch from a wire request, and a prefetching loader (collate threads, or worker processes)."""
+same Batch from a wire request, and a prefetching loader (collate threads, or worker processes).
+
+ShardSet(next_rv=True) also derives each record's root value at its seat's next own turn (next_root_value), the
+value target's next-turn share (targets.value_target next_w). It reaches the Batch as next_rv and is never written
+to a shard or sent over the wire."""
 from __future__ import annotations
 
 import os
@@ -13,6 +17,8 @@ import numpy as np
 import torch
 
 from . import packfmt as pf
+
+ACTIVE = 19     # dense[19]: the record's seat is the active player (gorge policynet denseIsActive, interface 5)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -54,8 +60,8 @@ def take(pack: dict, sel, targets: bool = True) -> dict:
     if targets and "cand_off" in pack:
         for n in ("outcome", "root_value", "subset", "choice", "game", "kind", "turn", "seat", "sims"):
             out[n] = pack[n][sel]
-        for n in pf.OPTIONAL_NAMES:             # weight: read_shard always supplies it; a bare pack may not
-            if n in pack:
+        for n in (*pf.OPTIONAL_NAMES, "next_rv"):   # weight: read_shard always supplies it, a bare pack may not;
+            if n in pack:                           # next_rv: a ShardSet's derived array (next_rv=True)
                 out[n] = pack[n][sel]
         out["cand_off"], kp = csr_take(pack["cand_off"], sel)
         for n in ("cand_visits", "cand_prior", "cand_q"):
@@ -169,6 +175,7 @@ class Batch:
     outcome: torch.Tensor | None = None       # [B] f32 (-1 unknown)
     subset: torch.Tensor | None = None        # [B] u8
     weight: torch.Tensor | None = None        # [B] f32 record training weight (SPEC §2 weight.npy); None = all 1
+    next_rv: torch.Tensor | None = None       # [B] f32 root value at the seat's next own turn (ShardSet next_rv)
     want: torch.Tensor | None = None          # [B] bool (wire batches)
 
     @property
@@ -299,6 +306,8 @@ def to_batch(p: dict, targets: bool = True, want=None) -> Batch:
         b.subset = _t(p["subset"], np.uint8)
         if "weight" in p:
             b.weight = _t(p["weight"], f32)
+        if "next_rv" in p:
+            b.next_rv = _t(p["next_rv"], f32)
     if want is not None:
         b.want = _t(np.asarray(want) != 0)
     return b
@@ -340,16 +349,51 @@ def drop_unwanted_options(pack: dict, want: np.ndarray) -> tuple[dict, np.ndarra
 # dataset
 # ------------------------------------------------------------------------------------------------
 
+def next_own_turn(game, seat, turn, own) -> np.ndarray:
+    """[n] i64: for each record, the first record of the same game and seat on one of the seat's own turns after the
+    record's turn (its next own turn: turn t + 2 from its own turn t, t + 1 from the opponent's, or t + 1 after an
+    extra turn of its own), -1 if there is none. `game` is a game key unique across the records, `turn` the game's
+    turn counter (gorge's Game.Turn, every player's turns), `own` whether the record's seat is the active player
+    (dense[ACTIVE]). Within a turn the records must be in decision order, as dzgorge pack writes them (a game's
+    records in the order its searches ran), so that the first record of a turn is its first decision."""
+    n = len(turn)
+    out = np.full(n, -1, np.int64)
+    mine = np.nonzero(np.asarray(own) != 0)[0]
+    if n == 0 or len(mine) == 0:
+        return out
+    t = np.asarray(turn, np.int64)
+    g = np.asarray(game, np.int64) * 2 + np.asarray(seat, np.int64)
+    key = g * (int(t.max() - t.min()) + 2) + (t - t.min())    # (game, seat, turn), in that order
+    order = mine[np.lexsort((mine, key[mine]))]               # own-turn records by (game, seat, turn), then position
+    j = np.searchsorted(key[order], key, side="right")        # the first with a later turn (or the next game or seat)
+    hit = order[np.minimum(j, len(order) - 1)]
+    ok = (j < len(order)) & (g[hit] == g)
+    out[ok] = hit[ok]
+    return out
+
+
+def next_root_value(game, seat, turn, own, root_value, outcome) -> np.ndarray:
+    """[n] f32: each record's root value at its seat's next own turn (the root value of next_own_turn's record), else
+    its outcome (-1 unknown, which the value mask drops)."""
+    nxt = next_own_turn(game, seat, turn, own)
+    out = np.asarray(outcome, np.float32).copy()
+    ok = nxt >= 0
+    out[ok] = np.asarray(root_value, np.float32)[nxt[ok]]
+    return out
+
+
 class ShardSet:
     """Records of one or more shard directories (each a shard or a `dzgorge pack` output directory),
     memory-mapped, or loaded with in_ram, which merges several shards into one pack so that a batch is
-    one gather however many shards it spans. Global record index = shards in order."""
+    one gather however many shards it spans. Global record index = shards in order. With next_rv, each pack also
+    holds "next_rv" (next_root_value over all the set's records, games matched by id across shards), which take and
+    collate carry into the Batch."""
 
-    def __init__(self, paths, in_ram: bool = False):
+    def __init__(self, paths, in_ram: bool = False, next_rv: bool = False):
         if isinstance(paths, (str, Path)):
             paths = [paths]
         self.dirs = [d for p in paths for d in pf.shard_dirs(p)]
-        self.in_ram = in_ram
+        self.in_ram, self.next_rv = in_ram, next_rv
         self.packs, self.metas = [], []
         for d in self.dirs:
             pack, meta = pf.read_shard(d, in_ram=in_ram and len(self.dirs) == 1)
@@ -361,12 +405,35 @@ class ShardSet:
         sizes = [m["n"] for m in self.metas]
         self.starts = np.concatenate([[0], np.cumsum(sizes)]).astype(np.int64)
         self.n = int(self.starts[-1])
+        if next_rv:
+            self._add_next_rv()
+
+    def game_keys(self) -> np.ndarray:
+        """[n] i64: each record's game, numbered by game id across the set (a game that spans shards is one game)."""
+        ids: dict[str, int] = {}
+        out = []
+        for pack, meta in zip(self.packs, self.metas):
+            gi = np.array([ids.setdefault(g, len(ids)) for g in meta["games"]] or [0], np.int64)
+            out.append(gi[np.asarray(pack["game"], np.int64)])
+        return np.concatenate(out) if out else np.zeros(0, np.int64)
+
+    def next_own_turn(self) -> np.ndarray:
+        """[n] i64: data.next_own_turn over the set's records (global indices, -1 none)."""
+        own = np.concatenate([np.asarray(p["dense"][:, ACTIVE]) for p in self.packs]) > 0.5
+        return next_own_turn(self.game_keys(), self.array("seat"), self.array("turn"), own)
+
+    def _add_next_rv(self) -> None:
+        nxt = self.next_own_turn()
+        nrv = self.array("outcome").astype(np.float32)
+        nrv[nxt >= 0] = self.array("root_value")[nxt[nxt >= 0]]
+        for pack, a, b in zip(self.packs, self.starts[:-1], self.starts[1:]):
+            pack["next_rv"] = nrv[a:b]
 
     def __getstate__(self):   # worker processes started with spawn reopen the shards
-        return {"dirs": [str(d) for d in self.dirs], "in_ram": self.in_ram}
+        return {"dirs": [str(d) for d in self.dirs], "in_ram": self.in_ram, "next_rv": self.next_rv}
 
     def __setstate__(self, st):
-        self.__init__(st["dirs"], in_ram=st["in_ram"])
+        self.__init__(st["dirs"], in_ram=st["in_ram"], next_rv=st.get("next_rv", False))
 
     def __len__(self) -> int:
         return self.n
