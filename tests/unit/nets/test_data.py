@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import torch
 
 from draftzero.nets import data as D
@@ -329,24 +330,26 @@ def test_next_own_turn_by_hand():
     assert D.next_own_turn([], [], [], []).tolist() == [] and D.next_own_turn([0], [0], [1], [0]).tolist() == [-1]
 
 
+def _turn_shard(d, rows, seed):
+    """A shard of synthetic records with (game id, seat, turn, own, root value, outcome) set by hand."""
+    pack, _ = pf.synthetic(len(rows), seed=seed)
+    games = list(dict.fromkeys(r[0] for r in rows))
+    pack["game"] = np.array([games.index(r[0]) for r in rows], np.int32)
+    pack["seat"] = np.array([r[1] for r in rows], np.uint8)
+    pack["turn"] = np.array([r[2] for r in rows], np.int32)
+    pack["dense"][:, D.ACTIVE] = [r[3] for r in rows]
+    pack["root_value"] = np.array([r[4] for r in rows], np.float32)
+    pack["outcome"] = np.array([r[5] for r in rows], np.float32)
+    pf.write_shard(d, pack, games)
+    return d
+
+
 def _turn_shards(root):
     """Two shards whose games and turns are set by hand; game g1 spans both (its turn 3 is in the second)."""
     first = [("g0", 0, 1, 1, 0.5, 1.0), ("g0", 1, 1, 0, 0.4, 0.0), ("g1", 0, 1, 1, 0.3, 0.0),
              ("g0", 1, 2, 1, 0.45, 0.0), ("g1", 1, 2, 1, 0.7, 1.0), ("g0", 0, 3, 1, 0.6, 1.0)]
     second = [("g1", 0, 3, 1, 0.35, 0.0), ("g2", 0, 1, 1, 0.9, -1.0), ("g1", 1, 3, 0, 0.66, 1.0)]
-    dirs = []
-    for k, rows in enumerate((first, second)):
-        pack, _ = pf.synthetic(len(rows), seed=30 + k)
-        games = list(dict.fromkeys(r[0] for r in rows))
-        pack["game"] = np.array([games.index(r[0]) for r in rows], np.int32)
-        pack["seat"] = np.array([r[1] for r in rows], np.uint8)
-        pack["turn"] = np.array([r[2] for r in rows], np.int32)
-        pack["dense"][:, D.ACTIVE] = [r[3] for r in rows]
-        pack["root_value"] = np.array([r[4] for r in rows], np.float32)
-        pack["outcome"] = np.array([r[5] for r in rows], np.float32)
-        d = root / f"{k:05d}"
-        pf.write_shard(d, pack, games)
-        dirs.append(d)
+    dirs = [_turn_shard(root / f"{k:05d}", rows, seed=30 + k) for k, rows in enumerate((first, second))]
     # g0: 0 -> 5, 1 -> 3, 3 -> none (0.0), 5 -> none (1.0); g1 across shards: 2 -> 6, 4 -> none, 8 -> none (1.0)
     want = np.array([0.6, 0.45, 0.35, 0.0, 1.0, 1.0, 0.0, -1.0, 1.0], np.float32)
     return dirs, want
@@ -391,3 +394,17 @@ def test_loader_procs_carry_next_rv(tmp_path):
     got = list(D.Loader(ds, bl, procs=1, start_method=method))
     for b, sel in zip(got, bl):
         assert torch.equal(b.next_rv, torch.from_numpy(want[sel]))
+
+
+def test_next_rv_refuses_records_out_of_decision_order(tmp_path):
+    """A game whose turn goes back in record order (its records out of decision order, or its shards passed in the
+    wrong order) is refused rather than given the wrong next_rv; without next_rv nothing is checked."""
+    dirs, want = _turn_shards(tmp_path / "pk")
+    assert np.array_equal(D.ShardSet(dirs, next_rv=True).array("next_rv"), want)
+    swapped = _turn_shard(tmp_path / "sw", [("g0", 0, 1, 1, 0.5, 1.0), ("g0", 0, 3, 1, 0.6, 1.0),
+                                             ("g1", 0, 1, 1, 0.3, 0.0), ("g0", 0, 2, 0, 0.4, 1.0)], seed=33)
+    for bad in (dirs[::-1], [swapped]):            # g1's turn 3 before its turns 1 and 2; g0's turn 2 after its 3
+        for in_ram in (False, True):
+            with pytest.raises(ValueError, match="decision order"):
+                D.ShardSet(bad, in_ram=in_ram, next_rv=True)
+            assert "next_rv" not in D.ShardSet(bad, in_ram=in_ram).packs[0]

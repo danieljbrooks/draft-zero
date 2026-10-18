@@ -418,9 +418,18 @@ class ShardSet:
         return np.concatenate(out) if out else np.zeros(0, np.int64)
 
     def next_own_turn(self) -> np.ndarray:
-        """[n] i64: data.next_own_turn over the set's records (global indices, -1 none)."""
+        """[n] i64: data.next_own_turn over the set's records (global indices, -1 none). Raises if a game's turn goes
+        back in record order: its records are then not in decision order (or the shards came in the wrong order),
+        and next_own_turn would take the wrong record of a turn."""
         own = np.concatenate([np.asarray(p["dense"][:, ACTIVE]) for p in self.packs]) > 0.5
-        return next_own_turn(self.game_keys(), self.array("seat"), self.array("turn"), own)
+        game, turn = self.game_keys(), self.array("turn").astype(np.int64)
+        o = np.argsort(game, kind="stable")                      # each game's records, in record order
+        back = (game[o][1:] == game[o][:-1]) & (turn[o][1:] < turn[o][:-1])
+        if back.any():
+            i = int(o[1:][back][0])
+            raise ValueError(f"ShardSet next_rv: record {i} (turn {turn[i]}) follows a record of a later turn of its "
+                             "game; a game's records must be in decision order (as dzgorge pack writes them)")
+        return next_own_turn(game, self.array("seat"), turn, own)
 
     def _add_next_rv(self) -> None:
         nxt = self.next_own_turn()

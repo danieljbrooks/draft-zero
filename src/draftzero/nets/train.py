@@ -113,6 +113,8 @@ def parse_args(argv=None):
     for k in ("surprise_weight", "value_surprise"):
         if not 0.0 <= getattr(args, k) <= 1.0:
             ap.error(f"--{k.replace('_', '-')} must be in [0, 1]")
+    if not 0.0 <= args.value_blend <= 1.0:
+        ap.error("--value-blend must be in [0, 1]")
     if not (0.0 <= args.value_next and args.value_blend + args.value_next <= 1.0 + 1e-9):
         ap.error("--value-next must be >= 0, with --value-blend + --value-next at most 1")
     if not 0.0 <= args.ema_decay < 1.0:

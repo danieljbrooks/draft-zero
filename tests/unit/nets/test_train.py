@@ -183,7 +183,8 @@ def test_surprise_weighting_trains_and_differs(shards, tmp_path):
 def test_extras_reject_bad_values(shards, tmp_path):
     for bad in (["--surprise-weight", "1.5"], ["--value-surprise", "-0.1"], ["--ema-decay", "1"],
                 ["--export-ema"], ["--ema-decay", "0.9", "--ema-every", "0"], ["--value-next", "-0.1"],
-                ["--value-next", "0.6"]):                                   # _run's --value-blend 0.5: 0.5 + 0.6 > 1
+                ["--value-next", "0.6"],                                    # _run's --value-blend 0.5: 0.5 + 0.6 > 1
+                ["--value-blend", "-0.5", "--value-next", "1.5"], ["--value-blend", "1.5"]):
         with pytest.raises(SystemExit):
             _run(shards, tmp_path / "bad", *bad)
 
