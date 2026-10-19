@@ -44,7 +44,7 @@ def test_defaults_are_the_contract_values(cfg):
                             "surprise_weight": 0.0, "value_surprise": 0.0, "ema_decay": 0.0,
                             "window": {"kind": "fixed", "c": 150000, "alpha": 0.75, "beta": 0.4}}
     assert d["eval"] == {"every_versions": 1, "sims": 100, "pairs": 100, "seed": 3131, "workers": 2,
-                         "opponents": ["prev", "sbtactical"]}
+                         "opponents": ["prev", "sbtactical"], "shard_pairs": 10}
     assert d["store"] == "runs/smoke" and d["tracking"] == {"trackio": False, "project": "draftzero"}
     assert d["sync"] == {"games_per_version": 200} and d["paused"] is False
     assert d["builder"] == {
