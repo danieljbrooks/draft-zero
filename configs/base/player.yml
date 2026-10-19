@@ -77,6 +77,7 @@ eval:
   seed: 3131
   workers: 2
   opponents: [prev, sbtactical] # prev | v<N> | sbtactical | bot | nonet | file:/path.dzgw
+  shard_pairs: 10               # deck pairs a shard (one evaluator's games in flight = 2 x this); a served net wants all pairs
 
 store: runs/player-base         # local path | hf://buckets/<owner>/<bucket> | ssh://host/path; `--store` overrides
 tracking: {trackio: false, project: draftzero}

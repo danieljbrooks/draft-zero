@@ -30,7 +30,7 @@ SCHEMA_KEYS = [
     "learner.value_blend", "learner.warm_start", "learner.threads", "learner.surprise_weight",
     "learner.value_surprise", "learner.ema_decay", "learner.window.kind", "learner.window.c", "learner.window.alpha",
     "learner.window.beta",
-    "eval.every_versions", "eval.sims", "eval.pairs", "eval.seed", "eval.workers", "eval.opponents",
+    "eval.every_versions", "eval.sims", "eval.pairs", "eval.seed", "eval.workers", "eval.opponents", "eval.shard_pairs",
     "store", "tracking.trackio", "tracking.project", "sync.games_per_version", "paused",
     "builder.learn", "builder.kinds", "builder.random_share", "builder.members", "builder.pools_per_chunk",
     "builder.games_per_chunk", "builder.games_per_version", "builder.sims", "builder.pilot", "builder.closedlist",

@@ -67,6 +67,10 @@ Pending Dan's review (the deck builder on the loop, branch `wip/sealedloop`):
 - 8: the `builder` section and `player.learn` (both default to the player loop as it was).
 - 10: a new evaluation, builder version v's decks against `best23@1`'s on held-out draftlab pools (`builder.eval`; `draftzero.loop.builder.score_match`).
 
+Pending Dan's review (branch `eval-shard-pairs`):
+
+- 8: `eval.shard_pairs` (default 10, as before): the deck pairs an evaluator shard plays, so an evaluator against a served network can put a whole job's games in flight.
+
 ## [0.1.0] - 2026-10-14
 
 Everything before the 0.2.0 refactor, kept reproducible. A pre-release on GitHub.
