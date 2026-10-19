@@ -943,6 +943,10 @@ def test_eval_jobs_and_opponents(tmp_path):
     assert (job["job"], job["version"], job["opponent"], job["pairs"], job["sims"], job["seed"]) == \
         ("v0004-vs-sbtactical", 4, "sbtactical", 25, 50, 9)
     assert [(s["first_pair"], s["pairs"]) for s in job["shards"]] == [(0, 10), (10, 10), (20, 5)]
+    one = make_job(4, "sbtactical", make_cfg(tmp_path, eval={"pairs": 25, "shard_pairs": 100}), now=0)
+    assert [(s["first_pair"], s["pairs"]) for s in one["shards"]] == [(0, 25)]   # a served net: one shard
+    assert [(s["first_pair"], s["pairs"]) for s in make_job(4, "sbtactical", make_cfg(tmp_path, eval={
+        "pairs": 25, "shard_pairs": 12}), now=0)["shards"]] == [(0, 12), (12, 12), (24, 1)]
     spec = policy_spec(make_cfg(tmp_path, search={"closedlist": False, "keys": ["autopay"]}), sims=5, explore=False,
                        gonet=None)
     assert (spec.sims, spec.closedlist, spec.keys, spec.explore, spec.topk) == (5, False, ("autopay",), False, None)

@@ -211,6 +211,7 @@ class EvalConfig:
     workers: int = 2
     opponents: list[str] = field(default_factory=lambda: ["prev", "sbtactical"])
     # prev | v<N> | sbtactical | bot | nonet (the search without a net) | file:/path.dzgw
+    shard_pairs: int = 10                        # deck pairs a shard (one evaluator's games in flight: pairs x 2)
 
 
 @dataclass

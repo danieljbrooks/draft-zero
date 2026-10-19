@@ -60,8 +60,11 @@ def opponent_valid(version: int, opponent: str) -> bool:
 
 def make_job(version: int, opponent: str, cfg, now: float | None = None) -> dict:
     pairs = int(ctl.get(cfg, "eval.pairs"))
-    shards = [{"id": i, "first_pair": lo, "pairs": min(SHARD_PAIRS, pairs - lo), "machine": None, "assigned": None,
-               "done": False} for i, lo in enumerate(range(0, pairs, SHARD_PAIRS))]
+    # eval.shard_pairs: a served network batches only the games in flight, so its evaluator plays whole jobs as one
+    # shard (docs/039: 20 games a shard gave ~3 positions a GPU forward and stole the actors' GPU time)
+    per = max(1, int(ctl.get(cfg, "eval.shard_pairs", SHARD_PAIRS) or SHARD_PAIRS))
+    shards = [{"id": i, "first_pair": lo, "pairs": min(per, pairs - lo), "machine": None, "assigned": None,
+               "done": False} for i, lo in enumerate(range(0, pairs, per))]
     return {"job": job_id(version, opponent), "version": int(version), "opponent": opponent, "pairs": pairs,
             "sims": int(ctl.get(cfg, "eval.sims")), "seed": int(ctl.get(cfg, "eval.seed")),
             "created": ctl.now_iso(now), "shards": shards}
