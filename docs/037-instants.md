@@ -56,6 +56,7 @@ Given the goal of playing high level Magic without prior information (tabula ras
 1. Have one auxiliary network decide whether to play the instant, then another decide decide when to play the instant. 
 2. Simply trimming search trees (e.g. start on the first main phase). 
 3. Come up with a clever filter to reduce redundant search. E.g. have a network that learns whether or not play the instant on the current step. If the network says no, no search is performed. 
-4. Explicitly develop rules for changes in information. (E.g. drawing a card from you library -> less hidden information). The use explicit changes in the amount of information to guidance search decion. 
+4. Explicitly develop rules for changes in information. (E.g. drawing a card from you library -> less hidden information). Then use changes in information to information as a cue to refresh planning. 
+5. By default, MCTS builds a new search tree every step by default. What if we hacked the search process to keep the old tree as a base?
 
 - Daniel Brooks
