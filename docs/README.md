@@ -9,6 +9,7 @@ Two pages are not numbered, because they track the current code:
 
 | Number | Title | Started | Applies to | Kind | Superseded by |
 | --- | --- | --- | --- | --- | --- |
+| 044 | [E48: learning when to cast instants](044-e48-learning-when-to-cast-instants.md) | 2026-10-24 | v0.2.0 | Report |  |
 | 036 | [The gorge–DraftZero interface](036-gorge-draftzero-interface.md) | 2026-10-14 | v0.2.0 | Plan |  |
 | 035 | [RunPod network volumes as a run's store](035-runpod-network-volumes.md) | 2026-10-14 | v0.2.0 | Report |  |
 | 034 | [The first experiments on the 0.2.0 pipeline](034-v0.2.0-first-experiments.md) | 2026-10-14 | v0.2.0 | Report |  |
