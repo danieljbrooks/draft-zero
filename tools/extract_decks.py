@@ -73,7 +73,11 @@ def extract(path: str, min_winrate: float, min_player_games: int):
             wins[key] += row[col["won"]] == "True"
             if key in decks:
                 continue
-            cards = {name: int(row[i]) for i, name in deck_cols if row[i] not in ("", "0")}
+            cards = {
+                name: int(row[i].removesuffix(".0"))
+                for i, name in deck_cols
+                if row[i] not in ("", "0", "0.0")
+            }
             decks[key] = {
                 "draft_id": key[0],
                 "build_index": int(key[1]),
