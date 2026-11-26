@@ -1,5 +1,8 @@
 """The deck pool in gorge format: pool.tsv, deck files, deterministic samples, the 17lands conversion, assets/sample."""
+import gzip
 import json
+import runpy
+from pathlib import Path
 
 import pytest
 
@@ -88,6 +91,17 @@ def test_pools_cli_sample(tmp_path, capsys):
     p = _pool(tmp_path, [(f"d{i}", "train", "", "", 0) for i in range(10)])
     assert pools.main(["sample", "--pool", str(p), "--n", "3", "--split", "train", "--seed", "x"]) == 0
     assert capsys.readouterr().out.split() == pools.sample(p, 3, split="train", seed="x")
+
+
+def test_extract_decks_reads_integer_and_decimal_counts(tmp_path):
+    path = tmp_path / "games.csv.gz"
+    with gzip.open(path, "wt") as f:
+        f.write("draft_id,build_index,won,expansion,event_type,draft_time,rank,main_colors,splash_colors,"
+                "user_game_win_rate_bucket,user_n_games_bucket,deck_Plains,deck_Island,deck_Swamp,deck_Mountain,deck_Forest\n"
+                "abc,0,True,EOE,PremierDraft,2025-08-01,Gold,RG,,0.60,100,,0,0.0,1,2.0\n")
+    script = Path(__file__).resolve().parents[2] / "tools" / "extract_decks.py"
+    rows, _, _ = runpy.run_path(str(script))["extract"](path, min_winrate=0.60, min_player_games=0)
+    assert rows[0]["cards"] == {"Mountain": 1, "Forest": 2}
 
 
 def _row(cards, main="WB", splash="", draft="abc", idx=0):
